@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IntegrationTestPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approved",
+    "targets"
+  ],
+  "properties": {
+    "approved": {
+      "type": "boolean"
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "controller",
+          "endpoint",
+          "scenarios"
+        ],
+        "properties": {
+          "controller": {
+            "type": "string",
+            "minLength": 1
+          },
+          "endpoint": {
+            "type": "string",
+            "minLength": 1
+          },
+          "serviceChain": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "repositoryChain": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "externalMocks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scenarios": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "request",
+                "expected"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "preconditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "request": {
+                  "type": "object"
+                },
+                "expected": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

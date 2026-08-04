@@ -1,0 +1,42 @@
+version: 1
+project:
+  type: maven
+  root: .
+
+integrationTest:
+  executable: ./mvnw
+  args:
+    - -Dtest=${testClass}
+    - test
+  reportDir: target/surefire-reports
+  timeoutSeconds: 600
+  profile: test
+
+service:
+  executable: ./mvnw
+  args:
+    - spring-boot:run
+  startupTimeoutSeconds: 120
+  readiness:
+    type: log
+    pattern: Started Application
+  logFile: logs/application.log
+
+scope:
+  sourceIncludes:
+    - src/main/java/**/*.java
+  testIncludes:
+    - src/test/java/**/*Test.java
+
+write:
+  allowedTestPaths:
+    - src/test/java/**
+  allowedProductionPaths:
+    - src/main/java/**
+  deniedPaths:
+    - .git/**
+    - .github/**
+    - target/**
+
+runs:
+  directory: harness/runs

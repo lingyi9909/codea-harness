@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Diagnosis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "classification",
+    "rootCause",
+    "evidence",
+    "nextAction"
+  ],
+  "properties": {
+    "classification": {
+      "enum": [
+        "TEST_COMPILE_ERROR",
+        "TEST_CODE_ERROR",
+        "TEST_CONTEXT_ERROR",
+        "TEST_DATA_OR_ENVIRONMENT_ERROR",
+        "SERVICE_START_ERROR",
+        "PRODUCTION_CODE_ERROR",
+        "UNKNOWN"
+      ]
+    },
+    "rootCause": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "nextAction": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}
