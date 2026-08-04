@@ -1,21 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "FixPlan",
+  "description": "修复方案，由 Fix Agent 设计，需经人工审批后才能应用于生产代码",
   "type": "object",
   "additionalProperties": false,
   "required": ["fixPlanId", "rootCause", "changes", "verification"],
   "properties": {
     "fixPlanId": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "修复方案唯一标识，用户必须通过该标识明确批准修复方案"
     },
     "rootCause": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "根因分析"
     },
     "changes": {
       "type": "array",
       "minItems": 1,
+      "description": "修改清单",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -23,15 +27,18 @@
         "properties": {
           "file": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "要修改的文件路径"
           },
           "reason": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "修改原因"
           },
           "change": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "修改内容描述"
           }
         }
       }
@@ -39,6 +46,7 @@
     "verification": {
       "type": "array",
       "minItems": 1,
+      "description": "验证步骤",
       "items": {
         "type": "string",
         "minLength": 1

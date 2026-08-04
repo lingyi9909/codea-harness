@@ -1,84 +1,84 @@
-# Project Instructions for Codea Harness
+# Codea Harness 项目指令
 
-## Scope
+## 范围
 
-This repository defines Codea Harness V1. Keep changes limited to specification, contracts, agent instructions, skill instructions, example configuration, and package validation.
+本仓库定义 Codea Harness V1。所有变更应限于规范、契约、Agent 指令、Skill 指令、示例配置和包校验。
 
-## V1 behavior
+## V1 行为约定
 
-- Review starts from Git Diff and reads only directly related call-chain code.
-- Integration tests enter through MockMvc and use real Controller, Service, Repository, and the project's existing test database configuration.
-- Internal Service and Repository beans are not mocked by default.
-- External systems, third-party APIs, MQ, and RPC follow the target project's existing test substitution method.
-- Local service debugging is independent from integration-test execution.
+- 评审以 Git Diff 为入口，只读取直接相关的调用链代码。
+- 集成测试以 MockMvc 为入口，使用真实的 Controller、Service、Repository，以及项目现有的测试数据库配置。
+- 项目内部的 Service 和 Repository Bean 默认不 Mock。
+- 外部系统、第三方接口、MQ、RPC 沿用目标项目已有的测试替代方式。
+- 本地服务调试与集成测试执行是两条独立路径。
 
-## Required gates
+## 审批门禁
 
-- Do not write or modify test code before an approved test plan exists. Approval is by exact `planId` match — the agent cannot self-approve.
-- Do not modify production code before an approved fix plan exists. Approval is by exact `fixPlanId` match — the agent cannot self-approve.
-- A newly generated failing test may be repaired and rerun without a second approval when the issue is in test code only.
+- 测试计划审批通过前，不得编写或修改测试代码。审批以 `planId` 精确匹配为准——Agent 不能自行审批。
+- 修复方案审批通过前，不得修改生产代码。审批以 `fixPlanId` 精确匹配为准——Agent 不能自行审批。
+- 新生成但执行失败的测试，如果问题仅出在测试代码本身，可以直接修复并重跑，无需再次审批。
 
-## Intent routing
+## 意图路由
 
-The Orchestrator (`harness/agents/orchestrator.md`) routes all user intents:
+Orchestrator（`harness/agents/orchestrator.md`）负责路由所有用户意图：
 
-| Intent | Agents invoked |
-|--------|---------------|
+| 意图 | 调用的 Agent |
+|------|-------------|
 | `harness review` | Reviewer |
-| `harness test` | Reviewer → Integration Test Agent → Runtime Debugger → (Fix Agent if needed) |
+| `harness test` | Reviewer → Integration Test Agent → Runtime Debugger →（如需要）Fix Agent |
 | `harness debug-service` | Runtime Debugger |
 | `harness fix finding:<id>` | Fix Agent → Runtime Debugger |
 | `harness fix diagnosis:<runId>` | Fix Agent → Runtime Debugger |
 | `harness verify test:<class>` | Runtime Debugger |
 | `harness verify fix:<fixPlanId>` | Runtime Debugger |
-| `harness verify service:<runId>` | Runtime Debugger |
+| `harness verify service:<runId>` | Runtime Debugger（重新启动服务，建立新的日志采集窗口） |
 
-## Agent responsibilities
+## Agent 职责划分
 
-- **Reviewer**: analyze changes + review code. Read-only.
-- **Integration Test Agent**: design test plans + generate/repair test code. Does NOT execute tests or diagnose failures.
-- **Runtime Debugger**: execute tests / start services + collect logs + classify failures. Owns diagnosis and nextAction exclusively. Tracks repair round count.
-- **Fix Agent**: design minimal fix plans + apply approved changes. Does NOT execute tests.
-- **Orchestrator**: routes intents, manages agent handoffs, enforces approval gates, tracks repair rounds, produces user summaries.
+- **Reviewer**：分析变更 + 评审代码。只读，不修改任何文件。
+- **Integration Test Agent**：设计测试计划 + 生成/修复测试代码。不负责执行测试，也不负责诊断故障。
+- **Runtime Debugger**：执行测试 / 启动服务 + 采集日志 + 诊断故障。拥有故障分类和 nextAction 的唯一决定权。追踪修复轮次计数。
+- **Fix Agent**：设计最小修复方案 + 应用经审批的修改。不负责执行测试。
+- **Orchestrator**：路由意图、管理 Agent 间交接、执行审批门禁、追踪修复轮次、输出用户摘要。
 
-## Approval rules
+## 审批规则
 
-1. The user must explicitly state the exact `planId` or `fixPlanId` to approve. Example: `批准 test-plan-20260804-001` or `批准 fix-plan-20260804-001`.
-2. Generic affirmations ("ok", "yes", "继续", "可以", "go ahead") do NOT count as approval.
-3. If a plan's content is modified, a new ID must be generated. Old approvals do not transfer.
-4. If multiple unapproved plans exist, ask the user which one to act on.
+1. 用户必须明确写出精确的 `planId` 或 `fixPlanId` 才算审批通过。例如：`批准 test-plan-20260804-001` 或 `批准 fix-plan-20260804-001`。
+2. 模糊的肯定（「好」「继续」「可以」「yes」「ok」）**不**视为审批。
+3. 计划内容修改后必须生成新的 ID，原有审批不延续。
+4. 如果同时存在多份未审批的计划，必须询问用户要处理哪一份。
 
-## Tool constraints
+## 工具约束
 
-- Subagents may only use the controlled tool contracts listed in `harness/tools/README.md`.
-- Do not execute arbitrary shell commands. All Maven and service commands must use the exact `executable` and `args` from `harness.yaml`.
-- When executing Maven or service commands, the full executable and argument list must be displayed. Shell evaluation (`shell=true`, `eval`, `bash -c`, `sh -c`), pipes, redirection, and command chaining (`&&`, `;`) are prohibited.
-- `stop_service` must stop the process tree recorded in the `ServiceHandle` (using `processGroup`), not just a single PID.
-- `write_test` requires a `planId` from a human-approved test plan.
-- `apply_approved_patch` requires a `fixPlanId` from a human-approved fix plan.
+- Subagent 只能使用 `harness/tools/README.md` 中列出的受控工具契约。
+- 禁止执行任意 Shell 命令。所有 Maven 和服务命令必须使用 `harness.yaml` 中确切配置的 `executable` 和 `args`。
+- 执行 Maven 或服务命令时，必须完整展示最终 executable 和 args。禁止 Shell 求值（`shell=true`、`eval`、`bash -c`、`sh -c`）、管道、重定向和命令链接（`&&`、`;`）。
+- `stop_service` 必须停止 `ServiceHandle` 中记录的进程树（使用 `processGroup`），而非单个 PID。
+- `write_test` 需要经人工审批的测试计划的 `planId`。
+- `apply_approved_patch` 需要经人工审批的修复方案的 `fixPlanId`。
 
-## Test auto-repair limits
+## 测试自动修复限制
 
-- A newly generated failing test may be repaired at most **2 rounds**.
-- Repair round count is tracked by the Orchestrator / Runtime Debugger per `planId`.
-- After 2 failed repair rounds, stop and emit a schema-valid diagnosis with `nextAction: STOP_UNKNOWN`.
-- During repair, the following are prohibited:
-  - Deleting tests
-  - Adding `@Disabled`
-  - Commenting out assertions
-  - Weakening assertions (e.g., changing exact value checks to non-null checks)
-  - Catching and ignoring exceptions
-  - Replacing real internal beans with mocks to bypass production issues
+- 新生成但失败的测试，最多自动修复 **2 轮**。
+- 修复轮次由 Orchestrator 按 `planId` 追踪。
+- 2 轮修复失败后，保留真实故障分类，将 `nextAction` 设置为 `MANUAL_TEST_REPAIR_REQUIRED`，停止自动修改，输出失败证据和当前测试文件。
+- 修复期间禁止以下行为：
+  - 删除测试
+  - 添加 `@Disabled`
+  - 注释掉断言
+  - 弱化断言（如将精确值校验改为仅判断非空）
+  - 捕获并忽略异常
+  - 将真实内部 Bean 替换为 Mock 以绕过生产问题
 
-## Result summary format
+## 结果摘要格式
 
-After every intent completes or stops, output:
+每次意图执行完成或停止后，输出统一摘要：
 
 ```
 结果：PASSED | FAILED | WAITING_APPROVAL | MANUAL_ACTION_REQUIRED
 
 完成：
-- Review N 个文件
+- 评审 N 个文件
 - 生成 M 个测试类
 - 执行 K 个场景
 
@@ -91,10 +91,10 @@ After every intent completes or stops, output:
 - 或：所有测试通过，无需进一步操作
 ```
 
-## Prohibited behavior
+## 禁止行为
 
-- No arbitrary shell construction by subagents.
-- No production database access.
-- No automatic dependency environment provisioning.
-- No automatic commit, push, or pull-request creation.
-- No unrelated refactoring or weakened assertions.
+- Subagent 不得构造任意 Shell 命令。
+- 不得访问生产数据库。
+- 不得自动配置依赖环境。
+- 不得自动提交、推送或创建 PR。
+- 不得进行无关重构或弱化断言。

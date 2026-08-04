@@ -1,6 +1,6 @@
 ---
 name: analyze-change
-description: Analyze the current Git Diff to identify all changed files, trace call chains, and produce a structured change analysis for downstream review and test planning.
+description: 分析 Git Diff，识别所有变更文件、追踪调用链，产出结构化的变更分析结果。
 version: 1
 agent: reviewer
 tools:
@@ -9,72 +9,86 @@ tools:
 output_schema: docs/contracts/change-analysis.schema.json
 ---
 
-# Analyze Git Change
+# 分析代码变更
 
-## Purpose
-Analyze the current Git Diff to identify all changed files, understand the affected call chains, and produce a structured change summary for downstream review and test planning.
+## 目标
 
-## When to use
-- User says `harness review` or `harness test` — this is always the first step
-- Before any review, test planning, or code modification
-- Whenever the change context is needed by Reviewer, Integration Test Agent, or Fix Agent
+分析当前 Git Diff，识别所有变更文件，理解受影响的调用链，产出结构化的变更摘要，供下游评审和测试计划使用。
 
-## Do not use when
-- There is no Git repository
-- The working tree has no changes relative to the base ref
+## 适用场景
 
-## Inputs
-- `baseRef` (optional): base Git ref, defaults to the merge-base with main/master
-- `headRef` (optional): head Git ref, defaults to HEAD
+- 用户说 `harness review` 或 `harness test`——这是所有流程的第一步
+- 任何评审、测试计划或代码修改之前
+- Reviewer、Integration Test Agent 或 Fix Agent 需要变更上下文时
 
-## Allowed tools
-- `git_diff` — list changed files and hunks
-- `read_code` — read changed source files and directly related callers/callees
+## 不适用场景
 
-## Execution steps
+- 没有 Git 仓库
+- 工作区相对 base ref 没有任何变更
 
-1. **Get the diff**: call `git_diff(baseRef, headRef)` to obtain all changed files and their hunks.
-2. **Classify changes**: group changed files by role — Controller, Service, Repository/Mapper/DAO, Entity/DTO/VO, Validator, ExceptionHandler, Config, Utility, Other.
-3. **Read changed files**: for every changed source file matching `scope.sourceIncludes`, call `read_code` to get full file content.
-4. **Trace call chains**: for each changed Controller or Service method, identify:
-   - Direct callers (upstream) and callees (downstream) within the project
-   - Repository/Mapper methods invoked
-   - External dependencies (RPC, MQ, third-party APIs, cache)
-5. **Identify risk areas**: flag methods that involve:
-   - State transitions or status flows
-   - Transactional boundaries
-   - Authorization, identity, or tenant checks
-   - Idempotency mechanisms
-   - Exception handling paths
-   - Database write operations (INSERT/UPDATE/DELETE)
-6. **Assemble output**: produce a structured summary validating against `docs/contracts/change-analysis.schema.json`.
+## 输入
 
-## Output
-Must validate against `docs/contracts/change-analysis.schema.json`:
-- `changedFiles[]`: path, role, optional hunkSummary
-- `affectedControllers[]`: controller class and affected endpoints
-- `callChains[]`: entryPoint and full Controller → Service → Repository chain
-- `externalDependencies[]`: external systems touched by the change
-- `riskAreas[]`: method and list of risk tags (stateTransition, transactional, authorization, tenancy, idempotency, exceptionHandling, databaseWrite)
+- `baseRef`（可选）：基准 Git ref，默认使用与 main/master 的 merge-base
+- `headRef`（可选）：头部 Git ref，默认使用 HEAD
 
-## Stop conditions
-- No changed files matching `scope.sourceIncludes` → report empty diff and stop
-- A file cannot be read → report the error and skip that file
+## 允许使用的工具
 
-## Forbidden actions
-- Do not scan unrelated modules or the whole repository
-- Do not modify any files
-- Do not execute shell commands directly
+- `git_diff`——列出变更文件和变更块
+- `read_code`——读取变更的源文件及直接相关的上下游代码
 
-## Example
+## 前置条件
+
+- 当前目录是 Git 仓库
+- 存在可读取的 Git Diff
+
+## 执行步骤
+
+1. **获取 Diff**：调用 `git_diff(baseRef, headRef)` 获取所有变更文件及变更块。
+2. **分类变更**：按角色分组——Controller、Service、Repository/Mapper/DAO、Entity/DTO/VO、Validator、ExceptionHandler、Config、Utility、Other。
+3. **读取变更文件**：对每个匹配 `scope.sourceIncludes` 的变更源文件，调用 `read_code` 获取完整文件内容。
+4. **追踪调用链**：对每个变更的 Controller 或 Service 方法，识别：
+   - 项目内的直接调用方（上游）和被调用方（下游）
+   - 调用的 Repository/Mapper 方法
+   - 外部依赖（RPC、MQ、第三方接口、缓存）
+5. **识别风险区域**：标记涉及以下内容的方法：
+   - 状态流转
+   - 事务边界
+   - 权限、身份或租户校验
+   - 幂等机制
+   - 异常处理路径
+   - 数据库写操作（INSERT/UPDATE/DELETE）
+6. **组装输出**：产出符合 Schema 的结构化摘要。
+
+## 输出
+
+必须通过 `docs/contracts/change-analysis.schema.json` 校验：
+- `changedFiles[]`：路径、角色、可选的变更摘要
+- `affectedControllers[]`：Controller 类及受影响的接口
+- `callChains[]`：入口点及完整的 Controller → Service → Repository 调用链
+- `externalDependencies[]`：变更涉及的外部系统
+- `riskAreas[]`：方法及风险标签列表（stateTransition, transactional, authorization, tenancy, idempotency, exceptionHandling, databaseWrite）
+
+## 停止条件
+
+- 没有匹配 `scope.sourceIncludes` 的变更文件 → 报告空 diff 后停止
+- 文件无法读取 → 报告错误并跳过该文件
+
+## 禁止行为
+
+- 不得扫描无关模块或整个仓库
+- 不得修改任何文件
+- 不得直接执行 Shell 命令
+
+## 示例
 
 ```
-Input: git_diff for feature branch with 3 changed files
-Output:
+输入：feature 分支相对 main 的 git_diff，共 3 个变更文件
+
+输出：
   changedFiles:
-    - { path: "OrderController.java", role: "Controller", hunkSummary: "new approve endpoint" }
-    - { path: "OrderService.java", role: "Service", hunkSummary: "approve logic" }
-    - { path: "OrderRepository.java", role: "Repository", hunkSummary: "updateStatus method" }
+    - { path: "OrderController.java", role: "Controller", hunkSummary: "新增 approve 接口" }
+    - { path: "OrderService.java", role: "Service", hunkSummary: "approve 业务逻辑" }
+    - { path: "OrderRepository.java", role: "Repository", hunkSummary: "updateStatus 方法" }
   affectedControllers:
     - { controller: "OrderController", endpoints: ["POST /api/order/approve"] }
   callChains:

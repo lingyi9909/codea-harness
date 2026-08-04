@@ -1,6 +1,6 @@
 ---
 name: design-integration-tests
-description: Design Controller-entry Spring Boot integration tests. Map affected Controllers to real Service/Repository chains, identify external mocks, and produce a schema-valid test plan for human approval.
+description: 设计以 Controller 为入口的 Spring Boot 集成测试。将受影响的 Controller 映射到真实 Service/Repository 调用链，识别外部 Mock，产出需人工审批的测试计划。
 version: 1
 agent: integration-test-agent
 tools:
@@ -8,70 +8,84 @@ tools:
 output_schema: docs/contracts/test-plan.schema.json
 ---
 
-# Design Integration Tests
+# 设计集成测试
 
-## Purpose
-Given a change analysis and review findings, design Controller-entry integration tests. Map affected Controllers to their real Service and Repository chains, identify external dependencies to mock, and produce a schema-valid test plan for human approval.
+## 目标
 
-## When to use
-- After `harness review` completes and review findings are available
-- When `harness test` proceeds to the test planning phase
-- When Integration Test Agent receives change analysis from Reviewer
+根据变更分析和评审发现，设计以 Controller 为入口的集成测试。将受影响的 Controller 映射到真实 Service 和 Repository 调用链，识别需要 Mock 的外部依赖，产出符合 Schema 的测试计划供人工审批。
 
-## Do not use when
-- No change analysis has been produced — run `analyze-change` first
-- No affected Controllers were found in the change
-- The test plan has already been approved and tests are already generated
+## 适用场景
 
-## Inputs
-- Change analysis from `analyze-change` (validated against `change-analysis.schema.json`)
-- Review findings from `review-code` (especially items with `needsTest: true`)
-- Target project's existing test configuration and external-mock patterns
+- `harness review` 完成且评审发现可用之后
+- `harness test` 进入测试计划阶段时
+- Integration Test Agent 收到 Reviewer 的变更分析后
 
-## Allowed tools
-- `read_code` — read existing test files to understand project conventions
-- `read_code` — read Controller, Service, Repository source to trace call chains
+## 不适用场景
 
-## Execution steps
+- 尚未产出变更分析——先执行 `analyze-change`
+- 变更中没有受影响的 Controller
+- 测试计划已审批通过且测试已生成
 
-1. **Identify affected Controllers**: from the change analysis, list every Controller with changed endpoints or whose downstream Service/Repository chain is modified.
-2. **Trace the real call chain**: for each affected endpoint, read the Controller method and trace:
-   - Which Service methods it calls
-   - Which Repository/Mapper methods those Services call
-   - Which external systems (RPC, MQ, third-party API, cache) are invoked
-3. **Determine mock strategy**: for each external dependency, identify how the project already mocks or substitutes it in tests (e.g., `@MockBean`, `@SpringBootTest` with test config, WireMock, Testcontainers). Do NOT mock internal Service or Repository beans by default.
-4. **Design scenarios**: for each endpoint, design at minimum:
-   - **Happy path**: valid request, expected 2xx response, correct state transition and database effects
-   - **Error case**: invalid input, expected 4xx response with error body
-   - **Edge case**: boundary values, empty inputs, duplicate requests (if idempotency is relevant)
-5. **Define preconditions**: for each scenario, specify:
-   - Required database state (created through Controller requests or existing test data)
-   - External mock responses
-   - Authentication/tenant context
-6. **Define expected results**: for each scenario, specify:
-   - HTTP status code
-   - Response body assertions (key fields, not exhaustive)
-   - Database state assertions (rows inserted/updated/deleted, specific column values)
-   - State transitions (from → to)
-7. **Generate planId**: assign a unique ID like `test-plan-YYYYMMDD-NNN`.
-8. **Present for approval**: the plan is not yet approved. Prompt the user: "请回复：批准 <planId>".
+## 输入
 
-## Output
-Must validate against `docs/contracts/test-plan.schema.json`. Key fields:
-- `planId`: unique identifier for this plan
-- `targets[]`: per endpoint — controller, endpoint path, serviceChain, repositoryChain, externalMocks, scenarios
+- `analyze-change` 产出的变更分析（通过 `change-analysis.schema.json` 校验）
+- `review-code` 产出的评审发现（特别是 `needsTest: true` 的条目）
+- 目标项目已有的测试配置和外部依赖 Mock 方式
 
-## Stop conditions
-- No affected Controllers found → report and stop
-- Unable to determine mock strategy for an external dependency → flag as a question in the plan, do not guess
+## 允许使用的工具
 
-## Forbidden actions
-- Do not write any test files before the plan is approved
-- Do not mock internal Service or Repository beans by default
-- Do not design tests that access production data or systems
-- Do not weaken assertions to make tests easier to pass
+- `read_code`——读取已有测试文件以了解项目约定
+- `read_code`——读取 Controller、Service、Repository 源码以追踪调用链
 
-## Example
+## 前置条件
+
+- 变更分析已完成
+- 评审发现可用
+- 至少有一个受影响的 Controller
+
+## 执行步骤
+
+1. **识别受影响的 Controller**：从变更分析中列出每个有变更接口或其下游 Service/Repository 链被修改的 Controller。
+2. **追踪真实调用链**：对每个受影响的接口，读取 Controller 方法并追踪：
+   - 调用了哪些 Service 方法
+   - 这些 Service 调用了哪些 Repository/Mapper 方法
+   - 调用了哪些外部系统（RPC、MQ、第三方接口、缓存）
+3. **确定 Mock 策略**：对每个外部依赖，识别项目在测试中已有的 Mock 或替代方式（如 `@MockBean`、测试配置、WireMock、Testcontainers）。默认**不 Mock** 项目内部的 Service 或 Repository Bean。
+4. **设计场景**：对每个接口至少设计：
+   - **正常路径**：有效请求，预期 2xx 响应，正确的状态流转和数据库效果
+   - **错误场景**：无效输入，预期 4xx 响应及错误体
+   - **边界场景**：边界值、空输入、重复请求（如涉及幂等性）
+5. **定义前置条件**：对每个场景指定：
+   - 需要的数据库状态（优先通过 Controller 请求创建，或使用已有测试数据）
+   - 外部 Mock 的响应
+   - 认证/租户上下文
+6. **定义预期结果**：对每个场景指定：
+   - HTTP 状态码
+   - 响应体断言（关键字段，不必穷举）
+   - 数据库状态断言（插入/更新/删除的行、具体列值）
+   - 状态流转（from → to）
+7. **生成 planId**：分配唯一 ID，如 `test-plan-YYYYMMDD-NNN`。
+8. **呈现等待审批**：计划初始为未审批状态。提示用户：「请回复：批准 <planId>」。
+
+## 输出
+
+必须通过 `docs/contracts/test-plan.schema.json` 校验。关键字段：
+- `planId`：计划唯一标识
+- `targets[]`：每个接口——controller、endpoint、serviceChain、repositoryChain、externalMocks、scenarios
+
+## 停止条件
+
+- 没有受影响的 Controller → 报告后停止
+- 无法确定外部依赖的 Mock 策略 → 在计划中标记为待确认，不要猜测
+
+## 禁止行为
+
+- 不得在计划审批通过前编写任何测试文件
+- 不得默认 Mock 项目内部的 Service 或 Repository Bean
+- 不得设计访问生产数据或系统的测试
+- 不得为了让测试更容易通过而弱化断言
+
+## 示例
 
 ```json
 {
@@ -83,8 +97,8 @@ Must validate against `docs/contracts/test-plan.schema.json`. Key fields:
     "repositoryChain": ["OrderRepository"],
     "externalMocks": ["OrderRpcClient"],
     "scenarios": [{
-      "name": "approve pending order successfully",
-      "preconditions": ["a PENDING order exists with id=1"],
+      "name": "正常审批待处理订单",
+      "preconditions": ["存在 id=1 且状态为 PENDING 的订单"],
       "request": {
         "method": "POST",
         "path": "/api/order/approve",

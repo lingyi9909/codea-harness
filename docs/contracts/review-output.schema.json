@@ -1,16 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ReviewOutput",
+  "description": "代码评审输出，由 Reviewer 在分析变更后产出",
   "type": "object",
   "additionalProperties": false,
   "required": ["summary", "findings"],
   "properties": {
     "summary": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "评审摘要"
     },
     "findings": {
       "type": "array",
+      "description": "评审发现列表",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -29,41 +32,51 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "发现编号，如 F-001"
           },
           "severity": {
-            "enum": ["critical", "high", "medium", "low"]
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "严重程度"
           },
           "file": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "问题所在文件路径"
           },
           "line": {
             "type": ["integer", "null"],
-            "minimum": 1
+            "minimum": 1,
+            "description": "问题所在行号"
           },
           "evidence": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "具体证据（来自 diff 或代码）"
           },
           "impact": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "问题影响"
           },
           "recommendation": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "最小修复建议"
           },
           "needsTest": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否需要补充集成测试"
           },
           "introducedByChange": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否由本次变更引入"
           },
           "confidence": {
             "type": "number",
             "minimum": 0,
-            "maximum": 1
+            "maximum": 1,
+            "description": "置信度（0-1）"
           }
         }
       }

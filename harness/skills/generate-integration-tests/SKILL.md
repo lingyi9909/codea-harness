@@ -1,6 +1,6 @@
 ---
 name: generate-integration-tests
-description: Given a human-approved test plan, generate or modify Spring Boot integration test classes using @SpringBootTest + @AutoConfigureMockMvc with real internal beans.
+description: 根据已审批的测试计划，生成使用 @SpringBootTest + @AutoConfigureMockMvc 的集成测试类，真实调用内部 Bean。
 version: 1
 agent: integration-test-agent
 tools:
@@ -9,71 +9,85 @@ tools:
 output_schema: null
 ---
 
-# Generate Integration Tests
+# 生成集成测试
 
-## Purpose
-Given a human-approved test plan, generate or modify integration test classes using `@SpringBootTest` + `@AutoConfigureMockMvc` with real internal beans and the project's existing test database configuration.
+## 目标
 
-## When to use
-- After the user explicitly approves a test plan by its `planId` (e.g., "批准 test-plan-20260804-001")
-- When Integration Test Agent proceeds from plan approval to code generation
+根据经人工审批的测试计划，使用 `@SpringBootTest` + `@AutoConfigureMockMvc` 生成或修改集成测试类，真实调用内部 Bean，使用项目已有的测试数据库配置。
 
-## Do not use when
-- The test plan has not been explicitly approved
-- The approval is vague ("ok", "继续") — must contain the exact `planId`
-- The plan has been modified since approval — generate a new `planId` first
+## 适用场景
 
-## Inputs
-- An approved test plan (`planId` must have been explicitly approved by a human)
-- The target project's existing test directory structure and conventions
-- The project's existing `@SpringBootTest` configuration (test database, external mock setup)
+- 用户以精确 `planId` 明确审批测试计划后（如「批准 test-plan-20260804-001」）
+- Integration Test Agent 从计划审批阶段进入代码生成阶段
 
-## Allowed tools
-- `read_code` — read existing test files, test configuration, and source code
-- `write_test` — create or modify test files under allowed test paths
+## 不适用场景
 
-## Execution steps
+- 测试计划尚未被明确审批
+- 审批表述模糊（「好」「继续」）——必须包含精确的 `planId`
+- 计划自审批以来已被修改——需先生成新的 `planId`
 
-1. **Verify approval**: confirm the test plan identified by `planId` has been explicitly approved by a human with the exact `planId` in the approval message. If not, stop and request approval.
-2. **Study conventions**: read 1-2 existing integration test files in the project to understand:
-   - Base test class or common annotations
-   - Test class naming pattern (e.g., `XxxControllerIT`, `XxxIntegrationTest`)
-   - Assertion library (AssertJ, Hamcrest, JUnit assertions)
-   - How external dependencies are mocked (`@MockBean`, test configuration, WireMock)
-   - How test data is prepared (SQL scripts, `@BeforeEach`, builder methods)
-   - Authentication/tenant context setup in tests
-3. **Determine test class location**: place new tests under `src/test/java/` mirroring the production package structure. Follow the project's existing naming convention.
-4. **Write the test class**:
-   - Annotate with `@SpringBootTest` and `@AutoConfigureMockMvc`
-   - Use `@Autowired MockMvc` for requests
-   - Use `@Autowired` for real Controller, Service, Repository beans when needed for setup/verification
-   - Mock only external dependencies (RPC, MQ, third-party APIs) using the project's existing pattern
-   - Use the project's existing test database profile/configuration
-5. **Implement each scenario** from the plan:
-   - **Setup**: prepare preconditions (create data through Controller requests or repository setup)
-   - **Execute**: send the request via `MockMvc.perform()`
-   - **Assert**: verify HTTP status, response body key fields, and database state changes
-   - **Teardown**: rely on `@Transactional` rollback or the project's existing cleanup mechanism
-6. **Handle error scenarios**: for 4xx/5xx expected responses, assert the error code/message structure matching the project's unified error response format.
-7. **Preserve existing tests**: never delete, disable, or weaken existing test assertions.
+## 输入
 
-## Output
-- New or modified test files under `write.allowedTestPaths`
-- Each test method corresponds to a scenario in the approved plan
+- 已审批的测试计划（`planId` 必须已经人工明确审批）
+- 目标项目已有的测试目录结构和约定
+- 项目已有的 `@SpringBootTest` 配置（测试数据库、外部 Mock 设置）
 
-## Stop conditions
-- Test plan is not approved → stop and request approval
-- Test path is not in allowed paths → stop and report
-- Existing test conventions cannot be determined → flag and ask
+## 允许使用的工具
 
-## Forbidden actions
-- Do not write tests without an approved plan
-- Do not mock internal Service or Repository beans by default
-- Do not delete existing tests, add `@Disabled`, comment out assertions, or weaken assertions
-- Do not access production data or systems
-- Do not change production code to make tests pass
+- `read_code`——读取已有测试文件、测试配置和源码
+- `write_test`——在允许的测试路径下创建或修改测试文件
 
-## Example
+## 前置条件
+
+- 测试计划已获人工审批
+- 目标项目的测试目录结构可访问
+- `harness.yaml` 中 `write.allowedTestPaths` 配置有效
+
+## 执行步骤
+
+1. **验证审批**：确认以 `planId` 标识的测试计划已被人工明确审批，审批消息中包含精确的 `planId`。如未审批，停止并请求审批。
+2. **学习约定**：阅读项目中 1-2 个已有的集成测试文件，了解：
+   - 基类或通用注解
+   - 测试类命名规则（如 `XxxControllerIT`、`XxxIntegrationTest`）
+   - 断言库（AssertJ、Hamcrest、JUnit assertions）
+   - 外部依赖的 Mock 方式（`@MockBean`、测试配置、WireMock）
+   - 测试数据准备方式（SQL 脚本、`@BeforeEach`、Builder 方法）
+   - 测试中的认证/租户上下文设置
+3. **确定测试类位置**：将新测试放在 `src/test/java/` 下，镜像生产包结构。遵循项目已有的命名约定。
+4. **编写测试类**：
+   - 使用 `@SpringBootTest` 和 `@AutoConfigureMockMvc` 注解
+   - 使用 `@Autowired MockMvc` 发送请求
+   - 使用 `@Autowired` 注入真实 Controller、Service、Repository Bean（用于 setup/verification）
+   - 仅 Mock 外部依赖（RPC、MQ、第三方接口），沿用项目已有方式
+   - 使用项目已有的测试数据库 profile/配置
+5. **实现每个场景**：
+   - **准备**：构造前置条件（通过 Controller 请求或 Repository 操作创建数据）
+   - **执行**：通过 `MockMvc.perform()` 发送请求
+   - **断言**：验证 HTTP 状态码、响应体关键字段和数据库状态变更
+   - **清理**：依赖 `@Transactional` 回滚或项目已有的清理机制
+6. **处理错误场景**：对 4xx/5xx 预期响应，断言错误码/消息结构匹配项目统一错误响应格式。
+7. **保留已有测试**：绝不删除、禁用或弱化已有的测试断言。
+
+## 输出
+
+- 新建或修改的测试文件（位于 `write.allowedTestPaths` 下）
+- 每个测试方法对应审批通过的计划中的一个场景
+
+## 停止条件
+
+- 测试计划未获审批 → 停止并请求审批
+- 测试路径不在允许的路径中 → 停止并报告
+- 无法确定已有测试约定 → 标记并询问
+
+## 禁止行为
+
+- 不得在计划审批通过前编写测试代码
+- 不得默认 Mock 项目内部的 Service 或 Repository Bean
+- 不得删除已有测试、添加 `@Disabled`、注释掉断言或弱化断言
+- 不得访问生产数据或系统
+- 不得为让测试通过而修改生产代码
+
+## 示例
 
 ```java
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -92,23 +106,23 @@ class OrderControllerIT {
 
     @Test
     void shouldApprovePendingOrder() throws Exception {
-        // setup: create a pending order
+        // 准备：创建待处理订单
         Order order = orderRepository.save(
             new Order().setStatus(Status.PENDING).setTenantId("t1"));
 
-        // mock external RPC
+        // Mock 外部 RPC
         when(orderRpcClient.notifyErp(any())).thenReturn(true);
 
-        // execute
+        // 执行
         mockMvc.perform(post("/api/order/approve")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-Tenant-Id", "t1")
                 .content("{\"orderId\": " + order.getId() + "}"))
-            // assert
+            // 断言
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("APPROVED"));
 
-        // verify database
+        // 验证数据库
         Order updated = orderRepository.findById(order.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(Status.APPROVED);
     }
