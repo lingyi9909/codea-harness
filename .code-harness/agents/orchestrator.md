@@ -89,6 +89,40 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 - 进程树停止：可用
 ```
 
+### 执行前能力检查
+
+宿主能力（文件读取、Maven 执行、进程控制等）属于当前机器和当前 Agent 会话的属性，**不得持久化到 `harness.yaml`**。`harness init` 时输出的宿主能力仅作为当前会话的参考，不写入配置。
+
+以下意图除了要求 `initialization.status` 为 `READY` 外，还必须在执行前确认当前宿主具备所需能力：
+
+| 意图 | 文件读取 | 受限文件写入 | Maven 执行 | 超时控制 | 日志采集 | 进程树停止 |
+|------|---------|-------------|-----------|---------|---------|-----------|
+| `harness test` | 需要 | 需要 | 需要 | 需要 | - | - |
+| `harness debug-service` | - | - | 需要 | - | 需要 | 需要 |
+| `harness fix finding:<id>` | 需要 | 需要 | - | - | - | - |
+| `harness fix diagnosis:<runId>` | 需要 | 需要 | - | - | - | - |
+| `harness verify test:<class>` | 需要 | - | 需要 | 需要 | - | - |
+| `harness verify fix:<fixPlanId>` | 需要 | - | 需要 | 需要 | - | - |
+| `harness verify service:<runId>` | - | - | 需要 | - | 需要 | 需要 |
+
+`harness init` 和 `harness review` 不在此列——它们只需要文件读取能力，这是所有 Agent 会话的基础能力。
+
+**完整门禁 = `initialization.status = READY` + 当前宿主具备本次意图所需能力。**
+
+能力缺失时的输出格式：
+
+```
+结果：MANUAL_ACTION_REQUIRED
+
+缺少能力：
+- Maven 进程执行
+- 进程树停止
+
+当前可以执行：
+- harness review
+- harness init（重新确认）
+```
+
 ### `harness review`
 ```
 1. Reviewer: analyze-change → review-code
@@ -98,6 +132,7 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 ### `harness test`
 ```
+0. 执行前能力检查：确认文件读取、受限文件写入、Maven 执行、超时控制均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
 1. Reviewer: analyze-change → review-code
 2. 如果存在受影响的 Controller → 继续设计集成测试
    （needsTest=true 仅用于标记重点测试场景，不影响是否生成测试）
@@ -122,6 +157,7 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 ### `harness debug-service`
 ```
+0. 执行前能力检查：确认 Maven 执行、日志采集、进程树停止均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
 1. Runtime Debugger（service-debug 模式）: debug-local-service
 2. 等待服务就绪
 3. 输出："服务已就绪。请手动触发接口请求。完成后回复 'done'。"
@@ -135,6 +171,7 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 ### `harness fix finding:<id>`
 ```
+0. 执行前能力检查：确认文件读取、受限文件写入均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
 1. Fix Agent: fix-bug（输入：用户选定的评审发现 id）
 2. 输出修复方案 → WAITING_APPROVAL
    提示："请回复：批准 <fixPlanId>"
@@ -146,24 +183,28 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 ### `harness fix diagnosis:<runId>`
 ```
+0. 执行前能力检查：确认文件读取、受限文件写入均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
 1. Fix Agent: fix-bug（输入：PRODUCTION_CODE_ERROR 诊断结果，以 runId 标识）
 2. 后续流程与 harness fix finding:<id> 的步骤 2 起相同
 ```
 
 ### `harness verify test:<class>`
 ```
+0. 执行前能力检查：确认文件读取、Maven 执行、超时控制均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
 1. Runtime Debugger: run-integration-tests → analyze-failure
 2. 输出：通过/失败 + 诊断结果
 ```
 
 ### `harness verify fix:<fixPlanId>`
 ```
+0. 执行前能力检查：确认文件读取、Maven 执行、超时控制均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
 1. Runtime Debugger: 重新运行与该修复方案关联的测试
 2. 输出：通过/失败——修复是否成功？
 ```
 
 ### `harness verify service:<runId>`
 ```
+0. 执行前能力检查：确认 Maven 执行、日志采集、进程树停止均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
 1. Runtime Debugger（service-debug 模式）: 重新启动本地服务
 2. 建立新的日志采集窗口
 3. 提示用户手动触发接口请求

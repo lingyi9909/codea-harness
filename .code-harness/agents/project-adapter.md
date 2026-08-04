@@ -26,7 +26,7 @@ skills:
 ### 首次初始化
 
 1. **扫描项目结构**：使用 `list_project_tree` 获取目标项目的目录概览。
-2. **检查宿主能力**：确认当前宿主平台支持哪些工具能力（文件读取、Maven 执行、进程控制）。输出宿主能力清单。如果关键能力缺失（如无法执行 Maven），`harness test` 和 `harness debug-service` 将不可用。
+2. **检查宿主能力**：确认当前宿主平台支持哪些工具能力（文件读取、Maven 执行、进程控制）。输出宿主能力清单供当前会话参考。**宿主能力不持久化到 `harness.yaml`**——每次执行 `harness test`、`harness debug-service` 等意图时，Orchestrator 会重新检查。如果关键能力缺失（如无法执行 Maven），`harness test` 和 `harness debug-service` 将不可用。
 3. **识别构建方式**：先判断操作系统，再选择 Maven Wrapper：
    - Windows → 优先 `mvnw.cmd`
    - Unix/Linux/macOS → 优先 `./mvnw`

@@ -82,9 +82,29 @@
         "unresolved": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "未确定的配置项列表。status 为 READY 时必须为空数组"
+          "description": "未确定的配置项列表。READY 时必须为空数组；NEEDS_CONFIRMATION 时至少 1 项"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "READY" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": { "unresolved": { "maxItems": 0 } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "NEEDS_CONFIRMATION" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": { "unresolved": { "minItems": 1 } }
+          }
+        }
+      ]
     },
     "scope": {
       "type": "object",

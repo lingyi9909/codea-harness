@@ -28,9 +28,12 @@ service:
 stopService:
   mode: processTree
 
+# 本文件为模板，不能直接作为配置执行。
+# 只有 Project Adapter 在 harness init 时生成的 harness.yaml 才是有效配置。
 initialization:
   status: NEEDS_CONFIRMATION
-  unresolved: []
+  unresolved:
+    - projectNotInitialized
 
 scope:
   sourceIncludes:

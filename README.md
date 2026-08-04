@@ -99,7 +99,7 @@ harness verify service:debug-001  # 重新启动服务，采集日志，验证�
 
 - 测试计划审批通过前，不得编写测试代码。
 - 修复方案审批通过前，不得修改生产代码。
-- Agent 只能使用 `tools/README.md` 中列出的受控工具契约。
+- Agent 只能使用 `.code-harness/tools/README.md` 中列出的受控工具契约。
 - 测试代码最多自动修复 2 轮，超限后停止。
 - V1 不会自动提交、推送、创建 PR，也不会在测试/生产环境中自动执行。
 
