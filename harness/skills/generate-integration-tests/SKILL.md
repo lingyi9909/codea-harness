@@ -1,7 +1,27 @@
+---
+name: generate-integration-tests
+description: Given a human-approved test plan, generate or modify Spring Boot integration test classes using @SpringBootTest + @AutoConfigureMockMvc with real internal beans.
+version: 1
+agent: integration-test-agent
+tools:
+  - read_code
+  - write_test
+output_schema: null
+---
+
 # Generate Integration Tests
 
 ## Purpose
 Given a human-approved test plan, generate or modify integration test classes using `@SpringBootTest` + `@AutoConfigureMockMvc` with real internal beans and the project's existing test database configuration.
+
+## When to use
+- After the user explicitly approves a test plan by its `planId` (e.g., "批准 test-plan-20260804-001")
+- When Integration Test Agent proceeds from plan approval to code generation
+
+## Do not use when
+- The test plan has not been explicitly approved
+- The approval is vague ("ok", "继续") — must contain the exact `planId`
+- The plan has been modified since approval — generate a new `planId` first
 
 ## Inputs
 - An approved test plan (`planId` must have been explicitly approved by a human)
@@ -14,7 +34,7 @@ Given a human-approved test plan, generate or modify integration test classes us
 
 ## Execution steps
 
-1. **Verify approval**: confirm the test plan identified by `planId` has been explicitly approved by a human. If not, stop and request approval.
+1. **Verify approval**: confirm the test plan identified by `planId` has been explicitly approved by a human with the exact `planId` in the approval message. If not, stop and request approval.
 2. **Study conventions**: read 1-2 existing integration test files in the project to understand:
    - Base test class or common annotations
    - Test class naming pattern (e.g., `XxxControllerIT`, `XxxIntegrationTest`)

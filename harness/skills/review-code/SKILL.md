@@ -1,10 +1,30 @@
+---
+name: review-code
+description: Review analyzed changes for correctness, state transitions, transactions, authorization, tenancy, idempotency, exception handling, and data consistency. Produce evidence-backed findings.
+version: 1
+agent: reviewer
+tools:
+  - read_code
+output_schema: docs/contracts/review-output.schema.json
+---
+
 # Review Changed Code
 
 ## Purpose
 Review the analyzed change for correctness and safety, producing evidence-backed findings that validate against `review-output.schema.json`.
 
+## When to use
+- After `analyze-change` completes — this is the second step in `harness review` and `harness test`
+- Whenever changed code needs correctness verification
+- Always runs before test plan generation in `harness test`
+
+## Do not use when
+- No change analysis exists yet — run `analyze-change` first
+- The diff is empty (no changes to review)
+- User explicitly requests to skip review
+
 ## Inputs
-- Change analysis from `analyze-change` (changed files, call chains, risk areas)
+- Change analysis from `analyze-change` (validated against `change-analysis.schema.json`)
 - Full content of all changed source files and directly related callers/callees
 
 ## Allowed tools

@@ -1,10 +1,30 @@
+---
+name: design-integration-tests
+description: Design Controller-entry Spring Boot integration tests. Map affected Controllers to real Service/Repository chains, identify external mocks, and produce a schema-valid test plan for human approval.
+version: 1
+agent: integration-test-agent
+tools:
+  - read_code
+output_schema: docs/contracts/test-plan.schema.json
+---
+
 # Design Integration Tests
 
 ## Purpose
 Given a change analysis and review findings, design Controller-entry integration tests. Map affected Controllers to their real Service and Repository chains, identify external dependencies to mock, and produce a schema-valid test plan for human approval.
 
+## When to use
+- After `harness review` completes and review findings are available
+- When `harness test` proceeds to the test planning phase
+- When Integration Test Agent receives change analysis from Reviewer
+
+## Do not use when
+- No change analysis has been produced — run `analyze-change` first
+- No affected Controllers were found in the change
+- The test plan has already been approved and tests are already generated
+
 ## Inputs
-- Change analysis from `analyze-change`
+- Change analysis from `analyze-change` (validated against `change-analysis.schema.json`)
 - Review findings from `review-code` (especially items with `needsTest: true`)
 - Target project's existing test configuration and external-mock patterns
 
@@ -34,7 +54,7 @@ Given a change analysis and review findings, design Controller-entry integration
    - Database state assertions (rows inserted/updated/deleted, specific column values)
    - State transitions (from → to)
 7. **Generate planId**: assign a unique ID like `test-plan-YYYYMMDD-NNN`.
-8. **Set approval status**: the plan is initially unapproved. It must not be executed until a human explicitly approves it by planId.
+8. **Present for approval**: the plan is not yet approved. Prompt the user: "请回复：批准 <planId>".
 
 ## Output
 Must validate against `docs/contracts/test-plan.schema.json`. Key fields:

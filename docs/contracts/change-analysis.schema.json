@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChangeAnalysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "changedFiles",
+    "affectedControllers",
+    "callChains",
+    "externalDependencies",
+    "riskAreas"
+  ],
+  "properties": {
+    "changedFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "role": {
+            "enum": [
+              "Controller",
+              "Service",
+              "Repository",
+              "Mapper",
+              "Entity",
+              "DTO",
+              "VO",
+              "Validator",
+              "ExceptionHandler",
+              "Config",
+              "Utility",
+              "Other"
+            ]
+          },
+          "hunkSummary": { "type": "string" }
+        }
+      }
+    },
+    "affectedControllers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["controller", "endpoints"],
+        "properties": {
+          "controller": { "type": "string", "minLength": 1 },
+          "endpoints": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "callChains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entryPoint", "chain"],
+        "properties": {
+          "entryPoint": { "type": "string", "minLength": 1 },
+          "chain": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "externalDependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "riskAreas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["method", "risk"],
+        "properties": {
+          "method": { "type": "string", "minLength": 1 },
+          "risk": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "stateTransition",
+                "transactional",
+                "authorization",
+                "tenancy",
+                "idempotency",
+                "exceptionHandling",
+                "databaseWrite"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
