@@ -3,12 +3,7 @@
   "title": "Diagnosis",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "classification",
-    "rootCause",
-    "evidence",
-    "nextAction"
-  ],
+  "required": ["classification", "rootCause", "evidence", "nextAction"],
   "properties": {
     "classification": {
       "enum": [
@@ -34,8 +29,15 @@
       }
     },
     "nextAction": {
-      "type": "string",
-      "minLength": 1
+      "enum": [
+        "REPAIR_TEST",
+        "GENERATE_FIX_PLAN",
+        "RETRY_TEST",
+        "REPORT_ENVIRONMENT",
+        "STOP_UNKNOWN",
+        "RESTART_SERVICE",
+        "WAIT_FOR_MANUAL_REQUEST"
+      ]
     }
   }
 }

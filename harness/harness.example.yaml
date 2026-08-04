@@ -6,11 +6,11 @@ project:
 integrationTest:
   executable: ./mvnw
   args:
+    - -Dspring.profiles.active=test
     - -Dtest=${testClass}
     - test
   reportDir: target/surefire-reports
   timeoutSeconds: 600
-  profile: test
 
 service:
   executable: ./mvnw
@@ -21,6 +21,9 @@ service:
     type: log
     pattern: Started Application
   logFile: logs/application.log
+
+stopService:
+  mode: processTree
 
 scope:
   sourceIncludes:

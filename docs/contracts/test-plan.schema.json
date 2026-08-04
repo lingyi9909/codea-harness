@@ -3,13 +3,11 @@
   "title": "IntegrationTestPlan",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "approved",
-    "targets"
-  ],
+  "required": ["planId", "targets"],
   "properties": {
-    "approved": {
-      "type": "boolean"
+    "planId": {
+      "type": "string",
+      "minLength": 1
     },
     "targets": {
       "type": "array",
@@ -17,11 +15,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "controller",
-          "endpoint",
-          "scenarios"
-        ],
+        "required": ["controller", "endpoint", "scenarios"],
         "properties": {
           "controller": {
             "type": "string",
@@ -33,21 +27,15 @@
           },
           "serviceChain": {
             "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "items": { "type": "string" }
           },
           "repositoryChain": {
             "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "items": { "type": "string" }
           },
           "externalMocks": {
             "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "items": { "type": "string" }
           },
           "scenarios": {
             "type": "array",
@@ -55,11 +43,7 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "name",
-                "request",
-                "expected"
-              ],
+              "required": ["name", "request", "expected"],
               "properties": {
                 "name": {
                   "type": "string",
@@ -67,15 +51,53 @@
                 },
                 "preconditions": {
                   "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
+                  "items": { "type": "string" }
                 },
                 "request": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["method", "path"],
+                  "properties": {
+                    "method": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "headers": {
+                      "type": "object"
+                    },
+                    "body": {
+                      "type": "object"
+                    }
+                  }
                 },
                 "expected": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["httpStatus"],
+                  "properties": {
+                    "httpStatus": {
+                      "type": "integer"
+                    },
+                    "responseAssertions": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "databaseAssertions": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "stateTransition": {
+                      "type": "object",
+                      "properties": {
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
+                      }
+                    }
+                  }
                 }
               }
             }

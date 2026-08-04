@@ -3,10 +3,7 @@
   "title": "ReviewOutput",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "summary",
-    "findings"
-  ],
+  "required": ["summary", "findings"],
   "properties": {
     "summary": {
       "type": "string",
@@ -25,7 +22,9 @@
           "evidence",
           "impact",
           "recommendation",
-          "needsTest"
+          "needsTest",
+          "introducedByChange",
+          "confidence"
         ],
         "properties": {
           "id": {
@@ -33,22 +32,14 @@
             "minLength": 1
           },
           "severity": {
-            "enum": [
-              "critical",
-              "high",
-              "medium",
-              "low"
-            ]
+            "enum": ["critical", "high", "medium", "low"]
           },
           "file": {
             "type": "string",
             "minLength": 1
           },
           "line": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "evidence": {
@@ -65,6 +56,14 @@
           },
           "needsTest": {
             "type": "boolean"
+          },
+          "introducedByChange": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
           }
         }
       }
