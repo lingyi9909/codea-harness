@@ -12,6 +12,22 @@
 - 外部系统、第三方接口、MQ、RPC 沿用目标项目已有的测试替代方式。
 - 本地服务调试与集成测试执行是两条独立路径。
 
+## 初始化门禁
+
+`harness init` 和 `harness review` 可以在任意状态下执行。
+
+以下意图必须在 `harness.yaml` 中 `initialization.status` 为 `READY` 时才能执行：
+
+- `harness test`
+- `harness debug-service`
+- `harness fix finding:<id>`
+- `harness fix diagnosis:<runId>`
+- `harness verify test:<class>`
+- `harness verify fix:<fixPlanId>`
+- `harness verify service:<runId>`
+
+如果 status 为 `NEEDS_CONFIRMATION`，Orchestrator 必须停止并提示用户先完成初始化确认。
+
 ## 审批门禁
 
 - 测试计划审批通过前，不得编写或修改测试代码。审批以 `planId` 精确匹配为准——Agent 不能自行审批。
@@ -20,19 +36,19 @@
 
 ## 意图路由
 
-Orchestrator（`agents/orchestrator.md`）负责路由所有用户意图：
+Orchestrator（`.code-harness/agents/orchestrator.md`）负责路由所有用户意图：
 
-| 意图 | 调用的 Agent |
-|------|-------------|
-| `harness init` | Project Adapter |
-| `harness review` | Reviewer |
-| `harness test` | Reviewer → Integration Test Agent → Runtime Debugger →（如需要）Fix Agent |
-| `harness debug-service` | Runtime Debugger |
-| `harness fix finding:<id>` | Fix Agent → Runtime Debugger |
-| `harness fix diagnosis:<runId>` | Fix Agent → Runtime Debugger |
-| `harness verify test:<class>` | Runtime Debugger |
-| `harness verify fix:<fixPlanId>` | Runtime Debugger |
-| `harness verify service:<runId>` | Runtime Debugger（重新启动服务，建立新的日志采集窗口） |
+| 意图 | 调用的 Agent | 需要 READY |
+|------|-------------|------------|
+| `harness init` | Project Adapter | 否 |
+| `harness review` | Reviewer | 否 |
+| `harness test` | Reviewer → Integration Test Agent → Runtime Debugger →（如需要）Fix Agent | 是 |
+| `harness debug-service` | Runtime Debugger | 是 |
+| `harness fix finding:<id>` | Fix Agent → Runtime Debugger | 是 |
+| `harness fix diagnosis:<runId>` | Fix Agent → Runtime Debugger | 是 |
+| `harness verify test:<class>` | Runtime Debugger | 是 |
+| `harness verify fix:<fixPlanId>` | Runtime Debugger | 是 |
+| `harness verify service:<runId>` | Runtime Debugger（重新启动服务，建立新的日志采集窗口） | 是 |
 
 ## Agent 职责划分
 
@@ -52,7 +68,7 @@ Orchestrator（`agents/orchestrator.md`）负责路由所有用户意图：
 
 ## 工具约束
 
-- Subagent 只能使用 `tools/README.md` 中列出的受控工具契约。
+- Subagent 只能使用 `.code-harness/tools/README.md` 中列出的受控工具契约。
 - 禁止执行任意 Shell 命令。所有 Maven 和服务命令必须使用 `harness.yaml` 中确切配置的 `executable` 和 `args`。
 - 执行 Maven 或服务命令时，必须完整展示最终 executable 和 args。禁止 Shell 求值（`shell=true`、`eval`、`bash -c`、`sh -c`）、管道、重定向和命令链接（`&&`、`;`）。
 - `stop_service` 必须停止 `ServiceHandle` 中记录的进程树（使用 `processGroup`），而非单个 PID。

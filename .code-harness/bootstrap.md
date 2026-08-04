@@ -2,10 +2,10 @@
 
 当用户要求执行 `harness init` 时：
 
-1. 读取 `AGENTS.md`，了解 Harness 通用规则和安全约束。
-2. 读取 `agents/orchestrator.md`，了解完整意图路由。
-3. 由 Orchestrator 调用 Project Adapter（`agents/project-adapter.md`）。
-4. Project Adapter 使用 `adapt-project` Skill（`skills/adapt-project/SKILL.md`）分析目标项目。
+1. 读取 `.code-harness/AGENTS.md`，了解 Harness 通用规则和安全约束。
+2. 读取 `.code-harness/agents/orchestrator.md`，了解完整意图路由。
+3. 由 Orchestrator 调用 Project Adapter（`.code-harness/agents/project-adapter.md`）。
+4. Project Adapter 使用 `adapt-project` Skill（`.code-harness/skills/adapt-project/SKILL.md`）分析目标项目。
 5. 根据识别结果自动生成：
    - `harness.yaml`——项目可执行配置
    - `project.md`——项目适配信息
@@ -16,4 +16,4 @@
 
 ---
 
-`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `agents/orchestrator.md` 中的路由自动执行。
+`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行。

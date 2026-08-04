@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HarnessConfig",
+  "description": "harness.yaml 配置校验，由 Project Adapter 在生成和更新配置时使用",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "project", "integrationTest", "service", "stopService", "initialization", "scope", "write", "runs"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "配置版本号"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "root", "module"],
+      "properties": {
+        "type": { "enum": ["maven"], "description": "项目构建类型" },
+        "root": { "type": "string", "description": "项目根目录，通常为 ." },
+        "module": { "type": "string", "description": "目标模块名，单模块项目为空字符串" }
+      }
+    },
+    "integrationTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "args", "reportDir", "timeoutSeconds"],
+      "properties": {
+        "executable": { "type": "string", "minLength": 1, "description": "Maven 可执行文件路径" },
+        "args": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Maven 测试参数，${testClass} 会被替换为实际测试类"
+        },
+        "reportDir": { "type": "string", "minLength": 1, "description": "Surefire 报告目录" },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "测试超时秒数" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "args", "startupTimeoutSeconds", "readiness", "logFile"],
+      "properties": {
+        "executable": { "type": "string", "minLength": 1 },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "startupTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "pattern"],
+          "properties": {
+            "type": { "enum": ["log"], "description": "就绪检测方式" },
+            "pattern": { "type": "string", "minLength": 1, "description": "就绪日志匹配模式" }
+          }
+        },
+        "logFile": {
+          "type": ["string", "null"],
+          "description": "应用日志文件路径，null 表示只采集 stdout/stderr"
+        }
+      }
+    },
+    "stopService": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["processTree"], "description": "服务停止方式" }
+      }
+    },
+    "initialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "unresolved"],
+      "properties": {
+        "status": {
+          "enum": ["READY", "NEEDS_CONFIRMATION"],
+          "description": "初始化状态。READY 表示所有配置已确认可执行；NEEDS_CONFIRMATION 表示存在未确定项，harness test/debug-service/fix/verify 不得执行"
+        },
+        "unresolved": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "未确定的配置项列表。status 为 READY 时必须为空数组"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceIncludes", "testIncludes"],
+      "properties": {
+        "sourceIncludes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "testIncludes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "write": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedTestPaths", "allowedProductionPaths", "deniedPaths"],
+      "properties": {
+        "allowedTestPaths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "allowedProductionPaths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "deniedPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "runs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory"],
+      "properties": {
+        "directory": { "type": "string", "minLength": 1, "description": "运行产物目录" }
+      }
+    }
+  }
+}

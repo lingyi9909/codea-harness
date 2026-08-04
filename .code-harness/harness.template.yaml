@@ -28,6 +28,10 @@ service:
 stopService:
   mode: processTree
 
+initialization:
+  status: NEEDS_CONFIRMATION
+  unresolved: []
+
 scope:
   sourceIncludes:
     - src/main/java/**/*.java

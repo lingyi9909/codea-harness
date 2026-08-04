@@ -52,12 +52,12 @@ tools:
 
 ### 2. 识别 Maven 命令
 
-按优先级检查：
-1. `./mvnw`（Maven Wrapper Unix）
-2. `mvnw.cmd`（Maven Wrapper Windows）
-3. `mvn`（系统 Maven）
+先判断当前操作系统，再按对应优先级选择 Maven Wrapper：
 
-存在 Maven Wrapper 时必须优先使用 Wrapper。
+- **Windows** → 优先 `mvnw.cmd`，其次系统 `mvn`
+- **Unix / Linux / macOS** → 优先 `./mvnw`，其次系统 `mvn`
+
+存在 Maven Wrapper 时必须优先使用 Wrapper。如果宿主平台不支持执行 Maven 命令，标记为宿主能力缺失。
 
 ### 3. 识别模块结构
 
@@ -129,15 +129,65 @@ readiness:
 
 ### 8. 生成 harness.yaml
 
-根据所有识别结果生成 `.code-harness/harness.yaml`。参考模板为 `harness.template.yaml`，但必须根据项目实际情况调整：
+根据所有识别结果生成 `.code-harness/harness.yaml`。参考模板为 `harness.template.yaml`，但必须根据项目实际情况调整。
+
+**可以使用约定默认值的字段**（无需询问用户，标记来源为 convention-default）：
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `timeoutSeconds` | `600` | 测试超时 |
+| `reportDir` | `target/surefire-reports`（单模块）或 `<module>/target/surefire-reports`（多模块） | Surefire 标准目录 |
+| `readiness.pattern` | `Started` | 通用就绪模式（能识别类名时用 `Started <AppName>`） |
+| `runs.directory` | `.code-harness/runs` | 运行产物目录 |
+| `scope.sourceIncludes` | `src/main/java/**/*.java` | 标准 Maven 源码路径 |
+| `scope.testIncludes` | `src/test/java/**/*.java` | 标准 Maven 测试路径 |
+| `write.allowed*` | 标准 Maven 路径 | 与 scope 一致 |
+| `write.deniedPaths` | `.git/**`、`.github/**`、`target/**`、`.code-harness/agents/**` 等 | 固定排除路径 |
+| `stopService.mode` | `processTree` | 进程树停止 |
+
+使用默认值时在初始化报告中注明「使用默认值」。
+
+**必须人工确认的字段**（未确认时 `initialization.status` 设为 `NEEDS_CONFIRMATION`，加入 `unresolved` 列表）：
+
+- 测试 Profile（`spring.profiles.active`）
+- 服务启动 Profile（`spring-boot.run.profiles`）
+- 测试数据库是否允许写入
+- 多个启动模块中选择哪一个
+- 多个 Controller/Web 模块中选择哪一个
+- 外部依赖（RPC/MQ/第三方 API）的 Mock 或替代方式
+- 是否会连接共享或生产资源
+
+不得为以上字段猜测值。未确认时不得执行测试或启动服务。
 
 - Maven 命令、Profile、模块参数必须来自识别结果
 - 测试报告路径必须根据实际模块结构调整
 - 日志文件路径能识别则填写，不能则填 `null`
-- 所有 `scope` 和 `write` 路径必须根据实际项目结构生成
 - denied paths 必须包含 `.code-harness/agents/**`、`.code-harness/skills/**`、`.code-harness/contracts/**`、`.code-harness/tools/**`
+- 生成后设置 `initialization.status` 和 `initialization.unresolved`
+- 使用 `harness-config.schema.json` 校验生成的配置
 
-### 9. 生成 project.md
+### 9. 检查宿主能力
+
+在初始化时输出宿主平台对关键能力的支持情况：
+
+```
+宿主能力：
+- 文件树读取：可用 / 不可用
+- 文件读取：可用 / 不可用
+- 受限文件写入：可用 / 不可用
+- Maven 进程执行：可用 / 不可用
+- 超时控制：可用 / 不可用
+- 进程树停止：可用 / 不可用
+```
+
+如果 Maven 进程执行不可用：
+- `harness review` 仍可执行
+- `harness test`、`harness debug-service` 等必须在初始化报告中说明能力缺失
+
+如果进程树停止不可用：
+- `harness debug-service` 的服务停止功能不可用，需人工停止
+
+### 10. 生成 project.md
 
 根据 `project.template.md` 模板填充所有识别到的信息。
 

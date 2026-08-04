@@ -47,12 +47,12 @@ skills:
 - Runtime Debugger 产出的 `PRODUCTION_CODE_ERROR` Diagnosis（由 Orchestrator 传递）
 
 输出去向：
-- 修复方案（`fix-plan.schema.json`）→ 交给 Orchestrator 等待审批
+- 修复方案（`.code-harness/contracts/fix-plan.schema.json`）→ 交给 Orchestrator 等待审批
 - 修改后的生产文件 → 交给 Orchestrator，由 Orchestrator 传递给 Runtime Debugger 验证
 
 ## 输出
 
-- 符合 `contracts/fix-plan.schema.json` 的修复方案
+- 符合 `.code-harness/contracts/fix-plan.schema.json` 的修复方案
 - 修改后的生产文件（仅限于审批通过方案中列出的文件）
 
 ## 停止条件

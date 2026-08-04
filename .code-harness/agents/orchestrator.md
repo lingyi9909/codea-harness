@@ -17,17 +17,49 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 ### `harness init`
 ```
 1. Orchestrator 接收 harness init
-2. 调用 Project Adapter（agents/project-adapter.md）
+2. 调用 Project Adapter（.code-harness/agents/project-adapter.md）
 3. Project Adapter 调用 adapt-project Skill
 4. 扫描目标项目结构、构建方式、测试规范
-5. 自动生成 harness.yaml
+5. 自动生成 harness.yaml（initialization.status 按识别结果设置）
 6. 自动生成 project.md
 7. 输出初始化摘要（已识别 / 未确定）
-8. 如果存在未确定项，一次性列出所有未确定项
-9. 询问用户："是否在项目根目录 AGENTS.md 中增加 Codea Harness 快捷入口？"
-   - 用户同意 + 根目录无 AGENTS.md → 创建最小入口文件
-   - 用户同意 + 根目录已有 AGENTS.md → 仅追加/更新 <!-- CODEA-HARNESS:START --> ... <!-- CODEA-HARNESS:END --> 区块
-   - 用户不同意 → 跳过，不做任何修改
+8. 输出宿主能力检查结果（文件读取、Maven 执行、进程控制等）
+9. 如果 status 为 NEEDS_CONFIRMATION：
+   - 列出所有未确定项
+   - 等待用户逐一回答
+   - 用户回答后 → Orchestrator 将答案交给 Project Adapter
+   - Project Adapter 更新 harness.yaml 和 project.md
+   - 校验配置（通过 .code-harness/contracts/harness-config.schema.json）
+   - 所有未确定项已回答 → status 改为 READY，unresolved 清空
+   - 仍有未回答项 → status 保持 NEEDS_CONFIRMATION
+10. 如果 status 为 READY：
+    - 询问用户："是否在项目根目录 AGENTS.md 中增加 Codea Harness 快捷入口？"
+    - 用户同意 → 调用 update_root_agents_entry 工具
+    - 用户不同意 → 跳过
+```
+
+### 初始化门禁
+
+`harness init` 自身和 `harness review` 可以在任意状态下执行。
+
+以下意图必须在 `initialization.status` 为 `READY` 时才能执行：
+
+- `harness test`
+- `harness debug-service`
+- `harness fix finding:<id>`
+- `harness fix diagnosis:<runId>`
+- `harness verify test:<class>`
+- `harness verify fix:<fixPlanId>`
+- `harness verify service:<runId>`
+
+如果 status 为 `NEEDS_CONFIRMATION`，Orchestrator 必须停止并提示：
+
+```
+当前初始化状态为 NEEDS_CONFIRMATION，以下配置尚未确定：
+- <列出 unresolved 项>
+
+请先完成初始化确认：
+读取 .code-harness/bootstrap.md，执行 harness init
 ```
 
 初始化完成后输出摘要格式：
@@ -47,6 +79,14 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 未确定：
 - （列出所有无法自动识别的项）
+
+宿主能力：
+- 文件树读取：可用
+- 文件读取：可用
+- 受限文件写入：可用
+- Maven 进程执行：可用
+- 超时控制：可用
+- 进程树停止：可用
 ```
 
 ### `harness review`

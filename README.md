@@ -107,12 +107,6 @@ harness verify service:debug-001  # 重新启动服务，采集日志，验证�
 
 ## 提交到仓库
 
-建议将以下文件提交到目标项目的 Git 仓库：
-
-- `.code-harness/harness.yaml`
-- `.code-harness/project.md`
-- `.code-harness/.gitignore`
+建议将完整的 `.code-harness/` 目录提交到目标项目的 Git 仓库，仅排除 `runs/` 下的运行产物（已通过 `.code-harness/.gitignore` 忽略）。
 
 这样团队其他成员拉取项目后无需重新初始化。
-
-运行产物（`runs/` 目录）已通过 `.code-harness/.gitignore` 忽略。

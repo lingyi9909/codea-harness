@@ -41,12 +41,12 @@ skills:
 ## 与其他 Agent 的交接
 
 输出去向：
-- 变更分析（`change-analysis.schema.json`）→ 交给 Orchestrator，由 Orchestrator 传递给 Integration Test Agent
-- 评审输出（`review-output.schema.json`）→ 交给 Orchestrator，呈现给用户；其中 `needsTest: true` 的发现传递给 Integration Test Agent
+- 变更分析（`.code-harness/contracts/change-analysis.schema.json`）→ 交给 Orchestrator，由 Orchestrator 传递给 Integration Test Agent
+- 评审输出（`.code-harness/contracts/review-output.schema.json`）→ 交给 Orchestrator，呈现给用户；其中 `needsTest: true` 的发现传递给 Integration Test Agent
 
 ## 输出
 
-必须通过 `contracts/review-output.schema.json` 校验。每条发现必须包含 `introducedByChange` 和 `confidence` 字段。
+必须通过 `.code-harness/contracts/review-output.schema.json` 校验。每条发现必须包含 `introducedByChange` 和 `confidence` 字段。
 
 ## 停止条件
 

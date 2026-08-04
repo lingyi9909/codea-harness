@@ -5,7 +5,7 @@ version: 1
 agent: reviewer
 tools:
   - read_code
-output_schema: contracts/review-output.schema.json
+output_schema: .code-harness/contracts/review-output.schema.json
 ---
 
 # 评审变更代码
@@ -85,7 +85,7 @@ output_schema: contracts/review-output.schema.json
 
 ## 输出
 
-必须通过 `contracts/review-output.schema.json` 校验。每条发现必须包含：
+必须通过 `.code-harness/contracts/review-output.schema.json` 校验。每条发现必须包含：
 - `id`、`severity`、`file`、`line`、`evidence`、`impact`、`recommendation`
 - `needsTest`（boolean）、`introducedByChange`（boolean）、`confidence`（0-1）
 

@@ -71,14 +71,14 @@ skills:
 - Orchestrator 的服务启动请求
 
 输出去向：
-- Diagnosis（`diagnosis.schema.json`）→ 交给 Orchestrator
+- Diagnosis（`.code-harness/contracts/diagnosis.schema.json`）→ 交给 Orchestrator
   - 如果 `REPAIR_TEST` → Orchestrator 判断轮次后交给 Integration Test Agent
   - 如果 `GENERATE_FIX_PLAN` → Orchestrator 交给 Fix Agent（仅生成方案，不自动修改代码）
   - 如果 `REPORT_ENVIRONMENT` / `STOP_UNKNOWN` → Orchestrator 呈现给用户
 
 ## 输出
 
-必须通过 `contracts/diagnosis.schema.json` 校验。`nextAction` 必须是枚举中定义的值之一。
+必须通过 `.code-harness/contracts/diagnosis.schema.json` 校验。`nextAction` 必须是枚举中定义的值之一。
 
 ## 停止条件
 
