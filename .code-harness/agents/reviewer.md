@@ -46,7 +46,7 @@ skills:
 
 ## 输出
 
-必须通过 `docs/contracts/review-output.schema.json` 校验。每条发现必须包含 `introducedByChange` 和 `confidence` 字段。
+必须通过 `contracts/review-output.schema.json` 校验。每条发现必须包含 `introducedByChange` 和 `confidence` 字段。
 
 ## 停止条件
 

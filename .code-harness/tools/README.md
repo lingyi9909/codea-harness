@@ -37,3 +37,12 @@ Subagent 只能使用以下操作。具体实现必须拒绝 `harness.yaml` 范�
 
 ## `apply_approved_patch(fixPlanId, changes) -> PatchResult`
 需要经人工审批的修复方案，以 `fixPlanId` 标识。每个变更路径必须匹配 `allowedProductionPaths`、避开 denied paths，且出现在审批通过的方案中。
+
+## `list_project_tree(root, maxDepth?, includes?, excludes?) -> TreeResult`
+读取目标项目目录结构。不读取文件正文。默认排除 `.git`、`target`、`node_modules`、日志目录和大型制品目录。
+
+## `read_project_file(path) -> FileContent`
+允许读取：`pom.xml`、Java 源码、测试源码、`application` 配置、Maven Wrapper 配置、项目已有 `AGENTS.md`。禁止读取：密钥文件、`.env`、生产凭据、证书、私钥、用户明确禁止的路径。
+
+## `write_harness_file(path, content) -> WriteResult`
+默认只允许写入 `.code-harness/harness.yaml` 和 `.code-harness/project.md`。禁止写入 `src/main/**`、`src/test/**`、`pom.xml`、`application*.yml`、`application*.yaml`、`application*.properties`。修改目标项目根目录 `AGENTS.md` 不得通过该工具自动完成，必须使用单独的用户确认流程。

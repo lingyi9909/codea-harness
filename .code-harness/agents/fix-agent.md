@@ -52,7 +52,7 @@ skills:
 
 ## 输出
 
-- 符合 `docs/contracts/fix-plan.schema.json` 的修复方案
+- 符合 `contracts/fix-plan.schema.json` 的修复方案
 - 修改后的生产文件（仅限于审批通过方案中列出的文件）
 
 ## 停止条件

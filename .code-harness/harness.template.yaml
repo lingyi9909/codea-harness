@@ -1,7 +1,9 @@
 version: 1
+
 project:
   type: maven
   root: .
+  module: ""
 
 integrationTest:
   executable: ./mvnw
@@ -16,11 +18,12 @@ service:
   executable: ./mvnw
   args:
     - spring-boot:run
+    - -Dspring-boot.run.profiles=local
   startupTimeoutSeconds: 120
   readiness:
     type: log
-    pattern: Started Application
-  logFile: logs/application.log
+    pattern: Started
+  logFile: null
 
 stopService:
   mode: processTree
@@ -29,7 +32,7 @@ scope:
   sourceIncludes:
     - src/main/java/**/*.java
   testIncludes:
-    - src/test/java/**/*Test.java
+    - src/test/java/**/*.java
 
 write:
   allowedTestPaths:
@@ -40,6 +43,10 @@ write:
     - .git/**
     - .github/**
     - target/**
+    - .code-harness/agents/**
+    - .code-harness/skills/**
+    - .code-harness/contracts/**
+    - .code-harness/tools/**
 
 runs:
-  directory: harness/runs
+  directory: .code-harness/runs

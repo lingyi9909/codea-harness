@@ -5,7 +5,7 @@ version: 1
 agent: fix-agent
 tools:
   - apply_approved_patch
-output_schema: docs/contracts/fix-plan.schema.json
+output_schema: contracts/fix-plan.schema.json
 ---
 
 # 修复已确认的缺陷
@@ -76,7 +76,7 @@ output_schema: docs/contracts/fix-plan.schema.json
 
 ## 输出
 
-- 通过 `docs/contracts/fix-plan.schema.json` 校验的修复方案
+- 通过 `contracts/fix-plan.schema.json` 校验的修复方案
 - 修改后的生产文件（仅限审批通过方案的 `changes` 中列出的文件）
 
 ## 停止条件

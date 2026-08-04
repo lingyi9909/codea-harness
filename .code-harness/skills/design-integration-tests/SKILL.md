@@ -5,7 +5,7 @@ version: 1
 agent: integration-test-agent
 tools:
   - read_code
-output_schema: docs/contracts/test-plan.schema.json
+output_schema: contracts/test-plan.schema.json
 ---
 
 # 设计集成测试
@@ -69,7 +69,7 @@ output_schema: docs/contracts/test-plan.schema.json
 
 ## 输出
 
-必须通过 `docs/contracts/test-plan.schema.json` 校验。关键字段：
+必须通过 `contracts/test-plan.schema.json` 校验。关键字段：
 - `planId`：计划唯一标识
 - `targets[]`：每个接口——controller、endpoint、serviceChain、repositoryChain、externalMocks、scenarios
 

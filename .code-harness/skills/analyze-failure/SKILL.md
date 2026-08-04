@@ -6,7 +6,7 @@ agent: runtime-debugger
 tools:
   - read_test_report
   - read_service_logs
-output_schema: docs/contracts/diagnosis.schema.json
+output_schema: contracts/diagnosis.schema.json
 ---
 
 # 分析故障
@@ -72,7 +72,7 @@ output_schema: docs/contracts/diagnosis.schema.json
 
 ## 输出
 
-必须通过 `docs/contracts/diagnosis.schema.json` 校验。
+必须通过 `contracts/diagnosis.schema.json` 校验。
 - `classification`：恰好一个枚举值
 - `rootCause`：具体、可操作的描述
 - `evidence`：具体日志行、堆栈或报告摘录列表

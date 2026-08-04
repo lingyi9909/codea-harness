@@ -78,7 +78,7 @@ skills:
 
 ## 输出
 
-必须通过 `docs/contracts/diagnosis.schema.json` 校验。`nextAction` 必须是枚举中定义的值之一。
+必须通过 `contracts/diagnosis.schema.json` 校验。`nextAction` 必须是枚举中定义的值之一。
 
 ## 停止条件
 

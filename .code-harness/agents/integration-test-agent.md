@@ -62,7 +62,7 @@ skills:
 
 ## 输出
 
-- 符合 Schema 的测试计划（`docs/contracts/test-plan.schema.json`）
+- 符合 Schema 的测试计划（`contracts/test-plan.schema.json`）
 - 测试类文件（位于允许的测试路径下）
 
 ## 停止条件

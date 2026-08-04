@@ -6,7 +6,7 @@ agent: reviewer
 tools:
   - git_diff
   - read_code
-output_schema: docs/contracts/change-analysis.schema.json
+output_schema: contracts/change-analysis.schema.json
 ---
 
 # 分析代码变更
@@ -61,7 +61,7 @@ output_schema: docs/contracts/change-analysis.schema.json
 
 ## 输出
 
-必须通过 `docs/contracts/change-analysis.schema.json` 校验：
+必须通过 `contracts/change-analysis.schema.json` 校验：
 - `changedFiles[]`：路径、角色、可选的变更摘要
 - `affectedControllers[]`：Controller 类及受影响的接口
 - `callChains[]`：入口点及完整的 Controller → Service → Repository 调用链

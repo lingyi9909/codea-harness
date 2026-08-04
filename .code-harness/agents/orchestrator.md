@@ -10,9 +10,44 @@ version: 1
 
 将用户自然语言意图路由到正确的 Subagent 序列，管理 Agent 之间的产物传递和交接，执行审批门禁，追踪测试修复轮次，并为用户输出一致的最终摘要。
 
-Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委派给 Reviewer、Integration Test Agent、Runtime Debugger 和 Fix Agent。
+Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委派给 Reviewer、Integration Test Agent、Runtime Debugger、Fix Agent 和 Project Adapter。
 
 ## 意图路由
+
+### `harness init`
+```
+1. Orchestrator 接收 harness init
+2. 调用 Project Adapter（agents/project-adapter.md）
+3. Project Adapter 调用 adapt-project Skill
+4. 扫描目标项目结构、构建方式、测试规范
+5. 自动生成 harness.yaml
+6. 自动生成 project.md
+7. 输出初始化摘要（已识别 / 未确定）
+8. 如果存在未确定项，一次性列出所有未确定项
+9. 询问用户："是否在项目根目录 AGENTS.md 中增加 Codea Harness 快捷入口？"
+   - 用户同意 + 根目录无 AGENTS.md → 创建最小入口文件
+   - 用户同意 + 根目录已有 AGENTS.md → 仅追加/更新 <!-- CODEA-HARNESS:START --> ... <!-- CODEA-HARNESS:END --> 区块
+   - 用户不同意 → 跳过，不做任何修改
+```
+
+初始化完成后输出摘要格式：
+```
+结果：INITIALIZED | NEEDS_CONFIRMATION | FAILED
+
+已识别：
+- Maven 执行方式
+- 项目模块
+- Spring Boot 启动模块
+- Controller 模块
+- 测试目录
+- 测试 Profile
+- 测试报告目录
+- 服务启动方式
+- 现有测试规范
+
+未确定：
+- （列出所有无法自动识别的项）
+```
 
 ### `harness review`
 ```
@@ -24,7 +59,8 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 ### `harness test`
 ```
 1. Reviewer: analyze-change → review-code
-2. 如果有 needsTest=true 的评审发现 → 继续
+2. 如果存在受影响的 Controller → 继续设计集成测试
+   （needsTest=true 仅用于标记重点测试场景，不影响是否生成测试）
    如果没有受影响的 Controller → 停止，报告用户
 3. Integration Test Agent: design-integration-tests
 4. 输出测试计划 → WAITING_APPROVAL

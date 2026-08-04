@@ -20,10 +20,11 @@
 
 ## 意图路由
 
-Orchestrator（`harness/agents/orchestrator.md`）负责路由所有用户意图：
+Orchestrator（`agents/orchestrator.md`）负责路由所有用户意图：
 
 | 意图 | 调用的 Agent |
 |------|-------------|
+| `harness init` | Project Adapter |
 | `harness review` | Reviewer |
 | `harness test` | Reviewer → Integration Test Agent → Runtime Debugger →（如需要）Fix Agent |
 | `harness debug-service` | Runtime Debugger |
@@ -37,9 +38,10 @@ Orchestrator（`harness/agents/orchestrator.md`）负责路由所有用户意图
 
 - **Reviewer**：分析变更 + 评审代码。只读，不修改任何文件。
 - **Integration Test Agent**：设计测试计划 + 生成/修复测试代码。不负责执行测试，也不负责诊断故障。
-- **Runtime Debugger**：执行测试 / 启动服务 + 采集日志 + 诊断故障。拥有故障分类和 nextAction 的唯一决定权。追踪修复轮次计数。
+- **Runtime Debugger**：执行测试 / 启动服务 + 采集日志 + 诊断故障。拥有故障分类和 nextAction 的唯一决定权。
 - **Fix Agent**：设计最小修复方案 + 应用经审批的修改。不负责执行测试。
-- **Orchestrator**：路由意图、管理 Agent 间交接、执行审批门禁、追踪修复轮次、输出用户摘要。
+- **Project Adapter**：分析目标项目结构、构建方式和测试规范，自动生成 `harness.yaml` 和 `project.md`。只在 `harness init` 时调用。
+- **Orchestrator**：路由意图、管理 Agent 间交接、执行审批门禁、追踪修复轮次、输出用户摘要。修复轮次追踪是 Orchestrator 的唯一职责，Runtime Debugger 不维护轮次。
 
 ## 审批规则
 
@@ -50,7 +52,7 @@ Orchestrator（`harness/agents/orchestrator.md`）负责路由所有用户意图
 
 ## 工具约束
 
-- Subagent 只能使用 `harness/tools/README.md` 中列出的受控工具契约。
+- Subagent 只能使用 `tools/README.md` 中列出的受控工具契约。
 - 禁止执行任意 Shell 命令。所有 Maven 和服务命令必须使用 `harness.yaml` 中确切配置的 `executable` 和 `args`。
 - 执行 Maven 或服务命令时，必须完整展示最终 executable 和 args。禁止 Shell 求值（`shell=true`、`eval`、`bash -c`、`sh -c`）、管道、重定向和命令链接（`&&`、`;`）。
 - `stop_service` 必须停止 `ServiceHandle` 中记录的进程树（使用 `processGroup`），而非单个 PID。
