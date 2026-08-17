@@ -20,6 +20,7 @@
       "required": [
         "currentBranch",
         "baseRef",
+        "baseCommit",
         "mergeBase",
         "headCommit",
         "includeWorkingTree"
@@ -58,7 +59,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "role"],
+        "required": ["path", "role", "sources"],
         "properties": {
           "path": {
             "type": "string",
@@ -85,6 +86,15 @@
           "hunkSummary": {
             "type": "string",
             "description": "变更摘要"
+          },
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "该文件的变更来源（同一文件去重后可能来自多个来源）",
+            "items": {
+              "enum": ["COMMITTED", "STAGED", "UNSTAGED", "UNTRACKED"]
+            }
           }
         }
       }

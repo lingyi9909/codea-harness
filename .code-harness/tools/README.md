@@ -85,6 +85,27 @@ Reviewer 应看到该文件相对于 merge-base 的最终有效状态变化。
 
 `sources` 表示本次实际纳入的变更来源；`files` 为去重后的统一变更文件列表。后续 Agent 据此清楚本次到底 Review 了什么。
 
+### `git_refs() -> GitRefsResult`
+只读。列出本地已有的 Git refs，供 Project Adapter 识别 `review.baseRef`。**不读取文件正文，不执行 `git fetch`、`git pull` 或联网更新远端状态**。
+
+返回：
+
+```json
+{
+  "currentBranch": "feature/order",
+  "detachedHead": false,
+  "localBranches": ["master", "develop"],
+  "remoteBranches": ["origin/master", "origin/main", "origin/develop"],
+  "originHead": "origin/master"
+}
+```
+
+- `currentBranch`：当前分支名，Detached HEAD 时为 `null`。
+- `detachedHead`：是否处于 Detached HEAD 状态。
+- `localBranches`：本地分支列表。
+- `remoteBranches`：远端跟踪分支列表（`refs/remotes/origin/*`）。
+- `originHead`：`refs/remotes/origin/HEAD` 指向的目标（如 `origin/master`），无则为 `null`。
+
 ### `read_code(paths, lineRanges?) -> CodeBundle`
 读取 source/test scope 允许的仓库文本文件。只读；glob 匹配不得逃出项目根目录。
 

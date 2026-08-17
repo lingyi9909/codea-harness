@@ -16,7 +16,7 @@ skills:
 ## 输入
 
 - 完整 Review Change Set（通过 `git_diff` 获取，含 committed + staged + unstaged + untracked）
-- 变更的源代码文件（通过 `read_code` 读取，限定在 `scope.sourceIncludes` 范围内）
+- 变更的源代码与测试代码文件（通过 `read_code` 读取，覆盖 `scope.sourceIncludes` + `scope.testIncludes`）
 - 直接相关的调用链代码（变更方法的上下游调用方和被调用方）
 
 ## 可使用的 Skill

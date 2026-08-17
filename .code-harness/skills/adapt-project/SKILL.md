@@ -6,6 +6,7 @@ agent: project-adapter
 tools:
   - list_project_tree
   - read_project_file
+  - git_refs
   - write_harness_file
 ---
 
@@ -34,6 +35,7 @@ tools:
 
 - `list_project_tree`——读取目录结构（不读文件内容）
 - `read_project_file`——读取 `pom.xml`、Java 源码、测试源码、`application` 配置、Maven Wrapper 配置、已有 `AGENTS.md`
+- `git_refs`——读取本地 Git refs（分支、远端跟踪分支、`origin/HEAD`），用于识别 `review.baseRef`。不 fetch/pull/联网
 - `write_harness_file`——写入 `.code-harness/harness.yaml` 和 `.code-harness/project.md`
 
 ## 前置条件
@@ -129,11 +131,11 @@ readiness:
 
 ### 8. 识别 Review 基线
 
-确定 `review.baseRef` 和 `review.includeWorkingTree`：
+调用 `git_refs()` 读取本地已有 Git refs，确定 `review.baseRef` 和 `review.includeWorkingTree`。**不得自动执行 `git fetch`、`git pull` 或联网更新远端状态**。
 
 - `review.includeWorkingTree` 默认 `true`（convention-default，无需询问）。
-- `review.baseRef` 只能从本地已有 Git refs 识别，**不得自动执行 `git fetch`、`git pull` 或联网更新远端状态**。按优先级：
-  1. `refs/remotes/origin/HEAD` 指向的默认分支
+- `review.baseRef` 按以下优先级严格选择（命中即停止，不得猜测或跳过）：
+  1. `originHead`（即 `refs/remotes/origin/HEAD` 指向的默认分支，如 `origin/master`）
   2. `origin/master`
   3. `origin/main`
   4. `origin/develop`
@@ -141,8 +143,6 @@ readiness:
   6. `main`
   7. `develop`
   8. 仍无法确定 → 加入 `unresolved`，保持 NEEDS_CONFIRMATION，不得猜测
-
-如果同时存在 `origin/master` 和 `origin/develop` 但无法判断哪一个是默认主干，不得猜测，加入 `unresolved` 询问用户。
 
 ### 9. 生成 harness.yaml
 

@@ -16,6 +16,7 @@ skills:
 
 - 目标项目根目录（Orchestrator 传入）
 - 项目文件：`pom.xml`、Maven Wrapper、`application` 配置、已有测试代码、已有 `AGENTS.md`
+- 本地 Git refs（通过 `git_refs` 读取，用于识别 `review.baseRef`）
 
 ## 可使用的 Skill
 
@@ -36,8 +37,8 @@ skills:
 6. **识别测试 Profile**：检查 `application-test.*`、`@ActiveProfiles`、Maven Profile、已有测试参数。
 7. **识别测试报告路径**：单模块使用 `target/surefire-reports`，多模块使用 `<test-module>/target/surefire-reports`。
 8. **识别服务启动方式**：识别启动模块、`spring-boot-maven-plugin`、`@SpringBootApplication` 主类、启动 Profile、日志文件位置。
-9. **识别 Review 基线**：确定 `review.baseRef`。只能读取本地已有 Git refs，不得自动执行 `git fetch`、`git pull` 或联网更新远端状态。按优先级识别：
-   1. `refs/remotes/origin/HEAD` 指向的默认分支
+9. **识别 Review 基线**：调用 `git_refs()` 读取本地已有 Git refs，确定 `review.baseRef`。不得自动执行 `git fetch`、`git pull` 或联网更新远端状态。按优先级严格选择（命中即停止，不得猜测或跳过）：
+   1. `originHead`（即 `refs/remotes/origin/HEAD` 指向的默认分支）
    2. `origin/master`
    3. `origin/main`
    4. `origin/develop`
@@ -46,9 +47,7 @@ skills:
    7. `develop`
    8. 仍无法确定 → 加入 `unresolved`，保持 NEEDS_CONFIRMATION，不得猜测
 
-   例如 `refs/remotes/origin/HEAD -> origin/master`，则生成 `review.baseRef: origin/master`、`review.includeWorkingTree: true`。
-
-   如果同时存在 `origin/master` 和 `origin/develop`，但无法判断哪一个是默认主干，则不能猜，加入 `unresolved` 询问用户。
+   例如 `originHead -> origin/master`，则生成 `review.baseRef: origin/master`、`review.includeWorkingTree: true`。
 10. **生成配置**：根据识别结果生成 `harness.yaml` 和 `project.md`。
    - **可以使用约定默认值的字段**（标记来源为 convention-default）：
      - `timeoutSeconds: 600`
