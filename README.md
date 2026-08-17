@@ -53,7 +53,7 @@ cp -R .code-harness /path/to/target-project/.code-harness
 初始化时选择了增加根目录 `AGENTS.md` 快捷入口后，直接对工程 Agent 说：
 
 ```
-harness review              # 评审当前分支的变更代码
+harness review
 harness test                # 评审 → 测试计划 → 审批 → 生成测试 → 执行 → 诊断
 harness debug-service       # 启动本地服务，采集日志，等待人工触发请求
 harness fix finding:F-001   # 针对评审发现生成修复方案
@@ -81,6 +81,31 @@ harness verify service:debug-001  # 重新启动服务，采集日志，验证�
 ```
 
 重复初始化不会重复追加根目录 `AGENTS.md` 快捷入口区块。
+
+### 评审范围（Review Scope）
+
+`harness review` 评审当前开发分支相对于项目默认基线分支，从双方 merge-base 开始由当前开发分支引入的全部代码变化，并默认同时包含 staged、unstaged 和 untracked 本地变化。
+
+```text
+Review Change Set = merge-base(baseRef, HEAD) → HEAD 的已提交变更 + staged + unstaged + untracked
+```
+
+`harness test` 的第一阶段复用完全相同的 Change Set。
+
+默认使用 `harness.yaml` 中配置的基线：
+
+```
+harness review
+```
+
+也可临时指定基线（仅本次生效，不修改配置）：
+
+```
+harness review base:origin/develop
+harness test base:origin/develop
+```
+
+Codea Harness **不会自动执行 `git fetch`**。评审使用当前本地已有的 Git refs。
 
 ---
 

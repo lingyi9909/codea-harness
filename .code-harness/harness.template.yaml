@@ -5,6 +5,10 @@ project:
   root: .
   module: ""
 
+review:
+  baseRef: ""
+  includeWorkingTree: true
+
 integrationTest:
   executable: ./mvnw
   args:

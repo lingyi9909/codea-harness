@@ -15,7 +15,7 @@ skills:
 
 ## 输入
 
-- Git Diff（通过 `git_diff` 获取）
+- 完整 Review Change Set（通过 `git_diff` 获取，含 committed + staged + unstaged + untracked）
 - 变更的源代码文件（通过 `read_code` 读取，限定在 `scope.sourceIncludes` 范围内）
 - 直接相关的调用链代码（变更方法的上下游调用方和被调用方）
 
@@ -26,8 +26,27 @@ skills:
 
 ## 执行流程
 
-1. **分析变更**：调用 `analyze-change` 产出结构化变更分析——受影响的 Controller、Service/Repository 调用链、外部依赖、风险区域。
-2. **逐项评审**：调用 `review-code` 检查每个变更方法及其直接调用链的以下方面：
+1. **分析变更**：调用 `analyze-change` 产出结构化变更分析（含 `reviewScope`）——受影响的 Controller、Service/Repository 调用链、外部依赖、风险区域。
+2. **输出 Review Scope**：正式评审前，必须先向用户输出本次 Review 范围（来自 `reviewScope`），然后才能开始代码评审。**不能跳过这一步直接输出 Review Finding**。格式：
+
+   ```
+   Review Scope
+
+   当前分支：feature/order
+   基线：origin/master
+   Merge Base：abc123
+   HEAD：def456
+
+   纳入范围：
+   - committed：是
+   - staged：是
+   - unstaged：是
+   - untracked：是
+
+   变更文件数：8
+   ```
+
+3. **逐项评审**：调用 `review-code` 检查每个变更方法及其直接调用链的以下方面：
    - 参数校验
    - 业务规则正确性
    - 状态流转合法性
@@ -36,7 +55,7 @@ skills:
    - 幂等性
    - 异常处理
    - 数据一致性
-3. **生成发现**：每个问题记录文件路径、行号、具体证据、影响范围、最小修复建议、严重程度、是否由本次变更引入、置信度（0-1）、是否需要补充集成测试。
+4. **生成发现**：每个问题记录文件路径、行号、具体证据、影响范围、最小修复建议、严重程度、是否由本次变更引入、置信度（0-1）、是否需要补充集成测试。
 
 ## 与其他 Agent 的交接
 

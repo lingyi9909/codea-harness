@@ -123,17 +123,90 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 - harness init（重新确认）
 ```
 
+### Review 基线（baseRef）与变更来源
+
+`harness review` 和 `harness test` 的第一阶段使用**完全相同的 Change Set**：
+
+```text
+Review Change Set
+=
+merge-base(baseRef, HEAD) → HEAD 的已提交变更
++
+staged
++
+unstaged
++
+untracked
+```
+
+不能出现「review 看完整分支变化、test 只看 git diff」的不一致。
+
+**有效基线解析**：
+
+```text
+effectiveBaseRef =
+  用户本次显式指定 base（如 harness review base:origin/develop）
+  否则
+  harness.yaml.review.baseRef
+```
+
+支持临时指定基线：
+
+```text
+harness review base:origin/develop
+harness test base:origin/develop
+```
+
+临时指定只对本次生效，**不得修改 `harness.yaml`**。
+
+**异常处理**：
+
+- **baseRef 缺失**：`harness.yaml.review.baseRef` 为空或不存在 → 停止。
+- **baseRef 不存在**（配置了但本地 ref 找不到）：
+  ```
+  结果：MANUAL_ACTION_REQUIRED
+
+  配置的 Review 基线不存在：
+  origin/master
+
+  请：
+  1. 执行 harness init
+  或
+  2. 使用 harness review base:<ref>
+  ```
+  不得自行切换到 main/develop。
+
+- **无代码变化**（committed=0 且 staged=0 且 unstaged=0 且 untracked=0）：
+  ```
+  结果：PASSED
+
+  当前没有需要 Review 的代码变化。
+
+  当前分支：feature/order
+  基线：origin/master
+  ```
+  不要继续消耗 Reviewer。
+
+- **Detached HEAD**：允许继续按 `baseRef...HEAD` 评审，但 Review Scope 中显示 `当前分支：DETACHED_HEAD`。
+
 ### `harness review`
 ```
-1. Reviewer: analyze-change → review-code
-2. 输出: review-output（评审发现 + 摘要）
-3. 结束：DONE
+1. 解析 effectiveBaseRef：
+   - 用户显式指定 base:<ref> → 使用该 ref（仅本次生效）
+   - 否则读取 harness.yaml.review.baseRef
+2. 如果 baseRef 缺失或本地 ref 不存在 → STOP（MANUAL_ACTION_REQUIRED）
+3. Reviewer 调用 analyze-change → 生成完整 Change Set + reviewScope
+4. 输出 Review Scope（当前分支/基线/Merge Base/HEAD/纳入范围/变更文件数）
+5. 如果无任何代码变化 → 输出 PASSED，STOP
+6. Reviewer 调用 review-code
+7. 输出 review-output（评审发现 + 摘要）
+8. DONE
 ```
 
 ### `harness test`
 ```
 0. 执行前能力检查：确认文件读取、受限文件写入、Maven 执行、超时控制均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
-1. Reviewer: analyze-change → review-code
+1. 解析 effectiveBaseRef（base:<ref> 优先，否则 harness.yaml.review.baseRef；缺失或不存在 → STOP）。Reviewer: analyze-change → review-code——复用与 `harness review` 完全相同的 Change Set
 2. 如果存在受影响的 Controller → 继续设计集成测试
    （needsTest=true 仅用于标记重点测试场景，不影响是否生成测试）
    如果没有受影响的 Controller → 停止，报告用户

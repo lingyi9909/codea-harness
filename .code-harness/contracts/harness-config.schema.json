@@ -4,7 +4,7 @@
   "description": "harness.yaml 配置校验，由 Project Adapter 在生成和更新配置时使用",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "project", "integrationTest", "service", "stopService", "initialization", "scope", "write", "runs"],
+  "required": ["version", "project", "review", "integrationTest", "service", "stopService", "initialization", "scope", "write", "runs"],
   "properties": {
     "version": {
       "type": "integer",
@@ -18,6 +18,22 @@
         "type": { "enum": ["maven"], "description": "项目构建类型" },
         "root": { "type": "string", "description": "项目根目录，通常为 ." },
         "module": { "type": "string", "description": "目标模块名，单模块项目为空字符串" }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseRef", "includeWorkingTree"],
+      "properties": {
+        "baseRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "默认 Code Review 基线，例如 origin/master、origin/main"
+        },
+        "includeWorkingTree": {
+          "type": "boolean",
+          "description": "是否同时包含 staged、unstaged 和 untracked 本地变化"
+        }
       }
     },
     "integrationTest": {

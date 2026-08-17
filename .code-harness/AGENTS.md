@@ -6,7 +6,7 @@
 
 ## V1 行为约定
 
-- 评审以 Git Diff 为入口，只读取直接相关的调用链代码。
+- 评审以「当前分支相对基线的 merge-base 完整分支差异 + staged + unstaged + untracked」为入口，只读取直接相关的调用链代码。
 - 集成测试以 MockMvc 为入口，使用真实的 Controller、Service、Repository，以及项目现有的测试数据库配置。
 - 项目内部的 Service 和 Repository Bean 默认不 Mock。
 - 外部系统、第三方接口、MQ、RPC 沿用目标项目已有的测试替代方式。

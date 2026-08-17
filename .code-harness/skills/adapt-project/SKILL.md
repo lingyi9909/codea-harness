@@ -127,7 +127,24 @@ readiness:
 
 如果没有明确的日志文件配置，设置 `logFile: null`。
 
-### 8. 生成 harness.yaml
+### 8. 识别 Review 基线
+
+确定 `review.baseRef` 和 `review.includeWorkingTree`：
+
+- `review.includeWorkingTree` 默认 `true`（convention-default，无需询问）。
+- `review.baseRef` 只能从本地已有 Git refs 识别，**不得自动执行 `git fetch`、`git pull` 或联网更新远端状态**。按优先级：
+  1. `refs/remotes/origin/HEAD` 指向的默认分支
+  2. `origin/master`
+  3. `origin/main`
+  4. `origin/develop`
+  5. `master`
+  6. `main`
+  7. `develop`
+  8. 仍无法确定 → 加入 `unresolved`，保持 NEEDS_CONFIRMATION，不得猜测
+
+如果同时存在 `origin/master` 和 `origin/develop` 但无法判断哪一个是默认主干，不得猜测，加入 `unresolved` 询问用户。
+
+### 9. 生成 harness.yaml
 
 根据所有识别结果生成 `.code-harness/harness.yaml`。参考模板为 `harness.template.yaml`，但必须根据项目实际情况调整。
 
@@ -144,11 +161,13 @@ readiness:
 | `write.allowed*` | 标准 Maven 路径 | 与 scope 一致 |
 | `write.deniedPaths` | `.git/**`、`.github/**`、`target/**`、`.code-harness/agents/**` 等 | 固定排除路径 |
 | `stopService.mode` | `processTree` | 进程树停止 |
+| `review.includeWorkingTree` | `true` | 评审纳入 staged/unstaged/untracked |
 
 使用默认值时在初始化报告中注明「使用默认值」。
 
 **必须人工确认的字段**（未确认时 `initialization.status` 设为 `NEEDS_CONFIRMATION`，加入 `unresolved` 列表）：
 
+- `review.baseRef`（无法从本地 Git refs 确定时）
 - 测试 Profile（`spring.profiles.active`）
 - 服务启动 Profile（`spring-boot.run.profiles`）
 - 测试数据库是否允许写入
@@ -166,7 +185,7 @@ readiness:
 - 生成后设置 `initialization.status` 和 `initialization.unresolved`
 - 使用 `harness-config.schema.json` 校验生成的配置
 
-### 9. 检查宿主能力
+### 10. 检查宿主能力
 
 在初始化时输出宿主平台对关键能力的支持情况。**宿主能力仅作为当前会话的参考，不持久化到 `harness.yaml`。** 每次执行需要宿主能力的意图时，Orchestrator 会重新检查。
 
@@ -187,7 +206,7 @@ readiness:
 如果进程树停止不可用：
 - `harness debug-service` 的服务停止功能不可用，需人工停止
 
-### 10. 生成 project.md
+### 11. 生成 project.md
 
 根据 `project.template.md` 模板填充所有识别到的信息。
 
@@ -195,7 +214,7 @@ readiness:
 
 **不能识别的写「未确定」，不得虚构。**
 
-### 11. 输出初始化摘要
+### 12. 输出初始化摘要
 
 ```
 结果：INITIALIZED | NEEDS_CONFIRMATION | FAILED
@@ -211,10 +230,18 @@ readiness:
 - 服务启动方式：./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 - 现有测试规范：@SpringBootTest + @AutoConfigureMockMvc，测试类命名 *IT
 
+Review 配置：
+- 当前分支：feature/order
+- 默认基线：origin/master
+- 基线来源：refs/remotes/origin/HEAD
+- includeWorkingTree：true
+
 未确定：
 - 测试数据库是否允许写入
 - ExternalRpcClient 应使用哪种替代方式
 ```
+
+如果基线无法确定，`未确定` 中列出 `review.baseRef`。
 
 ## 输出
 
@@ -237,6 +264,7 @@ readiness:
 - 不得修改 `application*.yml`、`application*.yaml`、`application*.properties`
 - 不得连接数据库
 - 不得安装依赖
+- 不得自动执行 `git fetch`、`git pull` 或联网更新远端 Git 状态
 - 不得虚构不能从代码中确认的信息
 - 不得在未经用户同意的情况下修改根目录 `AGENTS.md`
 - 不得猜测有冲突的信息——标记为未确定
@@ -257,6 +285,7 @@ readiness:
 - Profile：test（application-test.yml 存在）
 - 报告：target/surefire-reports
 - 日志：null（无明确日志文件配置）
+- Review 基线：origin/master（refs/remotes/origin/HEAD）
 
 生成的 harness.yaml：
 version: 1
@@ -264,6 +293,9 @@ project:
   type: maven
   root: .
   module: ""
+review:
+  baseRef: origin/master
+  includeWorkingTree: true
 integrationTest:
   executable: ./mvnw
   args:

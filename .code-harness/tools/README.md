@@ -6,8 +6,84 @@ Subagent 只能使用以下操作。具体实现必须拒绝 `harness.yaml` 范�
 
 ## 只读工具
 
-### `git_diff(baseRef?, headRef?) -> DiffResult`
-返回变更文件及变更块。只读。
+### `git_diff(baseRef, headRef?, includeWorkingTree?) -> DiffResult`
+返回本次 Review 的完整 Change Set（变更文件及变更块）。只读。
+
+**参数规则**：
+
+- `baseRef`：必填。默认来自 `harness.yaml.review.baseRef`。这是评审基线，不能为空。
+- `headRef`：可选。默认 `HEAD`。
+- `includeWorkingTree`：可选。默认来自 `harness.yaml.review.includeWorkingTree`。
+
+**比较语义（必须使用 merge-base）**：
+
+```text
+mergeBase = merge-base(baseRef, HEAD)
+```
+
+已提交变更范围：
+
+```text
+mergeBase → HEAD
+```
+
+等价于：
+
+```text
+baseRef...HEAD
+```
+
+**禁止**直接使用普通 `git diff`（只对工作区，看不到分支差异）作为 `harness review` 的完整变更来源。
+
+**纳入工作区变化**：
+
+当 `includeWorkingTree: true` 时，必须同时获取四部分：
+
+```text
+1. committed   —— merge-base(baseRef, HEAD) → HEAD
+2. staged      —— git diff --cached
+3. unstaged    —— git diff（工作区相对 index）
+4. untracked   —— 未被 Git 追踪的文件（普通 git diff 看不到，必须主动获取文件列表）
+```
+
+`untracked` 文件必须主动枚举，并把新文件内容作为新增文件纳入 Review。
+
+**同一文件合并去重**：
+
+如果同一文件同时存在多个来源的修改（例如 `OrderService.java` 既有已 commit 修改，又有当前 unstaged 修改），不能作为两个独立文件重复 Review。应合并为一个统一 Change Set 条目：
+
+```text
+OrderService.java
+
+sources:
+- COMMITTED
+- UNSTAGED
+```
+
+Reviewer 应看到该文件相对于 merge-base 的最终有效状态变化。
+
+**返回 DiffResult**：
+
+```json
+{
+  "currentBranch": "feature/order",
+  "baseRef": "origin/master",
+  "baseCommit": "abc111",
+  "mergeBase": "abc000",
+  "headRef": "HEAD",
+  "headCommit": "abc999",
+  "includeWorkingTree": true,
+  "sources": {
+    "committed": true,
+    "staged": true,
+    "unstaged": true,
+    "untracked": true
+  },
+  "files": []
+}
+```
+
+`sources` 表示本次实际纳入的变更来源；`files` 为去重后的统一变更文件列表。后续 Agent 据此清楚本次到底 Review 了什么。
 
 ### `read_code(paths, lineRanges?) -> CodeBundle`
 读取 source/test scope 允许的仓库文本文件。只读；glob 匹配不得逃出项目根目录。

@@ -36,7 +36,20 @@ skills:
 6. **识别测试 Profile**：检查 `application-test.*`、`@ActiveProfiles`、Maven Profile、已有测试参数。
 7. **识别测试报告路径**：单模块使用 `target/surefire-reports`，多模块使用 `<test-module>/target/surefire-reports`。
 8. **识别服务启动方式**：识别启动模块、`spring-boot-maven-plugin`、`@SpringBootApplication` 主类、启动 Profile、日志文件位置。
-9. **生成配置**：根据识别结果生成 `harness.yaml` 和 `project.md`。
+9. **识别 Review 基线**：确定 `review.baseRef`。只能读取本地已有 Git refs，不得自动执行 `git fetch`、`git pull` 或联网更新远端状态。按优先级识别：
+   1. `refs/remotes/origin/HEAD` 指向的默认分支
+   2. `origin/master`
+   3. `origin/main`
+   4. `origin/develop`
+   5. `master`
+   6. `main`
+   7. `develop`
+   8. 仍无法确定 → 加入 `unresolved`，保持 NEEDS_CONFIRMATION，不得猜测
+
+   例如 `refs/remotes/origin/HEAD -> origin/master`，则生成 `review.baseRef: origin/master`、`review.includeWorkingTree: true`。
+
+   如果同时存在 `origin/master` 和 `origin/develop`，但无法判断哪一个是默认主干，则不能猜，加入 `unresolved` 询问用户。
+10. **生成配置**：根据识别结果生成 `harness.yaml` 和 `project.md`。
    - **可以使用约定默认值的字段**（标记来源为 convention-default）：
      - `timeoutSeconds: 600`
      - `reportDir`：标准 Surefire 目录
@@ -44,7 +57,9 @@ skills:
      - `runs.directory: .code-harness/runs`
      - `scope.sourceIncludes` / `scope.testIncludes`：标准 Maven 路径
      - `write.allowedPaths` / `write.deniedPaths`：标准路径
+     - `review.includeWorkingTree: true`
    - **必须人工确认的字段**（未确认时 status 保持 NEEDS_CONFIRMATION）：
+     - `review.baseRef`（无法从本地 refs 确定时）
      - 测试 Profile（`spring.profiles.active`）
      - 服务启动 Profile
      - 测试数据库是否允许写入
@@ -52,11 +67,11 @@ skills:
      - 多个 Controller 模块时选择哪一个
      - 外部依赖（RPC/MQ/第三方 API）的 Mock 或替代方式
      - 是否会连接共享或生产资源
-10. **设置初始化状态**：
+11. **设置初始化状态**：
     - 所有字段已确认 → `initialization.status: READY`，`unresolved: []`
     - 存在未确认字段 → `initialization.status: NEEDS_CONFIRMATION`，`unresolved` 列出未确认项
-11. **校验配置**：使用 `.code-harness/contracts/harness-config.schema.json` 校验生成的 `harness.yaml`。
-12. **输出初始化摘要**：列出已识别项、未确定项和宿主能力。
+12. **校验配置**：使用 `.code-harness/contracts/harness-config.schema.json` 校验生成的 `harness.yaml`。
+13. **输出初始化摘要**：列出已识别项、未确定项和宿主能力。
 
 ### 重新确认（用户回答未确定项后）
 

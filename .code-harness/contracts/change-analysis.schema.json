@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "reviewScope",
     "changedFiles",
     "affectedControllers",
     "callChains",
@@ -12,6 +13,45 @@
     "riskAreas"
   ],
   "properties": {
+    "reviewScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "本次 Review 的范围标识，Reviewer、Integration Test Agent、Orchestrator 共享同一 Scope",
+      "required": [
+        "currentBranch",
+        "baseRef",
+        "mergeBase",
+        "headCommit",
+        "includeWorkingTree"
+      ],
+      "properties": {
+        "currentBranch": {
+          "type": "string",
+          "description": "当前分支名，Detached HEAD 时为 DETACHED_HEAD"
+        },
+        "baseRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "评审基线 ref，如 origin/master"
+        },
+        "baseCommit": {
+          "type": "string",
+          "description": "基线 ref 当前指向的 commit"
+        },
+        "mergeBase": {
+          "type": "string",
+          "description": "merge-base(baseRef, HEAD) 的 commit"
+        },
+        "headCommit": {
+          "type": "string",
+          "description": "HEAD 指向的 commit"
+        },
+        "includeWorkingTree": {
+          "type": "boolean",
+          "description": "是否纳入 staged、unstaged、untracked 本地变化"
+        }
+      }
+    },
     "changedFiles": {
       "type": "array",
       "description": "变更文件列表",
