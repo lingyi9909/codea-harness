@@ -211,11 +211,18 @@ harness test base:origin/develop
    （needsTest=true 仅用于标记重点测试场景，不影响是否生成测试）
    如果没有受影响的 Controller → 停止，报告用户
 3. Integration Test Agent: design-integration-tests
-4. 输出测试计划 → WAITING_APPROVAL
-   提示："请回复：批准 <planId>"
+   → 产出测试计划，含每个 target 的 `strategy` 与 Existing Test Coverage Analysis
+4. 按 strategy 分支：
+   - 所有 target 都是 `REUSE_EXISTING`：
+     → 不等待审批、不生成/修改任何测试代码
+     → 直接进入步骤 7，Runtime Debugger 执行 `existingTests` 中的现有测试类
+   - 存在 `EXTEND_EXISTING` 或 `CREATE_NEW`：
+     → 输出测试计划（只含 `MISSING` 场景）→ WAITING_APPROVAL
+     → 提示："请回复：批准 <planId>"
 5. 用户以精确 planId 批准 → 继续
-   （模糊肯定「好」「继续」不算通过）
+   （模糊肯定「好」「继续」不算通过；REUSE_EXISTING 的 target 无需审批）
 6. Integration Test Agent: generate-integration-tests
+   （只处理 `MISSING` 场景；`REUSE_EXISTING` 的 target 不写代码）
 7. Runtime Debugger: run-integration-tests → analyze-failure
 8. 如果全部测试通过 → DONE
    如果 nextAction=REPAIR_TEST → Orchestrator 判断修复轮次：
@@ -225,6 +232,8 @@ harness test base:origin/develop
    如果 nextAction=REPORT_ENVIRONMENT → 报告用户，STOP
    如果 nextAction=STOP_UNKNOWN → 报告用户，STOP
 ```
+
+**现有测试失败时的安全规则**：`REUSE_EXISTING` 的现有测试执行失败，**禁止自动修改现有测试**——由 Runtime Debugger 正常诊断（`PRODUCTION_CODE_ERROR` / `ENVIRONMENT_ERROR` / `TEST_ERROR` / `UNKNOWN`）。诊断为 `PRODUCTION_CODE_ERROR` → 走 Fix Plan 流程；诊断为 `TEST_ERROR` → 也不能直接自动改旧测试，必须生成测试修改建议 / Test Plan 并经用户审批。自动修复 ≤2 轮只针对本次经 `planId` 审批后新建或修改的测试，不得修改历史 Existing Test。
 
 **注意**：当 Diagnosis 为 `PRODUCTION_CODE_ERROR` 时，Orchestrator 可以自动调用 Fix Agent 生成 Fix Plan，但**不得自动应用修改**。代码修改必须在用户明确批准 `fixPlanId` 之后才能执行。
 
@@ -301,7 +310,7 @@ harness test base:origin/develop
 
 ## 审批规则
 
-1. **测试计划审批**：用户必须明确写出精确的 `planId`（如「批准 test-plan-20260804-001」）。「好」「继续」「可以」「yes」「ok」不算审批。
+1. **测试计划审批**：用户必须明确写出精确的 `planId`（如「批准 test-plan-20260804-001」）。「好」「继续」「可以」「yes」「ok」不算审批。`strategy = REUSE_EXISTING` 的 target 不需要审批。
 2. **修复方案审批**：用户必须明确写出精确的 `fixPlanId`（如「批准 fix-plan-20260804-001」）。规则同上。
 3. **审批失效**：计划内容修改后，必须生成新的 `planId`/`fixPlanId`，原审批不延续。
 4. **并发计划**：如果同时存在多份未审批的计划，询问用户要处理哪一份。
@@ -314,6 +323,7 @@ harness test base:origin/develop
 - 同一 `planId` 最多修复 2 轮。
 - 达到上限后，Orchestrator 将 `nextAction` 覆写为 `MANUAL_TEST_REPAIR_REQUIRED`，保留真实 `classification`，停止自动修改，输出失败证据和当前测试文件。
 - 轮次计数在生成新 `planId` 时重置。
+- **修复轮次只针对本次经 `planId` 审批后新建或修改的测试**。`REUSE_EXISTING` 复用的历史 Existing Test 失败时，不进入自动修复轮次——必须走 Runtime Debugger 诊断，`TEST_ERROR` 也需生成测试修改计划并经用户审批后才能改。
 
 ## 结果摘要格式
 

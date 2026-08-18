@@ -18,7 +18,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["controller", "endpoint", "scenarios"],
+        "required": ["controller", "endpoint", "strategy", "scenarios"],
         "properties": {
           "controller": {
             "type": "string",
@@ -29,6 +29,24 @@
             "type": "string",
             "minLength": 1,
             "description": "接口路径，如 POST /api/order/approve"
+          },
+          "strategy": {
+            "type": "string",
+            "enum": ["REUSE_EXISTING", "EXTEND_EXISTING", "CREATE_NEW"],
+            "description": "测试策略：复用现有测试 / 扩展现有测试 / 新建测试类"
+          },
+          "existingTests": {
+            "type": "array",
+            "description": "可复用或可扩展的现有测试；REUSE_EXISTING / EXTEND_EXISTING 时非空，CREATE_NEW 时为空",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["className", "path"],
+              "properties": {
+                "className": { "type": "string", "minLength": 1 },
+                "path": { "type": "string", "minLength": 1 }
+              }
+            }
           },
           "serviceChain": {
             "type": "array",
@@ -52,12 +70,22 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["name", "request", "expected"],
+              "required": ["name", "coverageStatus", "coveredBy"],
               "properties": {
                 "name": {
                   "type": "string",
                   "minLength": 1,
                   "description": "场景名称"
+                },
+                "coverageStatus": {
+                  "type": "string",
+                  "enum": ["COVERED", "MISSING"],
+                  "description": "该场景是否已被现有测试覆盖"
+                },
+                "coveredBy": {
+                  "type": "array",
+                  "description": "覆盖该场景的现有测试方法，如 OrderControllerIT.shouldApprovePendingOrder；MISSING 场景为空数组",
+                  "items": { "type": "string" }
                 },
                 "preconditions": {
                   "type": "array",
@@ -68,7 +96,7 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["method", "path"],
-                  "description": "HTTP 请求定义",
+                  "description": "HTTP 请求定义（MISSING 场景必填，COVERED 场景可省略）",
                   "properties": {
                     "method": {
                       "type": "string",
@@ -94,7 +122,7 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["httpStatus"],
-                  "description": "预期结果",
+                  "description": "预期结果（MISSING 场景必填，COVERED 场景可省略）",
                   "properties": {
                     "httpStatus": {
                       "type": "integer",

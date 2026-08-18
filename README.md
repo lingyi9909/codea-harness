@@ -54,7 +54,7 @@ cp -R .code-harness /path/to/target-project/.code-harness
 
 ```
 harness review
-harness test                # 评审 → 测试计划 → 审批 → 生成测试 → 执行 → 诊断
+harness test                # 评审 → 现有测试覆盖分析 → 复用/补充/新建 → 审批 → 执行 → 诊断
 harness debug-service       # 启动本地服务，采集日志，等待人工触发请求
 harness fix finding:F-001   # 针对评审发现生成修复方案
 harness fix diagnosis:run-001  # 针对诊断结果生成修复方案
@@ -107,13 +107,23 @@ harness test base:origin/develop
 
 Codea Harness **不会自动执行 `git fetch`**。评审使用当前本地已有的 Git refs。
 
+### 集成测试的现有测试复用（Existing Test Reuse）
+
+`harness test` 设计测试前，会先分析 `scope.testIncludes` 下的现有测试对本次变更行为的覆盖情况（基于代码语义和测试断言的行为覆盖，不是行覆盖率），并按「优先复用，其次补充，最后新建」原则为每个受影响接口确定策略：
+
+- **REUSE_EXISTING**：现有测试已充分覆盖本次变更 → 不生成修改、不要求审批、不修改任何测试代码，直接执行现有测试。
+- **EXTEND_EXISTING**：现有测试部分覆盖 → 测试计划只列缺失场景，批准 `planId` 后在现有测试类中补充测试方法，不新建重复测试类。
+- **CREATE_NEW**：没有合适的现有测试 → 生成测试计划，批准 `planId` 后新建测试类。
+
+一次变更影响多个接口时，每个接口独立判定策略，不会整体一刀切。`REUSE_EXISTING` 的现有测试执行失败时，不会自动篡改旧测试，而是走 Runtime Debugger 诊断。
+
 ---
 
 ## 审批协议
 
 整个流程有两个正式门禁：
 
-1. **测试计划**：Agent 输出测试计划并附带 `planId`。回复 `批准 <planId>` 进行审批。
+1. **测试计划**：Agent 输出测试计划并附带 `planId`。回复 `批准 <planId>` 进行审批。（`REUSE_EXISTING` 无需审批。）
 2. **修复方案**：Agent 输出修复方案并附带 `fixPlanId`。回复 `批准 <fixPlanId>` 进行审批。
 
 模糊的肯定（「好」「继续」「可以」）**不**视为审批。
