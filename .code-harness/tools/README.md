@@ -238,7 +238,7 @@ spring:
    - `target < current` → `MANUAL_ACTION_REQUIRED`（禁止 downgrade），0 文件修改
    - VERSION 缺失或非法 SemVer → `MANUAL_ACTION_REQUIRED`，0 文件修改
 
-2. **校验升级包**：`sourceDir` 必须至少包含 `VERSION`、`AGENTS.md`、`bootstrap.md`、`harness.template.yaml`、`project.template.md`、`agents/`、`skills/`、`contracts/`、`tools/`。缺失 → `MANUAL_ACTION_REQUIRED`，且 `targetDir` 不发生任何修改。
+2. **校验升级包**：`sourceDir` 必须至少包含 `VERSION`、`AGENTS.md`、`bootstrap.md`、`upgrade.md`、`harness.template.yaml`、`project.template.md`、`agents/`、`skills/`、`contracts/`、`tools/`。缺失 → `MANUAL_ACTION_REQUIRED`，且 `targetDir` 不发生任何修改。
 
 3. **文件所有权（写死在工具里）**：
 
@@ -246,6 +246,7 @@ spring:
      ```
      AGENTS.md
      bootstrap.md
+     upgrade.md
      VERSION
      .gitignore
      harness.template.yaml

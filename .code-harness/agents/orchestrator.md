@@ -93,7 +93,7 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 宿主能力（文件读取、Maven 执行、进程控制等）属于当前机器和当前 Agent 会话的属性，**不得持久化到 `harness.yaml`**。`harness init` 时输出的宿主能力仅作为当前会话的参考，不写入配置。
 
-以下意图除了要求 `initialization.status` 为 `READY` 外，还必须在执行前确认当前宿主具备所需能力：
+以下意图（除 `harness upgrade` 外）除了要求 `initialization.status` 为 `READY` 外，还必须在执行前确认当前宿主具备所需能力：
 
 | 意图 | 文件读取 | 受限文件写入 | Maven 执行 | 超时控制 | 日志采集 | 进程树停止 |
 |------|---------|-------------|-----------|---------|---------|-----------|
@@ -108,9 +108,24 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 `harness init` 和 `harness review` 不在此列——它们只需要文件读取能力，这是所有 Agent 会话的基础能力。
 
-**例外**：`harness upgrade` 在此列检查能力（文件读取 + 受限文件写入），但**不要求** `initialization.status = READY`——旧 Harness 本身可能有问题时用户才需要升级。
+**门禁规则（两种，消除歧义）**：
 
-**完整门禁 = `initialization.status = READY` + 当前宿主具备本次意图所需能力。**
+- **普通受门禁意图**（`harness test`、`harness debug-service`、`harness fix ...`、`harness verify ...`）：
+  ```text
+  initialization.status = READY
+  +
+  当前宿主具备本次意图所需能力
+  ```
+
+- **`harness upgrade`**（能力检查见上表：文件读取 + 受限文件写入）：
+  ```text
+  仅要求：
+  - 文件读取
+  - 受限文件写入（升级所需受控写入）
+
+  不要求 initialization.status = READY
+  ```
+  因为旧 Harness 本身可能有问题时，用户才需要升级。
 
 能力缺失时的输出格式：
 

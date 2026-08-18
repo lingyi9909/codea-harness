@@ -121,13 +121,15 @@ Codea Harness **不会自动执行 `git fetch`**。评审使用当前本地已�
 
 ## 升级
 
-将新版 `.code-harness` 目录复制到业务项目根目录并命名为：
+将新版 `.code-harness` 目录复制到业务项目根目录并命名为 `.code-harness-upgrade/`。
+
+**首次升级**（当前 Harness 还没有 `harness upgrade` 意图，例如 1.0.0 → 1.1.0）：
 
 ```text
-.code-harness-upgrade/
+读取 .code-harness-upgrade/upgrade.md，执行升级
 ```
 
-然后执行：
+**后续升级**（当前 Harness 已是 1.1.0 及以上）：
 
 ```text
 harness upgrade
