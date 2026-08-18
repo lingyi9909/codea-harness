@@ -57,12 +57,12 @@ output_schema: .code-harness/contracts/test-plan.schema.json
 5. **覆盖映射**：对第 3 步列出的每个「需要验证的行为」，逐项映射到现有测试方法，标记 `COVERED` 或 `MISSING`。是否覆盖必须遵循「覆盖判断标准」（见下），不能用「存在同名测试」或行覆盖率代替。
 6. **确定 strategy**（每个 target 独立判定，混合场景不能整体一刀切）：
    - 全部行为 `COVERED` → `REUSE_EXISTING`（不生成修改、不要求审批、不修改代码）
-   - 部分行为 `MISSING` → `EXTEND_EXISTING`（计划只列 `MISSING` 场景，在现有测试类中补充）
+   - 部分行为 `MISSING` → `EXTEND_EXISTING`（计划保留完整覆盖映射，但审批和代码修改范围仅限 `MISSING` 场景，在现有测试类中补充）
    - 找不到合适的现有测试，或现有测试结构与目标完全不匹配 → `CREATE_NEW`
 7. **确定 Mock 策略**（EXTEND/CREATE 时）：识别外部依赖的 Mock 或替代方式（`@MockBean`、测试配置、WireMock、Testcontainers），默认**不 Mock** 项目内部的 Service 或 Repository Bean。
 8. **生成测试计划**：
    - `REUSE_EXISTING`：输出覆盖分析结论，不生成 `planId`，不等待审批。
-   - `EXTEND_EXISTING` / `CREATE_NEW`：生成带唯一 `planId` 的计划，只包含 `MISSING` 场景；`existingTests` 记录可复用或可扩展的现有测试类。
+   - `EXTEND_EXISTING` / `CREATE_NEW`：生成带唯一 `planId` 的计划，保留完整覆盖映射（COVERED + MISSING），但审批与代码修改范围仅限 `MISSING` 场景；`existingTests` 记录可复用或可扩展的现有测试类。
 9. **呈现等待审批**（仅 EXTEND/CREATE）：提示用户「请回复：批准 <planId>」。
 
 ## 覆盖判断标准
@@ -84,6 +84,7 @@ V1 做的是**基于代码语义和测试断言的行为覆盖分析**，不是�
 - 每个 target：`controller`、`endpoint`、`strategy`（必填）、`existingTests`、`scenarios`
 - 每个 scenario：`name`、`coverageStatus`（COVERED/MISSING）、`coveredBy`；`MISSING` 场景还需 `request`/`expected`
 - `REUSE_EXISTING` 的 target 仍在计划中体现（`strategy=REUSE_EXISTING`，scenarios 全部 COVERED），但不产生 `planId` 审批
+- 计划保留完整覆盖映射（COVERED + MISSING），但审批与后续代码修改范围仅限 `MISSING` 场景；`COVERED` 场景不进入审批、不重新生成
 
 ## 停止条件
 

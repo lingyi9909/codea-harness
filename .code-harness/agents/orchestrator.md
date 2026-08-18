@@ -217,7 +217,7 @@ harness test base:origin/develop
      → 不等待审批、不生成/修改任何测试代码
      → 直接进入步骤 7，Runtime Debugger 执行 `existingTests` 中的现有测试类
    - 存在 `EXTEND_EXISTING` 或 `CREATE_NEW`：
-     → 输出测试计划（只含 `MISSING` 场景）→ WAITING_APPROVAL
+     → 输出测试计划（保留完整覆盖映射 COVERED + MISSING，但审批与代码修改范围仅限 `MISSING` 场景）→ WAITING_APPROVAL
      → 提示："请回复：批准 <planId>"
 5. 用户以精确 planId 批准 → 继续
    （模糊肯定「好」「继续」不算通过；REUSE_EXISTING 的 target 无需审批）
@@ -225,9 +225,12 @@ harness test base:origin/develop
    （只处理 `MISSING` 场景；`REUSE_EXISTING` 的 target 不写代码）
 7. Runtime Debugger: run-integration-tests → analyze-failure
 8. 如果全部测试通过 → DONE
-   如果 nextAction=REPAIR_TEST → Orchestrator 判断修复轮次：
-     - 未达上限 → 回到步骤 6（Integration Test Agent 修复测试）
-     - 已达 2 轮上限 → 将 nextAction 改为 MANUAL_TEST_REPAIR_REQUIRED，停止并输出证据
+   如果 nextAction=REPAIR_TEST → Orchestrator 按「测试来源追踪」判定失败测试方法的 origin：
+     - origin = GENERATED_BY_PLAN（本次经 planId 审批后新建/修改的方法）：
+       判断修复轮次——未达 2 轮 → 回到步骤 6；已达 2 轮 → 将 nextAction 覆写为 MANUAL_TEST_REPAIR_REQUIRED，停止并输出证据
+     - origin = REUSED_EXISTING（历史 Existing Test）：
+       即使 Runtime Debugger 返回 REPAIR_TEST，也禁止自动修复
+       → Orchestrator 覆写为「生成测试修改计划 → WAITING_APPROVAL」，经用户批准 planId 后才允许修改
    如果 nextAction=GENERATE_FIX_PLAN → 自动生成 Fix Plan（不修改代码），进入 fix 流程
    如果 nextAction=REPORT_ENVIRONMENT → 报告用户，STOP
    如果 nextAction=STOP_UNKNOWN → 报告用户，STOP
@@ -314,6 +317,24 @@ harness test base:origin/develop
 2. **修复方案审批**：用户必须明确写出精确的 `fixPlanId`（如「批准 fix-plan-20260804-001」）。规则同上。
 3. **审批失效**：计划内容修改后，必须生成新的 `planId`/`fixPlanId`，原审批不延续。
 4. **并发计划**：如果同时存在多份未审批的计划，询问用户要处理哪一份。
+
+## 测试来源追踪（Test Origin Tracking）
+
+为区分「历史 Existing Test」与「本次经 `planId` 审批后生成/修改的测试」，Orchestrator 在执行测试时维护每个测试方法的来源：
+
+| 字段 | 取值 | 说明 |
+|------|------|------|
+| testClass | 测试类名 | 执行的测试类 |
+| testMethod | 测试方法名 | 失败的测试方法 |
+| origin | `REUSED_EXISTING` / `GENERATED_BY_PLAN` | 测试方法来源 |
+| planId | 计划 ID | 仅 `GENERATED_BY_PLAN` 时有值 |
+
+来源判定规则：
+
+- `REUSED_EXISTING`：来自 `existingTests` 中既有测试类里、`coverageStatus = COVERED` 且 `coveredBy` 指向的已有测试方法；或 `REUSE_EXISTING` target 直接复用的整个测试类。
+- `GENERATED_BY_PLAN`：本次经 `planId` 审批后，由 `generate-integration-tests` 针对 `MISSING` 场景新建或新增的测试方法。
+
+只有 `origin = GENERATED_BY_PLAN` 的方法进入自动修复轮次；`origin = REUSED_EXISTING` 的方法失败时，即使 Runtime Debugger 返回 `REPAIR_TEST`，Orchestrator 也必须覆盖为「生成测试修改计划 → WAITING_APPROVAL」。
 
 ## 修复轮次追踪
 

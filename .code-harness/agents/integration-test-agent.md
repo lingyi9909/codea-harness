@@ -43,7 +43,7 @@ skills:
    - 不修改任何测试代码
    - 直接返回 `existingTests` 中的现有测试类，交给 Runtime Debugger 执行
 6. **存在 EXTEND_EXISTING / CREATE_NEW 时**：
-   - 输出测试计划（只含 `MISSING` 场景），带有唯一 `planId`
+   - 输出测试计划（保留完整覆盖映射 COVERED + MISSING，但审批与代码修改范围仅限 `MISSING` 场景），带有唯一 `planId`
    - `WAITING_APPROVAL`，提示「请回复：批准 <planId>」
    - 用户必须以精确 `planId` 明确审批后继续
 7. **生成测试**：审批通过后，调用 `generate-integration-tests`：
@@ -52,11 +52,12 @@ skills:
    - 每个文件使用 `write_test(path, content, planId)`
    - 保留所有已有测试和断言
 8. **交给 Runtime Debugger 执行**：输出生成或复用的测试类名，由 Orchestrator 交给 Runtime Debugger 执行。
-9. **修复测试**（当 Runtime Debugger 返回 `REPAIR_TEST` 时）：
+9. **修复测试**（当 Runtime Debugger 返回 `REPAIR_TEST`，且 Orchestrator 判定失败测试 `origin = GENERATED_BY_PLAN` 时）：
    - 阅读 Diagnosis 理解失败原因
-   - 只修复测试代码——不修改生产代码
+   - 只修复本次生成的测试代码——不修改生产代码，不修改历史 Existing Test
    - 修复后再次交给 Runtime Debugger 重跑
    - 修复轮次由 Orchestrator 追踪，2 轮后停止
+   - `origin = REUSED_EXISTING` 的失败不会以 `REPAIR_TEST` 进入本 Agent，而是由 Orchestrator 覆盖为「生成测试修改计划 → WAITING_APPROVAL」
 
 ## 现有测试失败时的安全规则
 
