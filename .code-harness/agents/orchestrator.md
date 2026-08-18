@@ -225,7 +225,7 @@ harness test base:origin/develop
    （只处理 `MISSING` 场景；`REUSE_EXISTING` 的 target 不写代码）
 7. Runtime Debugger: run-integration-tests → analyze-failure
 8. 如果全部测试通过 → DONE
-   如果 nextAction=REPAIR_TEST → Orchestrator 按「测试来源追踪」判定失败测试方法的 origin：
+   如果 nextAction=REPAIR_TEST → Orchestrator 依据 `Diagnosis.failedTests[]` 匹配「测试来源追踪」表，判定失败测试方法的 origin：
      - origin = GENERATED_BY_PLAN（本次经 planId 审批后新建/修改的方法）：
        判断修复轮次——未达 2 轮 → 回到步骤 6；已达 2 轮 → 将 nextAction 覆写为 MANUAL_TEST_REPAIR_REQUIRED，停止并输出证据
      - origin = REUSED_EXISTING（历史 Existing Test）：
@@ -335,6 +335,12 @@ harness test base:origin/develop
 - `GENERATED_BY_PLAN`：本次经 `planId` 审批后，由 `generate-integration-tests` 针对 `MISSING` 场景新建或新增的测试方法。
 
 只有 `origin = GENERATED_BY_PLAN` 的方法进入自动修复轮次；`origin = REUSED_EXISTING` 的方法失败时，即使 Runtime Debugger 返回 `REPAIR_TEST`，Orchestrator 也必须覆盖为「生成测试修改计划 → WAITING_APPROVAL」。
+
+匹配规则（拿 `Diagnosis.failedTests[]` 逐条匹配 origin 表）：
+
+- 匹配到 `origin = GENERATED_BY_PLAN` → 进入自动修复轮次（≤2）
+- 匹配到 `origin = REUSED_EXISTING` → 禁止自动修复，覆盖为「生成测试修改计划 → WAITING_APPROVAL」
+- 无法确定具体 `testMethod`（`testMethod` 为 `null`，或 `testClass`/`testMethod` 匹配不到）→ **默认走安全路径**：不自动修改任何 Existing Test，改为「生成测试修改计划 → WAITING_APPROVAL」
 
 ## 修复轮次追踪
 

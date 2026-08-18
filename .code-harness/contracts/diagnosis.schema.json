@@ -32,6 +32,26 @@
         "minLength": 1
       }
     },
+    "failedTests": {
+      "type": "array",
+      "description": "集成测试运行失败的测试类与方法，从 Surefire 报告结构化提取，不得从 evidence 自然语言猜测；服务调试模式下可省略",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["testClass"],
+        "properties": {
+          "testClass": {
+            "type": "string",
+            "minLength": 1,
+            "description": "失败的测试类，如 OrderControllerIT"
+          },
+          "testMethod": {
+            "type": ["string", "null"],
+            "description": "失败的测试方法，如 shouldApprove；类级失败（如编译错误、Spring 上下文启动失败）时可为 null"
+          }
+        }
+      }
+    },
     "nextAction": {
       "description": "建议的下一步动作",
       "enum": [

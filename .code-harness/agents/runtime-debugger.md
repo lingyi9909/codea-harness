@@ -33,7 +33,7 @@ skills:
 1. **执行测试**：调用 `run-integration-tests` 执行 `run_maven_test(testClass, runId)`。
 2. **采集结果**：调用 `read_test_report(runId)` 读取 Maven stdout/stderr 和 Surefire XML/TXT 报告。
 3. **采集日志**：读取测试运行窗口内的应用日志。
-4. **诊断故障**：调用 `analyze-failure` 关联所有输出，归类为以下之一：
+4. **诊断故障**：调用 `analyze-failure` 关联所有输出。`analyze-failure` 必须从 Surefire XML/TXT 报告结构化提取失败测试的 `testClass`/`testMethod`，写入 `Diagnosis.failedTests`——不得让 Orchestrator 从 `evidence` 自然语言猜测。归类为以下之一：
    - `TEST_COMPILE_ERROR`——测试代码编译失败
    - `TEST_CODE_ERROR`——测试断言或逻辑错误
    - `TEST_CONTEXT_ERROR`——Spring 上下文装配或配置失败（含 `@SpringBootTest` 启动失败）
@@ -78,7 +78,7 @@ skills:
 
 ## 输出
 
-必须通过 `.code-harness/contracts/diagnosis.schema.json` 校验。`nextAction` 必须是枚举中定义的值之一。
+必须通过 `.code-harness/contracts/diagnosis.schema.json` 校验。`nextAction` 必须是枚举中定义的值之一。集成测试模式下，存在失败测试时必须填充 `failedTests`（从 Surefire 结构化提取的失败测试类与方法）。
 
 ## 停止条件
 

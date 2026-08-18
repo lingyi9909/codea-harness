@@ -45,14 +45,15 @@ output_schema: .code-harness/contracts/diagnosis.schema.json
 
 ## 执行步骤
 
-1. **检查编译错误**：扫描 stdout/stderr 中的编译失败标记。如找到 → `TEST_COMPILE_ERROR`，`nextAction: REPAIR_TEST`。
-2. **检查断言失败**：解析 Surefire XML 中的 `<failure>` 或 `<error>` 元素。提取断言消息和堆栈。如果失败出自测试断言逻辑 → `TEST_CODE_ERROR`，`nextAction: REPAIR_TEST`。
-3. **检查 Spring 上下文失败**：查找 `ApplicationContext` 加载失败、Bean 定义缺失、配置错误。
+1. **提取失败测试（failedTests）**：从 Surefire XML/TXT 报告（`read_test_report`）中提取所有 `<failure>` 或 `<error>` 的 `<testcase>`，结构化记录 `testClass` 与 `testMethod`，写入 `failedTests`。类级失败（编译错误、Spring 上下文启动失败、无具体方法）时 `testMethod` 为 `null`。不得从 `evidence` 自然语言猜测。
+2. **检查编译错误**：扫描 stdout/stderr 中的编译失败标记。如找到 → `TEST_COMPILE_ERROR`，`nextAction: REPAIR_TEST`（此时 `failedTests` 的 `testMethod` 通常为 `null`）。
+3. **检查断言失败**：解析 Surefire XML 中的 `<failure>` 或 `<error>` 元素。提取断言消息和堆栈。如果失败出自测试断言逻辑 → `TEST_CODE_ERROR`，`nextAction: REPAIR_TEST`。
+4. **检查 Spring 上下文失败**：查找 `ApplicationContext` 加载失败、Bean 定义缺失、配置错误。
    - **集成测试模式下** → `TEST_CONTEXT_ERROR`，`nextAction: REPAIR_TEST`
    - **服务调试模式下** → `SERVICE_START_ERROR`，`nextAction: RESTART_SERVICE` 或 `GENERATE_FIX_PLAN`
-4. **检查数据/环境问题**：查找连接拒绝、未知主机、表缺失、外部服务认证失败 → `TEST_DATA_OR_ENVIRONMENT_ERROR`，`nextAction: REPORT_ENVIRONMENT`。
-5. **检查生产代码缺陷**：如果测试本身正确，但生产代码返回错误结果、违反业务规则或有未处理的边界情况 → `PRODUCTION_CODE_ERROR`，`nextAction: GENERATE_FIX_PLAN`。
-6. **兜底**：如果没有明确模式匹配 → `UNKNOWN`，`nextAction: STOP_UNKNOWN`。附带所有原始证据。
+5. **检查数据/环境问题**：查找连接拒绝、未知主机、表缺失、外部服务认证失败 → `TEST_DATA_OR_ENVIRONMENT_ERROR`，`nextAction: REPORT_ENVIRONMENT`。
+6. **检查生产代码缺陷**：如果测试本身正确，但生产代码返回错误结果、违反业务规则或有未处理的边界情况 → `PRODUCTION_CODE_ERROR`，`nextAction: GENERATE_FIX_PLAN`。
+7. **兜底**：如果没有明确模式匹配 → `UNKNOWN`，`nextAction: STOP_UNKNOWN`。附带所有原始证据。
 
 ### 分类优先级（集成测试模式）
 1. `TEST_COMPILE_ERROR`——最高优先级，首先检查
@@ -76,6 +77,7 @@ output_schema: .code-harness/contracts/diagnosis.schema.json
 - `classification`：恰好一个枚举值
 - `rootCause`：具体、可操作的描述
 - `evidence`：具体日志行、堆栈或报告摘录列表
+- `failedTests`：集成测试模式下从 Surefire 报告结构化提取的失败测试类与方法列表；服务调试模式省略
 - `nextAction`：恰好一个枚举值
 
 ## 停止条件
@@ -98,6 +100,9 @@ output_schema: .code-harness/contracts/diagnosis.schema.json
     "Surefire：shouldApproveOrder 失败——期望 200，实际 500",
     "应用日志：OrderService.java:42 抛出 IllegalStateException——订单状态已是 CANCELLED",
     "测试发送的请求 orderId=1，该订单在测试数据库中状态为 CANCELLED"
+  ],
+  "failedTests": [
+    { "testClass": "OrderControllerIT", "testMethod": "shouldApprove" }
   ],
   "nextAction": "GENERATE_FIX_PLAN"
 }
