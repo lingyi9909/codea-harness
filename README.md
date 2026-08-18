@@ -119,6 +119,30 @@ Codea Harness **不会自动执行 `git fetch`**。评审使用当前本地已�
 
 ---
 
+## 升级
+
+将新版 `.code-harness` 目录复制到业务项目根目录并命名为：
+
+```text
+.code-harness-upgrade/
+```
+
+然后执行：
+
+```text
+harness upgrade
+```
+
+Harness 会自动保留：
+
+- `harness.yaml`
+- `project.md`
+- `runs/`
+
+升级失败会自动回滚。
+
+---
+
 ## 审批协议
 
 整个流程有两个正式门禁：

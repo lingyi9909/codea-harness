@@ -14,7 +14,7 @@
 
 ## 初始化门禁
 
-`harness init` 和 `harness review` 可以在任意状态下执行。
+`harness init`、`harness review` 和 `harness upgrade` 可以在任意状态下执行。
 
 以下意图必须在 `harness.yaml` 中 `initialization.status` 为 `READY` 时才能执行：
 
@@ -42,6 +42,7 @@ Orchestrator（`.code-harness/agents/orchestrator.md`）负责路由所有用户
 |------|-------------|------------|
 | `harness init` | Project Adapter | 否 |
 | `harness review` | Reviewer | 否 |
+| `harness upgrade` | Orchestrator（调用 upgrade-harness Skill，使用 `.code-harness-upgrade/` 新版安全升级 `.code-harness`，项目配置与运行记录保持不变） | 否 |
 | `harness test` | Reviewer → Integration Test Agent → Runtime Debugger →（如需要）Fix Agent | 是 |
 | `harness debug-service` | Runtime Debugger | 是 |
 | `harness fix finding:<id>` | Fix Agent → Runtime Debugger | 是 |

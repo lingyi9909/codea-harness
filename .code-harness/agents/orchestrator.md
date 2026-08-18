@@ -40,7 +40,7 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 
 ### 初始化门禁
 
-`harness init` 自身和 `harness review` 可以在任意状态下执行。
+`harness init`、`harness review` 和 `harness upgrade` 可以在任意状态下执行。
 
 以下意图必须在 `initialization.status` 为 `READY` 时才能执行：
 
@@ -104,8 +104,11 @@ Orchestrator 本身不实现业务逻辑——它按照既定序列将任务委�
 | `harness verify test:<class>` | 需要 | - | 需要 | 需要 | - | - |
 | `harness verify fix:<fixPlanId>` | 需要 | - | 需要 | 需要 | - | - |
 | `harness verify service:<runId>` | - | - | 需要 | - | 需要 | 需要 |
+| `harness upgrade` | 需要 | 需要 | - | - | - | - |
 
 `harness init` 和 `harness review` 不在此列——它们只需要文件读取能力，这是所有 Agent 会话的基础能力。
+
+**例外**：`harness upgrade` 在此列检查能力（文件读取 + 受限文件写入），但**不要求** `initialization.status = READY`——旧 Harness 本身可能有问题时用户才需要升级。
 
 **完整门禁 = `initialization.status = READY` + 当前宿主具备本次意图所需能力。**
 
@@ -201,6 +204,18 @@ harness test base:origin/develop
 6. Reviewer 调用 review-code
 7. 输出 review-output（评审发现 + 摘要）
 8. DONE
+```
+
+### `harness upgrade`
+```
+0. 执行前能力检查：确认文件读取、受限文件写入均可用。缺少任一能力 → MANUAL_ACTION_REQUIRED
+   （不要求 initialization.status = READY）
+1. 调用 upgrade-harness Skill（.code-harness/skills/upgrade-harness/SKILL.md）
+2. 读取 UpgradeResult，根据 status 分支：
+   - UPGRADED → 输出结果（新版本、更新/删除/保留的文件），DONE
+   - ALREADY_UP_TO_DATE → 输出结果，DONE
+   - MANUAL_ACTION_REQUIRED → 输出原因（降级 / 升级包不完整 / VERSION 非法），STOP
+   - UPGRADE_FAILED → 确认 rollbackPerformed = true，输出 errors，STOP
 ```
 
 ### `harness test`

@@ -210,3 +210,75 @@ spring:
 
 <!-- CODEA-HARNESS:END -->
 ```
+
+---
+
+## 升级工具
+
+### `upgrade_harness(sourceDir?, targetDir?) -> UpgradeResult`
+使用升级包中的新版 Harness 原子升级当前 `.code-harness/`。这是唯一的升级入口——不拆分成多个工具。
+
+**参数**：
+
+- `sourceDir`：可选。升级包目录，默认 `.code-harness-upgrade/`。
+- `targetDir`：可选。当前 Harness 目录，默认 `.code-harness/`。
+
+正常情况下用户不需要传参数，使用默认值。
+
+**前置条件**：
+
+- `sourceDir` 必须存在且包含完整升级包。
+- `targetDir` 必须存在（已初始化的 Harness）。
+
+**事务流程（原子，不允许出现半升级状态）**：
+
+1. **Preflight（版本检查）**：读取 `targetDir/VERSION`（current）与 `sourceDir/VERSION`（target），按 SemVer 校验：
+   - `target > current` → 可升级
+   - `target == current` → `ALREADY_UP_TO_DATE`，0 文件修改
+   - `target < current` → `MANUAL_ACTION_REQUIRED`（禁止 downgrade），0 文件修改
+   - VERSION 缺失或非法 SemVer → `MANUAL_ACTION_REQUIRED`，0 文件修改
+
+2. **校验升级包**：`sourceDir` 必须至少包含 `VERSION`、`AGENTS.md`、`bootstrap.md`、`harness.template.yaml`、`project.template.md`、`agents/`、`skills/`、`contracts/`、`tools/`。缺失 → `MANUAL_ACTION_REQUIRED`，且 `targetDir` 不发生任何修改。
+
+3. **文件所有权（写死在工具里）**：
+
+   - `FRAMEWORK_MANAGED`（允许新版覆盖；新版已删除的 Framework 文件，旧版本残留文件也要删除）：
+     ```
+     AGENTS.md
+     bootstrap.md
+     VERSION
+     .gitignore
+     harness.template.yaml
+     project.template.md
+     agents/**
+     skills/**
+     contracts/**
+     tools/**
+     ```
+   - `PROJECT_MANAGED`（永远禁止覆盖，必须原样保留）：
+     ```
+     harness.yaml
+     project.md
+     runs/**
+     ```
+   - 业务项目根目录 `AGENTS.md`：本次升级完全不触碰。
+
+4. **原子升级 + 自动回滚**：
+   ```
+   创建临时备份（旧 FRAMEWORK_MANAGED + 旧 VERSION）
+   ↓
+   用新版覆盖 FRAMEWORK_MANAGED，删除新版已移除的残留文件
+   ↓
+   保留 PROJECT_MANAGED（harness.yaml / project.md / runs 不动）
+   ↓
+   用新版 harness-config.schema.json 校验原 harness.yaml
+   ↓
+   PASS → 提交：VERSION = 新版，删除备份，删除 sourceDir
+   FAIL → 回滚：完整恢复旧 Framework 与旧 VERSION，rollbackPerformed = true
+   ```
+
+   **不做配置迁移（Config Migration）**：升级只做「现有 `harness.yaml` + 新版 `harness-config.schema.json` → validate」。通过则继续；不通过则回滚并把不兼容字段写入 `errors` 告诉用户。禁止 AI 猜新配置、自动重新 init、偷偷加字段、自动改 module/profile/path。
+
+**失败处理**：失败时 `harness.yaml`、`project.md`、`runs/**` 保持不变；可保留 `sourceDir`（`.code-harness-upgrade/`）供重新处理。
+
+**返回 UpgradeResult**（符合 `.code-harness/contracts/upgrade-result.schema.json`）：`status`、`fromVersion`、`toVersion`、`updatedFiles`、`removedFiles`、`preservedFiles`、`rollbackPerformed`、`errors`。
