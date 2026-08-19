@@ -63,6 +63,74 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Code Navigation runtime failed' }
           if (($out -join "`n") -notmatch 'OrderServiceImpl.java') { throw 'implementation not found by real ast-grep runtime' }
           Remove-Item -Recurse -Force smoke
+      - name: Windows live upgrade lifecycle smoke
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'codea-upgrade-smoke'
+          Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Copy-Item -Recurse '.code-harness' (Join-Path $root '.code-harness')
+          Copy-Item -Recurse '.code-harness' (Join-Path $root '.code-harness-upgrade')
+          Set-Content (Join-Path $root '.code-harness/VERSION') '1.1.0'
+          New-Item -ItemType Directory -Force (Join-Path $root '.code-harness/skills/stale') | Out-Null
+          Set-Content (Join-Path $root '.code-harness/skills/stale/SKILL.md') 'stale'
+          @'
+          version: 1
+          project:
+            type: maven
+            root: .
+            module: ""
+          review:
+            baseRef: origin/develop
+            includeWorkingTree: true
+          integrationTest:
+            executable: mvn
+            args: [test]
+            reportDir: target/surefire-reports
+            timeoutSeconds: 600
+          service:
+            executable: mvn
+            args: [spring-boot:run]
+            startupTimeoutSeconds: 120
+            readiness:
+              type: log
+              pattern: Started
+            logFile: null
+          stopService:
+            mode: processTree
+          initialization:
+            status: READY
+            unresolved: []
+          scope:
+            sourceIncludes: [src/main/java/**]
+            testIncludes: [src/test/java/**]
+          write:
+            allowedTestPaths: [src/test/**]
+            allowedProductionPaths: [src/main/**]
+            deniedPaths: []
+          runs:
+            directory: .code-harness/runs
+          '@ | Set-Content (Join-Path $root '.code-harness/harness.yaml')
+          $newExe = Join-Path $root '.code-harness-upgrade/bin/codea-harness-tools.exe'
+          [System.IO.File]::AppendAllText($newExe, 'CODEA-UPGRADE-SMOKE')
+          $expectedHash = (Get-FileHash -Algorithm SHA256 $newExe).Hash
+          Push-Location $root
+          try {
+            $out = & '.\.code-harness\bin\codea-harness-tools.exe' upgrade 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "live upgrade failed: $($out -join "`n")" }
+            $text = $out -join "`n"
+            if ($text -notmatch '"status": "UPGRADED"') { throw "unexpected upgrade output: $text" }
+            if ($text -notmatch 'skills/stale/SKILL.md') { throw "removedFiles missing stale path: $text" }
+            if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.1.1') { throw 'target version was not upgraded' }
+            if (Test-Path '.code-harness/skills/stale/SKILL.md') { throw 'stale framework file survived replace' }
+            if (Test-Path '.code-harness-upgrade') { throw 'source package was not cleaned after success' }
+            if (Get-ChildItem -Force -Name '.code-harness-stage-*' -ErrorAction SilentlyContinue) { throw 'stage directory leaked' }
+            if (Get-ChildItem -Force -Name '.code-harness-backup-*' -ErrorAction SilentlyContinue) { throw 'backup directory leaked' }
+            $actualHash = (Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash
+            if ($actualHash -ne $expectedHash) { throw 'running executable was not replaced by staged binary' }
+          } finally {
+            Pop-Location
+          }
       - name: Assert package completeness
         shell: pwsh
         run: |
