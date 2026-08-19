@@ -3,6 +3,7 @@ package schema
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -12,11 +13,12 @@ type valueInfo struct {
 	raw   string
 	count int
 }
-
 type schemaNode struct {
+	Ref                  string                 `json:"$ref"`
 	Type                 any                    `json:"type"`
 	Required             []string               `json:"required"`
 	Properties           map[string]*schemaNode `json:"properties"`
+	Defs                 map[string]*schemaNode `json:"$defs"`
 	AdditionalProperties *bool                  `json:"additionalProperties"`
 	Enum                 []any                  `json:"enum"`
 	Const                any                    `json:"const"`
@@ -24,11 +26,12 @@ type schemaNode struct {
 	MinItems             *int                   `json:"minItems"`
 	MaxItems             *int                   `json:"maxItems"`
 	Minimum              *float64               `json:"minimum"`
+	Items                *schemaNode            `json:"items"`
+	UniqueItems          bool                   `json:"uniqueItems"`
 	AllOf                []*schemaNode          `json:"allOf"`
 	If                   *schemaNode            `json:"if"`
 	Then                 *schemaNode            `json:"then"`
 }
-
 type yamlEntry struct {
 	indent int
 	path   string
@@ -37,8 +40,7 @@ type yamlEntry struct {
 func parseYAMLShape(data []byte) map[string]valueInfo {
 	out := map[string]valueInfo{"": {kind: "object"}}
 	var stack []yamlEntry
-	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
 		if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
@@ -85,7 +87,6 @@ func parseYAMLShape(data []byte) map[string]valueInfo {
 	}
 	return out
 }
-
 func inferKind(v string) string {
 	if v == "[]" || (strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]")) {
 		return "array"
@@ -96,7 +97,7 @@ func inferKind(v string) string {
 	if v == "null" || v == "~" {
 		return "null"
 	}
-	if _, err := strconv.Atoi(v); err == nil {
+	if _, e := strconv.Atoi(v); e == nil {
 		return "integer"
 	}
 	return "string"
@@ -115,17 +116,26 @@ func unquote(v string) string {
 	}
 	return v
 }
-
-func ValidateYAML(schemaBytes, yamlBytes []byte) error {
+func parseSchema(b []byte) (*schemaNode, error) {
 	var root schemaNode
-	if err := json.Unmarshal(schemaBytes, &root); err != nil {
-		return fmt.Errorf("invalid schema: %w", err)
+	if err := json.Unmarshal(b, &root); err != nil {
+		return nil, fmt.Errorf("invalid schema: %w", err)
 	}
-	shape := parseYAMLShape(yamlBytes)
-	return validateNode(&root, "", shape)
+	return &root, nil
 }
 
-func validateNode(s *schemaNode, path string, shape map[string]valueInfo) error {
+func ValidateYAML(schemaBytes, yamlBytes []byte) error {
+	root, err := parseSchema(schemaBytes)
+	if err != nil {
+		return err
+	}
+	return validateYAMLNode(root, root, "", parseYAMLShape(yamlBytes))
+}
+func validateYAMLNode(root, s *schemaNode, path string, shape map[string]valueInfo) error {
+	s, err := resolveRef(root, s)
+	if err != nil {
+		return err
+	}
 	info, exists := shape[path]
 	if path != "" && !exists {
 		return fmt.Errorf("missing %s", path)
@@ -149,19 +159,12 @@ func validateNode(s *schemaNode, path string, shape map[string]valueInfo) error 
 		}
 	}
 	if len(s.Enum) > 0 && path != "" {
-		ok := false
 		actual := scalarValue(info)
-		for _, e := range s.Enum {
-			if fmt.Sprint(e) == fmt.Sprint(actual) {
-				ok = true
-				break
-			}
-		}
-		if !ok {
+		if !enumContains(s.Enum, actual) {
 			return fmt.Errorf("%s: enum", path)
 		}
 	}
-	if s.Const != nil && path != "" && fmt.Sprint(s.Const) != fmt.Sprint(scalarValue(info)) {
+	if s.Const != nil && path != "" && !reflect.DeepEqual(normalizeNumber(s.Const), normalizeNumber(scalarValue(info))) {
 		return fmt.Errorf("%s: const", path)
 	}
 	for _, req := range s.Required {
@@ -179,7 +182,7 @@ func validateNode(s *schemaNode, path string, shape map[string]valueInfo) error 
 			p = path + "." + name
 		}
 		if _, ok := shape[p]; ok {
-			if err := validateNode(child, p, shape); err != nil {
+			if err := validateYAMLNode(root, child, p, shape); err != nil {
 				return err
 			}
 		}
@@ -207,8 +210,8 @@ func validateNode(s *schemaNode, path string, shape map[string]valueInfo) error 
 		}
 	}
 	for _, a := range s.AllOf {
-		if a.If != nil && conditionMatches(a.If, path, shape) && a.Then != nil {
-			if err := validateNode(a.Then, path, shape); err != nil {
+		if a.If != nil && validateYAMLNode(root, a.If, path, shape) == nil && a.Then != nil {
+			if err := validateYAMLNode(root, a.Then, path, shape); err != nil {
 				return err
 			}
 		}
@@ -216,8 +219,152 @@ func validateNode(s *schemaNode, path string, shape map[string]valueInfo) error 
 	return nil
 }
 
-func conditionMatches(s *schemaNode, path string, shape map[string]valueInfo) bool {
-	return validateNode(s, path, shape) == nil
+func ValidateJSON(schemaBytes, jsonBytes []byte) error {
+	root, err := parseSchema(schemaBytes)
+	if err != nil {
+		return err
+	}
+	var v any
+	dec := json.NewDecoder(strings.NewReader(string(jsonBytes)))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	return validateJSONNode(root, root, "$", v)
+}
+func validateJSONNode(root, s *schemaNode, path string, v any) error {
+	var err error
+	s, err = resolveRef(root, s)
+	if err != nil {
+		return err
+	}
+	kind := jsonKind(v)
+	if !typeMatches(s.Type, kind) {
+		return fmt.Errorf("%s: expected %v, got %s", path, s.Type, kind)
+	}
+	if s.MinLength != nil && kind == "string" && len(v.(string)) < *s.MinLength {
+		return fmt.Errorf("%s: minLength", path)
+	}
+	if len(s.Enum) > 0 && !enumContains(s.Enum, v) {
+		return fmt.Errorf("%s: enum", path)
+	}
+	if s.Const != nil && !reflect.DeepEqual(normalizeNumber(s.Const), normalizeNumber(v)) {
+		return fmt.Errorf("%s: const", path)
+	}
+	switch x := v.(type) {
+	case map[string]any:
+		for _, req := range s.Required {
+			if _, ok := x[req]; !ok {
+				return fmt.Errorf("%s: missing required field %s", path, req)
+			}
+		}
+		for name, val := range x {
+			if child, ok := s.Properties[name]; ok {
+				if err := validateJSONNode(root, child, path+"."+name, val); err != nil {
+					return err
+				}
+			} else if s.AdditionalProperties != nil && !*s.AdditionalProperties {
+				return fmt.Errorf("%s: additional property %s", path, name)
+			}
+		}
+	case []any:
+		if s.MinItems != nil && len(x) < *s.MinItems {
+			return fmt.Errorf("%s: minItems", path)
+		}
+		if s.MaxItems != nil && len(x) > *s.MaxItems {
+			return fmt.Errorf("%s: maxItems", path)
+		}
+		if s.UniqueItems {
+			for i := range x {
+				for j := 0; j < i; j++ {
+					if reflect.DeepEqual(normalizeNumber(x[i]), normalizeNumber(x[j])) {
+						return fmt.Errorf("%s: uniqueItems", path)
+					}
+				}
+			}
+		}
+		if s.Items != nil {
+			for i, val := range x {
+				if err := validateJSONNode(root, s.Items, fmt.Sprintf("%s[%d]", path, i), val); err != nil {
+					return err
+				}
+			}
+		}
+	case json.Number:
+		if s.Minimum != nil {
+			n, _ := x.Float64()
+			if n < *s.Minimum {
+				return fmt.Errorf("%s: minimum", path)
+			}
+		}
+	}
+	for _, a := range s.AllOf {
+		if a.If != nil && validateJSONNode(root, a.If, path, v) == nil && a.Then != nil {
+			if err := validateJSONNode(root, a.Then, path, v); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+func resolveRef(root, s *schemaNode) (*schemaNode, error) {
+	if s.Ref == "" {
+		return s, nil
+	}
+	const prefix = "#/$defs/"
+	if !strings.HasPrefix(s.Ref, prefix) {
+		return nil, fmt.Errorf("unsupported $ref %s", s.Ref)
+	}
+	name := strings.TrimPrefix(s.Ref, prefix)
+	d, ok := root.Defs[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown $ref %s", s.Ref)
+	}
+	return d, nil
+}
+func jsonKind(v any) string {
+	switch v.(type) {
+	case map[string]any:
+		return "object"
+	case []any:
+		return "array"
+	case string:
+		return "string"
+	case bool:
+		return "boolean"
+	case nil:
+		return "null"
+	case json.Number:
+		n := v.(json.Number)
+		if !strings.ContainsAny(n.String(), ".eE") {
+			return "integer"
+		}
+		return "number"
+	default:
+		return "unknown"
+	}
+}
+func enumContains(xs []any, v any) bool {
+	nv := normalizeNumber(v)
+	for _, e := range xs {
+		if reflect.DeepEqual(normalizeNumber(e), nv) {
+			return true
+		}
+	}
+	return false
+}
+func normalizeNumber(v any) any {
+	switch n := v.(type) {
+	case json.Number:
+		return n.String()
+	case float64:
+		if n == float64(int64(n)) {
+			return strconv.FormatInt(int64(n), 10)
+		}
+		return strconv.FormatFloat(n, 'g', -1, 64)
+	default:
+		return v
+	}
 }
 func scalarValue(i valueInfo) any {
 	switch i.kind {
