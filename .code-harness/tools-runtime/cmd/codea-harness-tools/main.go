@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"codea-harness-tools/internal/coverage"
 	"codea-harness-tools/internal/nav"
 	"codea-harness-tools/internal/schema"
 	"codea-harness-tools/internal/upgrade"
@@ -48,6 +49,7 @@ func runValidate(args []string) error {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	schemaPath := fs.String("schema", "", "schema under .code-harness/contracts")
 	input := fs.String("input", "", "input under .code-harness")
+	format := fs.String("format", "auto", "auto|yaml|json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -65,10 +67,36 @@ func runValidate(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := schema.ValidateYAML(sb, ib); err != nil {
-		return err
+	f := strings.ToLower(*format)
+	if f == "auto" {
+		if strings.EqualFold(filepath.Ext(*input), ".json") {
+			f = "json"
+		} else {
+			f = "yaml"
+		}
 	}
-	fmt.Println(`{"status":"VALID"}`)
+	switch f {
+	case "yaml", "yml":
+		if err := schema.ValidateYAML(sb, ib); err != nil {
+			return err
+		}
+		fmt.Println(`{"status":"VALID","format":"yaml"}`)
+	case "json":
+		if err := schema.ValidateJSON(sb, ib); err != nil {
+			return err
+		}
+		out := map[string]any{"status": "VALID", "format": "json"}
+		if filepath.Base(*schemaPath) == "change-analysis.schema.json" {
+			machine, err := coverage.VerifyAnalysisJSON(ib)
+			if err != nil {
+				return err
+			}
+			out["reviewCoverage"] = machine
+		}
+		return writeJSONAndStatus(out, true)
+	default:
+		return fmt.Errorf("unsupported validate format %q", *format)
+	}
 	return nil
 }
 func safeHarnessPath(p, requiredChild string) bool {
@@ -97,8 +125,7 @@ func runNav(args []string) error {
 	if *symbol == "" {
 		return errors.New("nav requires --symbol")
 	}
-	exe := filepath.Join(".code-harness", "bin", "ast-grep.exe")
-	n := nav.Navigator{RepoRoot: ".", AstGrepPath: exe}
+	n := nav.Navigator{RepoRoot: ".", AstGrepPath: filepath.Join(".code-harness", "bin", "ast-grep.exe")}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var r nav.Result
