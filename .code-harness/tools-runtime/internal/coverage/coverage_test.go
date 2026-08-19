@@ -1,32 +1,85 @@
 package coverage_test
 
 import (
-	"codea-harness-tools/internal/coverage"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"codea-harness-tools/internal/coverage"
+	"codea-harness-tools/internal/nav"
 )
 
-type golden struct {
-	name              string
-	changed, reviewed []string
-	unresolved        []string
-	want              string
+type fakeAstGrep struct{}
+
+func (fakeAstGrep) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "implements OrderService") {
+		return []byte(`{"file":"src/main/java/OrderServiceImpl.java","text":"class OrderServiceImpl implements OrderService","range":{"start":{"line":0,"column":0}}}` + "\n"), nil
+	}
+	if strings.Contains(joined, "approve(") {
+		return []byte(`{"file":"src/main/java/OrderController.java","text":"orderService.approve()","range":{"start":{"line":1,"column":2}}}` + "\n"), nil
+	}
+	return nil, nil
+}
+func write(t *testing.T, root, rel, body string) {
+	t.Helper()
+	p := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
-func TestReviewCoverageGoldenCases(t *testing.T) {
-	cases := []golden{
-		{"changed controller service repository", []string{"OrderController.java", "OrderServiceImpl.java", "OrderRepository.java"}, []string{"OrderController.java", "OrderServiceImpl.java", "OrderRepository.java"}, nil, "COMPLETE"},
-		{"service only still expands upstream and downstream", []string{"OrderServiceImpl.java"}, []string{"OrderServiceImpl.java", "OrderController.java", "OrderRepository.java"}, nil, "COMPLETE"},
-		{"interface resolves implementation", []string{"OrderController.java"}, []string{"OrderController.java", "OrderService.java", "OrderServiceImpl.java", "OrderRepository.java"}, nil, "COMPLETE"},
-		{"multi service chain", []string{"OrderController.java"}, []string{"OrderController.java", "ServiceA.java", "ServiceB.java", "OrderRepository.java"}, nil, "COMPLETE"},
-		{"unresolved implementation", []string{"OrderController.java"}, []string{"OrderController.java", "OrderService.java"}, []string{"OrderService.approve"}, "PARTIAL"},
-		{"external boundary is resolved by classification", []string{"OrderController.java"}, []string{"OrderController.java", "OrderServiceImpl.java"}, nil, "COMPLETE"},
+func TestReviewGoldenUsesNavigationAndRealReadsBeforeCoverage(t *testing.T) {
+	repo := t.TempDir()
+	write(t, repo, "src/main/java/OrderController.java", "class OrderController { void approve(){ orderService.approve(); } }")
+	write(t, repo, "src/main/java/OrderService.java", "interface OrderService { void approve(); }")
+	write(t, repo, "src/main/java/OrderServiceImpl.java", "class OrderServiceImpl implements OrderService { public void approve(){} }")
+	n := nav.Navigator{RepoRoot: repo, AstGrepPath: "fake", Runner: fakeAstGrep{}}
+	impl, err := n.FindImplementations(context.Background(), "OrderService", "src/main/java")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := coverage.Evaluate(tc.changed, tc.reviewed, tc.unresolved)
-			if got.Status != tc.want {
-				t.Fatalf("status=%s missing=%v unresolved=%v", got.Status, got.MissingChangedFiles, got.UnresolvedSymbols)
-			}
-		})
+	if len(impl.Matches) != 1 {
+		t.Fatalf("nav did not find implementation: %+v", impl)
+	}
+	reviewed := []string{"src/main/java/OrderService.java", impl.Matches[0].Path}
+	for _, rel := range reviewed {
+		if _, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("read evidence %s: %v", rel, err)
+		}
+	}
+	doc := map[string]any{
+		"changedFiles": []any{map[string]any{"path": "src/main/java/OrderService.java"}},
+		"reviewCoverage": map[string]any{
+			"status":            "COMPLETE",
+			"reviewedFiles":     []any{map[string]any{"path": reviewed[0]}, map[string]any{"path": reviewed[1]}},
+			"unresolvedSymbols": []any{},
+		},
+	}
+	b, _ := json.Marshal(doc)
+	if _, err := coverage.VerifyAnalysisJSON(b); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestMachineCoverageRejectsAgentCompleteWhenChangedFileMissing(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"A.java"},{"path":"B.java"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"A.java"}],"unresolvedSymbols":[]}}`)
+	r, err := coverage.VerifyAnalysisJSON(b)
+	if err == nil {
+		t.Fatal("agent COMPLETE must not be trusted")
+	}
+	if r.Status != "PARTIAL" || len(r.MissingChangedFiles) != 1 {
+		t.Fatalf("result=%+v", r)
+	}
+}
+func TestMachineCoverageRejectsUnresolvedSymbols(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"A.java"}],"reviewCoverage":{"status":"PARTIAL","reviewedFiles":[{"path":"A.java"}],"unresolvedSymbols":[{"symbol":"OrderService.approve"}]}}`)
+	if _, err := coverage.VerifyAnalysisJSON(b); err == nil {
+		t.Fatal("unresolved symbol must block complete review")
 	}
 }
