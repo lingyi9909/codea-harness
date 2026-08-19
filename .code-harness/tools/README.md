@@ -12,7 +12,7 @@ Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** 1.1.1 
 
 ```text
 codea-harness-tools.exe upgrade
-codea-harness-tools.exe validate --schema <under .code-harness/contracts> --input <under .code-harness>
+codea-harness-tools.exe validate --schema <under .code-harness/contracts> --input <under .code-harness> [--format auto|yaml|json]
 codea-harness-tools.exe nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-references --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
@@ -74,11 +74,21 @@ committed = mergeBase → HEAD
 
 ---
 
-## Schema 工具
+## Schema / Coverage 工具
 
-### `validate(schemaPath, inputPath) -> ValidationResult`
+### `validate_contract(schemaPath, inputPath) -> ValidationResult`
 
-使用 Runtime 做确定性 Schema 校验。路径必须在 `.code-harness` 内，Schema 必须在 `.code-harness/contracts/`；失败返回非零状态，不允许 Agent“肉眼认为通过”。Upgrade 必须使用**新版升级包**的 `harness-config.schema.json` 校验迁移后的配置。
+真实实现为 Runtime `validate` 子命令。路径必须在 `.code-harness` 内，Schema 必须在 `.code-harness/contracts/`；失败返回非零状态，不允许 Agent“肉眼认为通过”。
+
+- YAML 输入：执行 Harness Config Schema 校验。
+- JSON 输入：执行真实 JSON Contract 校验，支持 object/array/items/required/additionalProperties/enum/min/max/$defs `$ref` 等当前 Harness Contract 使用的约束。
+- 当 Schema 为 `change-analysis.schema.json` 时，Schema PASS 后 Runtime 必须再次执行机器 Review Coverage 校验：
+  - 所有 `changedFiles[].path` 必须出现在 `reviewCoverage.reviewedFiles[].path`；
+  - `unresolvedSymbols` 必须为空；
+  - Agent 声明的 `reviewCoverage.status` 必须与机器计算结果一致；
+  - 任一不满足时返回非零状态，Orchestrator 不得继续 Review/Test。
+
+Upgrade 必须使用**新版升级包**的 `harness-config.schema.json` 校验迁移后的配置。
 
 ---
 
@@ -135,7 +145,7 @@ bin/ast-grep.exe
 
 ### Framework Managed
 
-新版可覆盖/删除残留：
+新版必须按完整集合 **replace**，不是 overlay。新版不存在的旧 Framework 文件视为 stale，必须删除并进入 `removedFiles[]`：
 
 ```text
 AGENTS.md bootstrap.md upgrade.md VERSION .gitignore
@@ -170,15 +180,32 @@ review:
 
 已有 review 完全保留。无法识别 → `MANUAL_ACTION_REQUIRED`，0 修改。
 
-### 原子事务
+### Staged 原子事务与清理语义
 
 ```text
 备份完整旧 Harness
-→ 更新 Framework Managed
+→ 从旧 Harness 构建 stage
+→ stage 中删除全部 Framework Managed
+→ 仅复制新版 Framework Managed 到 stage
 → 执行 registered migration
-→ 新 Schema validate harness.yaml
-→ PASS：最后更新 VERSION，删除备份，UPGRADED
-→ FAIL：完整恢复备份，UPGRADE_FAILED，rollbackPerformed=true
+→ 使用 stage 中的新 Schema validate harness.yaml
+→ PASS：把 stage 的 Framework Managed 应用到 target，删除 stale
+→ 最后替换 codea-harness-tools.exe
+→ 删除 stage + backup + 已消费的 sourceDir
+→ UPGRADED
 ```
+
+失败语义：
+
+```text
+任一 apply 步骤失败
+→ 使用 backup 恢复旧 Harness
+→ rollbackPerformed=true（恢复成功时）
+→ 保留 sourceDir 供重新处理
+→ 清理 stage + backup
+→ UPGRADE_FAILED
+```
+
+Windows 下禁止向运行中的 `.code-harness/bin/codea-harness-tools.exe` 原地写入/覆盖。Runtime 必须先把新 exe 完整写到 staged/temp 文件，再将运行中的旧 exe rename 到 Harness 目录外的 OS temp，最后把 staged 新 exe rename 到规范路径；这样目标 Harness 树在命令完成时已经是新版。旧进程退出后，OS temp 中的旧 exe 允许做 best-effort 清理。
 
 禁止 AI 猜配置、自动 re-init、绕过 Runtime 复制/删除升级文件。
