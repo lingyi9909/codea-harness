@@ -9,6 +9,7 @@ tools:
   - find_symbol
   - find_references
   - find_implementations
+  - validate_contract
 output_schema: .code-harness/contracts/change-analysis.schema.json
 ---
 
@@ -26,6 +27,7 @@ output_schema: .code-harness/contracts/change-analysis.schema.json
 4. 符号定位必须使用 `find_symbol` / `find_references` / `find_implementations`，不得靠文件名猜路径。
 5. Agent/Skill 禁止依赖 ast-grep 语法；ast-grep 只是 Code Navigation Contract 的当前实现。
 6. 调用链只围绕本次 Change Set 的直接相关路径展开，不扫描整个仓库。
+7. Agent 声明的 `reviewCoverage.status` 不是最终事实；输出后必须交给 Tool Runtime 做机器校验。
 
 ## 执行步骤
 
@@ -98,11 +100,15 @@ output_schema: .code-harness/contracts/change-analysis.schema.json
 }
 ```
 
-21. `PARTIAL` 不是 Review 成功：交给 Orchestrator 后必须停止，不得继续 `review-code` 或测试计划。
+21. 组装完整 ChangeAnalysis JSON 后调用 `validate_contract`：使用 `change-analysis.schema.json` 做 JSON Schema 校验，并由 Tool Runtime **重新计算机器 Coverage**。Runtime 至少校验：
+    - `changedFiles[].path` 全部存在于 `reviewCoverage.reviewedFiles[].path`；
+    - `unresolvedSymbols` 为空；
+    - Agent 声明的 `status` 必须与机器计算结果一致。
+22. `validate_contract` 失败或机器 Coverage 不是 `COMPLETE` → 交给 Orchestrator 以 `MANUAL_ACTION_REQUIRED` 停止；不得继续 `review-code` 或测试计划。
 
 ## 输出
 
-输出必须通过 `.code-harness/contracts/change-analysis.schema.json`：
+输出必须通过 `.code-harness/contracts/change-analysis.schema.json` 与 Tool Runtime 的机器 Coverage 校验：
 
 - `reviewScope`
 - `changedFiles[]`
@@ -119,5 +125,6 @@ output_schema: .code-harness/contracts/change-analysis.schema.json
 - 不得跳过 changed test/source files。
 - 不得扫描整个仓库。
 - 不得直接调用 `ast-grep.exe`；只能使用受控 Code Navigation Contract。
+- 不得跳过 `validate_contract` 并直接相信 Agent 填写的 `COMPLETE`。
 - 不得执行任意 Shell、`git fetch` 或 `git pull`。
 - 不得修改文件。
