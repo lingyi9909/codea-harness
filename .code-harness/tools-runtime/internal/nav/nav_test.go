@@ -18,7 +18,11 @@ func TestFindImplementationsUsesFixedAstGrepArguments(t *testing.T){
 	got,err:=n.FindImplementations(context.Background(),"OrderService","src/main/java"); if err!=nil{t.Fatal(err)}
 	if len(got.Matches)!=1||got.Matches[0].Path!="src/main/java/OrderServiceImpl.java"{t.Fatalf("got=%+v",got)}
 	if len(r.calls)==0{t.Fatal("ast-grep not invoked")}
-	for _,a:=range r.calls[0]{ if a=="cmd"||a=="/c"||a=="powershell"||a=="bash"||a=="-c"{t.Fatalf("shell arg leaked: %v",r.calls[0])} }
+	for _,call:=range r.calls{ for _,a:=range call{ if a=="cmd"||a=="/c"||a=="powershell"||a=="bash"||a=="-c"{t.Fatalf("shell arg leaked: %v",call)} } }
+	wantPublic:=[]string{"--lang","java","--json=stream","--pattern","public class $C implements OrderService { $$$BODY }","src/main/java"}
+	foundPublic:=false
+	for _,call:=range r.calls{if reflect.DeepEqual(call,wantPublic){foundPublic=true}}
+	if !foundPublic{t.Fatalf("public implementation pattern missing: %v",r.calls)}
 }
 func TestNavigationRejectsScopeEscape(t *testing.T){ n:=nav.Navigator{RepoRoot:`C:\\repo`,AstGrepPath:`C:\\repo\\.code-harness\\bin\\ast-grep.exe`,Runner:&fakeRunner{}}; _,err:=n.FindSymbol(context.Background(),"OrderService","../outside"); if !errors.Is(err,nav.ErrInvalidScope){t.Fatalf("err=%v",err)} }
 func TestNavigationRejectsShellMetacharactersInSymbol(t *testing.T){ n:=nav.Navigator{RepoRoot:`C:\\repo`,AstGrepPath:`C:\\repo\\.code-harness\\bin\\ast-grep.exe`,Runner:&fakeRunner{}}; _,err:=n.FindReferences(context.Background(),"OrderService;calc.exe","src/main/java"); if !errors.Is(err,nav.ErrInvalidSymbol){t.Fatalf("err=%v",err)} }
