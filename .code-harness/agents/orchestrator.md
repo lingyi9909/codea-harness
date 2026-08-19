@@ -36,7 +36,11 @@ merge-base(baseRef, HEAD) → HEAD 的 committed
 
 ## Review Coverage 硬门禁（1.1.1）
 
-Reviewer 的 `analyze-change` 必须先产生通过 `change-analysis.schema.json` 的 `reviewCoverage`。
+Reviewer 的 `analyze-change` 必须先产生 `ChangeAnalysis` JSON，然后交给 Tool Runtime 执行 `validate_contract`：
+
+1. 先用 `change-analysis.schema.json` 做真实 JSON Contract 校验；
+2. 再由 Runtime 独立计算机器 Coverage；
+3. Agent 填写的 `reviewCoverage.status=COMPLETE` 不能直接作为通过依据。
 
 ### COMPLETE
 
@@ -45,34 +49,38 @@ Reviewer 的 `analyze-change` 必须先产生通过 `change-analysis.schema.json
 1. 所有 changed source/test files 已读取；
 2. 与变更直接相关的内部 call-chain symbol 均已确定性定位并读取；
 3. 或明确记录为 `externalDependencies`；
-4. `unresolvedSymbols` 为空。
+4. `unresolvedSymbols` 为空；
+5. Runtime 机器校验确认所有 `changedFiles[].path` 都存在于 `reviewCoverage.reviewedFiles[].path`，且机器计算结果为 `COMPLETE`。
 
-才允许 `status=COMPLETE`。
+才允许继续。
 
-### PARTIAL
+### PARTIAL / Runtime 校验失败
 
-任何 changed file 未读或内部 symbol 无法解析：
+任何 changed file 未读、内部 symbol 无法解析、Schema 不合法、机器 Coverage 不完整，统一：
 
 ```text
 结果：MANUAL_ACTION_REQUIRED
 
 Review 未完整完成：
-- <symbol> <- <from>: <reason>
+- <missing changed file / unresolved symbol / contract validation error>
 ```
 
-**PARTIAL 时禁止调用 `review-code`，禁止输出 Review PASSED，禁止进入 Integration Test Agent。**
+**此时禁止调用 `review-code`，禁止输出 Review PASSED，禁止进入 Integration Test Agent。**
 
 ## `harness review`
 
 ```text
 1. 解析并校验 effectiveBaseRef
 2. Reviewer.analyze-change：完整 Change Set + 全 changedFiles + 确定性调用链
-3. 输出 Review Scope
-4. 输出 Review Coverage
-5. 无变化 → PASSED，STOP
-6. coverage=PARTIAL → MANUAL_ACTION_REQUIRED，STOP
-7. coverage=COMPLETE → Reviewer.review-code
-8. 输出 Review Findings
+3. Tool Runtime: validate_contract(ChangeAnalysis JSON)
+   - JSON Schema 校验
+   - 机器 Coverage 校验
+4. 输出 Review Scope
+5. 输出 Review Coverage
+6. 无变化 → PASSED，STOP
+7. Runtime 校验失败 / coverage!=COMPLETE → MANUAL_ACTION_REQUIRED，STOP
+8. Reviewer.review-code
+9. 输出 Review Findings
 ```
 
 用户可见顺序固定为：
@@ -88,21 +96,22 @@ Review Scope
 ```text
 0. 要求 initialization.status=READY，且当前宿主具备文件读写、Maven 执行、超时控制
 1. 与 harness review 完全相同地解析 Change Set 并执行 analyze-change
-2. 输出 Review Scope + Review Coverage
-3. coverage != COMPLETE → MANUAL_ACTION_REQUIRED，STOP；不得设计测试
-4. Reviewer.review-code
-5. 如果没有受影响 Controller → 报告后 STOP
-6. Integration Test Agent 做 Existing Test Coverage Analysis
-7. 每个 target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW
-8. REUSE_EXISTING 直接执行；其余输出 Test Plan，精确 planId 审批后才写测试
-9. Runtime Debugger 独占测试执行、日志和 Diagnosis
-10. 新生成/修改测试若 TEST_ERROR：仅 GENERATED_BY_PLAN 可自动修复，最多 2 轮
-11. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
+2. Tool Runtime: validate_contract(ChangeAnalysis JSON)，执行 JSON Schema + 机器 Coverage 校验
+3. 输出 Review Scope + Review Coverage
+4. Runtime 校验失败 / coverage != COMPLETE → MANUAL_ACTION_REQUIRED，STOP；不得设计测试
+5. Reviewer.review-code
+6. 如果没有受影响 Controller → 报告后 STOP
+7. Integration Test Agent 做 Existing Test Coverage Analysis
+8. 每个 target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW
+9. REUSE_EXISTING 直接执行；其余输出 Test Plan，精确 planId 审批后才写测试
+10. Runtime Debugger 独占测试执行、日志和 Diagnosis
+11. 新生成/修改测试若 TEST_ERROR：仅 GENERATED_BY_PLAN 可自动修复，最多 2 轮
+12. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
 ```
 
 ## `harness upgrade`
 
-不要求 READY，但要求文件读取与受控写入能力。调用 `upgrade-harness`；配置兼容迁移只能由 Tool Runtime 的 registered migration 执行。状态按 `UPGRADED / ALREADY_UP_TO_DATE / MANUAL_ACTION_REQUIRED / UPGRADE_FAILED` 原样映射，失败时确认 rollback 状态。
+不要求 READY，但要求文件读取与受控写入能力。调用 `upgrade-harness`；配置兼容迁移只能由 Tool Runtime 的 registered migration 执行。Framework Managed 必须按新版完整集合 replace，stale Framework 文件必须删除并进入 `removedFiles`。成功时清理 stage/backup/升级源目录；失败时回滚旧 Harness、保留升级源目录并清理临时 stage/backup。Windows 下运行中的 `codea-harness-tools.exe` 禁止原地覆盖，只允许 staged/temp rename 方式替换。状态按 `UPGRADED / ALREADY_UP_TO_DATE / MANUAL_ACTION_REQUIRED / UPGRADE_FAILED` 原样映射。
 
 ## 其他意图（保持 1.1.0 语义）
 
@@ -136,7 +145,7 @@ Review Scope
 
 ## 禁止行为
 
-- 不得跳过 Review Coverage / 审批门禁。
+- 不得跳过 Review Coverage / Runtime Contract 校验 / 审批门禁。
 - 不得超过 2 轮自动测试修复。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。
