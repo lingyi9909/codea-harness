@@ -80,8 +80,9 @@ committed = mergeBase → HEAD
 
 真实实现为 Runtime `validate` 子命令。路径必须在 `.code-harness` 内，Schema 必须在 `.code-harness/contracts/`；失败返回非零状态，不允许 Agent“肉眼认为通过”。
 
-- YAML 输入：执行 Harness Config Schema 校验。
-- JSON 输入：执行真实 JSON Contract 校验，支持 object/array/items/required/additionalProperties/enum/min/max/$defs `$ref` 等当前 Harness Contract 使用的约束。
+- JSON Schema 使用成熟的 Draft 2020-12 Validator 实现，不在 Harness 内自维护 Schema 语义子集。
+- YAML 输入先由标准 YAML parser 解析，再以 JSON-compatible instance 进入同一 JSON Schema Validator。
+- JSON 输入直接执行完整 JSON Contract 校验。
 - 当 Schema 为 `change-analysis.schema.json` 时，Schema PASS 后 Runtime 必须再次执行机器 Review Coverage 校验：
   - 所有 `changedFiles[].path` 必须出现在 `reviewCoverage.reviewedFiles[].path`；
   - `unresolvedSymbols` 必须为空；
@@ -206,6 +207,6 @@ review:
 → UPGRADE_FAILED
 ```
 
-Windows 下禁止向运行中的 `.code-harness/bin/codea-harness-tools.exe` 原地写入/覆盖。Runtime 必须先把新 exe 完整写到 staged/temp 文件，再将运行中的旧 exe rename 到 Harness 目录外的 OS temp，最后把 staged 新 exe rename 到规范路径；这样目标 Harness 树在命令完成时已经是新版。旧进程退出后，OS temp 中的旧 exe 允许做 best-effort 清理。
+Windows 下禁止向运行中的 `.code-harness/bin/codea-harness-tools.exe` 原地写入/覆盖。Runtime 必须先把新 exe 完整写到 staged 文件，再将运行中的旧 exe rename 到 **`.code-harness` 同级、同卷**的临时路径，最后把 staged 新 exe rename 到规范路径。旧 exe 的停放路径必须在 Harness 树外且不能跨卷；旧进程退出后对该临时文件做 best-effort 清理。
 
 禁止 AI 猜配置、自动 re-init、绕过 Runtime 复制/删除升级文件。
