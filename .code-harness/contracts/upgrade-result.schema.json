@@ -1,49 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "UpgradeResult",
-  "description": "harness upgrade 的原子升级结果，由 upgrade_harness 工具产出",
+  "description": "harness upgrade 的确定性原子升级结果",
   "type": "object",
   "additionalProperties": false,
   "required": ["status", "fromVersion", "toVersion", "rollbackPerformed", "errors"],
   "properties": {
-    "status": {
-      "type": "string",
-      "enum": ["UPGRADED", "ALREADY_UP_TO_DATE", "MANUAL_ACTION_REQUIRED", "UPGRADE_FAILED"],
-      "description": "升级结果状态"
-    },
-    "fromVersion": {
-      "type": "string",
-      "minLength": 1,
-      "description": "当前 Harness 版本，如 1.0.0"
-    },
-    "toVersion": {
-      "type": "string",
-      "minLength": 1,
-      "description": "升级包目标版本，如 1.1.0"
-    },
-    "updatedFiles": {
-      "type": "array",
-      "description": "被新版覆盖的 Framework 文件（相对 .code-harness/）",
-      "items": { "type": "string" }
-    },
-    "removedFiles": {
-      "type": "array",
-      "description": "新版已删除、从旧版本清理的残留 Framework 文件",
-      "items": { "type": "string" }
-    },
-    "preservedFiles": {
-      "type": "array",
-      "description": "保留不变的项目配置文件（harness.yaml、project.md、runs/**）",
-      "items": { "type": "string" }
-    },
-    "rollbackPerformed": {
-      "type": "boolean",
-      "description": "是否执行了自动回滚（UPGRADE_FAILED 时为 true）"
-    },
-    "errors": {
-      "type": "array",
-      "description": "错误或提示信息列表（MANUAL_ACTION_REQUIRED / UPGRADE_FAILED 时非空）",
-      "items": { "type": "string" }
-    }
+    "status": { "enum": ["UPGRADED", "ALREADY_UP_TO_DATE", "MANUAL_ACTION_REQUIRED", "UPGRADE_FAILED"] },
+    "fromVersion": { "type": "string", "minLength": 1 },
+    "toVersion": { "type": "string", "minLength": 1 },
+    "updatedFiles": { "type": "array", "items": { "type": "string" } },
+    "removedFiles": { "type": "array", "items": { "type": "string" } },
+    "preservedFiles": { "type": "array", "items": { "type": "string" }, "description": "project.md、runs/** 与未被 registered migration 修改的项目状态" },
+    "rollbackPerformed": { "type": "boolean" },
+    "errors": { "type": "array", "items": { "type": "string" } },
+    "migrations": { "type": "array", "items": { "type": "string" }, "description": "本次实际执行的 registered Config Migration id" }
   }
 }

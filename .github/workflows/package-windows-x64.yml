@@ -1,0 +1,79 @@
+name: package-windows-x64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - '.code-harness/**'
+      - 'CHANGELOG.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - '.github/workflows/package-windows-x64.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+      - name: Test controlled runtime
+        working-directory: .code-harness/tools-runtime
+        run: |
+          go test -count=1 ./...
+          go vet ./...
+      - name: Build Windows x64 runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:GOOS = 'windows'
+          $env:GOARCH = 'amd64'
+          go build -trimpath -ldflags "-s -w" -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
+      - name: Vendor pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe'
+          & '.code-harness/bin/ast-grep.exe' --version
+      - name: Code Navigation end-to-end smoke
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force 'smoke/src/main/java' | Out-Null
+          @'
+          public interface OrderService { void approve(); }
+          '@ | Set-Content 'smoke/src/main/java/OrderService.java'
+          @'
+          public class OrderServiceImpl implements OrderService {
+              public void approve() {}
+          }
+          '@ | Set-Content 'smoke/src/main/java/OrderServiceImpl.java'
+          $out = & '.code-harness/bin/codea-harness-tools.exe' nav find-implementations --symbol OrderService --scope smoke/src/main/java
+          if ($LASTEXITCODE -ne 0) { throw 'Code Navigation runtime failed' }
+          if (($out -join "`n") -notmatch 'OrderServiceImpl.java') { throw 'implementation not found by real ast-grep runtime' }
+          Remove-Item -Recurse -Force smoke
+      - name: Assert package completeness
+        shell: pwsh
+        run: |
+          if (!(Test-Path '.code-harness/bin/codea-harness-tools.exe')) { throw 'runtime missing' }
+          if (!(Test-Path '.code-harness/bin/ast-grep.exe')) { throw 'ast-grep missing' }
+          if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.1.1') { throw 'wrong version' }
+      - name: Build offline package
+        shell: pwsh
+        run: Compress-Archive -Path '.code-harness','CHANGELOG.md','THIRD_PARTY_NOTICES.md' -DestinationPath 'codea-harness-1.1.1-windows-x64.zip' -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.1.1-windows-x64
+          path: codea-harness-1.1.1-windows-x64.zip
+          if-no-files-found: error
