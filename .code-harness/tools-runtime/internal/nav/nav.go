@@ -49,4 +49,21 @@ func (n Navigator) run(ctx context.Context, symbol, scope string, patterns ...st
 func splitSymbol(s string)(owner,member string){ if i:=strings.Index(s,"."); i>=0 { return s[:i],s[i+1:] }; return s,"" }
 func (n Navigator) FindSymbol(ctx context.Context,symbol,scope string)(Result,error){ owner,member:=splitSymbol(symbol); if member!="" { return n.run(ctx,symbol,scope,"$RET "+member+"($$$ARGS) { $$$BODY }") }; return n.run(ctx,symbol,scope,"class "+owner+" { $$$BODY }","interface "+owner+" { $$$BODY }","enum "+owner+" { $$$BODY }") }
 func (n Navigator) FindReferences(ctx context.Context,symbol,scope string)(Result,error){ _,member:=splitSymbol(symbol); if member!="" { return n.run(ctx,symbol,scope,"$OBJ."+member+"($$$ARGS)",member+"($$$ARGS)") }; return n.run(ctx,symbol,scope,"$T "+symbol,"new "+symbol+"($$$ARGS)") }
-func (n Navigator) FindImplementations(ctx context.Context,symbol,scope string)(Result,error){ owner,_:=splitSymbol(symbol); return n.run(ctx,symbol,scope,"class $C implements "+owner+" { $$$BODY }","class $C extends "+owner+" { $$$BODY }") }
+func (n Navigator) FindImplementations(ctx context.Context,symbol,scope string)(Result,error){
+	owner,_:=splitSymbol(symbol)
+	patterns:=[]string{
+		"class $C implements "+owner+" { $$$BODY }",
+		"public class $C implements "+owner+" { $$$BODY }",
+		"final class $C implements "+owner+" { $$$BODY }",
+		"public final class $C implements "+owner+" { $$$BODY }",
+		"abstract class $C implements "+owner+" { $$$BODY }",
+		"public abstract class $C implements "+owner+" { $$$BODY }",
+		"class $C extends "+owner+" { $$$BODY }",
+		"public class $C extends "+owner+" { $$$BODY }",
+		"final class $C extends "+owner+" { $$$BODY }",
+		"public final class $C extends "+owner+" { $$$BODY }",
+		"abstract class $C extends "+owner+" { $$$BODY }",
+		"public abstract class $C extends "+owner+" { $$$BODY }",
+	}
+	return n.run(ctx,symbol,scope,patterns...)
+}
