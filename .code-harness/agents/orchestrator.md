@@ -91,7 +91,6 @@ Review Scope
 → Review Findings
 ```
 
-
 ## Test Target Selection 硬门禁（1.2）
 
 仅用于 `harness test`，并且只能在 ChangeAnalysis Schema + Runtime Review Coverage 均通过后执行。
@@ -131,10 +130,11 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 10. Integration Test Agent 只对 selected targets 做 Existing Test Coverage Analysis
 11. 每个 selected target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW；未选择 target 不得生成计划
 12. REUSE_EXISTING 直接执行；其余输出 Test Plan，仍需精确 `批准 <planId>` 后才写测试
-13. Runtime Debugger 只能执行 selection artifact 对应 selected targets 的测试类；不得把未选择 Controller 加回范围
-14. Runtime Debugger 独占测试执行、日志和 Diagnosis
-15. 新生成/修改测试若 TEST_ERROR：仅 GENERATED_BY_PLAN 可自动修复，最多 2 轮
-16. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
+13. Integration Test Agent 返回 method/scenario 级 provenance；Orchestrator 形成 `TestExecutionTarget(testClass,testMethods[],selector,controllerId,origin,planId?)`
+14. selected-only execution gate：整类 selector 仅允许该 class 本次相关 methods 全部属于 selected targets；混合 selected+unselected class 必须收窄到 selected method selector；无法安全表达 method selector → `MANUAL_ACTION_REQUIRED`，不得整类执行
+15. Runtime Debugger 独占测试执行、日志和 Diagnosis；Surefire `failedTests.testClass + testMethod` 必须回查具体 TestExecutionTarget 判定 method-level origin
+16. 新生成/修改测试若 TEST_ERROR：仅失败方法 `origin=GENERATED_BY_PLAN` 且能唯一追溯 approved planId 时可自动修复，按 `planId+testClass+testMethod` 最多 2 轮；同 class 历史 Existing Test method 永不自动修改
+17. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
 ```
 
 ## `harness upgrade`
@@ -150,7 +150,26 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 
 ## Test Origin / Repair Gate
 
-`origin = REUSED_EXISTING | GENERATED_BY_PLAN`。只有 `GENERATED_BY_PLAN` 进入自动修复轮次；无法确定 origin 默认走安全路径，生成测试修改计划等待审批。同一 `planId` 最多 2 轮；达到上限 → `MANUAL_TEST_REPAIR_REQUIRED`。
+Origin/provenance 至少细化到 test method/scenario：
+
+```text
+TestExecutionTarget
+- testClass
+- testMethods[]
+- selector
+- controllerId
+- origin = REUSED_EXISTING | GENERATED_BY_PLAN
+- planId(optional)
+```
+
+硬规则：
+
+- `EXTEND_EXISTING` 的同一 class 可以同时包含两种 origin；禁止把整个 class 一刀切标成 GENERATED_BY_PLAN 或 REUSED_EXISTING。
+- Surefire 返回失败方法后，用 `failedTests.testClass + testMethod` 唯一匹配 TestExecutionTarget。
+- 只有匹配到 `GENERATED_BY_PLAN` 的具体失败 method 才进入自动修复轮次；对应 approved `planId` 必须存在。
+- `REUSED_EXISTING` method 永不自动修改，即使它与 GENERATED_BY_PLAN method 位于同一个 class。
+- `testMethod=null`、provenance 冲突或无法唯一匹配时默认走安全路径：不得自动 repair，进入测试修改计划 / `MANUAL_ACTION_REQUIRED`。
+- 自动 repair 计数键为 `planId + testClass + testMethod`，最多 2 轮；达到上限 → `MANUAL_TEST_REPAIR_REQUIRED`。
 
 ## 统一结果
 
@@ -173,20 +192,35 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 
 ## Task 7：Selected Test Flow + Integration-Test DB Assertions
 
-以下规则是在现有 `harness test` / Existing Test / Approval / Repair Gate 之上增加，不替代原语义：
+以下规则是在现有 `harness test` / Existing Test / Approval / Repair Gate 之上增加，不替代原语义；本节的 method-level 规则覆盖此前 Task 7 的 class-level handoff/origin 表述：
 
 1. selected target 的 ChangeAnalysis 出现 `databaseWrite / transactional / stateTransition` 风险时，Integration Test Agent 必须显式决定 DB Assertion 是否需要；需要时把具体断言写入现有 `expected.databaseAssertions[]`。
 2. DB Assertion 是正式测试证据；生成时只允许复用项目已有 helper/repository、existing JdbcTemplate、existing fixture/assertion utility；不得为此新增 Maven dependency，且断言必须在 cleanup/rollback 隐藏状态之前完成。
-3. Integration Test Agent 返回给 Orchestrator 的每个 test class 必须能追溯到 validated selection 的 selected target，并带 `origin = REUSED_EXISTING | GENERATED_BY_PLAN`。
-4. Orchestrator 在交给 Runtime Debugger 前再次做 selected-only scope check。若 proposed execution 仅属于 unselected Controller → `SCOPE_VIOLATION`，不得执行该测试类。
-5. Synthetic Golden Flow 必须满足：
+3. Integration Test Agent 返回 method/scenario 级 provenance，Orchestrator 生成 TestExecutionTarget，不再以“class 能追溯到 selected target”作为充分放行条件。
+4. Selected-only 执行门禁：
+   - 专属 selected Controller 的 class 可整类执行；
+   - 同时覆盖 selected + unselected Controller 的 class 必须只执行 selected methods；
+   - 当前 Maven/Surefire 固定配置无法安全表达所需 `Class#method`/方法集合 selector 时 → `SCOPE_VIOLATION / MANUAL_ACTION_REQUIRED`；禁止退化成整类。
+5. Method-level repair provenance：
+
+```text
+PaymentControllerIT.oldTestA
+origin=REUSED_EXISTING
+
+PaymentControllerIT.newMissingTest
+origin=GENERATED_BY_PLAN
+planId=test-plan-xxx
+```
+
+`oldTestA` 失败永不自动改；只有 `newMissingTest` 失败且 Diagnosis=`REPAIR_TEST` 才进入最多 2 轮 repair。
+6. Synthetic Golden Flow 必须满足：
 
 ```text
 Affected Controllers: Order, Payment, User
 Selection: Order + Payment
 
-Order -> REUSE_EXISTING -> no approval/no write -> execute Order existing test
-Payment -> EXTEND_EXISTING -> exact 批准 <paymentPlanId> -> modify only MISSING -> execute Payment test
+Order -> REUSE_EXISTING -> no approval/no write -> selected-only TestExecutionTarget
+Payment -> EXTEND_EXISTING -> exact 批准 <paymentPlanId> -> modify only MISSING -> method-level provenance
 User -> unselected
 
 User 必须没有：
@@ -195,13 +229,13 @@ User 必须没有：
 - generated/modified test artifact
 - Runtime execution artifact
 
-Order/Payment failure
--> Runtime Debugger
--> DB/code evidence only as needed
+若 CommonControllerIT 同时包含 Order + User methods：
+- 只允许执行 Order method selector
+- 无法安全 method-filter -> MANUAL_ACTION_REQUIRED
 ```
 
-6. 任意阶段把 User 或其他 unselected Controller 自动补回，均视为 `SCOPE_VIOLATION`。
-7. `REUSE_EXISTING -> run/no approval/no modification`、`EXTEND_EXISTING -> only MISSING + exact planId approval`、`CREATE_NEW -> exact planId approval`、historical Existing Test failure never auto-edit、GENERATED_BY_PLAN repair max 2 rounds 全部保持不变。
+7. 任意阶段把 User 或其他 unselected Controller 自动补回，均视为 `SCOPE_VIOLATION`。
+8. `REUSE_EXISTING -> run/no approval/no modification`、`EXTEND_EXISTING -> only MISSING + exact planId approval`、`CREATE_NEW -> exact planId approval`、historical Existing Test method never auto-edit、GENERATED_BY_PLAN method repair max 2 rounds 全部保持不变。
 
 ## 禁止行为
 

@@ -81,11 +81,63 @@ Surefire：共 8 个测试，6 个通过，2 个失败
 
 ## Task 7：Selected-only Execution Gate
 
-以下规则叠加在原执行规则之上：
+以下规则叠加在原执行规则之上，并覆盖此前任何 class 级 selected-only / origin 表述：
 
-1. 输入额外包含 validated `TestTargetSelection`、Orchestrator 交付的 selected-only test classes，以及每个 class 的 `origin = REUSED_EXISTING | GENERATED_BY_PLAN`。
-2. 每个待执行 test class 必须能追溯到 `selectedControllerIds` 对应 target；仅属于未选择 Controller 的 proposed execution → `SCOPE_VIOLATION`，不得调用 `run_maven_test`。
-3. `REUSE_EXISTING`：直接执行，无写操作审批；若失败，历史 Existing Test 永不自动修改。
-4. `GENERATED_BY_PLAN`：只有对应 Test Plan 已获精确 `批准 <planId>` 才可执行新生成/修改版本；若 Diagnosis 为 `REPAIR_TEST`，最多自动修复 2 轮。
-5. Runtime Debugger 不得“为了完整”把未选择 Controller 测试类重新加入执行列表。
-6. 执行失败后仍按现有 Runtime Debugger → `analyze-failure` 流程诊断；需要时使用受控 DB/code evidence，不改变本 Skill 的 selected-only 范围。
+### TestExecutionTarget handoff
+
+Runtime Debugger 不再只接收裸 `testClass` 列表。Orchestrator 必须为每个可执行单元提供：
+
+```text
+TestExecutionTarget
+- testClass
+- testMethods[]        # 空数组仅表示“允许整类执行”
+- selector             # testClass 或受控 Maven/Surefire 可表达的 Class#method / 方法集合
+- controllerId
+- origin = REUSED_EXISTING | GENERATED_BY_PLAN
+- planId(optional)     # GENERATED_BY_PLAN 时必须可追溯到批准的 planId
+```
+
+`origin` 属于具体 method/scenario 的 provenance，不属于整个 class。`EXTEND_EXISTING` 的同一 class 可以同时包含 REUSED_EXISTING 与 GENERATED_BY_PLAN 方法，必须拆成不同 TestExecutionTarget。
+
+### Selected-only 执行粒度
+
+1. 每个 TestExecutionTarget 都必须追溯到 validated `selectedControllerIds`；任何 unselected controller 对应的方法都不得进入 selector。
+2. **整类执行只允许在该 class 的本次相关测试全部属于 selected targets 时使用。** 如果一个 class 同时覆盖 selected + unselected targets，则禁止用裸 class selector 执行。
+3. 混合 class 必须收窄到 selected methods，例如 `CommonControllerIT#shouldApproveOrder`；如果当前 `harness.yaml.integrationTest.args` / Maven Surefire 配置无法安全表达所需 method selector，则返回 `SCOPE_VIOLATION` / `MANUAL_ACTION_REQUIRED`，不得退化成整类执行。
+4. `run_maven_test` 仍只使用现有受控入口：把已验证的 `selector` 作为 `${testClass}` 的值交给固定 Maven args；禁止 Shell 求值或用户命令拼接。
+5. Runtime Debugger 不得为了完整性把 unselected method、class 或 Controller 补回执行范围。
+
+### Method-level origin / repair provenance
+
+1. `REUSED_EXISTING` method：直接执行，无写操作审批；若失败，历史 Existing Test 永不自动修改。
+2. `GENERATED_BY_PLAN` method：必须带对应已精确批准的 `planId`；只有该方法失败且 Diagnosis=`REPAIR_TEST` 时，才可进入最多 2 轮自动 repair。
+3. Surefire `failedTests.testClass + testMethod` 必须回查匹配的 TestExecutionTarget 决定 origin；不能用 class 级标签替代。
+4. 若失败方法没有唯一 provenance、`testMethod=null` 且无法安全归因，默认走安全路径：不得自动 repair，返回测试修改计划或 `MANUAL_ACTION_REQUIRED`。
+5. 执行失败后仍按现有 Runtime Debugger → `analyze-failure` 流程诊断；需要时使用受控 DB/code evidence，不改变 selected-only 范围。
+
+### Golden blocker cases
+
+```text
+Affected = Order + User
+Selection = Order
+
+CommonControllerIT:
+  shouldApproveOrder() -> Order
+  shouldDisableUser()  -> User
+
+允许：CommonControllerIT#shouldApproveOrder
+禁止：CommonControllerIT 整类执行
+无法表达 method selector -> MANUAL_ACTION_REQUIRED
+```
+
+```text
+PaymentControllerIT.oldTestA
+origin=REUSED_EXISTING
+
+PaymentControllerIT.newMissingTest
+origin=GENERATED_BY_PLAN
+planId=test-plan-xxx
+
+oldTestA failure -> never auto-edit
+newMissingTest failure -> GENERATED_BY_PLAN repair gate, max 2 rounds
+```

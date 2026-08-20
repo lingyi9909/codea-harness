@@ -43,7 +43,7 @@ skills:
 5. **全部 REUSE_EXISTING 时**：
    - 不等待审批
    - 不修改任何测试代码
-   - 直接返回 `existingTests` 中的现有测试类，交给 Runtime Debugger 执行
+   - 返回可执行的 Existing Test method/scenario provenance，交给 Orchestrator 生成 selected-only TestExecutionTarget
 6. **存在 EXTEND_EXISTING / CREATE_NEW 时**：
    - 输出测试计划（保留完整覆盖映射 COVERED + MISSING，但审批与代码修改范围仅限 `MISSING` 场景），带有唯一 `planId`
    - `WAITING_APPROVAL`，提示「请回复：批准 <planId>」
@@ -53,13 +53,13 @@ skills:
    - `CREATE_NEW`：新建测试类
    - 每个文件使用 `write_test(path, content, planId)`
    - 保留所有已有测试和断言
-8. **交给 Runtime Debugger 执行**：输出生成或复用的测试类名，由 Orchestrator 交给 Runtime Debugger 执行。
-9. **修复测试**（当 Runtime Debugger 返回 `REPAIR_TEST`，且 Orchestrator 判定失败测试 `origin = GENERATED_BY_PLAN` 时）：
+8. **交给 Orchestrator 形成执行目标**：不得只返回 class 级 origin。必须按方法/场景区分：历史 Existing Test method 为 `REUSED_EXISTING`；本次经 planId 新增/修改的 method 为 `GENERATED_BY_PLAN` 并携带对应 `planId`。Orchestrator 基于这些 provenance 形成 `TestExecutionTarget` 后再交给 Runtime Debugger。
+9. **修复测试**（当 Runtime Debugger 返回 `REPAIR_TEST`，且 Orchestrator 根据失败的 `testClass + testMethod` 判定该具体方法 `origin = GENERATED_BY_PLAN` 时）：
    - 阅读 Diagnosis 理解失败原因
-   - 只修复本次生成的测试代码——不修改生产代码，不修改历史 Existing Test
-   - 修复后再次交给 Runtime Debugger 重跑
-   - 修复轮次由 Orchestrator 追踪，2 轮后停止
-   - `origin = REUSED_EXISTING` 的失败不会以 `REPAIR_TEST` 进入本 Agent，而是由 Orchestrator 覆盖为「生成测试修改计划 → WAITING_APPROVAL」
+   - 只修复该 `GENERATED_BY_PLAN` 方法/场景对应的本次生成测试代码——不修改生产代码，不修改同类中的历史 Existing Test methods
+   - 修复后再次交给 Runtime Debugger 重跑对应 TestExecutionTarget
+   - 修复轮次由 Orchestrator 按 `planId + testClass + testMethod` 追踪，最多 2 轮
+   - `origin = REUSED_EXISTING` 的失败不会以自动 repair 进入本 Agent，而是由 Orchestrator 走测试修改建议 / Test Plan 审批安全路径
 
 ## 现有测试失败时的安全规则
 
@@ -67,7 +67,7 @@ skills:
 - Runtime Debugger 正常诊断（`PRODUCTION_CODE_ERROR` / `ENVIRONMENT_ERROR` / `TEST_ERROR` / `UNKNOWN`）。
 - 诊断为 `PRODUCTION_CODE_ERROR` → 走现有 Fix Plan 流程。
 - 诊断为 `TEST_ERROR` → 也不能直接自动改旧测试，必须生成测试修改建议 / Test Plan，经用户审批后才允许修改。
-- 自动修复 ≤2 轮**只允许针对本次经 `planId` 审批后新建或修改的测试**，不能偷偷修改历史 Existing Test。
+- 自动修复 ≤2 轮**只允许针对本次经 `planId` 审批后新建或修改的具体测试方法/场景**，不能偷偷修改同一 class 中的历史 Existing Test。
 
 ## 与其他 Agent 的交接
 
@@ -77,20 +77,21 @@ skills:
 
 输出去向：
 - 测试计划 → 交给 Orchestrator 等待审批
-- 复用或生成的测试代码文件 → 交给 Orchestrator，由 Orchestrator 传递给 Runtime Debugger 执行
-- 修复后的测试代码 → 再次交给 Runtime Debugger 执行
+- 复用或生成的测试方法/场景 provenance → 交给 Orchestrator 形成 TestExecutionTarget，再由 Orchestrator 传递给 Runtime Debugger 执行
+- 修复后的测试方法 → 再次形成对应 TestExecutionTarget 执行
 
 ## 输出
 
 - 符合 Schema 的测试计划（`.code-harness/contracts/test-plan.schema.json`，含 strategy / coverageStatus / coveredBy）
-- 测试类文件（位于允许的测试路径下），或 `REUSE_EXISTING` 时返回的现有测试类名
+- 测试文件（位于允许的测试路径下）
+- 执行 provenance：`testClass + testMethod(s) + controllerId + origin + planId(optional)`；不得只输出 class 级 origin
 
 ## 停止条件
 
 - 测试计划未获审批 → 停止
 - 没有已选择 Controller → 报告后停止；正常的 0 target 应在 Orchestrator 的 `NO_TEST_TARGET` 已停止
-- 全部 target 为 `REUSE_EXISTING` → 不审批、不修改，直接执行现有测试后返回
-- 修复轮次用尽（由 Orchestrator 控制，达到 2 轮后不再调用本 Agent）
+- 全部 target 为 `REUSE_EXISTING` → 不审批、不修改，返回 Existing Test method provenance 供 selected-only execution
+- 修复轮次用尽（由 Orchestrator 控制，具体 GENERATED_BY_PLAN method 达到 2 轮后不再调用本 Agent）
 
 ## Selected-only 范围硬规则
 
@@ -119,8 +120,20 @@ skills:
 1. 对 selected target 的 ChangeAnalysis 风险 `databaseWrite / transactional / stateTransition`，设计阶段必须显式决定是否需要 DB Assertion；需要时写入具体 `expected.databaseAssertions[]`。
 2. 生成 DB Assertion 时只允许沿用项目现有：existing test helper/repository pattern → existing JdbcTemplate pattern → existing fixture/assertion utility；不得为此新增 Maven dependency。
 3. DB Assertion 必须在 cleanup/rollback 隐藏状态之前完成。
-4. 输出给 Runtime Debugger 的 test classes 必须能追溯到 selected target，并带 `origin = REUSED_EXISTING | GENERATED_BY_PLAN`。
-5. Synthetic Golden：
+4. 输出执行 handoff 时使用 method/scenario 级 provenance，而不是 class 级 origin：
+
+```text
+TestExecutionTarget source
+- testClass
+- testMethod(s)
+- controllerId
+- origin = REUSED_EXISTING | GENERATED_BY_PLAN
+- planId(optional)
+```
+
+5. 同一 EXTEND_EXISTING class 中，历史 methods 与本次新增 methods 必须保持不同 origin；禁止把整个 class 标成 GENERATED_BY_PLAN 或 REUSED_EXISTING。
+6. 一个 Existing Test class 若同时覆盖 selected + unselected Controllers，必须把可执行范围细化到 selected methods；若无法确定安全 method selector，不得把整类交给 Runtime Debugger。
+7. Synthetic Golden：
 
 ```text
 Affected = Order + Payment + User
@@ -135,7 +148,8 @@ User 必须没有：
 - generated/modified test
 - Runtime execution artifact
 
-Runtime 只执行 Order/Payment；失败后再由 Runtime Debugger 按需收集 DB/code evidence。
+PaymentControllerIT.oldTestA -> REUSED_EXISTING
+PaymentControllerIT.newMissingTest -> GENERATED_BY_PLAN + planId
 ```
 
-6. Existing Test / exact approval / GENERATED_BY_PLAN repair max 2 rounds 等原有安全规则保持不变。
+8. Existing Test / exact approval / GENERATED_BY_PLAN repair max 2 rounds 等原有安全规则保持不变。
