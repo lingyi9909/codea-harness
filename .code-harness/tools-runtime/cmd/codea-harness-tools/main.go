@@ -14,6 +14,7 @@ import (
 	"codea-harness-tools/internal/coverage"
 	"codea-harness-tools/internal/nav"
 	"codea-harness-tools/internal/schema"
+	"codea-harness-tools/internal/selection"
 	"codea-harness-tools/internal/upgrade"
 )
 
@@ -92,6 +93,12 @@ func runValidate(args []string) error {
 				return err
 			}
 			out["reviewCoverage"] = machine
+		}
+		if filepath.Base(*schemaPath) == "test-target-selection.schema.json" {
+			if err := selection.VerifyJSON(ib); err != nil {
+				return err
+			}
+			out["testTargetSelection"] = "VERIFIED"
 		}
 		return writeJSONAndStatus(out, true)
 	default:

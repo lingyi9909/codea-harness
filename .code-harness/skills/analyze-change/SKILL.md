@@ -69,6 +69,10 @@ output_schema: .code-harness/contracts/change-analysis.schema.json
     - 若找不到实现，记录 `IMPLEMENTATION_NOT_FOUND`，不得假装完成。
 13. **允许多层 Service**：例如 Controller → ServiceA → ServiceB → Repository，与本次变更路径直接相关时必须继续追踪 ServiceB，直到边界。
 14. 每个通过导航加入上下文并成功 `read_code` 的非 changed 文件，记录 `reason: CALL_CHAIN`。
+14a. 生成 `affectedControllers[]` 时必须为每个 Controller 写明影响来源：
+    - Controller 自身位于 Change Set → `impactType: DIRECT_CHANGE`；
+    - 通过 changed Service/Repository 等符号反向 `find_references` 定位到 Controller → `impactType: AFFECTED_BY_CALL_CHAIN`；
+    - `sourceSymbols` 至少包含 1 个实际已导航/读取的符号，用来解释该 Controller 为什么受影响；不得仅凭文件名或猜测填充。
 
 ### D. 停止边界
 
@@ -112,7 +116,7 @@ output_schema: .code-harness/contracts/change-analysis.schema.json
 
 - `reviewScope`
 - `changedFiles[]`
-- `affectedControllers[]`
+- `affectedControllers[]`（每项必须包含 `controller/endpoints/impactType/sourceSymbols`）
 - `callChains[]`
 - `externalDependencies[]`
 - `riskAreas[]`

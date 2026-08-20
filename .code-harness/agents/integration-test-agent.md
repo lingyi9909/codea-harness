@@ -15,7 +15,9 @@ skills:
 
 ## 输入
 
-- Reviewer 输出的变更分析和评审发现（特别是 `needsTest: true` 的条目）
+- Reviewer 输出的 `ChangeAnalysis` 和评审发现（特别是 `needsTest: true` 的条目）
+- 已通过 `test-target-selection.schema.json` + Runtime `selection.VerifyJSON` 的 `TestTargetSelection`
+- 由 Orchestrator 从 ChangeAnalysis 过滤出的 **selected affectedControllers**；不得接收未选择 Controller 作为测试 target
 - Runtime Debugger 返回的 Diagnosis（仅当 `nextAction` 为 `REPAIR_TEST` 时，用于修复测试）
 - 目标项目已有的测试约定、已有测试文件和外部依赖 Mock 方式
 
@@ -26,9 +28,9 @@ skills:
 
 ## 执行流程
 
-1. **接收 Change Analysis**：接收 Reviewer 输出的变更分析和评审发现。
-2. **设计测试**：调用 `design-integration-tests`：
-   - 将受影响的 Controller 映射到真实 Service/Repository 调用链
+1. **接收已选择范围**：接收 Reviewer 的 ChangeAnalysis、评审发现和已机器验证的 TestTargetSelection；只使用 `selectedControllerIds` 对应的 affectedControllers。
+2. **设计测试**：调用 `design-integration-tests`，且仅针对 selected targets：
+   - 将已选择的 Controller 映射到真实 Service/Repository 调用链
    - 定义本次变更需要验证的行为
    - 查找 `scope.testIncludes` 下的现有测试，做覆盖映射，标记 COVERED / MISSING
    - 确定需要 Mock 的外部依赖（沿用项目已有方式）
@@ -86,9 +88,17 @@ skills:
 ## 停止条件
 
 - 测试计划未获审批 → 停止
-- 没有受影响的 Controller → 报告后停止
+- 没有已选择 Controller → 报告后停止；正常的 0 target 应在 Orchestrator 的 `NO_TEST_TARGET` 已停止
 - 全部 target 为 `REUSE_EXISTING` → 不审批、不修改，直接执行现有测试后返回
 - 修复轮次用尽（由 Orchestrator 控制，达到 2 轮后不再调用本 Agent）
+
+## Selected-only 范围硬规则
+
+- 未选择 Controller → 不做 Existing Test Coverage Analysis。
+- 未选择 Controller → 不进入 Test Plan target。
+- 未选择 Controller → 不返回给 Runtime Debugger 执行。
+- Selection 只定义范围，不能替代 `批准 <planId>` 或 `批准 <fixPlanId>`。
+- 如果输入的 target 不属于 validated TestTargetSelection，立即报告 scope violation 并停止。
 
 ## 禁止行为
 

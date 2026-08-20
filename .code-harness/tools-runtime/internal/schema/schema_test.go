@@ -1,6 +1,9 @@
 package schema
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestValidateJSONContract(t *testing.T) {
 	s := []byte(`{"type":"object","additionalProperties":false,"required":["name","items"],"properties":{"name":{"type":"string","minLength":1},"items":{"type":"array","minItems":1,"items":{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}}}}}}`)
@@ -92,5 +95,34 @@ func TestInvalidDraft202012SchemaIsRejectedAtCompileTime(t *testing.T) {
 	}`)
 	if err := ValidateJSON(invalidSchema, []byte(`{}`)); err == nil {
 		t.Fatal("invalid JSON Schema must fail compilation")
+	}
+}
+
+func TestTargetSelectionSchema(t *testing.T) {
+	schemaBytes, err := os.ReadFile("../../../contracts/test-target-selection.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valid := []byte(`{"selectionId":"sel-001","status":"SELECTED","mode":"USER_MULTI","selectedControllerIds":["controller:OrderController"],"availableControllerIds":["controller:OrderController","controller:PaymentController"]}`)
+	if err := ValidateJSON(schemaBytes, valid); err != nil {
+		t.Fatalf("valid selection rejected: %v", err)
+	}
+
+	cases := []string{
+		`{"selectionId":"sel-002","status":"SELECTED","mode":"USER_MULTI","selectedControllerIds":[],"availableControllerIds":["controller:OrderController"]}`,
+		`{"selectionId":"sel-003","status":"SELECTED","mode":"UNKNOWN","selectedControllerIds":["controller:OrderController"],"availableControllerIds":["controller:OrderController"]}`,
+		`{"selectionId":"sel-004","status":"SELECTED","mode":"USER_MULTI","selectedControllerIds":["controller:OrderController","controller:OrderController"],"availableControllerIds":["controller:OrderController"]}`,
+		`{"selectionId":"sel-005","status":"SELECTED","mode":"USER_MULTI","selectedControllerIds":["controller:OrderController"],"availableControllerIds":["controller:OrderController","controller:OrderController"]}`,
+	}
+	for _, input := range cases {
+		if err := ValidateJSON(schemaBytes, []byte(input)); err == nil {
+			t.Fatalf("invalid selection accepted by schema: %s", input)
+		}
+	}
+
+	cancelled := []byte(`{"selectionId":"sel-006","status":"CANCELLED","mode":"USER_MULTI","selectedControllerIds":[],"availableControllerIds":["controller:OrderController","controller:PaymentController"]}`)
+	if err := ValidateJSON(schemaBytes, cancelled); err != nil {
+		t.Fatalf("valid cancelled selection rejected: %v", err)
 	}
 }

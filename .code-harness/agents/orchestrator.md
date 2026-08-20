@@ -40,7 +40,7 @@ Reviewer 的 `analyze-change` 必须先产生 `ChangeAnalysis` JSON，然后交�
 
 1. 先用 `change-analysis.schema.json` 做真实 JSON Contract 校验；
 2. 再由 Runtime 独立计算机器 Coverage；
-3. Agent 填写的 `reviewCoverage.status=COMPLETE` 不能直接作为通过依据。
+3. Agent 填冝的 `reviewCoverage.status=COMPLETE` 不能直接作为通过依据。
 
 ### COMPLETE
 
@@ -91,6 +91,30 @@ Review Scope
 → Review Findings
 ```
 
+
+## Test Target Selection 硬门禁（1.2）
+
+仅用于 `harness test`，并且只能在 ChangeAnalysis Schema + Runtime Review Coverage 均通过后执行。
+
+```text
+affectedControllers = 0 → NO_TEST_TARGET → DONE
+affectedControllers = 1 → AUTO_SINGLE → persist + machine validate → TEST_TARGETS_SELECTED
+affectedControllers >= 2 → WAITING_TEST_SELECTION
+  ├─ 宿主支持结构化选择 → native multi-select
+  └─ 否则 → numbered fallback（1,3 / ALL / DIRECT_ONLY）
+取消 → CANCELLED → STOP
+```
+
+多 Controller **不得默认全选**。选择结果写入 `.code-harness/runs/<runId>/test-target-selection.json`，并通过 `test-target-selection.schema.json` + Runtime `selection.VerifyJSON` 后，才允许进入 Integration Test Agent。
+
+Selection 只决定测试范围：
+
+```text
+Selection != 批准 <planId> != 批准 <fixPlanId>
+```
+
+宿主 UI 的确认、`ALL`、`DIRECT_ONLY`、编号选择都不能替代任何写操作审批。
+
 ## `harness test`
 
 ```text
@@ -100,13 +124,17 @@ Review Scope
 3. 输出 Review Scope + Review Coverage
 4. Runtime 校验失败 / coverage != COMPLETE → MANUAL_ACTION_REQUIRED，STOP；不得设计测试
 5. Reviewer.review-code
-6. 如果没有受影响 Controller → 报告后 STOP
-7. Integration Test Agent 做 Existing Test Coverage Analysis
-8. 每个 target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW
-9. REUSE_EXISTING 直接执行；其余输出 Test Plan，精确 planId 审批后才写测试
-10. Runtime Debugger 独占测试执行、日志和 Diagnosis
-11. 新生成/修改测试若 TEST_ERROR：仅 GENERATED_BY_PLAN 可自动修复，最多 2 轮
-12. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
+6. affectedControllers=0 → `NO_TEST_TARGET`，报告后 STOP
+7. affectedControllers=1 → `AUTO_SINGLE`；持久化并机器校验 TestTargetSelection，不打断用户
+8. affectedControllers>=2 → `WAITING_TEST_SELECTION`；宿主结构化多选优先，否则编号 fallback；取消 → `CANCELLED` STOP
+9. 只有 `TEST_TARGETS_SELECTED` 且 selection artifact 机器验证通过，才把 **selected affectedControllers** 交给 Integration Test Agent
+10. Integration Test Agent 只对 selected targets 做 Existing Test Coverage Analysis
+11. 每个 selected target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW；未选择 target 不得生成计划
+12. REUSE_EXISTING 直接执行；其余输出 Test Plan，仍需精确 `批准 <planId>` 后才写测试
+13. Runtime Debugger 只能执行 selection artifact 对应 selected targets 的测试类；不得把未选择 Controller 加回范围
+14. Runtime Debugger 独占测试执行、日志和 Diagnosis
+15. 新生成/修改测试若 TEST_ERROR：仅 GENERATED_BY_PLAN 可自动修复，最多 2 轮
+16. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
 ```
 
 ## `harness upgrade`
@@ -145,7 +173,7 @@ Review Scope
 
 ## 禁止行为
 
-- 不得跳过 Review Coverage / Runtime Contract 校验 / 审批门禁。
+- 不得跳过 Review Coverage / Runtime Contract 校验 / Test Target Selection / 审批门禁。
 - 不得超过 2 轮自动测试修复。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。
