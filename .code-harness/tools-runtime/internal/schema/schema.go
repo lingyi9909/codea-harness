@@ -41,6 +41,36 @@ func ValidateJSON(schemaBytes, jsonBytes []byte) error {
 	if err := compiled.Validate(instance); err != nil {
 		return fmt.Errorf("schema validation failed: %w", err)
 	}
+	if isDiagnosisSchema(schemaBytes) {
+		if err := validateDiagnosisSemantics(jsonBytes); err != nil {
+			return fmt.Errorf("diagnosis semantic validation failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func isDiagnosisSchema(schemaBytes []byte) bool {
+	var meta struct {
+		Title string `json:"title"`
+	}
+	return json.Unmarshal(schemaBytes, &meta) == nil && meta.Title == "Diagnosis"
+}
+
+func validateDiagnosisSemantics(jsonBytes []byte) error {
+	var diagnosis struct {
+		CodeEvidence []struct {
+			LineStart int `json:"lineStart"`
+			LineEnd   int `json:"lineEnd"`
+		} `json:"codeEvidence"`
+	}
+	if err := json.Unmarshal(jsonBytes, &diagnosis); err != nil {
+		return fmt.Errorf("decode diagnosis: %w", err)
+	}
+	for i, evidence := range diagnosis.CodeEvidence {
+		if evidence.LineEnd < evidence.LineStart {
+			return fmt.Errorf("codeEvidence[%d].lineEnd must be >= lineStart", i)
+		}
+	}
 	return nil
 }
 

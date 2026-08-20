@@ -126,3 +126,37 @@ func TestTargetSelectionSchema(t *testing.T) {
 		t.Fatalf("valid cancelled selection rejected: %v", err)
 	}
 }
+
+func TestDiagnosisSchemaEvidenceExtensions(t *testing.T) {
+	schemaBytes, err := os.ReadFile("../../../contracts/diagnosis.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valid := []byte(`{
+		"classification":"PRODUCTION_CODE_ERROR",
+		"rootCause":"Order state is not persisted before returning",
+		"evidence":["expected APPROVED, actual PENDING"],
+		"failedTests":[{"testClass":"OrderControllerIT","testMethod":"shouldApprove"}],
+		"suspectSymbols":["OrderServiceImpl.approve"],
+		"codeEvidence":[{"path":"src/main/java/com/acme/OrderServiceImpl.java","symbol":"OrderServiceImpl.approve","lineStart":178,"lineEnd":190,"reason":"stack trace target"}],
+		"databaseEvidence":["dbq-002"],
+		"externalDependencies":["PaymentRpcClient"],
+		"nextAction":"GENERATE_FIX_PLAN"
+	}`)
+	if err := ValidateJSON(schemaBytes, valid); err != nil {
+		t.Fatalf("valid evidence-backed diagnosis rejected: %v", err)
+	}
+
+	invalid := []string{
+		`{"classification":"UNKNOWN","rootCause":"x","evidence":["x"],"codeEvidence":[{"path":"a.java","symbol":"A.m","lineStart":0,"lineEnd":1,"reason":"x"}],"nextAction":"STOP_UNKNOWN"}`,
+		`{"classification":"UNKNOWN","rootCause":"x","evidence":["x"],"codeEvidence":[{"path":"a.java","symbol":"A.m","lineStart":10,"lineEnd":9,"reason":"x"}],"nextAction":"STOP_UNKNOWN"}`,
+		`{"classification":"UNKNOWN","rootCause":"x","evidence":["x"],"suspectSymbols":[""],"nextAction":"STOP_UNKNOWN"}`,
+		`{"classification":"UNKNOWN","rootCause":"x","evidence":["x"],"databaseEvidence":[""],"nextAction":"STOP_UNKNOWN"}`,
+	}
+	for _, input := range invalid {
+		if err := ValidateJSON(schemaBytes, []byte(input)); err == nil {
+			t.Fatalf("invalid diagnosis accepted: %s", input)
+		}
+	}
+}

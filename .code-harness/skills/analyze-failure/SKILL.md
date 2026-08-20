@@ -1,11 +1,19 @@
 ---
 name: analyze-failure
-description: 关联测试输出、Surefire 报告、堆栈跟踪和日志，产出带确定 nextAction 的故障诊断结果。
+description: 关联 Surefire、日志、数据库证据和 Code Navigation，产出 evidence-backed Diagnosis。
 version: 1
 agent: runtime-debugger
 tools:
   - read_test_report
   - read_service_logs
+  - find_symbol
+  - find_references
+  - find_implementations
+  - read_code
+  - db_ping
+  - db_list_tables
+  - db_describe_table
+  - db_query_readonly
 output_schema: .code-harness/contracts/diagnosis.schema.json
 ---
 
@@ -13,97 +21,133 @@ output_schema: .code-harness/contracts/diagnosis.schema.json
 
 ## 目标
 
-关联所有执行输出——Maven stdout/stderr、Surefire 报告、堆栈跟踪和运行窗口内的应用日志——对故障进行分类，并建议下一步动作。
-
-## 适用场景
-
-- `run-integration-tests` 返回非零退出码或存在失败测试断言后
-- `debug-local-service` 检测到启动失败或运行异常后
-- Orchestrator 需要在执行后决定下一步时
-
-## 不适用场景
-
-- 所有测试都已通过且服务健康
-- 当前运行中已经诊断过该故障
+从测试报告、stdout/stderr、应用日志、可选 Database Evidence 中提取失败信号，使用受控 Code Navigation 读取实际实现和调用链，在证据充分后产出 Diagnosis。不得只凭日志或模型推断把问题定为生产代码缺陷。
 
 ## 输入
 
-- Maven stdout/stderr（来自 `run_maven_test`）
-- Surefire XML/TXT 报告（来自 `read_test_report`）
-- 运行窗口内的应用日志（来自 `read_service_logs`）
-- 执行模式：`integration-test` 或 `service-debug`
+- Maven stdout/stderr
+- Surefire XML/TXT
+- 运行窗口内应用日志
+- 执行模式：`integration-test` / `service-debug`
+- 当前 run 已存在的 Database Evidence（如有）
 
 ## 允许使用的工具
 
-- `read_test_report`——必要时重新读取报告
-- `read_service_logs`——必要时调整时间窗口重新读取日志
+仅允许：
 
-## 前置条件
+```text
+read_test_report
+read_service_logs
+find_symbol
+find_references
+find_implementations
+read_code
+db_ping
+db_list_tables
+db_describe_table
+db_query_readonly
+```
 
-- 测试执行或服务启动已完成（无论成功或失败）
-- 原始输出可供分析
+## Evidence-first 诊断顺序
 
-## 执行步骤
+1. 从 Surefire 结构化提取 `failedTests`，不得从自然语言 evidence 猜测。
+2. 从 report/log 提取 exception、message、stack frame、project file:line、traceId、业务实际值等 Failure Signals。
+3. 从 Failure Signals 提取项目内 `suspectSymbols`。
+4. Stack Trace 指向项目内 `file:line` 时，在声称代码根因前 **MUST `read_code`** 该位置，并把实际读取范围写入 `codeEvidence`。
+5. suspect 是 interface/抽象类型时，先 `find_implementations`，再 `read_code` 实现；不能只看接口猜实现行为。
+6. 上游调用者不明确时使用 `find_references`；下游项目内符号不明确时使用 `find_symbol` + `read_code`。
+7. report/log 暴露具体数据状态疑问时，可使用 Database Evidence：未知表结构先 list/describe，查询必须走 `db_query_readonly`，每条 query 有 purpose。
+8. 到达外部 RPC/HTTP/SDK 边界且没有该服务源码时，将依赖写入 `externalDependencies` 并停止向服务端猜测根因。
+9. 证据充分后才输出 Diagnosis；证据仍不足时继续 bounded evidence collection，预算耗尽则 `UNKNOWN / STOP_UNKNOWN`。
 
-1. **提取失败测试（failedTests）**：从 Surefire XML/TXT 报告（`read_test_report`）中提取所有 `<failure>` 或 `<error>` 的 `<testcase>`，结构化记录 `testClass` 与 `testMethod`，写入 `failedTests`。类级失败（编译错误、Spring 上下文启动失败、无具体方法）时 `testMethod` 为 `null`。不得从 `evidence` 自然语言猜测。
-2. **检查编译错误**：扫描 stdout/stderr 中的编译失败标记。如找到 → `TEST_COMPILE_ERROR`，`nextAction: REPAIR_TEST`（此时 `failedTests` 的 `testMethod` 通常为 `null`）。
-3. **检查断言失败**：解析 Surefire XML 中的 `<failure>` 或 `<error>` 元素。提取断言消息和堆栈。如果失败出自测试断言逻辑 → `TEST_CODE_ERROR`，`nextAction: REPAIR_TEST`。
-4. **检查 Spring 上下文失败**：查找 `ApplicationContext` 加载失败、Bean 定义缺失、配置错误。
-   - **集成测试模式下** → `TEST_CONTEXT_ERROR`，`nextAction: REPAIR_TEST`
-   - **服务调试模式下** → `SERVICE_START_ERROR`，`nextAction: RESTART_SERVICE` 或 `GENERATE_FIX_PLAN`
-5. **检查数据/环境问题**：查找连接拒绝、未知主机、表缺失、外部服务认证失败 → `TEST_DATA_OR_ENVIRONMENT_ERROR`，`nextAction: REPORT_ENVIRONMENT`。
-6. **检查生产代码缺陷**：如果测试本身正确，但生产代码返回错误结果、违反业务规则或有未处理的边界情况 → `PRODUCTION_CODE_ERROR`，`nextAction: GENERATE_FIX_PLAN`。
-7. **兜底**：如果没有明确模式匹配 → `UNKNOWN`，`nextAction: STOP_UNKNOWN`。附带所有原始证据。
+## 调查预算（硬限制）
 
-### 分类优先级（集成测试模式）
-1. `TEST_COMPILE_ERROR`——最高优先级，首先检查
-2. `TEST_CONTEXT_ERROR`——Spring 上下文失败（**不是** `SERVICE_START_ERROR`）
-3. `TEST_DATA_OR_ENVIRONMENT_ERROR`——外部连通性
-4. `TEST_CODE_ERROR`——断言失败
-5. `PRODUCTION_CODE_ERROR`——业务逻辑缺陷
-6. `UNKNOWN`——兜底
+每个 Diagnosis：
 
-### 分类优先级（服务调试模式）
-1. `SERVICE_START_ERROR`——启动失败（仅此模式有效）
-2. `TEST_DATA_OR_ENVIRONMENT_ERROR`——外部连通性
-3. `PRODUCTION_CODE_ERROR`——运行时业务逻辑缺陷
-4. `UNKNOWN`——兜底
+```text
+navigation hops <= 6
+source/test files read <= 30
+DB queries <= database.yaml safety.maxQueriesPerDiagnosis
+```
 
-**关键规则**：`SERVICE_START_ERROR` 仅在服务调试模式下有效。集成测试模式下，`@SpringBootTest` 的 Spring Boot 启动失败归类为 `TEST_CONTEXT_ERROR`。
+达到任何预算后不得继续对应探索。若已有证据仍不足，必须 `classification: UNKNOWN`、`nextAction: STOP_UNKNOWN`。
 
-## 输出
+## 分类规则
 
-必须通过 `.code-harness/contracts/diagnosis.schema.json` 校验。
-- `classification`：恰好一个枚举值
-- `rootCause`：具体、可操作的描述
-- `evidence`：具体日志行、堆栈或报告摘录列表
-- `failedTests`：集成测试模式下从 Surefire 报告结构化提取的失败测试类与方法列表；服务调试模式省略
-- `nextAction`：恰好一个枚举值
+原有分类和 nextAction 语义保持不变：
+
+- `TEST_COMPILE_ERROR` → `REPAIR_TEST`
+- `TEST_CODE_ERROR` → `REPAIR_TEST`
+- `TEST_CONTEXT_ERROR` → `REPAIR_TEST`
+- `TEST_DATA_OR_ENVIRONMENT_ERROR` → `REPORT_ENVIRONMENT`（临时性问题可由 Orchestrator 决定 retry）
+- `SERVICE_START_ERROR` → 服务调试模式下 `RESTART_SERVICE` 或有代码证据时 `GENERATE_FIX_PLAN`
+- `PRODUCTION_CODE_ERROR` → `GENERATE_FIX_PLAN`
+- `UNKNOWN` → `STOP_UNKNOWN`
+
+`SERVICE_START_ERROR` 仅服务调试模式有效；集成测试中的 Spring Context 启动失败仍是 `TEST_CONTEXT_ERROR`。
+
+### 生产代码根因硬门禁
+
+要输出：
+
+```text
+classification = PRODUCTION_CODE_ERROR
+nextAction = GENERATE_FIX_PLAN
+```
+
+必须至少满足：
+
+- 失败现象来自 report/log/test expectation；并且
+- 对关联项目内实现做过 Code Navigation + `read_code`；并且
+- `codeEvidence` 指向实际读取过的实现范围；并且
+- 证据链能解释症状与实现行为之间的因果关系。
+
+只有 DB 状态异常、只有日志异常、只有 stack symbol 名称，都不足以单独确认生产代码根因。
+
+典型合法证据链：
+
+```text
+expected APPROVED / actual PENDING
++ DB Evidence 确认 order_info.status=PENDING
++ rollback log
++ read_code 读取 OrderServiceImpl.approve 的事务/异常路径
+→ PRODUCTION_CODE_ERROR
+```
+
+## Diagnosis 输出字段
+
+除既有字段外，可写：
+
+- `suspectSymbols[]`：Failure Signals 提取出的项目内可疑符号。
+- `codeEvidence[]`：实际 read_code 的 `path/symbol/lineStart/lineEnd/reason`。
+- `databaseEvidence[]`：本次诊断实际使用的已落盘 queryId。
+- `externalDependencies[]`：调查到达但无服务端源码证据的外部边界。
+
+所有输出必须通过 `.code-harness/contracts/diagnosis.schema.json` 的 Schema + machine semantic validation。
+
+## Golden 行为
+
+```text
+stack -> OrderServiceImpl.java:186 -> read_code -> codeEvidence
+interface OrderService -> find_implementations -> implementation read
+expected APPROVED/actual PENDING + DB + rollback log + source -> PRODUCTION_CODE_ERROR
+PaymentRpcClient -> externalDependencies + stop, no server-side guess
+budget exhausted + insufficient evidence -> UNKNOWN/STOP_UNKNOWN
+```
 
 ## 停止条件
 
-- 证据不足以分类 → 分类为 `UNKNOWN`，包含所有可用证据
+- 已形成充分 evidence-backed Diagnosis。
+- 到达外部依赖边界且无可验证服务端源码。
+- navigation/file/DB budget 任一耗尽。
+- 证据不足且无法继续受控探索 → `UNKNOWN / STOP_UNKNOWN`。
 
 ## 禁止行为
 
-- 不得修改测试代码或生产代码
-- 不得重新运行测试——那是 `run-integration-tests` 的职责
-- 不得猜测分类——始终引用证据
-
-## 示例
-
-```json
-{
-  "classification": "PRODUCTION_CODE_ERROR",
-  "rootCause": "OrderService.approve() 在将状态流转为 APPROVED 前未校验当前订单状态",
-  "evidence": [
-    "Surefire：shouldApproveOrder 失败——期望 200，实际 500",
-    "应用日志：OrderService.java:42 抛出 IllegalStateException——订单状态已是 CANCELLED",
-    "测试发送的请求 orderId=1，该订单在测试数据库中状态为 CANCELLED"
-  ],
-  "failedTests": [
-    { "testClass": "OrderControllerIT", "testMethod": "shouldApprove" }
-  ],
-  "nextAction": "GENERATE_FIX_PLAN"
-}
-```
+- 不得修改测试或生产代码。
+- 不得重新运行测试。
+- 不得执行任意 Shell。
+- 不得读取 `.code-harness/database.yaml` 或数据库 password。
+- 不得直接调用 mysql.exe 或绕过 DB Runtime safety gate。
+- 不得凭接口名、日志文本或外部依赖名称猜测服务端代码根因。
+- 不得生成或批准 Fix Plan；这里只产出 Diagnosis。

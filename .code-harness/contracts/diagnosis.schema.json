@@ -27,10 +27,7 @@
       "type": "array",
       "minItems": 1,
       "description": "证据列表（日志行、堆栈、报告摘要）",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
+      "items": {"type": "string", "minLength": 1}
     },
     "failedTests": {
       "type": "array",
@@ -40,17 +37,44 @@
         "additionalProperties": false,
         "required": ["testClass"],
         "properties": {
-          "testClass": {
-            "type": "string",
-            "minLength": 1,
-            "description": "失败的测试类，如 OrderControllerIT"
-          },
-          "testMethod": {
-            "type": ["string", "null"],
-            "description": "失败的测试方法，如 shouldApprove；类级失败（如编译错误、Spring 上下文启动失败）时可为 null"
-          }
+          "testClass": {"type": "string", "minLength": 1},
+          "testMethod": {"type": ["string", "null"]}
         }
       }
+    },
+    "suspectSymbols": {
+      "type": "array",
+      "description": "从失败证据中提取的项目内可疑符号",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "codeEvidence": {
+      "type": "array",
+      "description": "通过 Code Navigation 实际读取过的源代码证据",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "symbol", "lineStart", "lineEnd", "reason"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "symbol": {"type": "string", "minLength": 1},
+          "lineStart": {"type": "integer", "minimum": 1},
+          "lineEnd": {"type": "integer", "minimum": 1},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "databaseEvidence": {
+      "type": "array",
+      "description": "本次 Diagnosis 使用的已落盘 Database Evidence queryId",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "externalDependencies": {
+      "type": "array",
+      "description": "诊断到达但不可进入其服务端实现的外部依赖边界",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
     },
     "nextAction": {
       "description": "建议的下一步动作",
