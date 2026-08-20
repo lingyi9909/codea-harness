@@ -51,6 +51,7 @@ func runValidate(args []string) error {
 	schemaPath := fs.String("schema", "", "schema under .code-harness/contracts")
 	input := fs.String("input", "", "input under .code-harness")
 	format := fs.String("format", "auto", "auto|yaml|json")
+	changeAnalysisPath := fs.String("change-analysis", "", "validated ChangeAnalysis input under .code-harness")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -95,7 +96,28 @@ func runValidate(args []string) error {
 			out["reviewCoverage"] = machine
 		}
 		if filepath.Base(*schemaPath) == "test-target-selection.schema.json" {
-			if err := selection.VerifyJSON(ib); err != nil {
+			if *changeAnalysisPath == "" {
+				return errors.New("test target selection validation requires --change-analysis")
+			}
+			if !safeHarnessPath(*changeAnalysisPath, "") {
+				return errors.New("change analysis path outside .code-harness is not allowed")
+			}
+			changeAnalysisJSON, err := os.ReadFile(*changeAnalysisPath)
+			if err != nil {
+				return err
+			}
+			changeAnalysisSchemaPath := filepath.Join(".code-harness", "contracts", "change-analysis.schema.json")
+			changeAnalysisSchema, err := os.ReadFile(changeAnalysisSchemaPath)
+			if err != nil {
+				return err
+			}
+			if err := schema.ValidateJSON(changeAnalysisSchema, changeAnalysisJSON); err != nil {
+				return err
+			}
+			if _, err := coverage.VerifyAnalysisJSON(changeAnalysisJSON); err != nil {
+				return err
+			}
+			if err := selection.VerifyAgainstChangeAnalysis(ib, changeAnalysisJSON); err != nil {
 				return err
 			}
 			out["testTargetSelection"] = "VERIFIED"

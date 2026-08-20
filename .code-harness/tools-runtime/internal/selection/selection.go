@@ -81,6 +81,66 @@ func VerifyJSON(data []byte) error {
 	return nil
 }
 
+type changeAnalysis struct {
+	AffectedControllers []affectedController `json:"affectedControllers"`
+}
+
+type affectedController struct {
+	Controller string `json:"controller"`
+	ImpactType string `json:"impactType"`
+}
+
+func VerifyAgainstChangeAnalysis(selectionJSON, changeAnalysisJSON []byte) error {
+	if err := VerifyJSON(selectionJSON); err != nil {
+		return err
+	}
+
+	var a artifact
+	if err := json.Unmarshal(selectionJSON, &a); err != nil {
+		return fmt.Errorf("invalid test target selection: %w", err)
+	}
+	var ca changeAnalysis
+	if err := json.Unmarshal(changeAnalysisJSON, &ca); err != nil {
+		return fmt.Errorf("invalid change analysis: %w", err)
+	}
+
+	expected := make([]string, 0, len(ca.AffectedControllers))
+	direct := make([]string, 0, len(ca.AffectedControllers))
+	for _, controller := range ca.AffectedControllers {
+		if controller.Controller == "" {
+			return errors.New("change analysis affected controller must not be empty")
+		}
+		id := "controller:" + controller.Controller
+		expected = append(expected, id)
+		if controller.ImpactType == "DIRECT_CHANGE" {
+			direct = append(direct, id)
+		}
+	}
+
+	if !sameStringSet(a.AvailableControllerIDs, expected) {
+		return errors.New("availableControllerIds must exactly match ChangeAnalysis.affectedControllers")
+	}
+	if a.Status != StatusSelected {
+		return nil
+	}
+
+	switch a.Mode {
+	case "AUTO_SINGLE":
+		if len(expected) != 1 {
+			return errors.New("AUTO_SINGLE is allowed only when ChangeAnalysis has exactly one affected controller")
+		}
+	case "USER_ALL":
+		if !sameStringSet(a.SelectedControllerIDs, expected) {
+			return errors.New("USER_ALL must select all affected controllers")
+		}
+	case "USER_DIRECT_ONLY":
+		if !sameStringSet(a.SelectedControllerIDs, direct) {
+			return errors.New("USER_DIRECT_ONLY must select exactly DIRECT_CHANGE controllers")
+		}
+	}
+	return nil
+}
+
 func requireUnique(name string, ids []string) error {
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
@@ -90,4 +150,23 @@ func requireUnique(name string, ids []string) error {
 		seen[id] = struct{}{}
 	}
 	return nil
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	set := make(map[string]struct{}, len(left))
+	for _, value := range left {
+		set[value] = struct{}{}
+	}
+	if len(set) != len(left) {
+		return false
+	}
+	for _, value := range right {
+		if _, ok := set[value]; !ok {
+			return false
+		}
+	}
+	return true
 }

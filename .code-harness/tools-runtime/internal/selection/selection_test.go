@@ -64,3 +64,59 @@ func TestVerifyJSON(t *testing.T) {
 		})
 	}
 }
+
+const changeAnalysisThreeControllers = `{
+  "affectedControllers": [
+    {"controller":"OrderController","endpoints":["POST /order/approve"],"impactType":"DIRECT_CHANGE","sourceSymbols":["OrderController.approve"]},
+    {"controller":"PaymentController","endpoints":["POST /payment/pay"],"impactType":"AFFECTED_BY_CALL_CHAIN","sourceSymbols":["PaymentService.pay"]},
+    {"controller":"UserController","endpoints":["POST /user/update"],"impactType":"DIRECT_CHANGE","sourceSymbols":["UserController.update"]}
+  ]
+}`
+
+func TestVerifyAgainstChangeAnalysisRejectsForgedAutoSingle(t *testing.T) {
+	selection := `{"selectionId":"sel-1","status":"SELECTED","mode":"AUTO_SINGLE","selectedControllerIds":["controller:OrderController"],"availableControllerIds":["controller:OrderController"]}`
+	if err := VerifyAgainstChangeAnalysis([]byte(selection), []byte(changeAnalysisThreeControllers)); err == nil {
+		t.Fatal("forged AUTO_SINGLE must fail when ChangeAnalysis has 3 controllers")
+	}
+}
+
+func TestVerifyAgainstChangeAnalysisRejectsMissingAvailableController(t *testing.T) {
+	selection := `{"selectionId":"sel-2","status":"SELECTED","mode":"USER_MULTI","selectedControllerIds":["controller:OrderController"],"availableControllerIds":["controller:OrderController","controller:PaymentController"]}`
+	if err := VerifyAgainstChangeAnalysis([]byte(selection), []byte(changeAnalysisThreeControllers)); err == nil {
+		t.Fatal("availableControllerIds missing a real affected controller must fail")
+	}
+}
+
+func TestVerifyAgainstChangeAnalysisRejectsUnknownAvailableController(t *testing.T) {
+	selection := `{"selectionId":"sel-3","status":"SELECTED","mode":"USER_MULTI","selectedControllerIds":["controller:OrderController"],"availableControllerIds":["controller:OrderController","controller:PaymentController","controller:GhostController"]}`
+	if err := VerifyAgainstChangeAnalysis([]byte(selection), []byte(changeAnalysisThreeControllers)); err == nil {
+		t.Fatal("availableControllerIds containing unknown controller must fail")
+	}
+}
+
+func TestVerifyAgainstChangeAnalysisRejectsPartialUserAll(t *testing.T) {
+	selection := `{"selectionId":"sel-4","status":"SELECTED","mode":"USER_ALL","selectedControllerIds":["controller:OrderController","controller:PaymentController"],"availableControllerIds":["controller:OrderController","controller:PaymentController","controller:UserController"]}`
+	if err := VerifyAgainstChangeAnalysis([]byte(selection), []byte(changeAnalysisThreeControllers)); err == nil {
+		t.Fatal("USER_ALL must select every available controller")
+	}
+}
+
+func TestVerifyAgainstChangeAnalysisRejectsIndirectInDirectOnly(t *testing.T) {
+	selection := `{"selectionId":"sel-5","status":"SELECTED","mode":"USER_DIRECT_ONLY","selectedControllerIds":["controller:OrderController","controller:PaymentController"],"availableControllerIds":["controller:OrderController","controller:PaymentController","controller:UserController"]}`
+	if err := VerifyAgainstChangeAnalysis([]byte(selection), []byte(changeAnalysisThreeControllers)); err == nil {
+		t.Fatal("USER_DIRECT_ONLY must select exactly DIRECT_CHANGE controllers")
+	}
+}
+
+func TestVerifyAgainstChangeAnalysisAcceptsValidModes(t *testing.T) {
+	tests := []string{
+		`{"selectionId":"sel-ok-all","status":"SELECTED","mode":"USER_ALL","selectedControllerIds":["controller:OrderController","controller:PaymentController","controller:UserController"],"availableControllerIds":["controller:OrderController","controller:PaymentController","controller:UserController"]}`,
+		`{"selectionId":"sel-ok-direct","status":"SELECTED","mode":"USER_DIRECT_ONLY","selectedControllerIds":["controller:OrderController","controller:UserController"],"availableControllerIds":["controller:OrderController","controller:PaymentController","controller:UserController"]}`,
+		`{"selectionId":"sel-ok-multi","status":"SELECTED","mode":"USER_MULTI","selectedControllerIds":["controller:PaymentController"],"availableControllerIds":["controller:OrderController","controller:PaymentController","controller:UserController"]}`,
+	}
+	for _, selection := range tests {
+		if err := VerifyAgainstChangeAnalysis([]byte(selection), []byte(changeAnalysisThreeControllers)); err != nil {
+			t.Fatalf("valid binding rejected: %v", err)
+		}
+	}
+}
