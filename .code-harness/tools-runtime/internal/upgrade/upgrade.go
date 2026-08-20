@@ -105,12 +105,18 @@ var requiredSource = []string{
 
 var managedFiles = map[string]bool{
 	"AGENTS.md": true, "bootstrap.md": true, "upgrade.md": true, "VERSION": true, ".gitignore": true,
-	"harness.template.yaml": true, "project.template.md": true,
+	"harness.template.yaml": true, "project.template.md": true, "database.template.yaml": true,
 }
 var managedDirs = []string{"agents", "skills", "contracts", "tools", "bin", "tools-runtime"}
 
+var projectStateFiles = map[string]bool{
+	"harness.yaml":  true,
+	"project.md":    true,
+	"database.yaml": true,
+}
+
 func Run(o Options) Result {
-	r := Result{PreservedFiles: []string{"harness.yaml", "project.md", "runs/**"}, Errors: []string{}}
+	r := Result{PreservedFiles: []string{"harness.yaml", "project.md", "database.yaml", "runs/**"}, Errors: []string{}}
 	oldB, err := os.ReadFile(filepath.Join(o.TargetDir, "VERSION"))
 	if err != nil {
 		return failManual(r, err)
@@ -255,8 +261,16 @@ func hasTopLevelReview(b []byte) bool {
 	return false
 }
 
+func isProjectState(rel string) bool {
+	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
+	return projectStateFiles[rel] || rel == "runs" || strings.HasPrefix(rel, "runs/")
+}
+
 func isManaged(rel string) bool {
 	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
+	if isProjectState(rel) {
+		return false
+	}
 	if managedFiles[rel] {
 		return true
 	}

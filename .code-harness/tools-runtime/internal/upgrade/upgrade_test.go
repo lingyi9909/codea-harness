@@ -77,6 +77,26 @@ func makePair(t *testing.T, config string) (string, string) {
 	return source, target
 }
 
+func make12Pair(t *testing.T, config string) (string, string) {
+	t.Helper()
+	source, target := makePair(t, config)
+	write(t, target, "VERSION", "1.1.1\n")
+	write(t, source, "VERSION", "1.2.0\n")
+	for _, rel := range []string{
+		"database.template.yaml",
+		"contracts/database-config.schema.json",
+		"contracts/database-evidence.schema.json",
+		"contracts/test-target-selection.schema.json",
+		"skills/select-test-targets/SKILL.md",
+		"skills/query-database/SKILL.md",
+		"tools-runtime/internal/dbconfig/config.go",
+		"tools-runtime/internal/selection/selection.go",
+	} {
+		write(t, source, rel, "1.2 "+rel+"\n")
+	}
+	return source, target
+}
+
 func TestUpgradeReplacesManagedTreeAndReportsStaleFiles(t *testing.T) {
 	source, target := makePair(t, validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n"))
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
@@ -136,6 +156,61 @@ func TestUpgradeAddsReviewAndPreservesExisting(t *testing.T) {
 		t.Fatal("migration missing")
 	}
 }
+
+func TestUpgrade111To120PreservesDatabaseProjectStateAndInstallsFramework(t *testing.T) {
+	source, target := make12Pair(t, validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n"))
+	originalDB := "not: valid: yaml\npassword: super-secret\n"
+	write(t, target, "database.yaml", originalDB)
+	write(t, source, "database.yaml", "password: package-must-not-overwrite\n")
+
+	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
+	if result.Status != StatusUpgraded {
+		t.Fatalf("result=%+v", result)
+	}
+	got, err := os.ReadFile(filepath.Join(target, "database.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != originalDB {
+		t.Fatalf("database.yaml changed: got %q want %q", got, originalDB)
+	}
+	if _, err := os.Stat(filepath.Join(target, "database.template.yaml")); err != nil {
+		t.Fatalf("database.template.yaml not installed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "contracts", "database-config.schema.json")); err != nil {
+		t.Fatalf("1.2 contract not installed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "skills", "query-database", "SKILL.md")); err != nil {
+		t.Fatalf("1.2 skill not installed: %v", err)
+	}
+	if !contains(result.PreservedFiles, "database.yaml") {
+		t.Fatalf("database.yaml missing from preservedFiles: %v", result.PreservedFiles)
+	}
+	if !contains(result.PreservedFiles, "project.md") || !contains(result.PreservedFiles, "runs/**") {
+		t.Fatalf("existing project state missing from preservedFiles: %v", result.PreservedFiles)
+	}
+}
+
+func TestUpgrade111To120WithoutDatabaseStateStillSucceeds(t *testing.T) {
+	source, target := make12Pair(t, validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n"))
+	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
+	if result.Status != StatusUpgraded {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(target, "database.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("upgrade must not create database.yaml: err=%v", err)
+	}
+}
+
+func contains(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestStagedSelfReplacementNeverWritesOverLivePath(t *testing.T) {
 	root := t.TempDir()
 	dst := filepath.Join(root, "codea-harness-tools.exe")
