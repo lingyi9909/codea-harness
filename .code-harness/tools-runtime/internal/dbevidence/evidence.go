@@ -52,8 +52,21 @@ func WriteEvidence(root string, result dbmysql.QueryResult) (string, error) {
 	if err := ensureContained(runsRoot, path); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		return "", fmt.Errorf("database evidence %q already exists", clean.QueryID)
+	}
+	if err != nil {
+		return "", fmt.Errorf("create database evidence: %w", err)
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
 		return "", fmt.Errorf("write database evidence: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("close database evidence: %w", err)
 	}
 	return path, nil
 }

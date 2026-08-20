@@ -143,6 +143,26 @@ func TestDBQueryBudgetExceededBeforeConnect(t *testing.T) {
 	}
 }
 
+func TestDBDuplicateQueryIDRejectedBeforeConnect(t *testing.T) {
+	withTempProject(t)
+	installDatabaseSchema(t)
+	writeFile(t, filepath.Join(".code-harness", "database.yaml"), validDatabaseYAML(2))
+	existing := filepath.Join(".code-harness", "runs", "run-001", "evidence", "db", "dbq-001.json")
+	writeFile(t, existing, `{"original":true}`)
+	path := writeQueryRequest(t, "run-001", "request.json", `{"runId":"run-001","queryId":"dbq-001","purpose":"verify state","sql":"SELECT id FROM order_info","params":[]}`)
+	err := run([]string{"db", "query", "--input", path})
+	if err == nil || !strings.Contains(err.Error(), "QUERY_ID_ALREADY_EXISTS") {
+		t.Fatalf("err=%v", err)
+	}
+	data, readErr := os.ReadFile(existing)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != `{"original":true}` {
+		t.Fatalf("existing evidence was modified: %s", data)
+	}
+}
+
 func TestDBQueryDoesNotAcceptRawSQLArgument(t *testing.T) {
 	err := run([]string{"db", "query", "--sql", "SELECT 1"})
 	if err == nil {

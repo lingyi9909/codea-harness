@@ -337,6 +337,12 @@ func runDBQuery(args []string) error {
 	if _, err := dbguard.ValidateReadonlyQuery(req.SQL, cfg.Connection.Database, cfg.Safety.AllowedSchemas); err != nil {
 		return fmt.Errorf("readonly SQL rejected: %w", err)
 	}
+	evidencePath := filepath.Join(".code-harness", "runs", req.RunID, "evidence", "db", req.QueryID+".json")
+	if _, err := os.Stat(evidencePath); err == nil {
+		return fmt.Errorf("QUERY_ID_ALREADY_EXISTS: queryId %q already has database evidence for run %q", req.QueryID, req.RunID)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check database evidence queryId: %w", err)
+	}
 	used, err := countDBEvidence(req.RunID)
 	if err != nil {
 		return err
@@ -355,7 +361,7 @@ func runDBQuery(args []string) error {
 	if err != nil {
 		return err
 	}
-	evidencePath, err := dbevidence.WriteEvidence(".", result)
+	evidencePath, err = dbevidence.WriteEvidence(".", result)
 	if err != nil {
 		return err
 	}

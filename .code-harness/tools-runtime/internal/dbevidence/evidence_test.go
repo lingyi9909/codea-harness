@@ -102,3 +102,34 @@ func TestWriteEvidenceRejectsDotRunIDsAndKeepsNormalRunInsideRuns(t *testing.T) 
 		t.Fatalf("evidence escaped runs root: path=%q rel=%q", path, rel)
 	}
 }
+
+func TestWriteEvidenceDoesNotOverwriteExistingEvidence(t *testing.T) {
+	root := t.TempDir()
+	installSchema(t, root)
+	first := dbmysql.QueryResult{
+		QueryID: "dbq-001", RunID: "run-001", Purpose: "first", Schema: "order_test", StatementType: "SELECT",
+		Columns: []string{"id"}, Rows: []map[string]any{{"id": 1}}, RowCount: 1,
+	}
+	path, err := WriteEvidence(root, first)
+	if err != nil {
+		t.Fatalf("first WriteEvidence: %v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.Purpose = "second"
+	second.Rows = []map[string]any{{"id": 2}}
+	_, err = WriteEvidence(root, second)
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("err=%v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("existing evidence was overwritten\nbefore=%s\nafter=%s", before, after)
+	}
+}
