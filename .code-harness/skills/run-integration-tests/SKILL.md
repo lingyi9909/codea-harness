@@ -78,3 +78,14 @@ output_schema: null
 退出码：1
 Surefire：共 8 个测试，6 个通过，2 个失败
 ```
+
+## Task 7：Selected-only Execution Gate
+
+以下规则叠加在原执行规则之上：
+
+1. 输入额外包含 validated `TestTargetSelection`、Orchestrator 交付的 selected-only test classes，以及每个 class 的 `origin = REUSED_EXISTING | GENERATED_BY_PLAN`。
+2. 每个待执行 test class 必须能追溯到 `selectedControllerIds` 对应 target；仅属于未选择 Controller 的 proposed execution → `SCOPE_VIOLATION`，不得调用 `run_maven_test`。
+3. `REUSE_EXISTING`：直接执行，无写操作审批；若失败，历史 Existing Test 永不自动修改。
+4. `GENERATED_BY_PLAN`：只有对应 Test Plan 已获精确 `批准 <planId>` 才可执行新生成/修改版本；若 Diagnosis 为 `REPAIR_TEST`，最多自动修复 2 轮。
+5. Runtime Debugger 不得“为了完整”把未选择 Controller 测试类重新加入执行列表。
+6. 执行失败后仍按现有 Runtime Debugger → `analyze-failure` 流程诊断；需要时使用受控 DB/code evidence，不改变本 Skill 的 selected-only 范围。

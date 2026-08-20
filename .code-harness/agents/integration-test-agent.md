@@ -113,3 +113,29 @@ skills:
 - **不得调用 `analyze-failure`**——这是 Runtime Debugger 的职责
 - 不得访问生产数据或系统
 - 不得直接执行 Shell 命令——只能使用受控工具
+
+## Task 7：DB Assertion 与 Synthetic Flow 增量规则
+
+1. 对 selected target 的 ChangeAnalysis 风险 `databaseWrite / transactional / stateTransition`，设计阶段必须显式决定是否需要 DB Assertion；需要时写入具体 `expected.databaseAssertions[]`。
+2. 生成 DB Assertion 时只允许沿用项目现有：existing test helper/repository pattern → existing JdbcTemplate pattern → existing fixture/assertion utility；不得为此新增 Maven dependency。
+3. DB Assertion 必须在 cleanup/rollback 隐藏状态之前完成。
+4. 输出给 Runtime Debugger 的 test classes 必须能追溯到 selected target，并带 `origin = REUSED_EXISTING | GENERATED_BY_PLAN`。
+5. Synthetic Golden：
+
+```text
+Affected = Order + Payment + User
+Selection = Order + Payment
+Order -> REUSE_EXISTING
+Payment -> EXTEND_EXISTING -> exact 批准 <planId>
+User -> unselected
+
+User 必须没有：
+- Existing Test coverage analysis
+- Test Plan target
+- generated/modified test
+- Runtime execution artifact
+
+Runtime 只执行 Order/Payment；失败后再由 Runtime Debugger 按需收集 DB/code evidence。
+```
+
+6. Existing Test / exact approval / GENERATED_BY_PLAN repair max 2 rounds 等原有安全规则保持不变。

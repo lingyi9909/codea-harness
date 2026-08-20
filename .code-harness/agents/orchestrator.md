@@ -171,6 +171,38 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 - 或：所有测试通过，无需进一步操作
 ```
 
+## Task 7：Selected Test Flow + Integration-Test DB Assertions
+
+以下规则是在现有 `harness test` / Existing Test / Approval / Repair Gate 之上增加，不替代原语义：
+
+1. selected target 的 ChangeAnalysis 出现 `databaseWrite / transactional / stateTransition` 风险时，Integration Test Agent 必须显式决定 DB Assertion 是否需要；需要时把具体断言写入现有 `expected.databaseAssertions[]`。
+2. DB Assertion 是正式测试证据；生成时只允许复用项目已有 helper/repository、existing JdbcTemplate、existing fixture/assertion utility；不得为此新增 Maven dependency，且断言必须在 cleanup/rollback 隐藏状态之前完成。
+3. Integration Test Agent 返回给 Orchestrator 的每个 test class 必须能追溯到 validated selection 的 selected target，并带 `origin = REUSED_EXISTING | GENERATED_BY_PLAN`。
+4. Orchestrator 在交给 Runtime Debugger 前再次做 selected-only scope check。若 proposed execution 仅属于 unselected Controller → `SCOPE_VIOLATION`，不得执行该测试类。
+5. Synthetic Golden Flow 必须满足：
+
+```text
+Affected Controllers: Order, Payment, User
+Selection: Order + Payment
+
+Order -> REUSE_EXISTING -> no approval/no write -> execute Order existing test
+Payment -> EXTEND_EXISTING -> exact 批准 <paymentPlanId> -> modify only MISSING -> execute Payment test
+User -> unselected
+
+User 必须没有：
+- Existing Test coverage analysis artifact
+- Test Plan target
+- generated/modified test artifact
+- Runtime execution artifact
+
+Order/Payment failure
+-> Runtime Debugger
+-> DB/code evidence only as needed
+```
+
+6. 任意阶段把 User 或其他 unselected Controller 自动补回，均视为 `SCOPE_VIOLATION`。
+7. `REUSE_EXISTING -> run/no approval/no modification`、`EXTEND_EXISTING -> only MISSING + exact planId approval`、`CREATE_NEW -> exact planId approval`、historical Existing Test failure never auto-edit、GENERATED_BY_PLAN repair max 2 rounds 全部保持不变。
+
 ## 禁止行为
 
 - 不得跳过 Review Coverage / Runtime Contract 校验 / Test Target Selection / 审批门禁。

@@ -139,3 +139,19 @@ class OrderControllerIT {
     }
 }
 ```
+
+## Task 7：Selection 与 DB Assertion 增量规则
+
+1. 本 Skill 同时接收 validated `TestTargetSelection`；计划中的每个 target 都必须属于 `selectedControllerIds`。发现越界 target 立即 `SCOPE_VIOLATION`，不得调用 `write_test`。
+2. 对计划中非空的 `expected.databaseAssertions[]`，必须真正生成对应 DB assertion，优先级固定为：
+
+```text
+1 existing test helper / repository pattern
+2 existing JdbcTemplate pattern
+3 existing fixture / assertion utility
+```
+
+3. 不得为了 DB assertion 单独新增 Maven dependency。
+4. DB assertion 必须在 cleanup、fixture reset 或 `@Transactional` rollback 隐藏状态之前完成。
+5. `REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW`、精确 `批准 <planId>`、只补 MISSING、不得弱化 Existing Test 等原规则全部保持不变。
+6. 未选择 Controller 的测试文件禁止生成或修改。

@@ -192,3 +192,18 @@ OrderControllerIT
   }]
 }
 ```
+
+## Task 7：Selected-only + DB Assertion 增量规则
+
+以下规则在上述 Existing Test / Approval 语义之上增加，不替代任何原规则：
+
+1. 本 Skill 额外消费已通过 `test-target-selection.schema.json` + Runtime `selection.VerifyJSON` 的 `TestTargetSelection`；只允许 `selectedControllerIds` 对应的 affectedControllers 进入步骤 1-9。
+2. 未选择 Controller：不得做 Existing Test Coverage Analysis，不得进入 Test Plan target；若输入 target 不属于 validated selection，立即返回 `SCOPE_VIOLATION` 并停止该越界 target。
+3. 对 ChangeAnalysis 风险 `databaseWrite / transactional / stateTransition`，每个相关 scenario 必须显式判断是否需要 DB Assertion。
+4. 需要 DB Assertion 时，使用现有 `expected.databaseAssertions[]`，必须写成具体可验证状态，例如：
+   - `order_info.status == APPROVED for fixture order_id`
+   - `audit_log contains exactly one APPROVE record for fixture order_id`
+   - `rollback path keeps order_info.status == PENDING`
+5. 若判断不需要 DB Assertion，必须能说明 HTTP/response assertion 为什么已经足以证明该风险，不能静默省略。
+6. `databaseAssertions[]` 是正式测试证据；不能用 Task 5/6 的诊断期 Database Evidence 替代测试本身应有的 DB Assertion。
+7. Selection 仅定义“测哪些 target”，仍然不能替代 `批准 <planId>` 或 `批准 <fixPlanId>`。
