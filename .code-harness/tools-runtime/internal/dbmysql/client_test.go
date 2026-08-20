@@ -171,6 +171,53 @@ func TestQueryReadonlyPassesParamsUsesReadOnlyTransactionAndRedacts(t *testing.T
 	}
 }
 
+func TestQueryReadonlyRejectsDuplicateResultColumns(t *testing.T) {
+	c, mock := mockClient(t, testConfig())
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT o.id, a.id").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "id"}).AddRow(10001, 90001),
+	)
+	mock.ExpectRollback()
+	_, err := c.QueryReadonly(context.Background(), QueryRequest{
+		RunID: "run-001", QueryID: "dbq-duplicate", Purpose: "join duplicate columns",
+		SQL: "SELECT o.id, a.id FROM order_info o JOIN audit_log a ON a.order_id = o.id",
+	})
+	if err == nil {
+		t.Fatal("expected duplicate result column rejection")
+	}
+	if !strings.Contains(err.Error(), "DUPLICATE_RESULT_COLUMN") || !strings.Contains(err.Error(), `column "id"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQueryReadonlyAllowsAliasedJoinColumns(t *testing.T) {
+	c, mock := mockClient(t, testConfig())
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT o.id AS order_id, a.id AS audit_id").WillReturnRows(
+		sqlmock.NewRows([]string{"order_id", "audit_id"}).AddRow(10001, 90001),
+	)
+	mock.ExpectRollback()
+	got, err := c.QueryReadonly(context.Background(), QueryRequest{
+		RunID: "run-001", QueryID: "dbq-alias", Purpose: "join aliased columns",
+		SQL: "SELECT o.id AS order_id, a.id AS audit_id FROM order_info o JOIN audit_log a ON a.order_id = o.id",
+	})
+	if err != nil {
+		t.Fatalf("QueryReadonly: %v", err)
+	}
+	if !reflect.DeepEqual(got.Columns, []string{"order_id", "audit_id"}) {
+		t.Fatalf("columns=%v", got.Columns)
+	}
+	if got.Rows[0]["order_id"] != int64(10001) || got.Rows[0]["audit_id"] != int64(90001) {
+		t.Fatalf("row=%v", got.Rows[0])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestQueryReadonlyRequestsReadOnlyTransaction(t *testing.T) {
 	conn := &recordingConn{}
 	db := sql.OpenDB(recordingConnector{conn: conn})
@@ -216,7 +263,6 @@ func TestQueryReadonlyHonorsContextDeadline(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT id FROM order_info").WillDelayFor(100 * time.Millisecond).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
-	mock.ExpectRollback()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	_, err := c.QueryReadonly(ctx, QueryRequest{RunID: "run-001", QueryID: "dbq-timeout", Purpose: "timeout", SQL: "SELECT id FROM order_info"})

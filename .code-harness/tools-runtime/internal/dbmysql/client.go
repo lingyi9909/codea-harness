@@ -223,6 +223,9 @@ func (c *Client) QueryReadonly(ctx context.Context, req QueryRequest) (QueryResu
 	if err != nil {
 		return QueryResult{}, wrapErr("read query columns", err, c.cfg.Connection.Password)
 	}
+	if err := validateUniqueColumns(columns); err != nil {
+		return QueryResult{}, err
+	}
 	resultRows := make([]map[string]any, 0, min(c.cfg.Safety.MaxRows, 16))
 	truncated := false
 
@@ -261,6 +264,17 @@ func (c *Client) QueryReadonly(ctx context.Context, req QueryRequest) (QueryResu
 		Truncated:     truncated,
 		DurationMs:    time.Since(start).Milliseconds(),
 	}, nil
+}
+
+func validateUniqueColumns(columns []string) error {
+	seen := make(map[string]struct{}, len(columns))
+	for _, column := range columns {
+		if _, exists := seen[column]; exists {
+			return fmt.Errorf("DUPLICATE_RESULT_COLUMN: column %q appears multiple times; use SQL aliases", column)
+		}
+		seen[column] = struct{}{}
+	}
+	return nil
 }
 
 func (c *Client) validateDiscoveryTarget(schemaName, tableName string) error {

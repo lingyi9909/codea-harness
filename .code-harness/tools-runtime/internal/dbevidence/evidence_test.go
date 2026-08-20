@@ -68,3 +68,37 @@ func TestWriteEvidenceRejectsInvalidArtifactAndPathTraversal(t *testing.T) {
 		t.Fatal("expected invalid queryId rejection")
 	}
 }
+
+func TestWriteEvidenceRejectsDotRunIDsAndKeepsNormalRunInsideRuns(t *testing.T) {
+	for _, runID := range []string{".", ".."} {
+		t.Run(runID, func(t *testing.T) {
+			root := t.TempDir()
+			installSchema(t, root)
+			_, err := WriteEvidence(root, dbmysql.QueryResult{
+				QueryID: "dbq-001", RunID: runID, Purpose: "x", Schema: "order_test", StatementType: "SELECT",
+				Columns: []string{"id"}, Rows: []map[string]any{{"id": 1}}, RowCount: 1,
+			})
+			if err == nil {
+				t.Fatalf("runId=%q should be rejected", runID)
+			}
+		})
+	}
+
+	root := t.TempDir()
+	installSchema(t, root)
+	path, err := WriteEvidence(root, dbmysql.QueryResult{
+		QueryID: "dbq-normal", RunID: "run-normal_01", Purpose: "x", Schema: "order_test", StatementType: "SELECT",
+		Columns: []string{"id"}, Rows: []map[string]any{{"id": 1}}, RowCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("normal runId rejected: %v", err)
+	}
+	runsRoot := filepath.Join(root, ".code-harness", "runs")
+	rel, err := filepath.Rel(runsRoot, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		t.Fatalf("evidence escaped runs root: path=%q rel=%q", path, rel)
+	}
+}

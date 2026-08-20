@@ -40,11 +40,18 @@ func WriteEvidence(root string, result dbmysql.QueryResult) (string, error) {
 		return "", fmt.Errorf("validate database evidence: %w", err)
 	}
 
-	dir := filepath.Join(root, ".code-harness", "runs", clean.RunID, "evidence", "db")
+	runsRoot := filepath.Join(root, ".code-harness", "runs")
+	dir := filepath.Join(runsRoot, clean.RunID, "evidence", "db")
+	if err := ensureContained(runsRoot, dir); err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create database evidence directory: %w", err)
 	}
 	path := filepath.Join(dir, clean.QueryID+".json")
+	if err := ensureContained(runsRoot, path); err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", fmt.Errorf("write database evidence: %w", err)
 	}
@@ -94,7 +101,7 @@ func validateSemantics(result dbmysql.QueryResult) error {
 }
 
 func safeArtifactID(value string) bool {
-	if value == "" {
+	if value == "" || value == "." || value == ".." {
 		return false
 	}
 	for _, r := range value {
@@ -104,6 +111,25 @@ func safeArtifactID(value string) bool {
 		return false
 	}
 	return true
+}
+
+func ensureContained(base, target string) error {
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return fmt.Errorf("resolve database evidence runs directory: %w", err)
+	}
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("resolve database evidence path: %w", err)
+	}
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return fmt.Errorf("check database evidence path: %w", err)
+	}
+	if rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errors.New("database evidence path escapes runs directory")
+	}
+	return nil
 }
 
 func sensitiveColumn(column string) bool {
