@@ -6,6 +6,7 @@ on:
     branches: [develop]
     paths:
       - '.code-harness/**'
+      - 'README.md'
       - 'CHANGELOG.md'
       - 'THIRD_PARTY_NOTICES.md'
       - '.github/workflows/package-windows-x64.yml'
@@ -21,11 +22,44 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.23.x'
+
       - name: Test controlled runtime
         working-directory: .code-harness/tools-runtime
+        shell: pwsh
         run: |
           go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test selection verifier and schema
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/selection ./internal/schema
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test database config validation
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/dbconfig
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test SQL safety golden cases
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/dbguard
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test database runtime and evidence
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/dbmysql ./internal/dbevidence ./cmd/codea-harness-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build Windows x64 runtime
         working-directory: .code-harness/tools-runtime
         shell: pwsh
@@ -33,6 +67,8 @@ jobs:
           $env:GOOS = 'windows'
           $env:GOARCH = 'amd64'
           go build -trimpath -ldflags "-s -w" -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Vendor pinned ast-grep Windows x64
         shell: pwsh
         run: |
@@ -47,6 +83,8 @@ jobs:
           Expand-Archive -Path $zip -DestinationPath $dir -Force
           Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe'
           & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Code Navigation end-to-end smoke
         shell: pwsh
         run: |
@@ -63,6 +101,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Code Navigation runtime failed' }
           if (($out -join "`n") -notmatch 'OrderServiceImpl.java') { throw 'implementation not found by real ast-grep runtime' }
           Remove-Item -Recurse -Force smoke
+
       - name: Windows live upgrade lifecycle smoke
         shell: pwsh
         run: |
@@ -71,9 +110,24 @@ jobs:
           New-Item -ItemType Directory -Force $root | Out-Null
           Copy-Item -Recurse '.code-harness' (Join-Path $root '.code-harness')
           Copy-Item -Recurse '.code-harness' (Join-Path $root '.code-harness-upgrade')
-          Set-Content (Join-Path $root '.code-harness/VERSION') '1.1.0'
-          New-Item -ItemType Directory -Force (Join-Path $root '.code-harness/skills/stale') | Out-Null
-          Set-Content (Join-Path $root '.code-harness/skills/stale/SKILL.md') 'stale'
+
+          $target = Join-Path $root '.code-harness'
+          Set-Content (Join-Path $target 'VERSION') '1.1.1'
+          Remove-Item (Join-Path $target 'database.template.yaml') -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $target 'contracts/database-config.schema.json') -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $target 'contracts/database-evidence.schema.json') -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $target 'contracts/test-target-selection.schema.json') -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $target 'skills/select-test-targets') -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $target 'skills/query-database') -Recurse -Force -ErrorAction SilentlyContinue
+
+          New-Item -ItemType Directory -Force (Join-Path $target 'skills/stale') | Out-Null
+          Set-Content (Join-Path $target 'skills/stale/SKILL.md') 'stale'
+
+          $databaseBytes = [System.Text.UTF8Encoding]::new($false).GetBytes("version: 1`nenvironment: TEST`npassword: sentinel-secret`n")
+          $databasePath = Join-Path $target 'database.yaml'
+          [System.IO.File]::WriteAllBytes($databasePath, $databaseBytes)
+          $databaseHash = (Get-FileHash -Algorithm SHA256 $databasePath).Hash
+
           @'
           version: 1
           project:
@@ -110,10 +164,12 @@ jobs:
             deniedPaths: []
           runs:
             directory: .code-harness/runs
-          '@ | Set-Content (Join-Path $root '.code-harness/harness.yaml')
+          '@ | Set-Content (Join-Path $target 'harness.yaml')
+
           $newExe = Join-Path $root '.code-harness-upgrade/bin/codea-harness-tools.exe'
           [System.IO.File]::AppendAllText($newExe, 'CODEA-UPGRADE-SMOKE')
           $expectedHash = (Get-FileHash -Algorithm SHA256 $newExe).Hash
+
           Push-Location $root
           try {
             $out = & '.\.code-harness\bin\codea-harness-tools.exe' upgrade 2>&1
@@ -121,7 +177,9 @@ jobs:
             $text = $out -join "`n"
             if ($text -notmatch '"status": "UPGRADED"') { throw "unexpected upgrade output: $text" }
             if ($text -notmatch 'skills/stale/SKILL.md') { throw "removedFiles missing stale path: $text" }
-            if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.1.1') { throw 'target version was not upgraded' }
+            if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.2.0') { throw 'target version was not upgraded to 1.2.0' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/database.yaml').Hash -ne $databaseHash) { throw 'database.yaml bytes changed during upgrade' }
+            if (!(Test-Path '.code-harness/database.template.yaml')) { throw 'database.template.yaml missing after upgrade' }
             if (Test-Path '.code-harness/skills/stale/SKILL.md') { throw 'stale framework file survived replace' }
             if (Test-Path '.code-harness-upgrade') { throw 'source package was not cleaned after success' }
             if (Get-ChildItem -Force -Name '.code-harness-stage-*' -ErrorAction SilentlyContinue) { throw 'stage directory leaked' }
@@ -131,17 +189,55 @@ jobs:
           } finally {
             Pop-Location
           }
+
       - name: Assert package completeness
         shell: pwsh
         run: |
-          if (!(Test-Path '.code-harness/bin/codea-harness-tools.exe')) { throw 'runtime missing' }
-          if (!(Test-Path '.code-harness/bin/ast-grep.exe')) { throw 'ast-grep missing' }
-          if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.1.1') { throw 'wrong version' }
+          $required = @(
+            '.code-harness/bin/codea-harness-tools.exe',
+            '.code-harness/bin/ast-grep.exe',
+            '.code-harness/database.template.yaml',
+            '.code-harness/contracts/database-config.schema.json',
+            '.code-harness/contracts/database-evidence.schema.json',
+            '.code-harness/contracts/test-target-selection.schema.json',
+            '.code-harness/skills/select-test-targets/SKILL.md',
+            '.code-harness/skills/query-database/SKILL.md'
+          )
+          foreach ($path in $required) {
+            if (!(Test-Path $path)) { throw "required package path missing: $path" }
+          }
+          if (Test-Path '.code-harness/database.yaml') { throw 'database.yaml must not be present in release source tree' }
+          if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.2.0') { throw 'wrong version' }
+
       - name: Build offline package
         shell: pwsh
-        run: Compress-Archive -Path '.code-harness','CHANGELOG.md','THIRD_PARTY_NOTICES.md' -DestinationPath 'codea-harness-1.1.1-windows-x64.zip' -Force
+        run: Compress-Archive -Path '.code-harness','CHANGELOG.md','THIRD_PARTY_NOTICES.md' -DestinationPath 'codea-harness-1.2.0-windows-x64.zip' -Force
+
+      - name: Assert offline package contents
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path 'codea-harness-1.2.0-windows-x64.zip'))
+          try {
+            $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\','/') })
+            $required = @(
+              '.code-harness/database.template.yaml',
+              '.code-harness/contracts/database-config.schema.json',
+              '.code-harness/contracts/database-evidence.schema.json',
+              '.code-harness/contracts/test-target-selection.schema.json',
+              '.code-harness/skills/select-test-targets/SKILL.md',
+              '.code-harness/skills/query-database/SKILL.md'
+            )
+            foreach ($path in $required) {
+              if ($entries -notcontains $path) { throw "ZIP missing required path: $path" }
+            }
+            if ($entries -contains '.code-harness/database.yaml') { throw 'ZIP leaked .code-harness/database.yaml' }
+          } finally {
+            $archive.Dispose()
+          }
+
       - uses: actions/upload-artifact@v4
         with:
-          name: codea-harness-1.1.1-windows-x64
-          path: codea-harness-1.1.1-windows-x64.zip
+          name: codea-harness-1.2.0-windows-x64
+          path: codea-harness-1.2.0-windows-x64.zip
           if-no-files-found: error
