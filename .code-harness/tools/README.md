@@ -1,12 +1,12 @@
 # 受控工具契约
 
-Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** 1.1.1 新增的 Upgrade / Schema Validate / Code Navigation 有确定性 Go Runtime 实现：
+Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** Upgrade / Schema Validate / Code Navigation / Database Evidence 均有确定性 Go Runtime 实现：
 
 ```text
 .code-harness/bin/codea-harness-tools.exe
 ```
 
-它不是新的 Harness CLI 产品；用户仍然只表达 `harness review/test/upgrade`。Agent 只能映射到固定子命令，禁止 `cmd /c`、PowerShell、`bash -c`、管道、重定向、命令链接或用户输入命令拼接。
+它不是新的 Harness CLI 产品；用户仍然只表达 `harness review/test/debug-service/fix/verify/upgrade`。Agent 只能映射到固定子命令，禁止 `cmd /c`、PowerShell、`bash -c`、管道、重定向、命令链接或用户输入命令拼接。
 
 ## Runtime 固定入口
 
@@ -16,9 +16,13 @@ codea-harness-tools.exe validate --schema <under .code-harness/contracts> --inpu
 codea-harness-tools.exe nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-references --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
+codea-harness-tools.exe db ping --run-id <id>
+codea-harness-tools.exe db list-tables --schema <schema> --run-id <id>
+codea-harness-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
+codea-harness-tools.exe db query --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
-未知子命令、目录逃逸、非法 symbol 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。
+未知子命令、目录逃逸、非法 symbol/identifier 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。`db query` 不接受 raw SQL CLI 参数。
 
 ---
 
@@ -91,14 +95,62 @@ committed = mergeBase → HEAD
 
 Upgrade 必须使用**新版升级包**的 `harness-config.schema.json` 校验迁移后的配置。
 
-
 ### Database 本地配置边界
 
 - `.code-harness/database.template.yaml` 是 Framework Managed 的无真实凭据模板，默认 `enabled: false`。
 - `.code-harness/database.yaml` 是可选本机 Project State，必须被 `.code-harness/.gitignore` 忽略；Harness 不自动创建带真实凭据的该文件。
 - Database 配置只允许 `environment: TEST|LOCAL`、`dialect: mysql`；任何 DB 操作前必须由受控 Runtime 使用标准 YAML parser + Draft 2020-12 Schema 校验。
-- `database.yaml` 缺失时仅表示 Database Evidence capability unavailable/disabled，不得导致其他 Harness 能力失败。
+- `database.yaml` 缺失/disabled 时返回 `DATABASE_EVIDENCE_UNAVAILABLE`；仅表示 Database Evidence capability unavailable，不得导致其他 Harness 能力失败。
 - Project Adapter 和普通 Agent read tools 不得读取、打印或复制其中的连接凭据。
+
+---
+
+## Database Evidence 受控工具
+
+这些工具只授予 Runtime Debugger：
+
+### `db_ping(runId) -> DBStatus`
+映射到固定 `db ping --run-id <id>`，仅用于确认可选 DB capability 是否可用。
+
+### `db_list_tables(schema, runId) -> TableList`
+仅在 `allowSchemaDiscovery=true` 且 schema 位于 `allowedSchemas` 时执行。
+
+### `db_describe_table(schema, table, runId) -> ColumnList`
+仅在 `allowSchemaDiscovery=true`、schema allowlist 和 identifier Gate 全部通过后执行。
+
+### `db_query_readonly(sql, params, runId, purpose) -> DatabaseEvidence`
+
+Host/Runtime 必须先把结构化请求写入：
+
+```text
+.code-harness/runs/<runId>/requests/<file>.json
+```
+
+再调用固定 `db query --input <path>`。Runtime 强制：
+
+```text
+request path/fields
+→ database-config Schema + TEST/LOCAL
+→ dbguard mature AST read-only gate
+→ maxQueriesPerDiagnosis budget
+→ MySQL readonly runtime
+→ timeout + maxRows + sensitive-column redaction
+→ database-evidence Contract validation
+→ .code-harness/runs/<runId>/evidence/db/<queryId>.json
+```
+
+硬规则：
+
+```text
+Agent never invokes mysql.exe
+Agent never reads .code-harness/database.yaml
+Agent never receives/logs DB password
+Agent never bypasses dbguard
+Agent never sends raw SQL as a CLI argument
+DB tools use controlled runtime only
+```
+
+`QUERY_BUDGET_EXCEEDED` 必须在数据库连接/执行前停止该自动查询。动态值必须使用 `?` + params；重复结果列名必须由 SQL alias 消除，否则 Runtime 拒绝，避免 Evidence 丢字段。
 
 ---
 
