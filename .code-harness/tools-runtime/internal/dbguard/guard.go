@@ -14,6 +14,13 @@ type StatementInfo struct {
 	Tables        []string
 }
 
+type collector struct {
+	defaultSchema string
+	allowed       map[string]struct{}
+	schemaSet     map[string]struct{}
+	tableSet      map[string]struct{}
+}
+
 func ValidateReadonlyQuery(sqlText, defaultSchema string, allowedSchemas []string) (StatementInfo, error) {
 	parser, err := sqlparser.New(sqlparser.Options{})
 	if err != nil {
@@ -32,10 +39,8 @@ func ValidateReadonlyQuery(sqlText, defaultSchema string, allowedSchemas []strin
 	if err != nil {
 		return StatementInfo{}, fmt.Errorf("parse SQL: %w", err)
 	}
-	switch stmt.(type) {
-	case *sqlparser.Select, *sqlparser.Union:
-		// allowed top-level read query types
-	default:
+	selectStmt, ok := stmt.(sqlparser.SelectStatement)
+	if !ok {
 		return StatementInfo{}, fmt.Errorf("statement type %T is not readonly SELECT", stmt)
 	}
 
@@ -50,73 +55,134 @@ func ValidateReadonlyQuery(sqlText, defaultSchema string, allowedSchemas []strin
 		return StatementInfo{}, errors.New("allowedSchemas must not be empty")
 	}
 
-	cteNames := make(map[string]struct{})
-	if err := sqlparser.Walk(func(node sqlparser.SQLNode) (bool, error) {
-		switch n := node.(type) {
-		case *sqlparser.Select:
-			addCTENames(cteNames, n.With)
-		case *sqlparser.Union:
-			addCTENames(cteNames, n.With)
-		}
-		return true, nil
-	}, stmt); err != nil {
-		return StatementInfo{}, fmt.Errorf("inspect CTEs: %w", err)
+	c := &collector{
+		defaultSchema: defaultSchema,
+		allowed:       allowed,
+		schemaSet:     map[string]struct{}{},
+		tableSet:      map[string]struct{}{},
 	}
-
-	schemaSet := map[string]struct{}{}
-	tableSet := map[string]struct{}{}
-	err = sqlparser.Walk(func(node sqlparser.SQLNode) (bool, error) {
-		switch n := node.(type) {
-		case *sqlparser.Select:
-			if n.Lock != 0 {
-				return false, errors.New("locking SELECT is not allowed")
-			}
-			if n.Into != nil {
-				return false, errors.New("SELECT INTO is not allowed")
-			}
-		case *sqlparser.Union:
-			if n.Lock != 0 {
-				return false, errors.New("locking SELECT is not allowed")
-			}
-			if n.Into != nil {
-				return false, errors.New("SELECT INTO is not allowed")
-			}
-		case *sqlparser.AliasedTableExpr:
-			tableName, ok := n.Expr.(sqlparser.TableName)
-			if !ok {
-				return true, nil
-			}
-			table := tableName.Name.String()
-			if table == "" {
-				return true, nil
-			}
-			schema := tableName.Qualifier.String()
-			if schema == "" {
-				if _, isCTE := cteNames[table]; isCTE {
-					return true, nil
-				}
-				schema = defaultSchema
-				if schema == "" {
-					return false, fmt.Errorf("unqualified table %q requires a default schema", table)
-				}
-			}
-			if _, ok := allowed[schema]; !ok {
-				return false, fmt.Errorf("schema %q is not allowed", schema)
-			}
-			schemaSet[schema] = struct{}{}
-			tableSet[table] = struct{}{}
-		}
-		return true, nil
-	}, stmt)
-	if err != nil {
+	if err := c.collectSelectStatement(selectStmt, nil); err != nil {
 		return StatementInfo{}, err
 	}
 
 	return StatementInfo{
 		StatementType: "SELECT",
-		Schemas:       sortedKeys(schemaSet),
-		Tables:        sortedKeys(tableSet),
+		Schemas:       sortedKeys(c.schemaSet),
+		Tables:        sortedKeys(c.tableSet),
 	}, nil
+}
+
+func (c *collector) collectSelectStatement(stmt sqlparser.SelectStatement, inherited map[string]struct{}) error {
+	var with *sqlparser.With
+	switch n := stmt.(type) {
+	case *sqlparser.Select:
+		if n.Lock != 0 {
+			return errors.New("locking SELECT is not allowed")
+		}
+		if n.Into != nil {
+			return errors.New("SELECT INTO is not allowed")
+		}
+		with = n.With
+	case *sqlparser.Union:
+		if n.Lock != 0 {
+			return errors.New("locking SELECT is not allowed")
+		}
+		if n.Into != nil {
+			return errors.New("SELECT INTO is not allowed")
+		}
+		with = n.With
+	default:
+		return fmt.Errorf("statement type %T is not readonly SELECT", stmt)
+	}
+
+	if err := c.collectCTEDefinitions(with, inherited); err != nil {
+		return err
+	}
+
+	bodyScope := cloneScope(inherited)
+	addCTENames(bodyScope, with)
+	root := sqlparser.SQLNode(stmt)
+	return sqlparser.Walk(func(node sqlparser.SQLNode) (bool, error) {
+		switch n := node.(type) {
+		case *sqlparser.CommonTableExpr:
+			return false, nil
+		case *sqlparser.Select:
+			if node == root {
+				return true, nil
+			}
+			if err := c.collectSelectStatement(n, bodyScope); err != nil {
+				return false, err
+			}
+			return false, nil
+		case *sqlparser.Union:
+			if node == root {
+				return true, nil
+			}
+			if err := c.collectSelectStatement(n, bodyScope); err != nil {
+				return false, err
+			}
+			return false, nil
+		case *sqlparser.AliasedTableExpr:
+			if err := c.collectTable(n, bodyScope); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
+	}, root)
+}
+
+func (c *collector) collectCTEDefinitions(with *sqlparser.With, inherited map[string]struct{}) error {
+	if with == nil {
+		return nil
+	}
+	visible := cloneScope(inherited)
+	for _, cte := range with.CTEs {
+		if cte == nil {
+			continue
+		}
+		name := cte.ID.String()
+		definitionScope := cloneScope(visible)
+		if with.Recursive && name != "" {
+			definitionScope[name] = struct{}{}
+		}
+		if err := c.collectSelectStatement(cte.Subquery, definitionScope); err != nil {
+			return err
+		}
+		if name != "" {
+			visible[name] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func (c *collector) collectTable(expr *sqlparser.AliasedTableExpr, scope map[string]struct{}) error {
+	tableName, ok := expr.Expr.(sqlparser.TableName)
+	if !ok {
+		return nil
+	}
+	table := tableName.Name.String()
+	if table == "" {
+		return nil
+	}
+	schema := tableName.Qualifier.String()
+	if schema == "" && table == "dual" {
+		return nil
+	}
+	if schema == "" {
+		if _, isCTE := scope[table]; isCTE {
+			return nil
+		}
+		schema = c.defaultSchema
+		if schema == "" {
+			return fmt.Errorf("unqualified table %q requires a default schema", table)
+		}
+	}
+	if _, ok := c.allowed[schema]; !ok {
+		return fmt.Errorf("schema %q is not allowed", schema)
+	}
+	c.schemaSet[schema] = struct{}{}
+	c.tableSet[table] = struct{}{}
+	return nil
 }
 
 func addCTENames(names map[string]struct{}, with *sqlparser.With) {
@@ -131,6 +197,14 @@ func addCTENames(names map[string]struct{}, with *sqlparser.With) {
 			names[name] = struct{}{}
 		}
 	}
+}
+
+func cloneScope(scope map[string]struct{}) map[string]struct{} {
+	cloned := make(map[string]struct{}, len(scope))
+	for name := range scope {
+		cloned[name] = struct{}{}
+	}
+	return cloned
 }
 
 func sortedKeys(values map[string]struct{}) []string {

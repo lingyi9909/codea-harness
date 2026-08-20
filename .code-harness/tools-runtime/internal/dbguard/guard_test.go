@@ -67,3 +67,65 @@ func TestValidateReadonlyQueryRejectsMissingDefaultSchemaForUnqualifiedTable(t *
 		t.Fatal("expected rejection without default schema")
 	}
 }
+
+func TestValidateReadonlyQueryCTEScopeDoesNotHideOuterPhysicalTable(t *testing.T) {
+	sql := `SELECT *
+FROM order_info
+WHERE EXISTS (
+    WITH order_info AS (SELECT 1)
+    SELECT 1 FROM order_info
+)`
+	info, err := ValidateReadonlyQuery(sql, "order_test", []string{"order_test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(info.Schemas, []string{"order_test"}) {
+		t.Fatalf("Schemas=%v want [order_test]", info.Schemas)
+	}
+	if !reflect.DeepEqual(info.Tables, []string{"order_info"}) {
+		t.Fatalf("Tables=%v want [order_info]", info.Tables)
+	}
+}
+
+func TestValidateReadonlyQueryRejectsNestedCTEShadowSchemaBypass(t *testing.T) {
+	sql := `SELECT *
+FROM order_info
+WHERE EXISTS (
+    WITH order_info AS (SELECT id FROM order_test.audit_log)
+    SELECT id FROM order_info
+)`
+	if _, err := ValidateReadonlyQuery(sql, "other_db", []string{"order_test"}); err == nil {
+		t.Fatal("expected outer physical table to be rejected because default schema is not allowed")
+	}
+}
+
+func TestValidateReadonlyQueryLegalCTEStillPasses(t *testing.T) {
+	info, err := ValidateReadonlyQuery(
+		"WITH recent AS (SELECT id FROM order_info WHERE id=?) SELECT * FROM recent",
+		"order_test",
+		[]string{"order_test"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(info.Tables, []string{"order_info"}) {
+		t.Fatalf("Tables=%v want [order_info]", info.Tables)
+	}
+}
+
+func TestValidateReadonlyQueryCTEBodyPhysicalTableStillCollected(t *testing.T) {
+	info, err := ValidateReadonlyQuery(
+		"WITH recent AS (SELECT id FROM audit_log) SELECT * FROM recent",
+		"order_test",
+		[]string{"order_test"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(info.Schemas, []string{"order_test"}) {
+		t.Fatalf("Schemas=%v want [order_test]", info.Schemas)
+	}
+	if !reflect.DeepEqual(info.Tables, []string{"audit_log"}) {
+		t.Fatalf("Tables=%v want [audit_log]", info.Tables)
+	}
+}
