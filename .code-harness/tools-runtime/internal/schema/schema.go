@@ -58,7 +58,9 @@ func isDiagnosisSchema(schemaBytes []byte) bool {
 
 func validateDiagnosisSemantics(jsonBytes []byte) error {
 	var diagnosis struct {
-		CodeEvidence []struct {
+		Classification string `json:"classification"`
+		NextAction     string `json:"nextAction"`
+		CodeEvidence   []struct {
 			LineStart int `json:"lineStart"`
 			LineEnd   int `json:"lineEnd"`
 		} `json:"codeEvidence"`
@@ -69,6 +71,14 @@ func validateDiagnosisSemantics(jsonBytes []byte) error {
 	for i, evidence := range diagnosis.CodeEvidence {
 		if evidence.LineEnd < evidence.LineStart {
 			return fmt.Errorf("codeEvidence[%d].lineEnd must be >= lineStart", i)
+		}
+	}
+	if diagnosis.Classification == "PRODUCTION_CODE_ERROR" {
+		if len(diagnosis.CodeEvidence) == 0 {
+			return fmt.Errorf("PRODUCTION_CODE_ERROR requires at least one codeEvidence entry")
+		}
+		if diagnosis.NextAction != "GENERATE_FIX_PLAN" {
+			return fmt.Errorf("PRODUCTION_CODE_ERROR requires nextAction GENERATE_FIX_PLAN")
 		}
 	}
 	return nil

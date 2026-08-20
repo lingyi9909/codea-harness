@@ -160,3 +160,26 @@ func TestDiagnosisSchemaEvidenceExtensions(t *testing.T) {
 		}
 	}
 }
+
+func TestProductionCodeDiagnosisRequiresCodeEvidence(t *testing.T) {
+	schemaBytes, err := os.ReadFile("../../../contracts/diagnosis.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invalid := []string{
+		`{"classification":"PRODUCTION_CODE_ERROR","rootCause":"OrderService implementation bug","evidence":["stack trace says OrderServiceImpl"],"nextAction":"GENERATE_FIX_PLAN"}`,
+		`{"classification":"PRODUCTION_CODE_ERROR","rootCause":"OrderService implementation bug","evidence":["stack trace says OrderServiceImpl"],"codeEvidence":[],"nextAction":"GENERATE_FIX_PLAN"}`,
+		`{"classification":"PRODUCTION_CODE_ERROR","rootCause":"OrderService implementation bug","evidence":["source confirms bug"],"codeEvidence":[{"path":"src/main/java/OrderServiceImpl.java","symbol":"OrderServiceImpl.approve","lineStart":10,"lineEnd":20,"reason":"stack trace target"}],"nextAction":"STOP_UNKNOWN"}`,
+	}
+	for _, input := range invalid {
+		if err := ValidateJSON(schemaBytes, []byte(input)); err == nil {
+			t.Fatalf("invalid production diagnosis accepted: %s", input)
+		}
+	}
+
+	valid := []byte(`{"classification":"PRODUCTION_CODE_ERROR","rootCause":"OrderService implementation bug","evidence":["source confirms bug"],"codeEvidence":[{"path":"src/main/java/OrderServiceImpl.java","symbol":"OrderServiceImpl.approve","lineStart":10,"lineEnd":20,"reason":"stack trace target"}],"nextAction":"GENERATE_FIX_PLAN"}`)
+	if err := ValidateJSON(schemaBytes, valid); err != nil {
+		t.Fatalf("valid production diagnosis rejected: %v", err)
+	}
+}

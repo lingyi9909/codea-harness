@@ -21,7 +21,7 @@ output_schema: .code-harness/contracts/diagnosis.schema.json
 
 ## 目标
 
-从测试报告、stdout/stderr、应用日志、可选 Database Evidence 中提取失败信号，使用受控 Code Navigation 读取实际实现和调用链，在证据充分后产出 Diagnosis。不得只凭日志或模型推断把问题定为生产代码缺陷。
+保留原有 Failure Classification 能力，在此基础上关联 Surefire、stdout/stderr、应用日志、可选 Database Evidence 和 Code Navigation。先按原有确定性优先级完成故障分类；只有准备判定生产代码问题时，才进入 Code Navigation evidence gate。不得只凭日志或模型推断把问题定为生产代码缺陷。
 
 ## 输入
 
@@ -48,17 +48,62 @@ db_describe_table
 db_query_readonly
 ```
 
-## Evidence-first 诊断顺序
+## Failure Signals 与原有分类规则
 
-1. 从 Surefire 结构化提取 `failedTests`，不得从自然语言 evidence 猜测。
-2. 从 report/log 提取 exception、message、stack frame、project file:line、traceId、业务实际值等 Failure Signals。
-3. 从 Failure Signals 提取项目内 `suspectSymbols`。
-4. Stack Trace 指向项目内 `file:line` 时，在声称代码根因前 **MUST `read_code`** 该位置，并把实际读取范围写入 `codeEvidence`。
-5. suspect 是 interface/抽象类型时，先 `find_implementations`，再 `read_code` 实现；不能只看接口猜实现行为。
-6. 上游调用者不明确时使用 `find_references`；下游项目内符号不明确时使用 `find_symbol` + `read_code`。
-7. report/log 暴露具体数据状态疑问时，可使用 Database Evidence：未知表结构先 list/describe，查询必须走 `db_query_readonly`，每条 query 有 purpose。
-8. 到达外部 RPC/HTTP/SDK 边界且没有该服务源码时，将依赖写入 `externalDependencies` 并停止向服务端猜测根因。
-9. 证据充分后才输出 Diagnosis；证据仍不足时继续 bounded evidence collection，预算耗尽则 `UNKNOWN / STOP_UNKNOWN`。
+先完整收集 Failure Signals，再按执行模式的固定优先级选择 classification。不得因为后收集到低优先级信号而覆盖高优先级分类。
+
+信号判断规则保持原有语义：
+
+1. **提取失败测试（failedTests）**：从 Surefire XML/TXT 报告中提取所有 `<failure>` / `<error>` 的 `<testcase>`，记录 `testClass` / `testMethod`；类级失败时 `testMethod=null`。不得从自然语言 evidence 猜测。
+2. **编译错误**：stdout/stderr 出现测试编译失败标记 → `TEST_COMPILE_ERROR`，`nextAction: REPAIR_TEST`。
+3. **Spring Context 失败**：`ApplicationContext` 加载失败、Bean 定义缺失、测试配置错误等：
+   - integration-test → `TEST_CONTEXT_ERROR`，`nextAction: REPAIR_TEST`
+   - service-debug 启动阶段 → `SERVICE_START_ERROR`，通常 `nextAction: RESTART_SERVICE`；若最终要转 `GENERATE_FIX_PLAN`，仍必须满足代码证据门禁。
+4. **数据/环境问题**：连接拒绝、未知主机、表缺失、外部服务认证/连通失败等 → `TEST_DATA_OR_ENVIRONMENT_ERROR`，`nextAction: REPORT_ENVIRONMENT`。
+5. **测试代码/断言问题**：Surefire `<failure>` / `<error>` 表明失败来自测试断言逻辑或测试实现 → `TEST_CODE_ERROR`，`nextAction: REPAIR_TEST`。
+6. **生产代码候选问题**：测试本身正确，但业务结果、规则或边界行为异常时，只能先形成 `PRODUCTION_CODE_ERROR` 候选；必须继续进入下述 Code Navigation evidence gate，满足后才可最终确认。
+7. 没有足够证据匹配任何明确分类 → `UNKNOWN / STOP_UNKNOWN`。
+
+### 分类优先级（集成测试模式）
+
+严格按以下顺序判断：
+
+```text
+1 TEST_COMPILE_ERROR
+2 TEST_CONTEXT_ERROR
+3 TEST_DATA_OR_ENVIRONMENT_ERROR
+4 TEST_CODE_ERROR
+5 PRODUCTION_CODE_ERROR
+6 UNKNOWN
+```
+
+因此同一次失败同时包含 assertion、Spring context exception、DB connection exception 时，必须优先归类 `TEST_CONTEXT_ERROR`；若没有 Context 信号但存在 DB/外部连通性信号，则优先 `TEST_DATA_OR_ENVIRONMENT_ERROR`，不能直接进入生产代码诊断。
+
+### 分类优先级（服务调试模式）
+
+严格按以下顺序判断：
+
+```text
+1 SERVICE_START_ERROR
+2 TEST_DATA_OR_ENVIRONMENT_ERROR
+3 PRODUCTION_CODE_ERROR
+4 UNKNOWN
+```
+
+`SERVICE_START_ERROR` 仅在服务调试模式有效；integration-test 中 `@SpringBootTest` 的 Spring Boot 启动失败归类为 `TEST_CONTEXT_ERROR`。
+
+## PRODUCTION_CODE_ERROR 的 Evidence-first 导航门禁
+
+只有前述高优先级分类均不成立、准备判断 `PRODUCTION_CODE_ERROR` 时，才执行以下 Code Navigation：
+
+1. 从 report/log 提取 exception、message、stack frame、project file:line、traceId、业务实际值等 Failure Signals。
+2. 从 Failure Signals 提取项目内 `suspectSymbols`。
+3. Stack Trace 指向项目内 `file:line` 时，在声称生产代码根因前 **MUST `read_code`** 该位置，并把实际读取范围写入 `codeEvidence`。
+4. suspect 是 interface/抽象类型时，先 `find_implementations`，再 `read_code` 实现；不能只看接口猜实现行为。
+5. 上游调用者不明确时使用 `find_references`；下游项目内符号不明确时使用 `find_symbol` + `read_code`。
+6. report/log 暴露具体数据状态疑问时，可使用 Database Evidence：未知表结构先 list/describe，查询必须走 `db_query_readonly`，每条 query 有 purpose。
+7. 到达外部 RPC/HTTP/SDK 边界且没有该服务源码时，将依赖写入 `externalDependencies` 并停止向服务端猜测根因。
+8. 证据充分后才允许输出 `PRODUCTION_CODE_ERROR / GENERATE_FIX_PLAN`；证据仍不足时继续 bounded evidence collection，预算耗尽则 `UNKNOWN / STOP_UNKNOWN`。
 
 ## 调查预算（硬限制）
 
@@ -72,19 +117,17 @@ DB queries <= database.yaml safety.maxQueriesPerDiagnosis
 
 达到任何预算后不得继续对应探索。若已有证据仍不足，必须 `classification: UNKNOWN`、`nextAction: STOP_UNKNOWN`。
 
-## 分类规则
+## 分类与 nextAction
 
-原有分类和 nextAction 语义保持不变：
+原有枚举和语义保持不变：
 
 - `TEST_COMPILE_ERROR` → `REPAIR_TEST`
 - `TEST_CODE_ERROR` → `REPAIR_TEST`
 - `TEST_CONTEXT_ERROR` → `REPAIR_TEST`
 - `TEST_DATA_OR_ENVIRONMENT_ERROR` → `REPORT_ENVIRONMENT`（临时性问题可由 Orchestrator 决定 retry）
-- `SERVICE_START_ERROR` → 服务调试模式下 `RESTART_SERVICE` 或有代码证据时 `GENERATE_FIX_PLAN`
+- `SERVICE_START_ERROR` → 服务调试模式下 `RESTART_SERVICE`；若有充分代码证据也可 `GENERATE_FIX_PLAN`
 - `PRODUCTION_CODE_ERROR` → `GENERATE_FIX_PLAN`
 - `UNKNOWN` → `STOP_UNKNOWN`
-
-`SERVICE_START_ERROR` 仅服务调试模式有效；集成测试中的 Spring Context 启动失败仍是 `TEST_CONTEXT_ERROR`。
 
 ### 生产代码根因硬门禁
 
@@ -99,7 +142,7 @@ nextAction = GENERATE_FIX_PLAN
 
 - 失败现象来自 report/log/test expectation；并且
 - 对关联项目内实现做过 Code Navigation + `read_code`；并且
-- `codeEvidence` 指向实际读取过的实现范围；并且
+- `codeEvidence` 至少有 1 条，且指向实际读取过的实现范围；并且
 - 证据链能解释症状与实现行为之间的因果关系。
 
 只有 DB 状态异常、只有日志异常、只有 stack symbol 名称，都不足以单独确认生产代码根因。
@@ -128,6 +171,9 @@ expected APPROVED / actual PENDING
 ## Golden 行为
 
 ```text
+compile + other signals -> TEST_COMPILE_ERROR
+context + assertion + DB connection signals -> TEST_CONTEXT_ERROR
+DB connection + assertion signals -> TEST_DATA_OR_ENVIRONMENT_ERROR
 stack -> OrderServiceImpl.java:186 -> read_code -> codeEvidence
 interface OrderService -> find_implementations -> implementation read
 expected APPROVED/actual PENDING + DB + rollback log + source -> PRODUCTION_CODE_ERROR
@@ -137,7 +183,8 @@ budget exhausted + insufficient evidence -> UNKNOWN/STOP_UNKNOWN
 
 ## 停止条件
 
-- 已形成充分 evidence-backed Diagnosis。
+- 已按固定优先级形成非生产代码分类 → 直接输出，不为低优先级候选继续无界导航。
+- 已形成充分 evidence-backed `PRODUCTION_CODE_ERROR` Diagnosis。
 - 到达外部依赖边界且无可验证服务端源码。
 - navigation/file/DB budget 任一耗尽。
 - 证据不足且无法继续受控探索 → `UNKNOWN / STOP_UNKNOWN`。
