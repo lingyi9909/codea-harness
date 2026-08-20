@@ -1,0 +1,19 @@
+version: 1
+enabled: false
+environment: TEST
+dialect: mysql
+connection:
+  host: 127.0.0.1
+  port: 3306
+  database: replace_me
+  username: codea_readonly
+  password: replace_me
+  charset: utf8mb4
+safety:
+  allowedSchemas:
+    - replace_me
+  maxRows: 100
+  timeoutSeconds: 10
+  maxQueriesPerDiagnosis: 10
+  allowSchemaDiscovery: true
+  allowReadonlySql: true

@@ -70,7 +70,7 @@ committed = mergeBase → HEAD
 目录结构只读，默认排除 `.git`、`target`、`node_modules`、日志与大型制品。
 
 ### `read_project_file(path) -> FileContent`
-允许 `pom.xml`、Java/test 源码、非生产 application 配置、Maven Wrapper、根 AGENTS；禁止密钥、`.env`、证书/私钥/生产凭据。password/token/secret/accessKey/privateKey 等值返回前脱敏。
+允许 `pom.xml`、Java/test 源码、非生产 application 配置、Maven Wrapper、根 AGENTS；禁止密钥、`.env`、证书/私钥/生产凭据。`.code-harness/database.yaml` 始终禁止通过普通 Agent read tools 读取，即使 environment=TEST/LOCAL。password/token/secret/accessKey/privateKey 等值返回前脱敏。
 
 ---
 
@@ -90,6 +90,15 @@ committed = mergeBase → HEAD
   - 任一不满足时返回非零状态，Orchestrator 不得继续 Review/Test。
 
 Upgrade 必须使用**新版升级包**的 `harness-config.schema.json` 校验迁移后的配置。
+
+
+### Database 本地配置边界
+
+- `.code-harness/database.template.yaml` 是 Framework Managed 的无真实凭据模板，默认 `enabled: false`。
+- `.code-harness/database.yaml` 是可选本机 Project State，必须被 `.code-harness/.gitignore` 忽略；Harness 不自动创建带真实凭据的该文件。
+- Database 配置只允许 `environment: TEST|LOCAL`、`dialect: mysql`；任何 DB 操作前必须由受控 Runtime 使用标准 YAML parser + Draft 2020-12 Schema 校验。
+- `database.yaml` 缺失时仅表示 Database Evidence capability unavailable/disabled，不得导致其他 Harness 能力失败。
+- Project Adapter 和普通 Agent read tools 不得读取、打印或复制其中的连接凭据。
 
 ---
 

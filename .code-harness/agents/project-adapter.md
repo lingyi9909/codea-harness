@@ -17,6 +17,7 @@ skills:
 - 目标项目根目录（Orchestrator 传入）
 - 项目文件：`pom.xml`、Maven Wrapper、`application` 配置、已有测试代码、已有 `AGENTS.md`
 - 本地 Git refs（通过 `git_refs` 读取，用于识别 `review.baseRef`）
+- `.code-harness/database.yaml` 是可选本机 Project State；Project Adapter 不读取其凭据内容、不连接数据库，也不得把其中任何字段复制到 `harness.yaml` / `project.md`
 
 ## 可使用的 Skill
 
@@ -113,6 +114,8 @@ skills:
 
 - 不得修改业务代码、测试代码、`pom.xml` 或 `application` 配置文件
 - 不得连接数据库
+- 不得通过 `read_code` / `read_project_file` 或 Project Adapter 流程读取 `.code-harness/database.yaml`；数据库凭据仅允许受控 Runtime 读取
+- 不得把 `database.yaml` 的 host/username/password 等连接信息复制到 `harness.yaml`、`project.md` 或初始化摘要
 - 不得自动安装 Maven 或任何依赖
 - 不得虚构不能从代码中确认的信息
 - 不得在未经用户明确同意的情况下修改目标项目根目录的 `AGENTS.md`
