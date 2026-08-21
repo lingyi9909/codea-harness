@@ -90,20 +90,11 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 		return Selection{}, fmt.Errorf("target %q is not represented by selected call chains", selection.Target.Symbol)
 	}
 
-	universe := make(map[string]struct{})
 	selection.allChangedFiles = make([]string, 0, len(analysis.ChangedFiles))
 	for _, f := range analysis.ChangedFiles {
 		p := normalizePath(f.Path)
-		if p == "" {
-			continue
-		}
-		universe[p] = struct{}{}
-		selection.allChangedFiles = append(selection.allChangedFiles, p)
-	}
-	for _, f := range analysis.ReviewCoverage.ReviewedFiles {
-		p := normalizePath(f.Path)
-		if p != "" {
-			universe[p] = struct{}{}
+		if p != "" && p != "." {
+			selection.allChangedFiles = append(selection.allChangedFiles, p)
 		}
 	}
 	selection.allChangedFiles = uniqueSorted(selection.allChangedFiles)
@@ -111,11 +102,11 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 	if selection.Mode == "TARGETED" {
 		classes := relatedClasses(*selection.Target, selection.SelectedCallChains)
 		for i, f := range selection.ScopedFiles {
-			p := normalizePath(f)
-			selection.ScopedFiles[i] = p
-			if _, ok := universe[p]; !ok {
-				return Selection{}, fmt.Errorf("scoped file %q is not present in ChangeAnalysis evidence", f)
+			p, err := normalizeScopedPath(f)
+			if err != nil {
+				return Selection{}, err
 			}
+			selection.ScopedFiles[i] = p
 			if !fileMatchesClasses(p, classes) {
 				return Selection{}, fmt.Errorf("scoped file %q is not justified by selected call chain or target relation", f)
 			}
@@ -212,6 +203,10 @@ func decodeSelection(data []byte) (Selection, error) {
 	if err := dec.Decode(&selection); err != nil {
 		return Selection{}, fmt.Errorf("parse review scope selection: %w", err)
 	}
+	var extra any
+	if err := dec.Decode(&extra); err == nil {
+		return Selection{}, errors.New("parse review scope selection: multiple JSON values are not allowed")
+	}
 	return selection, nil
 }
 
@@ -297,6 +292,18 @@ func fileClassName(file string) string {
 		}
 	}
 	return base
+}
+
+func normalizeScopedPath(value string) (string, error) {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if value == "" || strings.HasPrefix(value, "/") || strings.Contains(value, ":") {
+		return "", fmt.Errorf("scoped file %q must be repository-relative", value)
+	}
+	clean := path.Clean(value)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", fmt.Errorf("scoped file %q escapes repository root", value)
+	}
+	return clean, nil
 }
 
 func normalizePath(value string) string {
