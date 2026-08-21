@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ReviewOutput",
-  "description": "代码评审输出，由 Reviewer 在分析变更后产出",
+  "description": "代码评审输出，由 Reviewer 在分析变更后产出。固定用户文案默认中文；Java 类名、方法名、路径和技术名词保持源码原文。",
   "type": "object",
   "additionalProperties": false,
   "required": ["summary", "findings"],
@@ -9,19 +9,21 @@
     "summary": {
       "type": "string",
       "minLength": 1,
-      "description": "评审摘要"
+      "description": "中文评审摘要"
     },
     "findings": {
       "type": "array",
-      "description": "评审发现列表",
+      "description": "评审发现列表。生产代码问题为 PRODUCTION_CODE；测试代码仅允许 TEST_VALIDITY。",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "id",
+          "category",
           "severity",
           "file",
           "line",
+          "problem",
           "evidence",
           "impact",
           "recommendation",
@@ -34,6 +36,10 @@
             "type": "string",
             "minLength": 1,
             "description": "发现编号，如 F-001"
+          },
+          "category": {
+            "enum": ["PRODUCTION_CODE", "TEST_VALIDITY"],
+            "description": "生产代码问题或测试有效性问题"
           },
           "severity": {
             "enum": ["critical", "high", "medium", "low"],
@@ -49,24 +55,29 @@
             "minimum": 1,
             "description": "问题所在行号"
           },
+          "problem": {
+            "type": "string",
+            "minLength": 1,
+            "description": "中文问题描述，只概括已有代码证据"
+          },
           "evidence": {
             "type": "string",
             "minLength": 1,
-            "description": "具体证据（来自 diff 或代码）"
+            "description": "中文证据说明，代码符号和路径保持原文"
           },
           "impact": {
             "type": "string",
             "minLength": 1,
-            "description": "问题影响"
+            "description": "中文问题影响"
           },
           "recommendation": {
             "type": "string",
             "minLength": 1,
-            "description": "最小修复建议"
+            "description": "中文最小修复建议"
           },
           "needsTest": {
             "type": "boolean",
-            "description": "是否需要补充集成测试"
+            "description": "是否需要补充测试"
           },
           "introducedByChange": {
             "type": "boolean",
