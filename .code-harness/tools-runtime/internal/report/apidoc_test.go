@@ -26,7 +26,7 @@ func validApiDocRequestJSON() string {
         "errorCodes":[{"code":"ORDER_NOT_FOUND","scenario":"Order does not exist","status":"CONFIRMED","evidence":["OrderService.java:41"]}],
         "testCoverage":[],"businessNotes":[]
       }]}]}}
-    }`
+    `
 }
 
 func TestDecodeApiDocRequestAndRenderDeterministically(t *testing.T) {
