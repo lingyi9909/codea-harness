@@ -25,9 +25,9 @@ TARGETED 不是 sampled review，也不是历史全量代码审计。它只有�
 ## 输入
 
 - `git_diff` 产生的完整 Review Change Set（committed + staged + unstaged + untracked）
-- `ChangeAnalysis.changedFiles[] / callChains[] / reviewCoverage`
+- `ChangeAnalysis.changedFiles[] / callChains[] / symbolLocations[] / reviewCoverage`
 - TARGETED 时已经过 Runtime 校验的 `ReviewScopeSelection`：`target / selectedCallChains / scopedFiles`
-- 通过 `find_symbol` / `find_references` / `find_implementations` 确定性定位的调用链代码
+- `symbolLocations[]` 必须来自 `find_symbol` / `find_references` / `find_implementations` 的确定性结果，记录 `symbol → exact repository path + role + source`；不得用 basename/className 猜路径
 
 ## FULL 流程
 
@@ -43,13 +43,14 @@ FULL 保持 1.3.2 语义：
 ## TARGETED 流程
 
 1. `analyze-change` 仍先建立**完整 Change Set 元数据与可确认调用链集合**，不能从用户 target 猜测仓库范围。
-2. 根据 target 从 `ChangeAnalysis.callChains[]` 选择真实业务链；`selectedCallChains` 不得由 Renderer 或 Reviewer 编造。
-3. `scopedFiles` 只能来自 selected call-chain / target 与 ChangeAnalysis 的确定性证据关系。
-4. `ReviewScopeSelection` 必须通过 `review-scope.schema.json`，并由 Controlled Runtime 对照 ChangeAnalysis 重新验证。
-5. TARGETED Coverage 只以经机器验证的 `scopedFiles` 为 required set；与 target 无关的 changed files 可以不读，但必须保持为“Change Set 中、未纳入本次定向评审”，不得伪装成 reviewed。
-6. selectedCallChains 对应的项目内部文件必须全部读取；任一 scoped file 缺失 → PARTIAL / MANUAL_ACTION_REQUIRED。
-7. 只有 TARGETED scoped coverage COMPLETE 才允许调用 `review-code`。
-8. 报告必须包含：`mode=TARGETED`、target、Change Set 文件数、本次 Scope 文件数，以及：
+2. 每个 confirmed call-chain symbol 必须同时固化 Code Navigation 的 exact path/role/source 到 `ChangeAnalysis.symbolLocations[]`。
+3. 根据 target 从 `ChangeAnalysis.callChains[]` 选择真实业务链；`selectedCallChains` 不得由 Renderer 或 Reviewer 编造。
+4. `scopedFiles` 只能使用 `symbolLocations[]` 中与 selected target/call-chain 有确定性关系的 exact repository path；多模块同名文件不能互相替代。
+5. `ReviewScopeSelection` 必须通过 `review-scope.schema.json`，并由 Controlled Runtime 对照 ChangeAnalysis 重新验证。
+6. TARGETED Coverage 只以经机器验证的 `scopedFiles` 为 required set；与 target 无关的 changed files 可以不读，但必须保持为“Change Set 中、未纳入本次定向评审”，不得伪装成 reviewed。
+7. selectedCallChains 对应的项目内部文件必须全部读取；任一 scoped file 缺失 → PARTIAL / MANUAL_ACTION_REQUIRED。
+8. 只有 TARGETED scoped coverage COMPLETE 才允许调用 `review-code`。
+9. 报告必须包含：`mode=TARGETED`、target、Change Set 文件数、本次 Scope 文件数，以及：
 
 ```text
 本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。
@@ -57,15 +58,23 @@ FULL 保持 1.3.2 语义：
 
 ## 多调用链选择
 
-当 target 只对应 1 条 confirmed chain 时可自动继续。
+规则固定如下：
 
-当 Service/Class/Method target 对应 2+ 条 confirmed chain 时：
+```text
+Controller CLASS  → 自动包含该 Controller 在当前 Change Set 中全部 confirmed chains
+Controller METHOD → 自动包含该 method 在当前 Change Set 中全部 confirmed chains
+Service/其他下游 target → 若命中 1 条链自动继续；若命中 2+ 条上游业务链才进入用户选择
+```
+
+因此 `harness review OrderController` 不允许用户只挑该 Controller 的部分 method 链；`harness review OrderController.approve` 也不允许漏掉同一 method 的其他 confirmed 分支链。只有 Service 等下游 target 被多个业务入口引用时，才：
 
 - 优先宿主结构化多选；
 - 否则 numbered fallback：`1` / `1,3` / `ALL`；
 - 不得默认 ALL；
 - 空选择/取消 → STOP；
 - Review Scope Selection 不等于 Test/Fix Approval。
+
+最终选择仍必须经过 Runtime `reviewscope.Verify`；提示词层不得绕过机器防漏链规则。
 
 ## `harness review list`
 
@@ -86,7 +95,7 @@ LIST 只展示当前 Change Set 已识别的调用链，不做 Finding Review：
 category = PRODUCTION_CODE
 ```
 
-TARGETED 时 Finding 必须落在经 Runtime 验证的本次 Scope 内；不得借定向评审顺手报告 scope 外问题。
+TARGETED 时 Finding 必须落在经 Runtime 验证的本次 Scope 内；不得借定向评审顺手报告 scope 外问题。Controlled Runtime Renderer 会再次拒绝 `Finding.file` 不属于 verified `scopedFiles` 的正式报告。
 
 ### 测试代码
 
