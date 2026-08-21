@@ -41,10 +41,20 @@ func (n Navigator) runRaw(ctx context.Context, scope string, patterns ...string)
 	return out,nil
 }
 
-func typePatterns(name string) []string { return []string{"class "+name+" { $$$BODY }","public class "+name+" { $$$BODY }","final class "+name+" { $$$BODY }","public final class "+name+" { $$$BODY }","abstract class "+name+" { $$$BODY }","public abstract class "+name+" { $$$BODY }","interface "+name+" { $$$BODY }","public interface "+name+" { $$$BODY }","enum "+name+" { $$$BODY }","public enum "+name+" { $$$BODY }"} }
-func allTypePatterns() []string { return []string{"class $C { $$$BODY }","public class $C { $$$BODY }","final class $C { $$$BODY }","public final class $C { $$$BODY }","abstract class $C { $$$BODY }","public abstract class $C { $$$BODY }","interface $C { $$$BODY }","public interface $C { $$$BODY }","enum $C { $$$BODY }","public enum $C { $$$BODY }"} }
-func methodPatterns(name string) []string { bases:=[]string{"$RET "+name+"($$$ARGS) { $$$BODY }","$RET "+name+"($$$ARGS);"}; mods:=[]string{"public ","protected ","private ","static ","public static ","protected static ","private static ","final ","public final ","abstract ","public abstract ","default "}; out:=append([]string{},bases...); for _,m:=range mods{out=append(out,m+bases[0],m+bases[1])}; return out }
-func allMethodPatterns() []string { bases:=[]string{"$RET $M($$$ARGS) { $$$BODY }","$RET $M($$$ARGS);"}; mods:=[]string{"public ","protected ","private ","static ","public static ","protected static ","private static ","final ","public final ","abstract ","public abstract ","default "}; out:=append([]string{},bases...); for _,m:=range mods{out=append(out,m+bases[0],m+bases[1])}; return out }
+func withAnnotationVariants(base []string) []string {
+	out:=append([]string{},base...)
+	for _,d:=range base {
+		out=append(out,"@$_ANN "+d,"@$_ANN($$$ANNARGS) "+d)
+	}
+	return out
+}
+
+func typePatterns(name string) []string {
+	return withAnnotationVariants([]string{"class "+name+" { $$$BODY }","public class "+name+" { $$$BODY }","final class "+name+" { $$$BODY }","public final class "+name+" { $$$BODY }","abstract class "+name+" { $$$BODY }","public abstract class "+name+" { $$$BODY }","interface "+name+" { $$$BODY }","public interface "+name+" { $$$BODY }","enum "+name+" { $$$BODY }","public enum "+name+" { $$$BODY }"})
+}
+func allTypePatterns() []string { return withAnnotationVariants([]string{"class $C { $$$BODY }","public class $C { $$$BODY }","final class $C { $$$BODY }","public final class $C { $$$BODY }","abstract class $C { $$$BODY }","public abstract class $C { $$$BODY }","interface $C { $$$BODY }","public interface $C { $$$BODY }","enum $C { $$$BODY }","public enum $C { $$$BODY }"}) }
+func methodPatterns(name string) []string { bases:=[]string{"$RET "+name+"($$$ARGS) { $$$BODY }","$RET "+name+"($$$ARGS);"}; mods:=[]string{"public ","protected ","private ","static ","public static ","protected static ","private static ","final ","public final ","abstract ","public abstract ","default "}; out:=append([]string{},bases...); for _,m:=range mods{out=append(out,m+bases[0],m+bases[1])}; return withAnnotationVariants(out) }
+func allMethodPatterns() []string { bases:=[]string{"$RET $M($$$ARGS) { $$$BODY }","$RET $M($$$ARGS);"}; mods:=[]string{"public ","protected ","private ","static ","public static ","protected static ","private static ","final ","public final ","abstract ","public abstract ","default "}; out:=append([]string{},bases...); for _,m:=range mods{out=append(out,m+bases[0],m+bases[1])}; return withAnnotationVariants(out) }
 func fieldPatterns(name string) []string { bases:=[]string{"$T "+name+";","$T "+name+" = $INIT;"}; mods:=[]string{"public ","protected ","private ","static ","public static ","private static ","final ","private final ","public final ","private static final ","public static final "}; out:=append([]string{},bases...); for _,m:=range mods{out=append(out,m+bases[0],m+bases[1])}; return out }
 func annotationPatterns(name string) []string { prefixes:=[]string{"@"+name+" ","@"+name+"($$$ANNARGS) "}; decls:=append(allTypePatterns(),allMethodPatterns()...); var out []string; for _,pre:=range prefixes{for _,d:=range decls{out=append(out,pre+d)}}; return out }
 
@@ -71,7 +81,7 @@ func (n Navigator) FindCallers(ctx context.Context,symbol,scope string)(CallerRe
 		if recv==""{cm.Resolution="CANDIDATE"; candidates=appendUniqueCaller(candidates,seen,cm); continue}
 		declName:=recv; if i:=strings.LastIndex(declName,".");i>=0{declName=declName[i+1:]}; if !identRE.MatchString(declName){cm.Resolution="CANDIDATE"; candidates=appendUniqueCaller(candidates,seen,cm); continue}
 		decls,err:=n.runRaw(ctx,scope,fieldPatterns(declName)...); if err!=nil{return CallerResult{},err}; typeSet:=map[string]bool{}; for _,d:=range decls{if d.Path==call.Path{if typ:=simpleType(fieldType(d.Text,declName));typ!=""{typeSet[typ]=true}}}
-		if len(typeSet)==1{for typ:=range typeSet{cm.ReceiverType=typ; if typ==simpleType(owner){cm.Resolution="CONFIRMED"; confirmed=appendUniqueCaller(confirmed,seen,cm)} /* mismatched receiver type is excluded */ }} else {cm.Resolution="CANDIDATE"; candidates=appendUniqueCaller(candidates,seen,cm)}
+		if len(typeSet)==1{for typ:=range typeSet{cm.ReceiverType=typ; if typ==simpleType(owner){cm.Resolution="CONFIRMED"; confirmed=appendUniqueCaller(confirmed,seen,cm)} }} else {cm.Resolution="CANDIDATE"; candidates=appendUniqueCaller(candidates,seen,cm)}
 	}
 	sortCallers(confirmed); sortCallers(candidates); return CallerResult{Symbol:symbol,Scope:scope,Callers:confirmed,Candidates:candidates},nil
 }
@@ -100,7 +110,7 @@ func findAnnotation(text,name string)string{prefix:="@"+name;for _,a:=range anno
 func declarationText(text string)string{_,rest:=parseLeadingAnnotations(text);return strings.TrimSpace(rest)}
 func declarationLine(text string)string{rest:=declarationText(text);if rest==""{return ""};return normalizeSpace(rest)}
 func methodName(text string)string{line:=declarationLine(text);open:=strings.Index(line,"(");if open<0{return ""};before:=strings.TrimSpace(line[:open]);parts:=strings.Fields(before);if len(parts)==0{return ""};return parts[len(parts)-1]}
-func methodParts(text,name string)(sig,ret string){line:=declarationLine(text);needle:=name+"(";i:=strings.Index(line,needle);if i<0{return "",""};open:=i+len(name);close:=balancedClose(line,open);if close<0{return "",""};params:=strings.TrimSpace(line[open+1:close]);sig=name+"("+normalizeSpace(params)+")";before:=strings.TrimSpace(line[:i]);parts:=strings.Fields(before);if len(parts)>0{ret=parts[len(parts)-1]};return sig,ret}
+func methodParts(text,name string)(sig,ret string){line:=declarationLine(text);needle:=name+"(";i:=strings.Index(line,needle);if i<0{return "",""};open:=i+len(name);close:=balancedClose(line,open);if close<0{return "",""};params:=strings.TrimSpace(line[open+1:close]);if params==""{sig=name+"()"}else{sig=name+"("+normalizeSpace(params)+")"};before:=strings.TrimSpace(line[:i]);parts:=strings.Fields(before);if len(parts)>0{ret=parts[len(parts)-1]};return sig,ret}
 func fieldName(text string)string{line:=declarationLine(text);line=strings.TrimSuffix(strings.TrimSpace(line),";");if i:=strings.Index(line,"=");i>=0{line=strings.TrimSpace(line[:i])};parts:=strings.Fields(line);if len(parts)==0{return ""};return parts[len(parts)-1]}
 func fieldType(text,name string)string{line:=declarationLine(text);i:=strings.Index(line,name);if i<0{return ""};before:=strings.TrimSpace(line[:i]);parts:=strings.Fields(before);if len(parts)==0{return ""};return parts[len(parts)-1]}
 func makeTypeInfo(symbol string,m rawMatch,name string)SymbolInfo{kind,_:=typeKindAndName(m.Text);return SymbolInfo{Symbol:symbol,Kind:kind,DeclaringType:name,Signature:typeSignature(m.Text,name),Annotations:annotations(m.Text),Path:m.Path,LineStart:m.StartLine,LineEnd:m.EndLine}}
