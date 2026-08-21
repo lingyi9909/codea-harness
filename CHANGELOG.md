@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 - 2026-08-21
+
+- **Release Packaging Fix**：Windows Release 拆分为 install / upgrade 双 ZIP，新增 `RELEASE-MANIFEST.json`，Upgrade Preflight 对不完整正式包一次性列出全部缺失项并提示不要使用 GitHub Source Code；不改变既有 staged upgrade / Project State / rollback / running-exe replacement 核心语义。
+
 ## 1.3.0 - 2026-08-21
 
 - **Review Report Persistence**：Review/Test 的 Review 阶段新增受控、确定性的 `review.md` 持久化，覆盖 PASSED / FAILED / MANUAL_ACTION_REQUIRED，模型不得自由生成最终报告。
