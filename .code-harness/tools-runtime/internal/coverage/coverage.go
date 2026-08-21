@@ -13,12 +13,18 @@ type Result struct {
 }
 
 func Evaluate(changed, reviewed, unresolved []string) Result {
+	return EvaluateRequired(changed, reviewed, unresolved)
+}
+
+// EvaluateRequired machine-checks exactly the files required by the declared review scope.
+// FULL passes the complete changed-file set; TARGETED passes only verified scopedFiles.
+func EvaluateRequired(required, reviewed, unresolved []string) Result {
 	seen := make(map[string]bool, len(reviewed))
 	for _, p := range reviewed {
 		seen[p] = true
 	}
 	var missing []string
-	for _, p := range changed {
+	for _, p := range required {
 		if !seen[p] {
 			missing = append(missing, p)
 		}
@@ -63,7 +69,7 @@ func VerifyAnalysisJSON(data []byte) (Result, error) {
 	for _, s := range a.ReviewCoverage.UnresolvedSymbols {
 		unresolved = append(unresolved, s.Symbol)
 	}
-	r := Evaluate(changed, reviewed, unresolved)
+	r := EvaluateRequired(changed, reviewed, unresolved)
 	if a.ReviewCoverage.Status != r.Status {
 		return r, fmt.Errorf("reviewCoverage.status=%s but machine status=%s", a.ReviewCoverage.Status, r.Status)
 	}
