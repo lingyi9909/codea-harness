@@ -156,37 +156,65 @@ func safeHarnessPath(p, requiredChild string) bool {
 
 func runNav(args []string) error {
 	if len(args) == 0 {
-		return errors.New("nav requires find-symbol, find-references, or find-implementations")
+		return errors.New("nav requires find-symbol, find-references, find-implementations, get-symbol-info, find-by-annotation, or find-callers")
 	}
 	action := args[0]
 	fs := flag.NewFlagSet("nav", flag.ContinueOnError)
 	symbol := fs.String("symbol", "", "Java symbol")
+	annotation := fs.String("annotation", "", "Java annotation name")
 	scope := fs.String("scope", "src/main/java", "repository-relative scope")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if *symbol == "" {
-		return errors.New("nav requires --symbol")
+	if fs.NArg() != 0 {
+		return errors.New("nav does not accept positional query arguments")
 	}
 	n := nav.Navigator{RepoRoot: ".", AstGrepPath: filepath.Join(".code-harness", "bin", "ast-grep.exe")}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	var r nav.Result
+	var output any
 	var err error
 	switch action {
 	case "find-symbol":
-		r, err = n.FindSymbol(ctx, *symbol, *scope)
+		if *symbol == "" {
+			return errors.New("nav find-symbol requires --symbol")
+		}
+		output, err = n.FindSymbol(ctx, *symbol, *scope)
 	case "find-references":
-		r, err = n.FindReferences(ctx, *symbol, *scope)
+		if *symbol == "" {
+			return errors.New("nav find-references requires --symbol")
+		}
+		output, err = n.FindReferences(ctx, *symbol, *scope)
 	case "find-implementations":
-		r, err = n.FindImplementations(ctx, *symbol, *scope)
+		if *symbol == "" {
+			return errors.New("nav find-implementations requires --symbol")
+		}
+		output, err = n.FindImplementations(ctx, *symbol, *scope)
+	case "get-symbol-info":
+		if *symbol == "" {
+			return errors.New("nav get-symbol-info requires --symbol")
+		}
+		output, err = n.GetSymbolInfo(ctx, *symbol, *scope)
+	case "find-by-annotation":
+		if *annotation == "" {
+			return errors.New("nav find-by-annotation requires --annotation")
+		}
+		if *symbol != "" {
+			return errors.New("nav find-by-annotation accepts only --annotation and --scope")
+		}
+		output, err = n.FindByAnnotation(ctx, *annotation, *scope)
+	case "find-callers":
+		if *symbol == "" {
+			return errors.New("nav find-callers requires --symbol")
+		}
+		output, err = n.FindCallers(ctx, *symbol, *scope)
 	default:
 		return fmt.Errorf("unknown nav action %q", action)
 	}
 	if err != nil {
 		return err
 	}
-	return writeJSONAndStatus(r, true)
+	return writeJSONAndStatus(output, true)
 }
 
 type dbQueryInput struct {

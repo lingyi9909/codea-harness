@@ -16,6 +16,9 @@ codea-harness-tools.exe validate --schema <under .code-harness/contracts> --inpu
 codea-harness-tools.exe nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-references --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
+codea-harness-tools.exe nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
+codea-harness-tools.exe nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
+codea-harness-tools.exe nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe db ping --run-id <id>
 codea-harness-tools.exe db list-tables --schema <schema> --run-id <id>
 codea-harness-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
@@ -23,7 +26,7 @@ codea-harness-tools.exe db query --input .code-harness/runs/<runId>/requests/<fi
 codea-harness-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
-未知子命令、目录逃逸、非法 symbol/identifier 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。`db query` 不接受 raw SQL CLI 参数。
+未知子命令、目录逃逸、非法 symbol/identifier/annotation name 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。`db query` 不接受 raw SQL CLI 参数。
 
 ### Review Report 受控入口
 
@@ -75,7 +78,28 @@ committed = mergeBase → HEAD
 
 定位接口实现/继承实现。例如 `OrderService -> OrderServiceImpl`。无法定位时必须进入 `reviewCoverage.unresolvedSymbols`，不得猜路径。
 
-三个导航 Contract 的 scope 都必须是仓库内相对路径；第一版只支持 Java。不得无界扫描整个仓库，调用方应从与 Change Set 直接相关的模块/source scope 开始。
+### `get_symbol_info(symbol, scope?) -> SymbolInfo`
+
+确定性读取 Java 符号声明信息，支持 `CLASS / INTERFACE / ENUM / METHOD / FIELD`。至少返回 `symbol / kind / declaringType / signature / annotations / path / lineStart / lineEnd`；METHOD/FIELD 可返回 `returnType`。当同一输入存在多个可匹配声明（例如重载方法）时必须返回 `AMBIGUOUS_SYMBOL`，Runtime 不得猜选其中一个。
+
+### `find_by_annotation(annotationName, scope?) -> AnnotationSearchResult`
+
+按 Java Annotation 名称查找声明，主要用于 API discovery。输入只允许 `annotationName + scope`，例如 `RestController / RequestMapping / PostMapping / GetMapping`；返回 `symbol / kind / annotation / path / lineStart / lineEnd`。
+
+禁止 Agent 输入或 Runtime 暴露：
+
+```text
+ast-grep raw rule
+raw pattern
+regex
+arbitrary query language
+```
+
+### `find_callers(symbol, scope?) -> CallerSearchResult`
+
+定位项目源码中 method symbol 的直接调用位置，返回 `callerSymbol / path / line`。V1.3 仅保证现有 ast-grep 可确定识别的静态源码范围，不承诺运行时多态、反射、复杂泛型语义或 Spring Proxy 解析。
+
+六个导航 Contract 的 scope 都必须是仓库内相对路径；第一版只支持 Java。目录逃逸必须拒绝。不得无界扫描整个仓库，调用方应从与 Change Set / API target 直接相关的 module/source scope 开始。所有导航都只能通过 Controlled Runtime 的固定 ast-grep pattern 执行，Agent/Skill 不得直接调用 ast-grep 或传入 rule/pattern/regex/query language。
 
 ### `read_test_report(runId) -> TestReportBundle`
 仅读取配置 `reportDir` 下本次 Maven 运行产物。
@@ -259,7 +283,7 @@ review:
 
 ```text
 备份完整旧 Harness
-→ 从旧 Harness构建 stage
+→ 从旧 Harness 构建 stage
 → stage 中删除全部 Framework Managed
 → 仅复制新版 Framework Managed 到 stage
 → 执行 registered migration
