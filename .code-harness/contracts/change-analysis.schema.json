@@ -81,6 +81,26 @@
         }
       }
     },
+    "symbolLocations": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Code Navigation 已确定性解析的 symbol → exact repository-relative path 证据。TARGETED Runtime 只允许使用这里的精确路径建立 scopedFiles；不得用 basename/className 猜路径。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["symbol", "path", "role", "source"],
+        "properties": {
+          "symbol": { "type": "string", "minLength": 1 },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
+          },
+          "role": { "$ref": "#/$defs/fileRole" },
+          "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS"] }
+        }
+      }
+    },
     "externalDependencies": {
       "type": "array",
       "description": "已确认的外部边界（RPC/MQ/Cache/第三方 SDK 等），导航到这里允许停止。",
