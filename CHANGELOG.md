@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 - 2026-08-21
+
+- **Review Report Persistence**：Review/Test 的 Review 阶段新增受控、确定性的 `review.md` 持久化，覆盖 PASSED / FAILED / MANUAL_ACTION_REQUIRED，模型不得自由生成最终报告。
+- **Frontend API Documentation**：新增 `harness api-doc Controller / Controller.method / changed`、API target selection、Evidence-backed API Contract 与 deterministic `api-doc.md` renderer。
+- **Lightweight Code Navigation**：新增 `get_symbol_info`、`find_by_annotation`、`find_callers`，继续通过固定 ast-grep Runtime Contract 提供 Java 静态源码导航。
+
 ## 1.2.0 - 2026-08-20
 
 - **Test Target Selection**：多 Controller 变更时由用户明确选择本次测试目标，Selection 独立于 Approval，并将 selected-only scope 贯穿 Existing Test、计划、生成与执行。
