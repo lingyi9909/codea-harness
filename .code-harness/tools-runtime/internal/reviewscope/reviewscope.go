@@ -50,9 +50,9 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	var analysis changeAnalysis
-	if err := json.Unmarshal(changeAnalysisJSON, &analysis); err != nil {
-		return Selection{}, fmt.Errorf("parse change analysis: %w", err)
+	analysis, err := parseChangeAnalysis(changeAnalysisJSON)
+	if err != nil {
+		return Selection{}, err
 	}
 
 	if selection.Mode != "FULL" && selection.Mode != "TARGETED" {
@@ -141,6 +141,26 @@ func ComputeCoverage(selection Selection, reviewedFiles []string) CoverageResult
 		status = "PARTIAL"
 	}
 	return CoverageResult{Status: status, MissingFiles: missing}
+}
+
+func ComputeCoverageFromAnalysis(selection Selection, changeAnalysisJSON []byte) (CoverageResult, error) {
+	analysis, err := parseChangeAnalysis(changeAnalysisJSON)
+	if err != nil {
+		return CoverageResult{}, err
+	}
+	reviewed := make([]string, 0, len(analysis.ReviewCoverage.ReviewedFiles))
+	for _, file := range analysis.ReviewCoverage.ReviewedFiles {
+		reviewed = append(reviewed, file.Path)
+	}
+	return ComputeCoverage(selection, reviewed), nil
+}
+
+func parseChangeAnalysis(data []byte) (changeAnalysis, error) {
+	var analysis changeAnalysis
+	if err := json.Unmarshal(data, &analysis); err != nil {
+		return changeAnalysis{}, fmt.Errorf("parse change analysis: %w", err)
+	}
+	return analysis, nil
 }
 
 func decodeSelection(data []byte) (Selection, error) {
