@@ -24,6 +24,10 @@ func TestTargetedReviewIntentContract(t *testing.T) {
 		"harness review list` → LIST",
 		"harness review <Class>` → TARGETED CLASS",
 		"harness review <Class.method>` → TARGETED METHOD",
+		"Controller CLASS",
+		"Controller METHOD",
+		"自动包含",
+		"Service/其他下游 target",
 		"不得默认 `ALL`",
 		"Review Scope Selection 不等于 Test/Fix Approval",
 	} {
@@ -55,6 +59,11 @@ func TestAnalyzeChangeDefinesFullAndTargetedCoverage(t *testing.T) {
 		"review-scope.schema.json",
 		"scopedFiles",
 		"selectedCallChains",
+		"symbolLocations",
+		"exact repository path",
+		"Controller CLASS",
+		"Controller METHOD",
+		"Service/其他下游 target",
 		"不允许 sampled review",
 	} {
 		if !strings.Contains(text, want) {
@@ -70,6 +79,8 @@ func TestReviewerDoesNotPromoteTargetedToFullReview(t *testing.T) {
 		"本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审",
 		"selectedCallChains",
 		"scopedFiles",
+		"symbolLocations",
+		"exact repository path",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("reviewer missing targeted safety rule %q", want)
