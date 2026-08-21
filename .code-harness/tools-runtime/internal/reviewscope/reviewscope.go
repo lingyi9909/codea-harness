@@ -34,6 +34,14 @@ type CoverageResult struct {
 	UnresolvedSymbols []string `json:"unresolvedSymbols,omitempty"`
 }
 
+type SymbolLocation struct {
+	Symbol string `json:"symbol"`
+	Path   string `json:"path"`
+	Role   string `json:"role"`
+	Source string `json:"source"`
+	From   string `json:"from,omitempty"`
+}
+
 type unresolvedSymbol struct {
 	Symbol string `json:"symbol"`
 	From   string `json:"from"`
@@ -43,13 +51,19 @@ type changeAnalysis struct {
 	ChangedFiles []struct {
 		Path string `json:"path"`
 	} `json:"changedFiles"`
-	CallChains []CallChain `json:"callChains"`
-	ReviewCoverage struct {
+	CallChains      []CallChain      `json:"callChains"`
+	SymbolLocations []SymbolLocation `json:"symbolLocations"`
+	ReviewCoverage  struct {
 		ReviewedFiles []struct {
 			Path string `json:"path"`
 		} `json:"reviewedFiles"`
 		UnresolvedSymbols []unresolvedSymbol `json:"unresolvedSymbols"`
 	} `json:"reviewCoverage"`
+}
+
+type navigationEvidence struct {
+	bySymbol  map[string]SymbolLocation
+	locations []SymbolLocation
 }
 
 func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
@@ -81,15 +95,6 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 		}
 	}
 
-	for _, selected := range selection.SelectedCallChains {
-		if !containsChain(analysis.CallChains, selected) {
-			return Selection{}, fmt.Errorf("selected call chain %q is not present in validated ChangeAnalysis", selected.EntryPoint)
-		}
-	}
-	if selection.Mode == "TARGETED" && !targetInChains(*selection.Target, selection.SelectedCallChains) {
-		return Selection{}, fmt.Errorf("target %q is not represented by selected call chains", selection.Target.Symbol)
-	}
-
 	selection.allChangedFiles = make([]string, 0, len(analysis.ChangedFiles))
 	for _, f := range analysis.ChangedFiles {
 		p := normalizePath(f.Path)
@@ -99,23 +104,53 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 	}
 	selection.allChangedFiles = uniqueSorted(selection.allChangedFiles)
 
-	if selection.Mode == "TARGETED" {
-		classes := relatedClasses(*selection.Target, selection.SelectedCallChains)
-		for i, f := range selection.ScopedFiles {
-			p, err := normalizeScopedPath(f)
-			if err != nil {
-				return Selection{}, err
-			}
-			selection.ScopedFiles[i] = p
-			if !fileMatchesClasses(p, classes) {
-				return Selection{}, fmt.Errorf("scoped file %q is not justified by selected call chain or target relation", f)
-			}
+	if selection.Mode == "FULL" {
+		return selection, nil
+	}
+
+	for _, selected := range selection.SelectedCallChains {
+		if !containsChain(analysis.CallChains, selected) {
+			return Selection{}, fmt.Errorf("selected call chain %q is not present in validated ChangeAnalysis", selected.EntryPoint)
 		}
-		selection.ScopedFiles = uniqueSorted(selection.ScopedFiles)
-		for class := range classes {
-			if !classCoveredByFiles(class, selection.ScopedFiles) {
-				return Selection{}, fmt.Errorf("selected internal symbol class %q has no scoped file", class)
-			}
+	}
+	if !targetInChains(*selection.Target, selection.SelectedCallChains) {
+		return Selection{}, fmt.Errorf("target %q is not represented by selected call chains", selection.Target.Symbol)
+	}
+
+	evidence, err := buildNavigationEvidence(analysis.SymbolLocations)
+	if err != nil {
+		return Selection{}, err
+	}
+	targetRole, err := resolveTargetRole(*selection.Target, evidence)
+	if err != nil {
+		return Selection{}, err
+	}
+	if targetRole == "Controller" {
+		if err := verifyAllControllerChains(*selection.Target, selection.SelectedCallChains, analysis.CallChains); err != nil {
+			return Selection{}, err
+		}
+	}
+
+	allowedPaths, requiredPaths, err := exactScopePaths(*selection.Target, selection.SelectedCallChains, evidence)
+	if err != nil {
+		return Selection{}, err
+	}
+	selectedPaths := make(map[string]struct{}, len(selection.ScopedFiles))
+	for i, f := range selection.ScopedFiles {
+		p, err := normalizeScopedPath(f)
+		if err != nil {
+			return Selection{}, err
+		}
+		selection.ScopedFiles[i] = p
+		if _, ok := allowedPaths[p]; !ok {
+			return Selection{}, fmt.Errorf("scoped file %q is not an exact Code Navigation path for the selected target/call chains", f)
+		}
+		selectedPaths[p] = struct{}{}
+	}
+	selection.ScopedFiles = uniqueSorted(selection.ScopedFiles)
+	for required := range requiredPaths {
+		if _, ok := selectedPaths[required]; !ok {
+			return Selection{}, fmt.Errorf("selected internal symbol exact Code Navigation path %q is missing from scopedFiles", required)
 		}
 	}
 
@@ -163,6 +198,155 @@ func ComputeCoverageFromAnalysis(selection Selection, changeAnalysisJSON []byte)
 	return result, nil
 }
 
+func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, error) {
+	if len(locations) == 0 {
+		return navigationEvidence{}, errors.New("TARGETED review requires ChangeAnalysis.symbolLocations from Code Navigation")
+	}
+	e := navigationEvidence{bySymbol: make(map[string]SymbolLocation), locations: make([]SymbolLocation, 0, len(locations))}
+	for _, raw := range locations {
+		symbol := strings.TrimSpace(raw.Symbol)
+		if symbol == "" {
+			return navigationEvidence{}, errors.New("navigation symbol location requires symbol")
+		}
+		p, err := normalizeScopedPath(raw.Path)
+		if err != nil {
+			return navigationEvidence{}, fmt.Errorf("navigation symbol %q: %w", symbol, err)
+		}
+		loc := raw
+		loc.Symbol = symbol
+		loc.Path = p
+		loc.Role = strings.TrimSpace(loc.Role)
+		loc.From = strings.TrimSpace(loc.From)
+		if previous, exists := e.bySymbol[symbol]; exists {
+			if previous.Path != loc.Path || previous.Role != loc.Role {
+				return navigationEvidence{}, fmt.Errorf("ambiguous Code Navigation path for symbol %q: %q vs %q", symbol, previous.Path, loc.Path)
+			}
+			continue
+		}
+		e.bySymbol[symbol] = loc
+		e.locations = append(e.locations, loc)
+	}
+	return e, nil
+}
+
+func resolveTargetRole(target Target, evidence navigationEvidence) (string, error) {
+	if target.Kind == "METHOD" {
+		loc, ok := evidence.bySymbol[strings.TrimSpace(target.Symbol)]
+		if !ok {
+			return "", fmt.Errorf("target %q has no exact Code Navigation path evidence", target.Symbol)
+		}
+		return loc.Role, nil
+	}
+
+	targetClass := className(target.Symbol, "CLASS")
+	roles := map[string]struct{}{}
+	paths := map[string]struct{}{}
+	for _, loc := range evidence.locations {
+		if className(loc.Symbol, "METHOD") != targetClass && className(loc.Symbol, "CLASS") != targetClass {
+			continue
+		}
+		roles[loc.Role] = struct{}{}
+		paths[loc.Path] = struct{}{}
+	}
+	if len(roles) == 0 {
+		return "", fmt.Errorf("target %q has no exact Code Navigation path evidence", target.Symbol)
+	}
+	if len(roles) != 1 || len(paths) != 1 {
+		return "", fmt.Errorf("target %q has ambiguous Code Navigation role/path evidence", target.Symbol)
+	}
+	for role := range roles {
+		return role, nil
+	}
+	return "", errors.New("unreachable target role")
+}
+
+func exactScopePaths(target Target, chains []CallChain, evidence navigationEvidence) (map[string]struct{}, map[string]struct{}, error) {
+	nodes := selectedNodes(chains)
+	allowed := make(map[string]struct{})
+	required := make(map[string]struct{})
+	for node := range nodes {
+		loc, ok := evidence.bySymbol[node]
+		if !ok {
+			return nil, nil, fmt.Errorf("selected internal symbol %q has no exact Code Navigation path evidence", node)
+		}
+		allowed[loc.Path] = struct{}{}
+		required[loc.Path] = struct{}{}
+	}
+	for _, loc := range evidence.locations {
+		_, symbolSelected := nodes[loc.Symbol]
+		_, fromSelected := nodes[loc.From]
+		targetClassRelated := target.Kind == "CLASS" && className(loc.Symbol, "METHOD") == className(target.Symbol, "CLASS")
+		if symbolSelected || fromSelected || targetClassRelated {
+			allowed[loc.Path] = struct{}{}
+		}
+	}
+	return allowed, required, nil
+}
+
+func verifyAllControllerChains(target Target, selected, all []CallChain) error {
+	required := make([]CallChain, 0)
+	for _, chain := range all {
+		if target.Kind == "METHOD" {
+			if strings.TrimSpace(chain.EntryPoint) == strings.TrimSpace(target.Symbol) {
+				required = append(required, chain)
+			}
+			continue
+		}
+		if className(chain.EntryPoint, "METHOD") == className(target.Symbol, "CLASS") {
+			required = append(required, chain)
+		}
+	}
+	if len(required) == 0 {
+		return fmt.Errorf("Controller target %q has no confirmed call chains", target.Symbol)
+	}
+	if !sameChainSet(selected, required) {
+		return fmt.Errorf("Controller target %q must include all confirmed Controller chains; selected=%d required=%d", target.Symbol, len(selected), len(required))
+	}
+	return nil
+}
+
+func sameChainSet(a, b []CallChain) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]int, len(a))
+	for _, chain := range a {
+		set[chainKey(chain)]++
+	}
+	for _, chain := range b {
+		key := chainKey(chain)
+		if set[key] == 0 {
+			return false
+		}
+		set[key]--
+	}
+	return true
+}
+
+func chainKey(chain CallChain) string {
+	parts := []string{strings.TrimSpace(chain.EntryPoint)}
+	for _, node := range chain.Chain {
+		parts = append(parts, strings.TrimSpace(node))
+	}
+	return strings.Join(parts, "\x00")
+}
+
+func selectedNodes(chains []CallChain) map[string]struct{} {
+	nodes := make(map[string]struct{})
+	for _, chain := range chains {
+		entry := strings.TrimSpace(chain.EntryPoint)
+		if entry != "" {
+			nodes[entry] = struct{}{}
+		}
+		for _, node := range chain.Chain {
+			node = strings.TrimSpace(node)
+			if node != "" {
+				nodes[node] = struct{}{}
+			}
+	}
+	return nodes
+}
+
 func relevantUnresolved(selection Selection, unresolved []unresolvedSymbol) []string {
 	if selection.Mode == "FULL" {
 		values := make([]string, 0, len(unresolved))
@@ -171,12 +355,7 @@ func relevantUnresolved(selection Selection, unresolved []unresolvedSymbol) []st
 		}
 		return uniqueSorted(values)
 	}
-	nodes := make(map[string]struct{})
-	for _, chain := range selection.SelectedCallChains {
-		for _, node := range append([]string{chain.EntryPoint}, chain.Chain...) {
-			nodes[strings.TrimSpace(node)] = struct{}{}
-		}
-	}
+	nodes := selectedNodes(selection.SelectedCallChains)
 	values := make([]string, 0)
 	for _, item := range unresolved {
 		_, symbolSelected := nodes[strings.TrimSpace(item.Symbol)]
@@ -244,21 +423,6 @@ func targetInChains(target Target, chains []CallChain) bool {
 	return false
 }
 
-func relatedClasses(target Target, chains []CallChain) map[string]struct{} {
-	classes := map[string]struct{}{}
-	if c := className(target.Symbol, target.Kind); c != "" {
-		classes[c] = struct{}{}
-	}
-	for _, chain := range chains {
-		for _, node := range append([]string{chain.EntryPoint}, chain.Chain...) {
-			if c := className(node, "METHOD"); c != "" {
-				classes[c] = struct{}{}
-			}
-		}
-	}
-	return classes
-}
-
 func className(symbol, kind string) string {
 	symbol = strings.TrimSpace(symbol)
 	if symbol == "" {
@@ -269,30 +433,6 @@ func className(symbol, kind string) string {
 		return parts[len(parts)-2]
 	}
 	return parts[len(parts)-1]
-}
-
-func classCoveredByFiles(class string, files []string) bool {
-	for _, file := range files {
-		if fileClassName(file) == class {
-			return true
-		}
-	}
-	return false
-}
-
-func fileMatchesClasses(file string, classes map[string]struct{}) bool {
-	_, ok := classes[fileClassName(file)]
-	return ok
-}
-
-func fileClassName(file string) string {
-	base := path.Base(normalizePath(file))
-	for _, suffix := range []string{".java", ".kt", ".xml", ".yml", ".yaml"} {
-		if strings.HasSuffix(base, suffix) {
-			return strings.TrimSuffix(base, suffix)
-		}
-	}
-	return base
 }
 
 func normalizeScopedPath(value string) (string, error) {
