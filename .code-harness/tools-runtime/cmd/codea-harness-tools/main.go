@@ -100,14 +100,41 @@ func runValidate(args []string) error {
 			return err
 		}
 		out := map[string]any{"status": "VALID", "format": "json"}
-		if filepath.Base(*schemaPath) == "change-analysis.schema.json" {
+		baseSchema := filepath.Base(*schemaPath)
+		if baseSchema == "change-analysis.schema.json" {
 			machine, err := coverage.VerifyAnalysisJSON(ib)
 			if err != nil {
 				return err
 			}
 			out["reviewCoverage"] = machine
 		}
-		if filepath.Base(*schemaPath) == "test-target-selection.schema.json" {
+		if baseSchema == "review-scope.schema.json" {
+			if *changeAnalysisPath == "" {
+				return errors.New("review scope validation requires --change-analysis")
+			}
+			if !safeHarnessPath(*changeAnalysisPath, "") {
+				return errors.New("change analysis path outside .code-harness is not allowed")
+			}
+			changeAnalysisJSON, err := os.ReadFile(*changeAnalysisPath)
+			if err != nil {
+				return err
+			}
+			changeAnalysisSchemaPath := filepath.Join(".code-harness", "contracts", "change-analysis.schema.json")
+			changeAnalysisSchema, err := os.ReadFile(changeAnalysisSchemaPath)
+			if err != nil {
+				return err
+			}
+			if err := schema.ValidateJSON(changeAnalysisSchema, changeAnalysisJSON); err != nil {
+				return err
+			}
+			verifiedScope, machine, err := validateReviewScopeAgainstAnalysis(ib, changeAnalysisJSON)
+			if err != nil {
+				return err
+			}
+			out["reviewScope"] = verifiedScope
+			out["reviewCoverage"] = machine
+		}
+		if baseSchema == "test-target-selection.schema.json" {
 			if *changeAnalysisPath == "" {
 				return errors.New("test target selection validation requires --change-analysis")
 			}
