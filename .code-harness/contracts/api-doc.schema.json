@@ -5,63 +5,19 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["controllers"],
-  "properties": {
-    "controllers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/controller" } }
-  },
+  "properties": {"controllers":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/controller"}}},
   "$defs": {
-    "controller": {
-      "type": "object", "additionalProperties": false, "required": ["name", "apis"],
-      "properties": { "name": {"type":"string","minLength":1}, "apis": {"type":"array","minItems":1,"items":{"$ref":"#/$defs/api"}} }
-    },
-    "api": {
-      "type": "object", "additionalProperties": false,
-      "required": ["title","httpMethod","path","description","request","response","permissions","preconditions","businessFlow","stateTransitions","dataEffects","externalEffects","transactions","idempotency","errorCodes","testCoverage","businessNotes"],
-      "properties": {
-        "title":{"type":"string","minLength":1},
-        "httpMethod":{"enum":["GET","POST","PUT","DELETE","PATCH","OPTIONS","HEAD"]},
-        "path":{"type":"string","minLength":1,"pattern":"^/"},
-        "description":{"type":"string"},
-        "request":{"$ref":"#/$defs/request"},
-        "response":{"$ref":"#/$defs/response"},
-        "permissions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "preconditions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "businessFlow":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "stateTransitions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "dataEffects":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "externalEffects":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "transactions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "idempotency":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "errorCodes":{"type":"array","items":{"$ref":"#/$defs/error"}},
-        "testCoverage":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},
-        "businessNotes":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}}
-      }
-    },
-    "semanticStatement": {
-      "type":"object", "additionalProperties":false, "required":["statement","status","evidence"],
-      "properties": {
-        "statement":{"type":"string","minLength":1},
-        "status":{"enum":["CONFIRMED","INFERRED","UNKNOWN"]},
-        "evidence":{"type":"array","items":{"type":"string","minLength":1}}
-      },
-      "allOf": [
-        {"if":{"properties":{"status":{"enum":["CONFIRMED","INFERRED"]}},"required":["status"]},"then":{"properties":{"evidence":{"minItems":1}}}}
-      ]
-    },
-    "request": {"type":"object","additionalProperties":false,"required":["fields","example"],"properties":{"fields":{"type":"array","items":{"$ref":"#/$defs/requestField"}},"example":{}}},
-    "requestField": {
-      "type":"object","additionalProperties":false,"required":["name","type","required","description","validation","enumValues"],
-      "properties":{"name":{"type":"string","minLength":1},"type":{"type":"string","minLength":1},"required":{"type":"boolean"},"description":{"type":"string"},"validation":{"type":"array","items":{"type":"string","minLength":1}},"enumValues":{"type":"array","items":{"$ref":"#/$defs/enumValue"}},"fields":{"type":"array","items":{"$ref":"#/$defs/requestField"}}}
-    },
-    "response": {"type":"object","additionalProperties":false,"required":["fields","example"],"properties":{"fields":{"type":"array","items":{"$ref":"#/$defs/responseField"}},"example":{}}},
-    "responseField": {
-      "type":"object","additionalProperties":false,"required":["name","type","description","enumValues"],
-      "properties":{"name":{"type":"string","minLength":1},"type":{"type":"string","minLength":1},"description":{"type":"string"},"enumValues":{"type":"array","items":{"$ref":"#/$defs/enumValue"}},"fields":{"type":"array","items":{"$ref":"#/$defs/responseField"}}}
-    },
-    "enumValue": {"type":"object","additionalProperties":false,"required":["value","description"],"properties":{"value":{"type":["string","number"]},"description":{"type":"string"}}},
-    "error": {
-      "type":"object","additionalProperties":false,"required":["code","scenario","status","evidence"],
-      "properties":{"code":{"type":["string","integer"]},"scenario":{"type":"string","minLength":1},"status":{"enum":["CONFIRMED","INFERRED","UNKNOWN"]},"evidence":{"type":"array","items":{"type":"string","minLength":1}}},
-      "allOf":[{"if":{"properties":{"status":{"enum":["CONFIRMED","INFERRED"]}},"required":["status"]},"then":{"properties":{"evidence":{"minItems":1}}}}]
-    }
+    "controller":{"type":"object","additionalProperties":false,"required":["name","apis"],"properties":{"name":{"type":"string","minLength":1},"apis":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/api"}}}},
+    "api":{"type":"object","additionalProperties":false,"required":["title","httpMethod","path","description","request","response","permissions","preconditions","businessFlow","stateTransitions","dataEffects","externalEffects","transactions","idempotency","errorCodes","testCoverage","businessNotes"],"properties":{
+      "title":{"type":"string","minLength":1},"httpMethod":{"enum":["GET","POST","PUT","DELETE","PATCH","OPTIONS","HEAD"]},"path":{"type":"string","minLength":1,"pattern":"^/"},"description":{"type":"string"},"request":{"$ref":"#/$defs/request"},"response":{"$ref":"#/$defs/response"},
+      "permissions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"preconditions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"businessFlow":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"stateTransitions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"dataEffects":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"externalEffects":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"transactions":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"idempotency":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"errorCodes":{"type":"array","items":{"$ref":"#/$defs/error"}},"testCoverage":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}},"businessNotes":{"type":"array","items":{"$ref":"#/$defs/semanticStatement"}}
+    }},
+    "semanticStatement":{"type":"object","additionalProperties":false,"required":["statement","status","evidence"],"properties":{"statement":{"type":"string","minLength":1},"status":{"enum":["CONFIRMED","INFERRED","UNKNOWN"]},"evidence":{"type":"array","items":{"type":"string","minLength":1}}},"allOf":[{"if":{"properties":{"status":{"enum":["CONFIRMED","INFERRED"]}},"required":["status"]},"then":{"properties":{"evidence":{"minItems":1}}}}]},
+    "request":{"type":"object","additionalProperties":false,"required":["fields","example"],"properties":{"fields":{"type":"array","items":{"$ref":"#/$defs/requestField"}},"example":{}}},
+    "requestField":{"type":"object","additionalProperties":false,"required":["name","type","required","description","validation","enumValues"],"properties":{"name":{"type":"string","minLength":1},"type":{"type":"string","minLength":1},"required":{"type":"boolean"},"description":{"type":"string"},"validation":{"type":"array","items":{"type":"string","minLength":1}},"enumValues":{"type":"array","items":{"$ref":"#/$defs/enumValue"}},"fields":{"type":"array","items":{"$ref":"#/$defs/requestField"}}}},
+    "response":{"type":"object","additionalProperties":false,"required":["fields","example"],"properties":{"fields":{"type":"array","items":{"$ref":"#/$defs/responseField"}},"example":{}}},
+    "responseField":{"type":"object","additionalProperties":false,"required":["name","type","description","enumValues"],"properties":{"name":{"type":"string","minLength":1},"type":{"type":"string","minLength":1},"description":{"type":"string"},"enumValues":{"type":"array","items":{"$ref":"#/$defs/enumValue"}},"fields":{"type":"array","items":{"$ref":"#/$defs/responseField"}}}},
+    "enumValue":{"type":"object","additionalProperties":false,"required":["value","description"],"properties":{"value":{"type":["string","number"]},"description":{"type":"string"}}},
+    "error":{"type":"object","additionalProperties":false,"required":["code","scenario","status","evidence"],"properties":{"code":{"oneOf":[{"type":"string","minLength":1},{"type":"integer"}]},"scenario":{"type":"string","minLength":1},"status":{"enum":["CONFIRMED","INFERRED","UNKNOWN"]},"evidence":{"type":"array","items":{"type":"string","minLength":1}}},"allOf":[{"if":{"properties":{"status":{"enum":["CONFIRMED","INFERRED"]}},"required":["status"]},"then":{"properties":{"evidence":{"minItems":1}}}}]}
   }
 }
