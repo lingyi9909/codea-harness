@@ -83,3 +83,25 @@ func TestMachineCoverageRejectsUnresolvedSymbols(t *testing.T) {
 		t.Fatal("unresolved symbol must block complete review")
 	}
 }
+
+func TestEvaluateRequiredScopeAllowsUnrelatedChangedFileOutsideTarget(t *testing.T) {
+	r := coverage.EvaluateRequired(
+		[]string{"src/main/java/OrderController.java", "src/main/java/OrderService.java"},
+		[]string{"src/main/java/OrderController.java", "src/main/java/OrderService.java"},
+		nil,
+	)
+	if r.Status != "COMPLETE" || len(r.MissingChangedFiles) != 0 {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestEvaluateRequiredScopeRejectsMissingScopedFile(t *testing.T) {
+	r := coverage.EvaluateRequired(
+		[]string{"src/main/java/OrderController.java", "src/main/java/OrderService.java"},
+		[]string{"src/main/java/OrderController.java"},
+		nil,
+	)
+	if r.Status != "PARTIAL" || len(r.MissingChangedFiles) != 1 || r.MissingChangedFiles[0] != "src/main/java/OrderService.java" {
+		t.Fatalf("result=%+v", r)
+	}
+}
