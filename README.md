@@ -6,7 +6,7 @@ Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Har
 
 1. Windows Release 拆分为首次安装包和升级包。
 2. 正式包新增 `RELEASE-MANIFEST.json`，记录版本、平台、架构、Runtime/ast-grep 版本与 SHA256。
-3. 升级统一通过 `.code-harness-upgrade/upgrade.md` bootstrap；在调用任何 Runtime 前先验证正式升级包基础结构。
+3. 升级统一通过 `.code-harness-upgrade/upgrade.md` bootstrap；在调用任何 Runtime 前先验证正式升级包完整性。
 4. 1.3.1 不修改既有 staged transaction、Project State 保留、rollback 或 Windows running-exe replacement 核心逻辑。
 
 ## 不要使用 GitHub Source Code 安装/升级
@@ -85,15 +85,25 @@ codea-harness-1.3.1-windows-x64-upgrade.zip
 读取 .code-harness-upgrade/upgrade.md，执行升级
 ```
 
-不要直接从旧版 `.code-harness/bin/codea-harness-tools.exe` 开始升级。
+不要绕过 `upgrade.md` 直接执行 Runtime。
 
-`upgrade.md` 会先做 Agent 层只读 Package Preflight，检查：
+`upgrade.md` 会先做 Agent 层只读 Package Preflight，一次性检查正式升级包 required source，包括：
 
 ```text
-.code-harness-upgrade/VERSION
-.code-harness-upgrade/RELEASE-MANIFEST.json
-.code-harness-upgrade/bin/codea-harness-tools.exe
-.code-harness-upgrade/bin/ast-grep.exe
+VERSION
+RELEASE-MANIFEST.json
+AGENTS.md
+bootstrap.md
+upgrade.md
+harness.template.yaml
+project.template.md
+agents/
+skills/
+contracts/
+tools/
+contracts/harness-config.schema.json
+bin/codea-harness-tools.exe
+bin/ast-grep.exe
 ```
 
 任一缺失：
@@ -101,14 +111,20 @@ codea-harness-1.3.1-windows-x64-upgrade.zip
 ```text
 MANUAL_ACTION_REQUIRED
 → 一次列出全部缺失项
-→ 提示可能误用了 GitHub Source Code
+→ 缺 exe 时提示可能误用了 GitHub Source Code
 → 不调用任何 Runtime
 → 不创建 stage/backup
 → 0 文件修改
 → STOP
 ```
 
-基础 Package Preflight 通过后，才调用新版 Upgrade Runtime；Runtime 再执行完整 required-source preflight，然后进入既有 staged transaction。
+Package Preflight 通过后，才调用**当前已安装**的：
+
+```text
+.code-harness/bin/codea-harness-tools.exe upgrade
+```
+
+这样继续保留既有 Windows running-exe staged replacement，以及成功后删除 `.code-harness-upgrade/` 的事务语义。
 
 Project State 持续保护：
 
@@ -208,7 +224,7 @@ harness verify fix:<fixPlanId>
 harness verify service:<runId>
 ```
 
-版本升级不直接从这里调用旧 Runtime；始终读取 `.code-harness-upgrade/upgrade.md` bootstrap。
+版本升级不直接从这里调用 Runtime；始终读取 `.code-harness-upgrade/upgrade.md` bootstrap。
 
 ## Test / DB / Failure Navigation 既有语义
 
@@ -234,4 +250,4 @@ go test -count=1 ./...
 go vet ./...
 ```
 
-Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 Runtime、Navigation、Review/API Doc renderer、Selection、Database Safety、双 ZIP layout、Manifest、wrong-source bootstrap contract、真实升级、Project State hashes、stale framework、running exe replacement、stage/backup/source cleanup 和 artifact upload。
+Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 Runtime、Navigation、Review/API Doc renderer、Selection、Database Safety、双 ZIP layout、Manifest、wrong-source bootstrap contract、`1.2.0/1.3.0 → 1.3.1` live upgrade、Project State hashes、stale framework、running exe replacement、stage/backup/source cleanup 和 artifact upload。
