@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ChangeAnalysis",
-  "description": "变更分析结果，由 Reviewer 在评审前产出，是后续评审和测试计划的上游输入",
+  "description": "当前完整 Review Change Set 的变更分析事实。FULL 直接以全部 changedFiles 做机器 Coverage；TARGETED 仍保留完整 Change Set，但通过独立 review-scope.schema.json 声明并验证 selectedCallChains/scopedFiles。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
     "reviewScope": {
       "type": "object",
       "additionalProperties": false,
-      "description": "本次 Review 的范围标识，Reviewer、Integration Test Agent、Orchestrator 共享同一 Scope",
+      "description": "Change Set 基线范围标识。它不是 1.4 TARGETED 的 ReviewScopeSelection；TARGETED 的选择通过独立 review-scope.schema.json 表达。",
       "required": ["currentBranch", "baseRef", "baseCommit", "mergeBase", "headCommit", "includeWorkingTree"],
       "properties": {
         "currentBranch": { "type": "string", "description": "当前分支名，Detached HEAD 时为 DETACHED_HEAD" },
@@ -30,7 +30,7 @@
     },
     "changedFiles": {
       "type": "array",
-      "description": "变更文件列表",
+      "description": "完整 Change Set 变更文件列表。TARGETED 也不得从这里删除 scope 外 changed file。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -70,7 +70,7 @@
     },
     "callChains": {
       "type": "array",
-      "description": "与本次变更直接相关的项目内部调用链，可从 Controller 或 changed Service/Repository 等符号开始。",
+      "description": "与本次 Change Set 直接相关、已经确定性识别的 confirmed 项目内部调用链。1.4 TARGETED 的 selectedCallChains 必须是这里的真实子集；candidate/unresolved 不得包装到本数组。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -104,7 +104,7 @@
     "reviewCoverage": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Review 完整性证据。只有 COMPLETE 才允许进入 Review Findings / Integration Test Agent。",
+      "description": "已读取文件与未解析符号的证据集合。FULL 的 status 继续由全部 changedFiles 机器复算；TARGETED 的最终 COMPLETE 由独立 ReviewScopeSelection + scoped coverage Runtime gate 判定。",
       "required": ["status", "reviewedFiles", "unresolvedSymbols"],
       "properties": {
         "status": { "enum": ["COMPLETE", "PARTIAL"] },
@@ -123,6 +123,7 @@
         },
         "unresolvedSymbols": {
           "type": "array",
+          "description": "无法确定性解析的 symbol。review list 必须与 confirmed callChains 分开呈现。",
           "items": {
             "type": "object",
             "additionalProperties": false,
