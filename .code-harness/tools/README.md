@@ -1,12 +1,12 @@
 # 受控工具契约
 
-Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** Upgrade / Schema Validate / Code Navigation / Database Evidence / Review Report 均有确定性 Go Runtime 实现：
+Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** Upgrade / Schema Validate / Code Navigation / Database Evidence / Review Report / API Documentation Report 均有确定性 Go Runtime 实现：
 
 ```text
 .code-harness/bin/codea-harness-tools.exe
 ```
 
-它不是新的 Harness CLI 产品；用户仍然只表达 `harness review/test/debug-service/fix/verify/upgrade`。Agent 只能映射到固定子命令，禁止 `cmd /c`、PowerShell、`bash -c`、管道、重定向、命令链接或用户输入命令拼接。
+它不是新的 Harness CLI 产品；用户仍然只表达 `harness review/test/api-doc/debug-service/fix/verify/upgrade`。Agent 只能映射到固定子命令，禁止 `cmd /c`、PowerShell、`bash -c`、管道、重定向、命令链接或用户输入命令拼接。
 
 ## Runtime 固定入口
 
@@ -24,6 +24,7 @@ codea-harness-tools.exe db list-tables --schema <schema> --run-id <id>
 codea-harness-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
 codea-harness-tools.exe db query --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
 未知子命令、目录逃逸、非法 symbol/identifier/annotation name 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。`db query` 不接受 raw SQL CLI 参数。
@@ -39,6 +40,18 @@ Runtime 只能把正式 Review Artifact 写到：
 ```
 
 Reviewer / Orchestrator 不得使用 arbitrary write_file 自由生成 `review.md`，也不得把 transport JSON 作为正式 `review.json` Artifact。Markdown 必须由 Controlled Runtime 的 deterministic renderer 固定生成；成功生成 `review.md` 后必须删除已消费的 transport JSON。
+
+### API Documentation Report 受控入口
+
+`report api-doc` 只消费 `.code-harness/runs/<runId>/requests/` 下的结构化 JSON transport。transport 固定包含 `runId / harnessVersion / apiDoc`，其中 `apiDoc` 必须由 Runtime 使用 `.code-harness/contracts/api-doc.schema.json` 做 Draft 2020-12 校验。
+
+Runtime 只能把正式 API Documentation Artifact 写到：
+
+```text
+.code-harness/runs/<runId>/api-doc.md
+```
+
+API Doc Agent / Orchestrator 不得自由生成最终 Markdown；必须调用 deterministic renderer。成功写入 `api-doc.md` 后删除已消费 transport。API Documentation 全程只读，不调用 DB，不进入 Test/Fix approval。
 
 ---
 
@@ -129,6 +142,7 @@ arbitrary query language
   - `unresolvedSymbols` 必须为空；
   - Agent 声明的 `reviewCoverage.status` 必须与机器计算结果一致；
   - 任一不满足时返回非零状态，Orchestrator 不得继续 Review/Test。
+- `api-doc.schema.json` 由 `report api-doc` 在渲染前再次执行真实 Draft 2020-12 校验；Schema 失败不得生成 `api-doc.md`。
 
 Upgrade 必须使用**新版升级包**的 `harness-config.schema.json` 校验迁移后的配置。
 
