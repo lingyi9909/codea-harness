@@ -146,9 +146,21 @@ func Validate(req ReviewRequest) error {
 			}
 		}
 	}
+	var targetedFiles map[string]struct{}
+	if mode == "TARGETED" {
+		targetedFiles = make(map[string]struct{}, len(req.Scope.ScopedFiles))
+		for _, file := range req.Scope.ScopedFiles {
+			targetedFiles[normalizeReportPath(file)] = struct{}{}
+		}
+	}
 	for i, f := range req.Findings {
 		if strings.TrimSpace(f.ID) == "" || strings.TrimSpace(f.File) == "" || strings.TrimSpace(f.Problem) == "" || strings.TrimSpace(f.Evidence) == "" || strings.TrimSpace(f.Impact) == "" || strings.TrimSpace(f.Recommendation) == "" {
 			return fmt.Errorf("finding %d has missing required fields", i)
+		}
+		if mode == "TARGETED" {
+			if _, ok := targetedFiles[normalizeReportPath(f.File)]; !ok {
+				return fmt.Errorf("finding %q file %q is outside verified scopedFiles", f.ID, f.File)
+			}
 		}
 		switch f.Category {
 		case "PRODUCTION_CODE", "TEST_VALIDITY":
@@ -183,6 +195,10 @@ func scopeFiles(req ReviewRequest) []string {
 		return req.Scope.ScopedFiles
 	}
 	return req.Scope.ChangedFiles
+}
+
+func normalizeReportPath(value string) string {
+	return filepath.ToSlash(filepath.Clean(strings.TrimSpace(value)))
 }
 
 func validArtifactID(value string) bool {
