@@ -17,6 +17,12 @@ const changeAnalysis = `{
     {"entryPoint":"OrderController.approve","chain":["OrderController.approve","OrderService.approve"]},
     {"entryPoint":"OrderController.cancel","chain":["OrderController.cancel","OrderService.cancel"]}
   ],
+  "symbolLocations":[
+    {"symbol":"OrderController.approve","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},
+    {"symbol":"OrderController.cancel","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},
+    {"symbol":"OrderService.approve","path":"src/main/java/OrderService.java","role":"Service","source":"FIND_SYMBOL"},
+    {"symbol":"OrderService.cancel","path":"src/main/java/OrderService.java","role":"Service","source":"FIND_SYMBOL"}
+  ],
   "reviewCoverage":{
     "reviewedFiles":[
       {"path":"src/main/java/OrderController.java"},
@@ -49,14 +55,14 @@ func TestVerifyRejectsSelectedChainNotInChangeAnalysis(t *testing.T) {
 
 func TestVerifyRejectsUnjustifiedScopedFile(t *testing.T) {
 	selection := targetedSelection(`["src/main/java/OrderController.java","src/main/java/UnrelatedService.java"]`)
-	if _, err := reviewscope.Verify(selection, []byte(changeAnalysis)); err == nil || !strings.Contains(err.Error(), "not justified") {
+	if _, err := reviewscope.Verify(selection, []byte(changeAnalysis)); err == nil || !strings.Contains(err.Error(), "exact Code Navigation path") {
 		t.Fatalf("expected unjustified scoped file rejection, err=%v", err)
 	}
 }
 
 func TestVerifyRejectsScopedFilesThatDoNotCoverEverySelectedInternalClass(t *testing.T) {
 	selection := targetedSelection(`["src/main/java/OrderController.java"]`)
-	if _, err := reviewscope.Verify(selection, []byte(changeAnalysis)); err == nil || !strings.Contains(err.Error(), "selected internal symbol") {
+	if _, err := reviewscope.Verify(selection, []byte(changeAnalysis)); err == nil || !strings.Contains(err.Error(), "selected internal symbol exact Code Navigation path") {
 		t.Fatalf("expected missing selected symbol file rejection, err=%v", err)
 	}
 }
@@ -87,6 +93,10 @@ func TestTargetedCoverageRejectsUnresolvedSelectedSymbol(t *testing.T) {
 	analysis := []byte(`{
 	  "changedFiles":[{"path":"src/main/java/OrderController.java"},{"path":"src/main/java/OrderService.java"}],
 	  "callChains":[{"entryPoint":"OrderController.approve","chain":["OrderController.approve","OrderService.approve"]}],
+	  "symbolLocations":[
+	    {"symbol":"OrderController.approve","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},
+	    {"symbol":"OrderService.approve","path":"src/main/java/OrderService.java","role":"Service","source":"FIND_SYMBOL"}
+	  ],
 	  "reviewCoverage":{
 	    "reviewedFiles":[{"path":"src/main/java/OrderController.java"},{"path":"src/main/java/OrderService.java"}],
 	    "unresolvedSymbols":[{"symbol":"OrderServiceImpl.approve","from":"OrderService.approve","reason":"IMPLEMENTATION_NOT_FOUND"}]
