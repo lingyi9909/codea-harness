@@ -32,7 +32,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|report>")
 	}
 	switch args[0] {
 	case "upgrade":
@@ -43,6 +43,8 @@ func run(args []string) error {
 		return runNav(args[1:])
 	case "db":
 		return runDB(args[1:])
+	case "report":
+		return runReport(args[1:])
 	default:
 		return fmt.Errorf("unknown subcommand %q", args[0])
 	}

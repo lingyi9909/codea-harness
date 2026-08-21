@@ -67,6 +67,36 @@ Review 未完整完成：
 
 **此时禁止调用 `review-code`，禁止输出 Review PASSED，禁止进入 Integration Test Agent。**
 
+## Review Report Persistence（1.3）
+
+`harness review` 与 `harness test` 的 Review 阶段都必须生成正式 Artifact：
+
+```text
+.code-harness/runs/<runId>/review.md
+```
+
+固定数据流：
+
+```text
+Reviewer / Orchestrator
+→ structured Review result
+→ .code-harness/runs/<runId>/requests/<transport>.json
+→ Controlled Runtime: report review
+→ deterministic Markdown renderer
+→ .code-harness/runs/<runId>/review.md
+→ 删除成功消费的 transport JSON
+```
+
+硬规则：
+
+- `review.md` 是唯一正式 Review Artifact；不得把 `review.json` 作为最终产物。
+- Reviewer/Orchestrator 不得使用 arbitrary write_file 自由生成 Markdown。
+- `PASSED / FAILED / MANUAL_ACTION_REQUIRED` 都必须生成报告。
+- 无代码变更也必须生成 `Result: PASSED`、`Changed Files: 0`、`Findings: 0` 的报告。
+- Coverage PARTIAL 或 Runtime Contract validation error 必须先把 unresolved、missing reviewed files、Runtime validation error 写入结构化 transport，再生成 `MANUAL_ACTION_REQUIRED` 报告，然后 STOP。
+- Runtime 报告生成失败时不得继续后续流程，统一 `MANUAL_ACTION_REQUIRED`。
+- OpenCode 最终摘要必须同时展示 Review 结果和 `review.md` 路径。
+
 ## `harness review`
 
 ```text
@@ -77,10 +107,12 @@ Review 未完整完成：
    - 机器 Coverage 校验
 4. 输出 Review Scope
 5. 输出 Review Coverage
-6. 无变化 → PASSED，STOP
-7. Runtime 校验失败 / coverage!=COMPLETE → MANUAL_ACTION_REQUIRED，STOP
+6. 无变化 → 形成 Result=PASSED 的 structured Review result → Controlled Runtime 生成 review.md → 展示 report path → STOP
+7. Runtime 校验失败 / coverage!=COMPLETE → 形成 Result=MANUAL_ACTION_REQUIRED（包含 unresolved/missing/runtimeErrors）→ Controlled Runtime 生成 review.md → 展示 report path → STOP
 8. Reviewer.review-code
-9. 输出 Review Findings
+9. findings 为空 → Result=PASSED；findings 非空 → Result=FAILED
+10. 形成 structured Review result → Controlled Runtime 生成 review.md
+11. 输出 Review Findings + 最终结果 + report path
 ```
 
 用户可见顺序固定为：
@@ -88,7 +120,8 @@ Review 未完整完成：
 ```text
 Review Scope
 → Review Coverage
-→ Review Findings
+→ Review Findings（如允许执行）
+→ 结果 + .code-harness/runs/<runId>/review.md
 ```
 
 ## Test Target Selection 硬门禁（1.2）
@@ -121,20 +154,22 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 1. 与 harness review 完全相同地解析 Change Set 并执行 analyze-change
 2. Tool Runtime: validate_contract(ChangeAnalysis JSON)，执行 JSON Schema + 机器 Coverage 校验
 3. 输出 Review Scope + Review Coverage
-4. Runtime 校验失败 / coverage != COMPLETE → MANUAL_ACTION_REQUIRED，STOP；不得设计测试
-5. Reviewer.review-code
-6. affectedControllers=0 → `NO_TEST_TARGET`，报告后 STOP
-7. affectedControllers=1 → `AUTO_SINGLE`；持久化并机器校验 TestTargetSelection，不打断用户
-8. affectedControllers>=2 → `WAITING_TEST_SELECTION`；宿主结构化多选优先，否则编号 fallback；取消 → `CANCELLED` STOP
-9. 只有 `TEST_TARGETS_SELECTED` 且 selection artifact 机器验证通过，才把 **selected affectedControllers** 交给 Integration Test Agent
-10. Integration Test Agent 只对 selected targets 做 Existing Test Coverage Analysis
-11. 每个 selected target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW；未选择 target 不得生成计划
-12. REUSE_EXISTING 直接执行；其余输出 Test Plan，仍需精确 `批准 <planId>` 后才写测试
-13. Integration Test Agent 返回 method/scenario 级 provenance；Orchestrator 形成 `TestExecutionTarget(testClass,testMethods[],selector,controllerId,origin,planId?)`
-14. selected-only execution gate：整类 selector 仅允许该 class 本次相关 methods 全部属于 selected targets；混合 selected+unselected class 必须收窄到 selected method selector；无法安全表达 method selector → `MANUAL_ACTION_REQUIRED`，不得整类执行
-15. Runtime Debugger 独占测试执行、日志和 Diagnosis；Surefire `failedTests.testClass + testMethod` 必须回查具体 TestExecutionTarget 判定 method-level origin
-16. 新生成/修改测试若 TEST_ERROR：仅失败方法 `origin=GENERATED_BY_PLAN` 且能唯一追溯 approved planId 时可自动修复，按 `planId+testClass+testMethod` 最多 2 轮；同 class 历史 Existing Test method 永不自动修改
-17. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
+4. 无代码变更 → 先生成 Result=PASSED、Changed Files=0、Findings=0 的 review.md，再 `NO_TEST_TARGET` → STOP
+5. Runtime 校验失败 / coverage != COMPLETE → 先生成 Result=MANUAL_ACTION_REQUIRED 的 review.md，再 STOP；不得设计测试
+6. Reviewer.review-code
+7. findings 为空 → Result=PASSED；findings 非空 → Result=FAILED；在任何 Test Target Selection 之前生成并确认 `.code-harness/runs/<runId>/review.md`
+8. affectedControllers=0 → `NO_TEST_TARGET`，报告后 STOP
+9. affectedControllers=1 → `AUTO_SINGLE`；持久化并机器校验 TestTargetSelection，不打断用户
+10. affectedControllers>=2 → `WAITING_TEST_SELECTION`；宿主结构化多选优先，否则编号 fallback；取消 → `CANCELLED` STOP
+11. 只有 `TEST_TARGETS_SELECTED` 且 selection artifact 机器验证通过，才把 **selected affectedControllers** 交给 Integration Test Agent
+12. Integration Test Agent 只对 selected targets 做 Existing Test Coverage Analysis
+13. 每个 selected target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW；未选择 target 不得生成计划
+14. REUSE_EXISTING 直接执行；其余输出 Test Plan，仍需精确 `批准 <planId>` 后才写测试
+15. Integration Test Agent 返回 method/scenario 级 provenance；Orchestrator 形成 `TestExecutionTarget(testClass,testMethods[],selector,controllerId,origin,planId?)`
+16. selected-only execution gate：整类 selector 仅允许该 class 本次相关 methods 全部属于 selected targets；混合 selected+unselected class 必须收窄到 selected method selector；无法安全表达 method selector → `MANUAL_ACTION_REQUIRED`，不得整类执行
+17. Runtime Debugger 独占测试执行、日志和 Diagnosis；Surefire `failedTests.testClass + testMethod` 必须回查具体 TestExecutionTarget 判定 method-level origin
+18. 新生成/修改测试若 TEST_ERROR：仅失败方法 `origin=GENERATED_BY_PLAN` 且能唯一追溯 approved planId 时可自动修复，按 `planId+testClass+testMethod` 最多 2 轮；同 class 历史 Existing Test method 永不自动修改
+19. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
 ```
 
 ## `harness upgrade`
@@ -190,6 +225,13 @@ TestExecutionTarget
 - 或：所有测试通过，无需进一步操作
 ```
 
+对于包含 Review 阶段的 `harness review` / `harness test`，统一结果中还必须显示：
+
+```text
+Review Report:
+.code-harness/runs/<runId>/review.md
+```
+
 ## Task 7：Selected Test Flow + Integration-Test DB Assertions
 
 以下规则是在现有 `harness test` / Existing Test / Approval / Repair Gate 之上增加，不替代原语义；本节的 method-level 规则覆盖此前 Task 7 的 class-level handoff/origin 表述：
@@ -239,7 +281,8 @@ User 必须没有：
 
 ## 禁止行为
 
-- 不得跳过 Review Coverage / Runtime Contract 校验 / Test Target Selection / 审批门禁。
+- 不得跳过 Review Coverage / Runtime Contract 校验 / Review Report Persistence / Test Target Selection / 审批门禁。
+- 不得让 Reviewer/Orchestrator 自由写 `review.md`；只能调用 Controlled Runtime Renderer。
 - 不得超过 2 轮自动测试修复。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。
