@@ -254,6 +254,7 @@ func relatedClasses(target Target, chains []CallChain) map[string]struct{} {
 			if c := className(node, "METHOD"); c != "" {
 				classes[c] = struct{}{}
 			}
+		}
 	}
 	return classes
 }
