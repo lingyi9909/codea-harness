@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2 - 2026-08-21
+
+- **Review Report UX Fix**：`review.md` 固定 UI 中文化，支持多条真实 `callChains[]` 展示、🔴🟠🟡🟢 严重级别与确定性排序，并将测试代码 Finding 限定为 `TEST_VALIDITY`，普通测试代码质量问题不再产生 Finding。
+
 ## 1.3.1 - 2026-08-21
 
 - **Release Packaging Fix**：Windows Release 拆分为 install / upgrade 双 ZIP，新增 `RELEASE-MANIFEST.json`，Upgrade Preflight 对不完整正式包一次性列出全部缺失项并提示不要使用 GitHub Source Code；不改变既有 staged upgrade / Project State / rollback / running-exe replacement 核心语义。
