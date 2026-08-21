@@ -7,28 +7,31 @@
 ## 核心行为
 
 - Review Change Set = merge-base 完整分支差异 + staged + unstaged + untracked。
-- `harness review` 与 `harness test` 必须复用相同 Change Set。
+- `harness review` 与 `harness test` 必须复用相同 Change Set；`harness api-doc changed` 也复用该 Change Set / ChangeAnalysis 的 affectedControllers。
 - Reviewer 必须读取所有 changed source/test files，并使用 Code Navigation Contract 沿与变更直接相关的内部调用链展开。
 - `reviewCoverage.status != COMPLETE` 时，review/test 均停止为 `MANUAL_ACTION_REQUIRED`。
+- `harness api-doc` 是只读流程，最终 `api-doc.md` 只能由 Controlled Runtime deterministic renderer 生成。
 - 集成测试仍以 MockMvc + 真实 Controller/Service/Repository 为主；内部 Bean 默认不 Mock，外部依赖沿用项目测试替代方式。
 
 ## 初始化门禁
 
-`harness init`、`harness review`、`harness upgrade` 不要求 READY。`harness test/debug-service/fix/verify` 必须 `initialization.status=READY`。
+`harness init`、`harness review`、`harness api-doc`、`harness upgrade` 不要求 READY。`harness test/debug-service/fix/verify` 必须 `initialization.status=READY`。
 
 ## Agent 职责
 
 - Reviewer：Change Set + Code Navigation + Review Coverage + Findings，只读。
+- API Doc Agent：API target discovery、DTO/Enum/Validation/Direct Service 一层 evidence、结构化 ApiDoc，只读；不得自由写最终 Markdown。
 - Integration Test Agent：Existing Test Coverage、测试计划、生成/修复经审批的测试；不执行测试。
 - Runtime Debugger：独占测试/服务执行、日志与 Diagnosis。
 - Fix Agent：最小 Fix Plan + 经 fixPlanId 审批的生产修改；不执行测试。
 - Project Adapter：init 适配与配置生成。
-- Orchestrator：路由、Review Coverage/审批门禁、Agent 交接、测试修复轮次。
+- Orchestrator：路由、Review Coverage/审批门禁、API target selection、Agent 交接、测试修复轮次。
 
 ## 审批
 
 - 测试代码修改前必须精确 `批准 <planId>`；REUSE_EXISTING 无需审批。
 - 生产代码修改前必须精确 `批准 <fixPlanId>`。
+- `harness api-doc` 的 target selection 仅决定只读文档范围，不构成任何写操作审批，也不得要求 `批准 <planId>`。
 - 「好/继续/可以/yes/ok」不算审批；计划变化后旧审批失效。
 - 自动测试修复最多 2 轮，且仅限本次 `GENERATED_BY_PLAN`；历史 Existing Test 不自动改。
 
@@ -46,6 +49,7 @@ codea-harness-tools nav get-symbol-info --symbol <symbol> --scope <repo-relative
 codea-harness-tools nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
 codea-harness-tools nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
 codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
 禁止 `cmd /c`、`powershell -Command`、`bash -c`、shell 求值、管道、重定向或用户命令拼接。Code Navigation 由 Runtime 封装随包 `ast-grep.exe`；Agent/Skill 不得直接调用 ast-grep、raw rule、raw pattern、regex 或 arbitrary query language。
@@ -60,6 +64,7 @@ codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<f
 ## 禁止行为
 
 - 不得访问生产数据库或生产资源。
+- API Documentation 不得读取真实数据库，也不得超过 Controller → DTO/VO → Enum/Validation → Direct Service Method 一层的分析深度。
 - 不得自动安装依赖、git fetch/pull、commit/push/PR。
 - 不得直接执行任意 Shell。
 - 不得为让测试通过而删除/禁用测试、弱化断言、吞异常或 Mock 内部 Bean。
