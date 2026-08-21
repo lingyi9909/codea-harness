@@ -1,6 +1,6 @@
 # 受控工具契约
 
-Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** Upgrade / Schema Validate / Code Navigation / Database Evidence 均有确定性 Go Runtime 实现：
+Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** Upgrade / Schema Validate / Code Navigation / Database Evidence / Review Report 均有确定性 Go Runtime 实现：
 
 ```text
 .code-harness/bin/codea-harness-tools.exe
@@ -20,9 +20,22 @@ codea-harness-tools.exe db ping --run-id <id>
 codea-harness-tools.exe db list-tables --schema <schema> --run-id <id>
 codea-harness-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
 codea-harness-tools.exe db query --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
 未知子命令、目录逃逸、非法 symbol/identifier 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。`db query` 不接受 raw SQL CLI 参数。
+
+### Review Report 受控入口
+
+`report review` 只消费 `.code-harness/runs/<runId>/requests/` 下的结构化 JSON transport。请求中的 `runId` 必须与 transport 所属 run 目录一致，目录逃逸、绝对路径、非 JSON 输入均拒绝。
+
+Runtime 只能把正式 Review Artifact 写到：
+
+```text
+.code-harness/runs/<runId>/review.md
+```
+
+Reviewer / Orchestrator 不得使用 arbitrary write_file 自由生成 `review.md`，也不得把 transport JSON 作为正式 `review.json` Artifact。Markdown 必须由 Controlled Runtime 的 deterministic renderer 固定生成；成功生成 `review.md` 后必须删除已消费的 transport JSON。
 
 ---
 
@@ -246,7 +259,7 @@ review:
 
 ```text
 备份完整旧 Harness
-→ 从旧 Harness 构建 stage
+→ 从旧 Harness构建 stage
 → stage 中删除全部 Framework Managed
 → 仅复制新版 Framework Managed 到 stage
 → 执行 registered migration

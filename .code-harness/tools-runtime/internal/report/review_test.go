@@ -38,8 +38,11 @@ func TestR1PassedWritesReviewMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "Result: PASSED") {
-		t.Fatalf("unexpected markdown: %s", data)
+	text := string(data)
+	for _, want := range []string{"Result: PASSED", "## Review Findings"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in markdown: %s", want, text)
+		}
 	}
 }
 
@@ -48,7 +51,7 @@ func TestR2FailedWritesFindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Result: FAILED", "### F-001 HIGH", "Problem:", "Needs Test:\nYES", "High: 1"} {
+	for _, want := range []string{"Result: FAILED", "## Review Findings", "### F-001 HIGH", "Problem:", "Needs Test:\nYES", "High: 1"} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("missing %q in %s", want, md)
 		}
@@ -67,7 +70,7 @@ func TestR3PartialWritesManualActionRequired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Result: MANUAL_ACTION_REQUIRED", "Coverage: PARTIAL", "IMPLEMENTATION_NOT_FOUND", "Missing reviewed file: OrderDTO.java", "Runtime Contract validation error: change-analysis contract failed"} {
+	for _, want := range []string{"Result: MANUAL_ACTION_REQUIRED", "Coverage: PARTIAL", "## Review Findings", "IMPLEMENTATION_NOT_FOUND", "Missing reviewed file: OrderDTO.java", "Runtime Contract validation error: change-analysis contract failed"} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("missing %q in %s", want, md)
 		}
@@ -86,10 +89,38 @@ func TestR4NoChangesWritesPassedZeroCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Result: PASSED", "Changed Files: 0", "Findings: 0"} {
+	for _, want := range []string{"Result: PASSED", "Changed Files: 0", "## Review Findings\n无", "Findings: 0"} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("missing %q in %s", want, md)
 		}
+	}
+}
+
+func TestR5HarnessTestPersistsReviewBeforeTargetSelection(t *testing.T) {
+	orchestratorPath := filepath.Join("..", "..", "..", "agents", "orchestrator.md")
+	data, err := os.ReadFile(orchestratorPath)
+	if err != nil {
+		t.Fatalf("read orchestrator contract: %v", err)
+	}
+	text := string(data)
+	start := strings.Index(text, "## `harness test`")
+	if start < 0 {
+		t.Fatal("harness test section not found")
+	}
+	section := text[start:]
+	if end := strings.Index(section, "## `harness upgrade`"); end >= 0 {
+		section = section[:end]
+	}
+	persist := strings.Index(section, "在任何 Test Target Selection 之前生成并确认 `.code-harness/runs/<runId>/review.md`")
+	selection := strings.Index(section, "affectedControllers=0 → `NO_TEST_TARGET`")
+	if persist < 0 {
+		t.Fatal("harness test contract does not require review.md before Test Target Selection")
+	}
+	if selection < 0 {
+		t.Fatal("Test Target Selection entry point not found in harness test contract")
+	}
+	if persist >= selection {
+		t.Fatalf("review.md persistence must precede Test Target Selection: persist=%d selection=%d", persist, selection)
 	}
 }
 

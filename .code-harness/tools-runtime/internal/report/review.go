@@ -177,8 +177,10 @@ func Render(req ReviewRequest) (string, error) {
 	writeList(&b, unresolved, "无")
 	fmt.Fprintf(&b, "Coverage: %s\n", req.Coverage.Status)
 
-	if len(req.Findings) > 0 {
-		fmt.Fprintln(&b, "## Review Findings")
+	fmt.Fprintln(&b, "## Review Findings")
+	if len(req.Findings) == 0 {
+		fmt.Fprintln(&b, "无")
+	} else {
 		for _, f := range req.Findings {
 			fmt.Fprintf(&b, "### %s %s\n", singleLine(f.ID), strings.ToUpper(f.Severity))
 			fmt.Fprintln(&b, "File:")
