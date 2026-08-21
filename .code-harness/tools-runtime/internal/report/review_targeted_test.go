@@ -28,6 +28,32 @@ func TestTargetedReviewHeaderAndDisclaimer(t *testing.T) {
 	}
 }
 
+func TestTargetedClassCanRenderMultipleMethodsWithoutFlattening(t *testing.T) {
+	req := sampleRequest()
+	req.Mode = "TARGETED"
+	req.Target = &ReviewTarget{Symbol: "OrderController", Kind: "CLASS"}
+	req.Scope.ScopedFiles = []string{"src/main/java/OrderController.java", "src/main/java/OrderServiceImpl.java"}
+	req.Coverage.CallChains = []CallChain{
+		{EntryPoint: "OrderController.approve", Chain: []string{"OrderController.approve", "OrderService.approve"}},
+		{EntryPoint: "OrderController.cancel", Chain: []string{"OrderController.cancel", "OrderService.cancel"}},
+	}
+	md, err := Render(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"| 评审目标 | `OrderController` |",
+		"### 调用链 1",
+		"`OrderController.approve`",
+		"### 调用链 2",
+		"`OrderController.cancel`",
+	} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("missing %q in class targeted report:\n%s", want, md)
+		}
+	}
+}
+
 func TestFullReviewDefaultsToFullModeAndUsesChangedFilesAsScope(t *testing.T) {
 	req := sampleRequest()
 	md, err := Render(req)
