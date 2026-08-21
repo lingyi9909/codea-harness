@@ -16,7 +16,7 @@ func TestChangeAnalysisAcceptsExactNavigationSymbolLocations(t *testing.T) {
       "affectedControllers":[{"controller":"OrderController","endpoints":["approve"],"impactType":"AFFECTED_BY_CALL_CHAIN","sourceSymbols":["OrderService.approve"]}],
       "callChains":[{"entryPoint":"OrderController.approve","chain":["OrderController.approve","OrderService.approve"]}],
       "symbolLocations":[
-        {"symbol":"OrderController.approve","path":"module-a/src/main/java/OrderController.java","role":"Controller","source":"FIND_REFERENCES"},
+        {"symbol":"OrderController.approve","path":"module-a/src/main/java/OrderController.java","role":"Controller","source":"FIND_REFERENCES","from":"OrderService.approve"},
         {"symbol":"OrderService.approve","path":"module-a/src/main/java/OrderService.java","role":"Service","source":"FIND_SYMBOL"}
       ],
       "externalDependencies":[],
