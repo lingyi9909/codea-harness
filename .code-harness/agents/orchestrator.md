@@ -140,23 +140,26 @@ harness api-doc changed
 ```text
 1. 创建 runId；全程只读分析。
 2. 显式 Controller / Controller.method：API Doc Agent 调用 discover-api，用受控 Code Navigation 唯一定位 target。
-3. changed：复用 Review Change Set + ChangeAnalysis 的 affectedControllers。
-4. changed target selection：
+3. changed：Orchestrator 解析与 review/test 完全相同的 Review Change Set。
+4. changed：Orchestrator 调用 Reviewer.analyze-change 生产 ChangeAnalysis；这里只允许 analyze-change，不调用 reviewer.review-code。
+5. changed：把 ChangeAnalysis transport 交给 Controlled Runtime validate_contract(change-analysis.schema.json)：先 Draft 2020-12 Schema 校验，再执行机器 Review Coverage 校验。任一失败 → MANUAL_ACTION_REQUIRED / STOP。
+6. changed：只从已通过 Runtime 校验的 ChangeAnalysis 读取 affectedControllers；不得读取未验证缓存，也不得要求用户先跑 harness review。
+7. changed target selection：
    - 0 → NO_API_TARGET → STOP
    - 1 → AUTO_SINGLE → 继续
    - 2+ → WAITING_API_SELECTION；native multi-select 优先，否则 numbered fallback（1,3 / ALL）
    - 多 target 不得默认 ALL；空选择/取消 → STOP
-5. API Doc Agent 调用 generate-api-doc，分析深度固定：
-   Controller → Request DTO → Response DTO/VO → Enum → Validation → Direct Service Method（最多一层）→ STOP。
-6. 禁止进入 Repository / Mapper / DAO / DB / MQ / Redis / RPC Server；不得读取真实数据库。
-7. 结构化 apiDoc 必须满足 api-doc.schema.json。CONFIRMED/INFERRED 必须带 evidence；无可靠证据优先空数组，禁止编造。
-8. Orchestrator/Agent 只把 transport 写入 `.code-harness/runs/<runId>/requests/api-doc.json`，不得自由生成最终 Markdown。
-9. 调用 Controlled Runtime：`report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json`。
-10. Runtime 再执行 Draft 2020-12 Schema 校验，通过后 deterministic renderer 生成 `.code-harness/runs/<runId>/api-doc.md`，并删除 transport。
-11. 最终摘要仅展示 target、endpoint 数和 Api Doc Report path。
+8. 将 selected affectedControllers 交给 API Doc Agent；changed discovery 阶段不生成 Finding、不生成 review.md、不进入 Integration Test/Fix。
+9. API Doc Agent 调用 generate-api-doc，分析深度固定：Controller → Request DTO → Response DTO/VO → Enum → Validation → Direct Service Method（最多一层）→ STOP。
+10. 禁止进入 Repository / Mapper / DAO / DB / MQ / Redis / RPC Server；不得读取真实数据库。
+11. 结构化 apiDoc 必须满足 api-doc.schema.json。CONFIRMED/INFERRED 必须带 evidence；无可靠证据优先空数组，禁止编造。
+12. Orchestrator/Agent 只把 transport 写入 `.code-harness/runs/<runId>/requests/api-doc.json`，不得自由生成最终 Markdown。
+13. 调用 Controlled Runtime：`report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json`。
+14. Runtime 再执行 Draft 2020-12 Schema 校验，通过后 deterministic renderer 生成 `.code-harness/runs/<runId>/api-doc.md`，并删除 transport。
+15. 最终摘要仅展示 target、endpoint 数和 Api Doc Report path。
 ```
 
-请求参数只识别：`@RequestBody / @RequestParam / @PathVariable / 明确业务 @RequestHeader`。Validation 只从源码提取 `@NotNull/@NotBlank/@NotEmpty/@Size/@Length/@Min/@Max/@DecimalMin/@DecimalMax/@Pattern/@Valid`。DTO 递归最大深度 3 并做 cycle detection。Enum 未解析时只保留类型，不得编造值。Error code 只允许 Controller/Direct Service Method 中显式 BizException/ErrorCode/assert evidence。
+请求参数位置必须显式映射：`@RequestBody → BODY`、`@RequestParam → QUERY`、`@PathVariable → PATH`、明确业务 `@RequestHeader → HEADER`。这些 transport annotations 不得写入 `validation[]`。Validation 只从源码提取 `@NotNull/@NotBlank/@NotEmpty/@Size/@Length/@Min/@Max/@DecimalMin/@DecimalMax/@Pattern/@Valid`。DTO 递归最大深度 3 并做 cycle detection。Enum 未解析时只保留类型，不得编造值。Error code 只允许 Controller/Direct Service Method 中显式 BizException/ErrorCode/assert evidence。
 
 API Documentation 的 semantic slots：
 
