@@ -2,12 +2,20 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
+## 1.3.2 Review Report UX Fix
+
+1. `review.md` 固定 UI 全中文，机器 Contract enum 继续保持英文。
+2. Review Report transport 使用 `callChains[] {entryPoint, chain[]}`，支持 0/1/多条真实调用链，不再压平。
+3. Finding 严重级别固定映射为 `🔴 严重 / 🟠 高 / 🟡 中 / 🟢 低`，并由 Runtime 按 severity → file → line → id 确定性排序。
+4. 测试代码仍必须参与 Review Coverage，但默认不做普通代码质量 Review；只有测试失真才允许 `TEST_VALIDITY` Finding。
+5. 1.3.2 不修改 Review Change Set、Coverage COMPLETE/PARTIAL Gate、Finding 判断原则、Approval、Test Target Selection、DB、Debug、Fix、Upgrade transaction 或 API Doc 主流程。
+
 ## 1.3.1 Release Packaging Fix
 
 1. Windows Release 拆分为首次安装包和升级包。
-2. 正式包新增 `RELEASE-MANIFEST.json`，记录版本、平台、架构、Runtime/ast-grep 版本与 SHA256。
+2. 正式包包含 `RELEASE-MANIFEST.json`，记录版本、平台、架构、Runtime/ast-grep 版本与 SHA256。
 3. 升级统一通过 `.code-harness-upgrade/upgrade.md` bootstrap；在调用任何 Runtime 前先验证正式升级包完整性。
-4. 1.3.1 不修改既有 staged transaction、Project State 保留、rollback 或 Windows running-exe replacement 核心逻辑。
+4. 不修改既有 staged transaction、Project State 保留、rollback 或 Windows running-exe replacement 核心逻辑。
 
 ## 不要使用 GitHub Source Code 安装/升级
 
@@ -33,7 +41,7 @@ Release ZIP = 可安装/可升级产品
 使用：
 
 ```text
-codea-harness-1.3.1-windows-x64-install.zip
+codea-harness-1.3.2-windows-x64-install.zip
 ```
 
 解压后顶层直接得到：
@@ -65,21 +73,10 @@ codea-harness-1.3.1-windows-x64-install.zip
 使用：
 
 ```text
-codea-harness-1.3.1-windows-x64-upgrade.zip
+codea-harness-1.3.2-windows-x64-upgrade.zip
 ```
 
-解压后顶层直接得到：
-
-```text
-.code-harness-upgrade/
-├── VERSION
-├── RELEASE-MANIFEST.json
-├── bin/codea-harness-tools.exe
-├── bin/ast-grep.exe
-└── ...
-```
-
-把 `.code-harness-upgrade/` 放到项目根目录。**升级入口固定为：**
+解压后顶层直接得到 `.code-harness-upgrade/`。升级入口固定为：
 
 ```text
 读取 .code-harness-upgrade/upgrade.md，执行升级
@@ -87,26 +84,7 @@ codea-harness-1.3.1-windows-x64-upgrade.zip
 
 不要绕过 `upgrade.md` 直接执行 Runtime。
 
-`upgrade.md` 会先做 Agent 层只读 Package Preflight，一次性检查正式升级包 required source，包括：
-
-```text
-VERSION
-RELEASE-MANIFEST.json
-AGENTS.md
-bootstrap.md
-upgrade.md
-harness.template.yaml
-project.template.md
-agents/
-skills/
-contracts/
-tools/
-contracts/harness-config.schema.json
-bin/codea-harness-tools.exe
-bin/ast-grep.exe
-```
-
-任一缺失：
+`upgrade.md` 会先做 Agent 层只读 Package Preflight，一次性检查正式升级包 required source。任一缺失：
 
 ```text
 MANUAL_ACTION_REQUIRED
@@ -118,13 +96,11 @@ MANUAL_ACTION_REQUIRED
 → STOP
 ```
 
-Package Preflight 通过后，才调用**当前已安装**的：
+Package Preflight 通过后，才调用当前已安装的：
 
 ```text
 .code-harness/bin/codea-harness-tools.exe upgrade
 ```
-
-这样继续保留既有 Windows running-exe staged replacement，以及成功后删除 `.code-harness-upgrade/` 的事务语义。
 
 Project State 持续保护：
 
@@ -143,7 +119,7 @@ runs/**
 
 ```json
 {
-  "version": "1.3.1",
+  "version": "1.3.2",
   "platform": "windows",
   "arch": "x64",
   "runtime": "codea-harness-tools.exe",
@@ -153,9 +129,7 @@ runs/**
 }
 ```
 
-## 1.3.0 功能
-
-### Review Report Persistence
+## Review Report
 
 `harness review` 与 `harness test` 的 Review 阶段由 Controlled Runtime 确定性生成：
 
@@ -163,9 +137,47 @@ runs/**
 .code-harness/runs/<runId>/review.md
 ```
 
-PASSED / FAILED / MANUAL_ACTION_REQUIRED 都有正式 Artifact；模型不得自由写最终 Markdown。
+最终报告固定展示：
 
-### Frontend API Documentation
+```text
+中文顶部摘要
+问题概览
+生产/测试代码评审范围
+真实多条代码调用链
+评审覆盖
+按严重级别排序的问题清单
+中文评审结论
+```
+
+机器 Contract 继续使用：
+
+```text
+PASSED | FAILED | MANUAL_ACTION_REQUIRED
+CRITICAL | HIGH | MEDIUM | LOW
+COMPLETE | PARTIAL
+```
+
+用户报告映射为中文和颜色标识。调用链只消费已经通过 Runtime 验证的 `ChangeAnalysis.callChains[]`，Renderer 不自行推断。
+
+### Review Finding Scope
+
+生产代码正常 Review：
+
+```text
+category = PRODUCTION_CODE
+```
+
+测试代码仍必须读取并参与 Review Coverage / Existing Test Coverage，但默认不得因命名、重复、结构、代码风格、可维护性或 Mock 写法不漂亮产生普通 Finding。
+
+测试代码只有存在明确 false-positive 证据时才允许：
+
+```text
+category = TEST_VALIDITY
+```
+
+例如删除/禁用有效测试、删除或明显弱化关键断言、吞异常导致无条件通过、Mock 内部业务 Bean 绕过真实调用链、修改测试范围使生产变更没有被验证等。
+
+## Frontend API Documentation
 
 支持：
 
@@ -181,21 +193,9 @@ harness api-doc changed
 .code-harness/runs/<runId>/api-doc.md
 ```
 
-分析深度固定：
+分析深度固定：Controller → Request DTO → Response DTO/VO → Enum → Validation → Direct Service Method（最多一层）→ STOP。
 
-```text
-Controller
-→ Request DTO
-→ Response DTO/VO
-→ Enum
-→ Validation
-→ Direct Service Method（最多一层）
-→ STOP
-```
-
-Request location：`BODY / QUERY / PATH / HEADER`。不继续 Repository / Mapper / DAO / DB / MQ / Redis / RPC Server。
-
-### Lightweight Code Navigation
+## Lightweight Code Navigation
 
 受控 Contract：
 
@@ -209,22 +209,6 @@ find_callers
 ```
 
 Agent 不得传 raw ast-grep rule/pattern/regex/arbitrary query。
-
-## 其他主要意图
-
-```text
-harness review
-harness test
-harness api-doc <target>
-harness debug-service
-harness fix finding:<id>
-harness fix diagnosis:<runId>
-harness verify test:<class>
-harness verify fix:<fixPlanId>
-harness verify service:<runId>
-```
-
-版本升级不直接从这里调用 Runtime；始终读取 `.code-harness-upgrade/upgrade.md` bootstrap。
 
 ## Test / DB / Failure Navigation 既有语义
 
@@ -250,4 +234,4 @@ go test -count=1 ./...
 go vet ./...
 ```
 
-Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 Runtime、Navigation、Review/API Doc renderer、Selection、Database Safety、双 ZIP layout、Manifest、wrong-source bootstrap contract、`1.2.0/1.3.0 → 1.3.1` live upgrade、Project State hashes、stale framework、running exe replacement、stage/backup/source cleanup 和 artifact upload。
+Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 Runtime、Review Report Golden、Navigation、Schema、Selection、Database Safety、Windows build、双 ZIP layout、Manifest、`1.3.1 → 1.3.2` live upgrade、Project State hashes、stale framework、running exe replacement、stage/backup/source cleanup 和 artifact upload。
