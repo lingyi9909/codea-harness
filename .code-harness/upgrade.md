@@ -39,18 +39,30 @@ codea-harness-<version>-windows-x64-upgrade.zip
 读取 .code-harness-upgrade/upgrade.md，执行升级
 ```
 
-不要直接从旧版 `.code-harness/bin/codea-harness-tools.exe` 开始升级。原因是旧 Runtime 无法可靠判断“新版 Runtime 自己缺失”这一类错误。
+不要直接跳过本文件调用 Runtime。旧 Runtime 无法可靠判断“新版 Runtime 自己缺失”这一类错误，因此正式包检查必须先由 Agent 做只读 bootstrap/preflight。
 
 ## Agent 层 Package Preflight（必须先执行）
 
-在调用任何 Runtime、创建 backup/stage、修改 `.code-harness/` 之前，先只读检查：
+在调用任何 Runtime、创建 backup/stage、修改 `.code-harness/` 之前，先只读检查以下 required source：
 
 ```text
 .code-harness-upgrade/VERSION
 .code-harness-upgrade/RELEASE-MANIFEST.json
+.code-harness-upgrade/AGENTS.md
+.code-harness-upgrade/bootstrap.md
+.code-harness-upgrade/upgrade.md
+.code-harness-upgrade/harness.template.yaml
+.code-harness-upgrade/project.template.md
+.code-harness-upgrade/agents/
+.code-harness-upgrade/skills/
+.code-harness-upgrade/contracts/
+.code-harness-upgrade/tools/
+.code-harness-upgrade/contracts/harness-config.schema.json
 .code-harness-upgrade/bin/codea-harness-tools.exe
 .code-harness-upgrade/bin/ast-grep.exe
 ```
+
+所有缺失项必须一次性收集后再输出，不得发现一个报一个。
 
 同时确认 `RELEASE-MANIFEST.json` 至少声明：
 
@@ -62,7 +74,7 @@ runtime = codea-harness-tools.exe
 astGrepVersion
 ```
 
-如果任一基础项缺失，立即输出并停止：
+如果任一 required source 缺失，立即输出并停止：
 
 ```text
 MANUAL_ACTION_REQUIRED
@@ -70,6 +82,7 @@ MANUAL_ACTION_REQUIRED
 升级包不完整：
 missing: <全部缺失项，一次列完>
 
+如果缺少 bin/codea-harness-tools.exe 或 bin/ast-grep.exe：
 检测到的目录可能来自 GitHub Source Code，而不是正式 Windows Release。
 请使用：codea-harness-<version>-windows-x64-upgrade.zip
 
@@ -92,11 +105,13 @@ STOP
 ## Package Preflight 通过后的执行步骤
 
 1. 读取新版 `.code-harness-upgrade/AGENTS.md`。
-2. 读取新版 `.code-harness-upgrade/agents/orchestrator.md` 的 `harness upgrade`。
-3. 调用新版 `.code-harness-upgrade/bin/codea-harness-tools.exe upgrade` 所实现的受控 `upgrade_harness`。
-4. Runtime 继续执行完整 required-source preflight；若还有缺失项，一次性列出并返回 `MANUAL_ACTION_REQUIRED`，0 文件修改。
-5. Package 完整后才进入既有 Upgrade transaction。
+2. 读取新版 `.code-harness-upgrade/agents/orchestrator.md` 的 `harness upgrade` 约束。
+3. 调用**当前已安装**的 `.code-harness/bin/codea-harness-tools.exe upgrade` 执行既有受控升级事务。
+4. Runtime 再执行自己的 required-source preflight；因为 Agent 层已经完整检查，正常路径不应再出现 package 缺失。
+5. Package 完整后进入既有 Upgrade transaction。
 6. 根据 `UpgradeResult` 输出结果。
+
+这里故意继续使用当前已安装 Runtime 执行事务，而不是执行 `.code-harness-upgrade/bin/codea-harness-tools.exe`：这样保持既有 Windows running-exe staged replacement 与成功后删除 `.code-harness-upgrade/` 的语义不变。
 
 ## 约束
 
