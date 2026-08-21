@@ -87,7 +87,7 @@ func TestR3MultipleCallChainsAreNotFlattened(t *testing.T) {
 	}
 }
 
-func TestR4NoCallChainHasChineseEmptyState(t *testing.T) {
+func TestNoCallChainHasChineseEmptyState(t *testing.T) {
 	req := sampleRequest()
 	req.Coverage.CallChains = nil
 	md, err := Render(req)
@@ -95,20 +95,45 @@ func TestR4NoCallChainHasChineseEmptyState(t *testing.T) {
 	if !strings.Contains(md, "未发现需要展开的项目内部调用链。") { t.Fatal(md) }
 }
 
-func TestR5TestReviewScopeRulesAreLocked(t *testing.T) {
+func reviewerContract(t *testing.T) string {
+	t.Helper()
 	path := filepath.Join("..", "..", "..", "agents", "reviewer.md")
 	data, err := os.ReadFile(path)
 	if err != nil { t.Fatal(err) }
-	text := string(data)
+	return string(data)
+}
+
+func TestR4TestCodeOrdinaryQualityMustNotProduceFinding(t *testing.T) {
+	text := reviewerContract(t)
 	for _, want := range []string{
 		"测试代码默认不得产生普通 Code Review Finding",
-		"TEST_VALIDITY",
-		"删除有效测试",
-		"删除或明显弱化关键断言",
-		"Mock 内部业务 Bean",
-		"false-positive",
+		"不得因为以下内容产生 Finding",
+		"命名不好",
+		"重复代码",
+		"测试结构不好",
+		"测试代码不够优雅",
+		"可维护性一般",
+		"代码风格",
+		"Mock 写法不漂亮",
 	} {
-		if !strings.Contains(text, want) { t.Fatalf("reviewer rule missing %q", want) }
+		if !strings.Contains(text, want) { t.Fatalf("reviewer ordinary-test-quality exclusion missing %q", want) }
+	}
+}
+
+func TestR5TestValidityGateIsExplicitAndEvidenceBacked(t *testing.T) {
+	text := reviewerContract(t)
+	for _, want := range []string{
+		"category = TEST_VALIDITY",
+		"删除有效测试",
+		"@Disabled",
+		"删除或明显弱化关键断言",
+		"catch / 吞异常导致测试无条件通过",
+		"Mock 内部业务 Bean",
+		"修改测试范围，使本次生产变更实际没有被验证",
+		"其他具有明确代码证据的 false-positive 行为",
+		"不得把 Test Validity Gate 扩展成普通测试代码质量 Review",
+	} {
+		if !strings.Contains(text, want) { t.Fatalf("reviewer test-validity rule missing %q", want) }
 	}
 }
 
@@ -148,6 +173,20 @@ func TestFindingCategoryRequired(t *testing.T) {
 	req := sampleRequest()
 	req.Findings[0].Category = ""
 	if err := Validate(req); err == nil { t.Fatal("expected missing finding category rejection") }
+}
+
+func TestTestValidityFindingCategoryAccepted(t *testing.T) {
+	req := sampleRequest()
+	req.Findings = []Finding{{
+		ID: "F-TV-001", Category: "TEST_VALIDITY", Severity: "HIGH",
+		File: "src/test/java/OrderServiceTest.java", Line: 42,
+		Problem: "删除关键断言导致测试可能无条件通过。",
+		Evidence: "assertEquals(...) 被本次变更删除。",
+		Impact: "生产代码错误可能无法被测试发现。",
+		Recommendation: "恢复对关键状态的断言。",
+		NeedsTest: true, IntroducedByChange: true, Confidence: 0.98,
+	}}
+	if err := Validate(req); err != nil { t.Fatalf("TEST_VALIDITY finding rejected: %v", err) }
 }
 
 func TestRequestTransportMustMatchRunAndIsDeletedAfterSuccess(t *testing.T) {
