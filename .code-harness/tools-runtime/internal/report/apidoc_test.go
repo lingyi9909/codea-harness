@@ -90,6 +90,12 @@ func TestDecodeApiDocRequestAndRenderDeterministically(t *testing.T) {
 
 func TestDecodeApiDocRequestRejectsContractViolation(t *testing.T) {
     bad := strings.Replace(validApiDocRequestJSON(), `"httpMethod":"POST"`, `"httpMethod":""`, 1)
+    if bad == validApiDocRequestJSON() {
+        bad = strings.Replace(validApiDocRequestJSON(), `"httpMethod": "POST"`, `"httpMethod": ""`, 1)
+    }
+    if bad == validApiDocRequestJSON() {
+        bad = strings.Replace(validApiDocRequestJSON(), `"httpMethod":"POST"`, `"httpMethod":""`, 1)
+    }
     if _, err := DecodeApiDocRequest([]byte(bad)); err == nil {
         t.Fatal("expected api-doc schema violation")
     }
