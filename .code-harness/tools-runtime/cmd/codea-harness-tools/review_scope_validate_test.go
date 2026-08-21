@@ -37,6 +37,10 @@ func targetedChangeAnalysis(reviewedService bool) string {
   ],
   "affectedControllers":[{"controller":"OrderController","endpoints":["approve"],"impactType":"DIRECT_CHANGE","sourceSymbols":["OrderController.approve"]}],
   "callChains":[{"entryPoint":"OrderController.approve","chain":["OrderController.approve","OrderService.approve"]}],
+  "symbolLocations":[
+    {"symbol":"OrderController.approve","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},
+    {"symbol":"OrderService.approve","path":"src/main/java/OrderService.java","role":"Service","source":"FIND_SYMBOL"}
+  ],
   "externalDependencies":[],
   "riskAreas":[],
   "reviewCoverage":{"status":"COMPLETE","reviewedFiles":` + reviewed + `,"unresolvedSymbols":[]}
