@@ -32,7 +32,7 @@ jobs:
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Targeted 1.3 golden suites
+      - name: Targeted 1.3.1 golden suites
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
@@ -116,33 +116,126 @@ jobs:
           if ($callerText -match 'AuditService.*CONFIRMED') { throw "AuditService call incorrectly confirmed: $callerText" }
           Remove-Item -Recurse -Force smoke
 
-      - name: Windows live upgrade 1.2.0 to 1.3.0
+      - name: Stage formal install and upgrade releases
         shell: pwsh
         run: |
+          $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
+          if ($version -ne '1.3.1') { throw "unexpected release version: $version" }
+
+          $runtimeHash = (Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash.ToLowerInvariant()
+          $astHash = (Get-FileHash -Algorithm SHA256 '.code-harness/bin/ast-grep.exe').Hash.ToLowerInvariant()
+
+          $installStage = Join-Path $env:RUNNER_TEMP 'codea-release-install'
+          $upgradeStage = Join-Path $env:RUNNER_TEMP 'codea-release-upgrade'
+          Remove-Item -Recurse -Force $installStage,$upgradeStage -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $installStage,$upgradeStage | Out-Null
+
+          Copy-Item -Recurse '.code-harness' (Join-Path $installStage '.code-harness')
+          Copy-Item -Recurse '.code-harness' (Join-Path $upgradeStage '.code-harness-upgrade')
+
+          $manifest = [ordered]@{
+            version = $version
+            platform = 'windows'
+            arch = 'x64'
+            runtime = 'codea-harness-tools.exe'
+            runtimeSha256 = $runtimeHash
+            astGrepVersion = '0.42.1'
+            astGrepSha256 = $astHash
+          } | ConvertTo-Json
+
+          [System.IO.File]::WriteAllText((Join-Path $installStage '.code-harness/RELEASE-MANIFEST.json'), $manifest, [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::WriteAllText((Join-Path $upgradeStage '.code-harness-upgrade/RELEASE-MANIFEST.json'), $manifest, [System.Text.UTF8Encoding]::new($false))
+
+          $commonRequired = @(
+            'VERSION',
+            'RELEASE-MANIFEST.json',
+            'AGENTS.md',
+            'bootstrap.md',
+            'upgrade.md',
+            'harness.template.yaml',
+            'project.template.md',
+            'bin/codea-harness-tools.exe',
+            'bin/ast-grep.exe',
+            'agents/api-doc-agent.md',
+            'skills/discover-api/SKILL.md',
+            'skills/generate-api-doc/SKILL.md',
+            'contracts/api-doc.schema.json',
+            'tools/README.md'
+          )
+
+          foreach ($pair in @(
+            @{ Root = (Join-Path $installStage '.code-harness'); Name = 'install' },
+            @{ Root = (Join-Path $upgradeStage '.code-harness-upgrade'); Name = 'upgrade' }
+          )) {
+            foreach ($rel in $commonRequired) {
+              if (!(Test-Path (Join-Path $pair.Root $rel))) { throw "$($pair.Name) release missing: $rel" }
+            }
+            foreach ($dir in @('agents','skills','contracts','tools')) {
+              if (@(Get-ChildItem (Join-Path $pair.Root $dir) -File -Recurse).Count -eq 0) { throw "$($pair.Name) release has empty $dir tree" }
+            }
+            foreach ($state in @('harness.yaml','project.md','database.yaml','runs')) {
+              if (Test-Path (Join-Path $pair.Root $state)) { throw "$($pair.Name) release leaked Project State: $state" }
+            }
+            $m = Get-Content (Join-Path $pair.Root 'RELEASE-MANIFEST.json') -Raw | ConvertFrom-Json
+            if ($m.version -ne $version -or $m.platform -ne 'windows' -or $m.arch -ne 'x64') { throw "$($pair.Name) manifest identity invalid" }
+            if ($m.runtime -ne 'codea-harness-tools.exe' -or $m.astGrepVersion -ne '0.42.1') { throw "$($pair.Name) manifest tool identity invalid" }
+            if ($m.runtimeSha256 -ne $runtimeHash -or $m.astGrepSha256 -ne $astHash) { throw "$($pair.Name) manifest hashes invalid" }
+          }
+
+      - name: Build install and upgrade ZIPs
+        shell: pwsh
+        run: |
+          $installStage = Join-Path $env:RUNNER_TEMP 'codea-release-install'
+          $upgradeStage = Join-Path $env:RUNNER_TEMP 'codea-release-upgrade'
+          Compress-Archive -Path (Join-Path $installStage '.code-harness') -DestinationPath 'codea-harness-1.3.1-windows-x64-install.zip' -Force
+          Compress-Archive -Path (Join-Path $upgradeStage '.code-harness-upgrade') -DestinationPath 'codea-harness-1.3.1-windows-x64-upgrade.zip' -Force
+
+      - name: Validate ZIP layouts and Windows live upgrade
+        shell: pwsh
+        run: |
+          $installExtract = Join-Path $env:RUNNER_TEMP 'codea-install-extract'
+          $upgradeExtract = Join-Path $env:RUNNER_TEMP 'codea-upgrade-extract'
+          Remove-Item -Recurse -Force $installExtract,$upgradeExtract -ErrorAction SilentlyContinue
+          Expand-Archive 'codea-harness-1.3.1-windows-x64-install.zip' $installExtract -Force
+          Expand-Archive 'codea-harness-1.3.1-windows-x64-upgrade.zip' $upgradeExtract -Force
+
+          if (!(Test-Path (Join-Path $installExtract '.code-harness'))) { throw 'install.zip must extract directly to .code-harness/' }
+          if (!(Test-Path (Join-Path $upgradeExtract '.code-harness-upgrade'))) { throw 'upgrade.zip must extract directly to .code-harness-upgrade/' }
+          if (Test-Path (Join-Path $installExtract '.code-harness-upgrade')) { throw 'install.zip contains wrong top-level harness directory' }
+          if (Test-Path (Join-Path $upgradeExtract '.code-harness')) { throw 'upgrade.zip contains wrong top-level harness directory' }
+
+          foreach ($root in @((Join-Path $installExtract '.code-harness'), (Join-Path $upgradeExtract '.code-harness-upgrade'))) {
+            foreach ($rel in @(
+              'VERSION','RELEASE-MANIFEST.json','AGENTS.md','bootstrap.md','upgrade.md',
+              'harness.template.yaml','project.template.md','bin/codea-harness-tools.exe','bin/ast-grep.exe',
+              'agents/api-doc-agent.md','skills/discover-api/SKILL.md','skills/generate-api-doc/SKILL.md',
+              'contracts/api-doc.schema.json','tools/README.md'
+            )) {
+              if (!(Test-Path (Join-Path $root $rel))) { throw "extracted release missing: $rel" }
+            }
+            foreach ($state in @('harness.yaml','project.md','database.yaml','runs')) {
+              if (Test-Path (Join-Path $root $state)) { throw "release ZIP leaked Project State: $state" }
+            }
+          }
+
           $root = Join-Path $env:RUNNER_TEMP 'codea-upgrade-smoke'
           Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $root | Out-Null
-          Copy-Item -Recurse '.code-harness' (Join-Path $root '.code-harness')
-          Copy-Item -Recurse '.code-harness' (Join-Path $root '.code-harness-upgrade')
+          Copy-Item -Recurse (Join-Path $installExtract '.code-harness') (Join-Path $root '.code-harness')
+          Copy-Item -Recurse (Join-Path $upgradeExtract '.code-harness-upgrade') (Join-Path $root '.code-harness-upgrade')
 
           $target = Join-Path $root '.code-harness'
           Set-Content (Join-Path $target 'VERSION') '1.2.0'
-
+          Remove-Item (Join-Path $target 'RELEASE-MANIFEST.json') -Force -ErrorAction SilentlyContinue
           Remove-Item (Join-Path $target 'agents/api-doc-agent.md') -Force -ErrorAction SilentlyContinue
           Remove-Item (Join-Path $target 'skills/discover-api') -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item (Join-Path $target 'skills/generate-api-doc') -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item (Join-Path $target 'contracts/api-doc.schema.json') -Force -ErrorAction SilentlyContinue
           Remove-Item (Join-Path $target 'tools-runtime/internal/report') -Recurse -Force -ErrorAction SilentlyContinue
-
           New-Item -ItemType Directory -Force (Join-Path $target 'skills/stale') | Out-Null
           Set-Content (Join-Path $target 'skills/stale/SKILL.md') 'stale'
 
-          $databaseBytes = [System.Text.UTF8Encoding]::new($false).GetBytes("version: 1`nenvironment: TEST`npassword: sentinel-secret`n")
-          $databasePath = Join-Path $target 'database.yaml'
-          [System.IO.File]::WriteAllBytes($databasePath, $databaseBytes)
-          $databaseHash = (Get-FileHash -Algorithm SHA256 $databasePath).Hash
-
-          @'
+          $harnessYaml = @'
           version: 1
           project:
             type: maven
@@ -178,11 +271,24 @@ jobs:
             deniedPaths: []
           runs:
             directory: .code-harness/runs
-          '@ | Set-Content (Join-Path $target 'harness.yaml')
+          '@
+          [System.IO.File]::WriteAllText((Join-Path $target 'harness.yaml'), $harnessYaml, [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::WriteAllText((Join-Path $target 'project.md'), "project-state-sentinel`n", [System.Text.UTF8Encoding]::new($false))
+          New-Item -ItemType Directory -Force (Join-Path $target 'runs') | Out-Null
+          [System.IO.File]::WriteAllBytes((Join-Path $target 'runs/keep.bin'), [byte[]](1,2,3,4,5))
+          $databaseBytes = [System.Text.UTF8Encoding]::new($false).GetBytes("version: 1`nenvironment: TEST`npassword: sentinel-secret`n")
+          [System.IO.File]::WriteAllBytes((Join-Path $target 'database.yaml'), $databaseBytes)
+
+          $stateHashes = @{
+            harness = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'harness.yaml')).Hash
+            project = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'project.md')).Hash
+            database = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'database.yaml')).Hash
+            runs = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'runs/keep.bin')).Hash
+          }
 
           $newExe = Join-Path $root '.code-harness-upgrade/bin/codea-harness-tools.exe'
           [System.IO.File]::AppendAllText($newExe, 'CODEA-UPGRADE-SMOKE')
-          $expectedHash = (Get-FileHash -Algorithm SHA256 $newExe).Hash
+          $expectedExeHash = (Get-FileHash -Algorithm SHA256 $newExe).Hash
 
           Push-Location $root
           try {
@@ -191,86 +297,43 @@ jobs:
             $text = $out -join "`n"
             if ($text -notmatch '"status": "UPGRADED"') { throw "unexpected upgrade output: $text" }
             if ($text -notmatch 'skills/stale/SKILL.md') { throw "removedFiles missing stale path: $text" }
-            if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.3.0') { throw 'target version was not upgraded to 1.3.0' }
-            if ((Get-FileHash -Algorithm SHA256 '.code-harness/database.yaml').Hash -ne $databaseHash) { throw 'database.yaml bytes changed during upgrade' }
+            if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.3.1') { throw 'target version was not upgraded to 1.3.1' }
+
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/harness.yaml').Hash -ne $stateHashes.harness) { throw 'harness.yaml changed during upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/project.md').Hash -ne $stateHashes.project) { throw 'project.md changed during upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/database.yaml').Hash -ne $stateHashes.database) { throw 'database.yaml bytes changed during upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/runs/keep.bin').Hash -ne $stateHashes.runs) { throw 'runs/** state changed during upgrade' }
+
             foreach ($path in @(
               '.code-harness/agents/api-doc-agent.md',
               '.code-harness/skills/discover-api/SKILL.md',
               '.code-harness/skills/generate-api-doc/SKILL.md',
               '.code-harness/contracts/api-doc.schema.json',
               '.code-harness/tools-runtime/internal/report/review.go',
-              '.code-harness/tools-runtime/internal/report/apidoc.go'
+              '.code-harness/tools-runtime/internal/report/apidoc.go',
+              '.code-harness/tools-runtime/internal/nav/extended.go'
             )) {
-              if (!(Test-Path $path)) { throw "1.3 framework path missing after upgrade: $path" }
+              if (!(Test-Path $path)) { throw "new framework path missing after upgrade: $path" }
             }
             if (Test-Path '.code-harness/skills/stale/SKILL.md') { throw 'stale framework file survived replace' }
-            if (Test-Path '.code-harness-upgrade') { throw 'source package was not cleaned after success' }
+            if (Test-Path '.code-harness-upgrade') { throw 'upgrade source was not cleaned after success' }
             if (Get-ChildItem -Force -Name '.code-harness-stage-*' -ErrorAction SilentlyContinue) { throw 'stage directory leaked' }
             if (Get-ChildItem -Force -Name '.code-harness-backup-*' -ErrorAction SilentlyContinue) { throw 'backup directory leaked' }
-            $actualHash = (Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash
-            if ($actualHash -ne $expectedHash) { throw 'running executable was not replaced by staged binary' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash -ne $expectedExeHash) { throw 'running executable was not replaced by staged binary' }
           } finally {
             Pop-Location
           }
 
-      - name: Assert 1.3 package completeness
-        shell: pwsh
-        run: |
-          $required = @(
-            '.code-harness/bin/codea-harness-tools.exe',
-            '.code-harness/bin/ast-grep.exe',
-            '.code-harness/database.template.yaml',
-            '.code-harness/contracts/database-config.schema.json',
-            '.code-harness/contracts/database-evidence.schema.json',
-            '.code-harness/contracts/test-target-selection.schema.json',
-            '.code-harness/contracts/api-doc.schema.json',
-            '.code-harness/agents/api-doc-agent.md',
-            '.code-harness/skills/select-test-targets/SKILL.md',
-            '.code-harness/skills/query-database/SKILL.md',
-            '.code-harness/skills/discover-api/SKILL.md',
-            '.code-harness/skills/generate-api-doc/SKILL.md',
-            '.code-harness/tools-runtime/internal/report/review.go',
-            '.code-harness/tools-runtime/internal/report/apidoc.go',
-            '.code-harness/tools-runtime/internal/nav/extended.go'
-          )
-          foreach ($path in $required) {
-            if (!(Test-Path $path)) { throw "required package path missing: $path" }
-          }
-          if (Test-Path '.code-harness/database.yaml') { throw 'database.yaml must not be present in release source tree' }
-          if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.3.0') { throw 'wrong version' }
-
-      - name: Build offline package
-        shell: pwsh
-        run: Compress-Archive -Path '.code-harness','CHANGELOG.md','THIRD_PARTY_NOTICES.md' -DestinationPath 'codea-harness-1.3.0-windows-x64.zip' -Force
-
-      - name: Assert offline package contents
-        shell: pwsh
-        run: |
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path 'codea-harness-1.3.0-windows-x64.zip'))
-          try {
-            $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\','/') })
-            $required = @(
-              '.code-harness/bin/codea-harness-tools.exe',
-              '.code-harness/bin/ast-grep.exe',
-              '.code-harness/contracts/api-doc.schema.json',
-              '.code-harness/agents/api-doc-agent.md',
-              '.code-harness/skills/discover-api/SKILL.md',
-              '.code-harness/skills/generate-api-doc/SKILL.md',
-              '.code-harness/tools-runtime/internal/report/review.go',
-              '.code-harness/tools-runtime/internal/report/apidoc.go',
-              '.code-harness/tools-runtime/internal/nav/extended.go'
-            )
-            foreach ($path in $required) {
-              if ($entries -notcontains $path) { throw "ZIP missing required path: $path" }
-            }
-            if ($entries -contains '.code-harness/database.yaml') { throw 'ZIP leaked .code-harness/database.yaml' }
-          } finally {
-            $archive.Dispose()
-          }
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload install package
+        uses: actions/upload-artifact@v4
         with:
-          name: codea-harness-1.3.0-windows-x64
-          path: codea-harness-1.3.0-windows-x64.zip
+          name: codea-harness-1.3.1-windows-x64-install
+          path: codea-harness-1.3.1-windows-x64-install.zip
+          if-no-files-found: error
+
+      - name: Upload upgrade package
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.3.1-windows-x64-upgrade
+          path: codea-harness-1.3.1-windows-x64-upgrade.zip
           if-no-files-found: error
