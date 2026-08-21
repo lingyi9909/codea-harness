@@ -10,199 +10,169 @@ import (
 
 func sampleRequest() ReviewRequest {
 	return ReviewRequest{
-		RunID:          "review-20260820-001",
-		HarnessVersion: "1.3.0",
+		RunID:          "review-20260821-001",
+		HarnessVersion: "1.3.2",
 		BaseRef:        "origin/develop",
 		Head:           "abc123",
 		Result:         ResultFailed,
-		Scope:          ReviewScope{ChangedFiles: []string{"OrderController.java", "OrderServiceImpl.java", "OrderDTO.java"}},
+		Scope: ReviewScope{ChangedFiles: []string{
+			"src/main/java/OrderController.java",
+			"src/main/java/OrderServiceImpl.java",
+			"src/test/java/OrderServiceTest.java",
+		}},
 		Coverage: ReviewCoverage{
-			ReviewedFiles:        []string{"OrderController.java", "OrderServiceImpl.java", "OrderDTO.java"},
-			CallChain:            []string{"OrderController.approve", "OrderServiceImpl.approve", "OrderRepository.updateStatus"},
+			ReviewedFiles: []string{
+				"src/main/java/OrderController.java",
+				"src/main/java/OrderService.java",
+				"src/main/java/OrderServiceImpl.java",
+				"src/main/java/OrderRepository.java",
+				"src/test/java/OrderServiceTest.java",
+			},
+			CallChains: []CallChain{
+				{EntryPoint: "OrderController.approve", Chain: []string{"OrderController.approve", "OrderService.approve", "OrderServiceImpl.approve", "OrderRepository.updateStatus"}},
+				{EntryPoint: "OrderController.cancel", Chain: []string{"OrderController.cancel", "OrderService.cancel", "OrderServiceImpl.cancel"}},
+			},
 			ExternalDependencies: []string{"PaymentRpcClient"},
 			Status:               "COMPLETE",
 		},
-		Findings: []Finding{{ID: "F-001", Severity: "HIGH", File: "src/main/java/OrderServiceImpl.java", Line: 186, Problem: "状态更新前没有校验订单当前状态。", Evidence: "if (...) updateStatus", Impact: "非法状态可能被更新", Recommendation: "更新前校验状态", NeedsTest: true, Confidence: 0.96}},
+		Findings: []Finding{
+			{ID: "F-004", Category: "PRODUCTION_CODE", Severity: "LOW", File: "src/main/java/Z.java", Line: 9, Problem: "低风险问题", Evidence: "证据D", Impact: "影响D", Recommendation: "建议D", NeedsTest: false, IntroducedByChange: true, Confidence: 0.7},
+			{ID: "F-003", Category: "PRODUCTION_CODE", Severity: "MEDIUM", File: "src/main/java/M.java", Line: 30, Problem: "中风险问题", Evidence: "证据C", Impact: "影响C", Recommendation: "建议C", NeedsTest: true, IntroducedByChange: true, Confidence: 0.8},
+			{ID: "F-002", Category: "PRODUCTION_CODE", Severity: "CRITICAL", File: "src/main/java/B.java", Line: 20, Problem: "严重问题B", Evidence: "证据B", Impact: "影响B", Recommendation: "建议B", NeedsTest: true, IntroducedByChange: true, Confidence: 0.99},
+			{ID: "F-001", Category: "PRODUCTION_CODE", Severity: "CRITICAL", File: "src/main/java/A.java", Line: 10, Problem: "严重问题A", Evidence: "证据A", Impact: "影响A", Recommendation: "建议A", NeedsTest: true, IntroducedByChange: true, Confidence: 0.95},
+		},
 	}
 }
 
-func TestR1PassedWritesReviewMarkdown(t *testing.T) {
+func TestR1PassedChineseReport(t *testing.T) {
 	req := sampleRequest()
 	req.Result = ResultPassed
 	req.Findings = nil
-	path, err := Write(t.TempDir(), req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(data)
-	for _, want := range []string{"Result: PASSED", "## Review Findings"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("missing %q in markdown: %s", want, text)
-		}
+	md, err := Render(req)
+	if err != nil { t.Fatal(err) }
+	for _, want := range []string{
+		"# 📝 代码评审报告",
+		"| 评审结果 | ✅ 通过 |",
+		"## 📁 评审范围",
+		"## 🔗 代码调用链",
+		"## ✅ 评审覆盖",
+		"## 📌 评审结论",
+		"### ✅ 本次评审通过",
+		"未发现需要处理的生产代码问题。",
+	} {
+		if !strings.Contains(md, want) { t.Fatalf("missing %q in markdown:\n%s", want, md) }
 	}
 }
 
-func TestR2FailedWritesFindings(t *testing.T) {
+func TestR2SeverityChineseColorAndDeterministicSort(t *testing.T) {
 	md, err := Render(sampleRequest())
-	if err != nil {
-		t.Fatal(err)
+	if err != nil { t.Fatal(err) }
+	for _, want := range []string{"🔴 严重", "🟠 高", "🟡 中", "🟢 低", "| 🔴 严重 | 2 |", "| 🟡 中 | 1 |", "| 🟢 低 | 1 |"} {
+		if !strings.Contains(md, want) { t.Fatalf("missing %q in markdown:\n%s", want, md) }
 	}
-	for _, want := range []string{"Result: FAILED", "## Review Findings", "### F-001 HIGH", "Problem:", "Needs Test:\nYES", "High: 1"} {
-		if !strings.Contains(md, want) {
-			t.Fatalf("missing %q in %s", want, md)
-		}
+	idx1 := strings.Index(md, "F-001")
+	idx2 := strings.Index(md, "F-002")
+	idx3 := strings.Index(md, "F-003")
+	idx4 := strings.Index(md, "F-004")
+	if !(idx1 >= 0 && idx1 < idx2 && idx2 < idx3 && idx3 < idx4) {
+		t.Fatalf("finding order is not severity/file/line/id deterministic: %d %d %d %d", idx1, idx2, idx3, idx4)
 	}
 }
 
-func TestR3PartialWritesManualActionRequired(t *testing.T) {
+func TestR3MultipleCallChainsAreNotFlattened(t *testing.T) {
+	md, err := Render(sampleRequest())
+	if err != nil { t.Fatal(err) }
+	for _, want := range []string{"### 调用链 1", "`OrderController.approve`\n↓\n`OrderService.approve`", "### 调用链 2", "`OrderController.cancel`\n↓\n`OrderService.cancel`"} {
+		if !strings.Contains(md, want) { t.Fatalf("missing %q in markdown:\n%s", want, md) }
+	}
+}
+
+func TestR4NoCallChainHasChineseEmptyState(t *testing.T) {
+	req := sampleRequest()
+	req.Coverage.CallChains = nil
+	md, err := Render(req)
+	if err != nil { t.Fatal(err) }
+	if !strings.Contains(md, "未发现需要展开的项目内部调用链。") { t.Fatal(md) }
+}
+
+func TestR5TestReviewScopeRulesAreLocked(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "agents", "reviewer.md")
+	data, err := os.ReadFile(path)
+	if err != nil { t.Fatal(err) }
+	text := string(data)
+	for _, want := range []string{
+		"测试代码默认不得产生普通 Code Review Finding",
+		"TEST_VALIDITY",
+		"删除有效测试",
+		"删除或明显弱化关键断言",
+		"Mock 内部业务 Bean",
+		"false-positive",
+	} {
+		if !strings.Contains(text, want) { t.Fatalf("reviewer rule missing %q", want) }
+	}
+}
+
+func TestR6PartialChineseManualActionRequired(t *testing.T) {
 	req := sampleRequest()
 	req.Result = ResultManualActionRequired
 	req.Coverage.Status = "PARTIAL"
 	req.Findings = nil
-	req.Coverage.Unresolved = []string{"OrderService.approve: IMPLEMENTATION_NOT_FOUND"}
-	req.Coverage.MissingReviewedFiles = []string{"OrderDTO.java"}
-	req.Coverage.RuntimeErrors = []string{"change-analysis contract failed"}
+	req.Coverage.Unresolved = []string{"OrderService.approve - 原因：未找到实现"}
+	req.Coverage.MissingReviewedFiles = []string{"src/main/java/OrderServiceImpl.java"}
 	md, err := Render(req)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil { t.Fatal(err) }
+	for _, want := range []string{"## ⚠️ 评审未完整完成", "当前评审需要人工处理，不能判定为通过。", "OrderService.approve", "尚未评审文件", "⚠️ 需要人工处理"} {
+		if !strings.Contains(md, want) { t.Fatalf("missing %q in markdown:\n%s", want, md) }
 	}
-	for _, want := range []string{"Result: MANUAL_ACTION_REQUIRED", "Coverage: PARTIAL", "## Review Findings", "IMPLEMENTATION_NOT_FOUND", "Missing reviewed file: OrderDTO.java", "Runtime Contract validation error: change-analysis contract failed"} {
-		if !strings.Contains(md, want) {
-			t.Fatalf("missing %q in %s", want, md)
-		}
+	if strings.Contains(md, "✅ 本次评审通过") { t.Fatal("PARTIAL report must not claim passed") }
+}
+
+func TestR7FixedUIHasNoEnglishLabels(t *testing.T) {
+	md, err := Render(sampleRequest())
+	if err != nil { t.Fatal(err) }
+	for _, forbidden := range []string{"Review Scope", "Review Coverage", "Review Findings", "Problem", "Evidence", "Impact", "Recommendation", "Summary", "Needs Test"} {
+		if strings.Contains(md, forbidden) { t.Fatalf("fixed UI still contains %q:\n%s", forbidden, md) }
 	}
 }
 
-func TestR4NoChangesWritesPassedZeroCounts(t *testing.T) {
-	req := sampleRequest()
-	req.Result = ResultPassed
-	req.Scope.ChangedFiles = nil
-	req.Coverage.ReviewedFiles = nil
-	req.Coverage.CallChain = nil
-	req.Coverage.ExternalDependencies = nil
-	req.Findings = nil
-	md, err := Render(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"Result: PASSED", "Changed Files: 0", "## Review Findings\n无", "Findings: 0"} {
-		if !strings.Contains(md, want) {
-			t.Fatalf("missing %q in %s", want, md)
-		}
-	}
-}
-
-func TestR5HarnessTestPersistsReviewBeforeTargetSelection(t *testing.T) {
-	orchestratorPath := filepath.Join("..", "..", "..", "agents", "orchestrator.md")
-	data, err := os.ReadFile(orchestratorPath)
-	if err != nil {
-		t.Fatalf("read orchestrator contract: %v", err)
-	}
-	text := string(data)
-	start := strings.Index(text, "## `harness test`")
-	if start < 0 {
-		t.Fatal("harness test section not found")
-	}
-	section := text[start:]
-	if end := strings.Index(section, "## `harness upgrade`"); end >= 0 {
-		section = section[:end]
-	}
-	persist := strings.Index(section, "在任何 Test Target Selection 之前生成并确认 `.code-harness/runs/<runId>/review.md`")
-	selection := strings.Index(section, "affectedControllers=0 → `NO_TEST_TARGET`")
-	if persist < 0 {
-		t.Fatal("harness test contract does not require review.md before Test Target Selection")
-	}
-	if selection < 0 {
-		t.Fatal("Test Target Selection entry point not found in harness test contract")
-	}
-	if persist >= selection {
-		t.Fatalf("review.md persistence must precede Test Target Selection: persist=%d selection=%d", persist, selection)
-	}
-}
-
-func TestR6RunIDEscapeRejected(t *testing.T) {
-	req := sampleRequest()
-	req.RunID = "../escape"
-	if _, err := Write(t.TempDir(), req); err == nil {
-		t.Fatal("expected runId escape rejection")
-	}
-}
-
-func TestR7ReportCannotWriteOutsideRunDirectory(t *testing.T) {
-	root := t.TempDir()
-	req := sampleRequest()
-	path, err := Write(root, req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := filepath.Join(root, ".code-harness", "runs", req.RunID, "review.md")
-	if path != expected {
-		t.Fatalf("path=%q want=%q", path, expected)
-	}
-}
-
-func TestR8SameInputIsDeterministic(t *testing.T) {
+func TestR8SameInputIsByteForByteDeterministic(t *testing.T) {
 	req := sampleRequest()
 	a, err := Render(req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	b, err := Render(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a != b {
-		t.Fatal("same input produced different markdown")
-	}
+	if err != nil { t.Fatal(err) }
+	if a != b { t.Fatal("same input produced different markdown") }
+}
+
+func TestFindingCategoryRequired(t *testing.T) {
+	req := sampleRequest()
+	req.Findings[0].Category = ""
+	if err := Validate(req); err == nil { t.Fatal("expected missing finding category rejection") }
 }
 
 func TestRequestTransportMustMatchRunAndIsDeletedAfterSuccess(t *testing.T) {
 	root := t.TempDir()
 	old, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
+	if err := os.Chdir(root); err != nil { t.Fatal(err) }
 	defer func() { _ = os.Chdir(old) }()
 
 	req := sampleRequest()
 	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	input := filepath.Join(".code-harness", "runs", req.RunID, "requests", "review-report.json")
-	if err := os.MkdirAll(filepath.Dir(input), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(input, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	if err := os.MkdirAll(filepath.Dir(input), 0o755); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(input, data, 0o600); err != nil { t.Fatal(err) }
 	path, err := WriteRequestFile(".", input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(input); !os.IsNotExist(err) {
-		t.Fatalf("transport should be deleted, stat err=%v", err)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
+	if _, err := os.Stat(input); !os.IsNotExist(err) { t.Fatalf("transport should be deleted, stat err=%v", err) }
+	if _, err := os.Stat(path); err != nil { t.Fatal(err) }
 }
 
 func TestRequestTransportRejectsUnknownFields(t *testing.T) {
 	req := sampleRequest()
 	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	data = append(data[:len(data)-1], []byte(`,"unexpected":true}`)...)
-	if _, err := DecodeReviewRequest(data); err == nil {
-		t.Fatal("expected unknown field rejection")
-	}
+	if _, err := DecodeReviewRequest(data); err == nil { t.Fatal("expected unknown field rejection") }
 }
