@@ -94,7 +94,17 @@ TARGETED 时 Finding 必须落在经 Runtime 验证的本次 Scope 内；不得�
 
 但是：**测试代码默认不得产生普通 Code Review Finding。**
 
-不得因为命名、重复代码、测试结构、优雅度、可维护性、代码风格或 Mock 写法不漂亮产生 Finding。
+不得因为以下内容产生 Finding：
+
+```text
+命名不好
+重复代码
+测试结构不好
+测试代码不够优雅
+可维护性一般
+代码风格
+Mock 写法不漂亮
+```
 
 测试代码只保留 **Test Validity Gate**。只有存在明确代码证据表明测试产生 false-positive 或真实覆盖被破坏时，才允许：
 
@@ -112,7 +122,7 @@ category = TEST_VALIDITY
 6. 修改测试范围，使本次生产变更实际没有被验证。
 7. 其他具有明确代码证据的 false-positive 行为。
 
-不得把 Test Validity Gate 扩展成普通测试代码质量评审。
+不得把 Test Validity Gate 扩展成普通测试代码质量 Review。
 
 ## Review Report transport
 
