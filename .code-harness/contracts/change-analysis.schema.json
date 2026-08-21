@@ -97,7 +97,8 @@
             "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
           },
           "role": { "$ref": "#/$defs/fileRole" },
-          "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS"] }
+          "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS"] },
+          "from": { "type": "string", "minLength": 1, "description": "可选：该定位由哪个已确认 symbol 导航得到，用于证明 target/call-chain 与额外上下文文件的直接关系。" }
         }
       }
     },
