@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewScopeSelection",
+  "description": "FULL/TARGETED Review 的机器可验证 Scope。TARGETED 只覆盖已选择调用链及其 scopedFiles，不代表整个 Change Set 已评审。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mode", "selectedCallChains", "scopedFiles"],
+  "properties": {
+    "mode": { "enum": ["FULL", "TARGETED"] },
+    "target": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/target" }
+      ]
+    },
+    "selectedCallChains": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/callChain" }
+    },
+    "scopedFiles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "TARGETED" } }, "required": ["mode"] },
+      "then": {
+        "required": ["target"],
+        "properties": {
+          "target": { "$ref": "#/$defs/target" },
+          "selectedCallChains": { "minItems": 1 },
+          "scopedFiles": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "FULL" } }, "required": ["mode"] },
+      "then": {
+        "properties": {
+          "target": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "kind"],
+      "properties": {
+        "symbol": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["CLASS", "METHOD"] }
+      }
+    },
+    "callChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entryPoint", "chain"],
+      "properties": {
+        "entryPoint": { "type": "string", "minLength": 1 },
+        "chain": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
