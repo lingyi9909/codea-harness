@@ -15,12 +15,14 @@ func TestReviewCodeSkillContractMatches132FindingRules(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"version: 3",
+		"version: 4",
 		"PRODUCTION_CODE",
 		"TEST_VALIDITY",
 		"category",
 		"problem",
 		"测试代码默认不得产生普通 Finding",
+		"不得因为以下内容产生 Finding",
+		"不得把 Test Validity Gate 扩展成普通测试代码质量 Review",
 		"problem / evidence / impact / recommendation",
 	} {
 		if !strings.Contains(text, want) {
