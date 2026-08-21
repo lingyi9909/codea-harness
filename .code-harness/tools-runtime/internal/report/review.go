@@ -27,13 +27,21 @@ type ReviewRequest struct {
 	BaseRef        string         `json:"baseRef"`
 	Head           string         `json:"head"`
 	Result         Result         `json:"result"`
+	Mode           string         `json:"mode,omitempty"`
+	Target         *ReviewTarget  `json:"target,omitempty"`
 	Scope          ReviewScope    `json:"reviewScope"`
 	Coverage       ReviewCoverage `json:"reviewCoverage"`
 	Findings       []Finding      `json:"findings"`
 }
 
+type ReviewTarget struct {
+	Symbol string `json:"symbol"`
+	Kind   string `json:"kind"`
+}
+
 type ReviewScope struct {
 	ChangedFiles []string `json:"changedFiles"`
+	ScopedFiles  []string `json:"scopedFiles,omitempty"`
 }
 
 type CallChain struct {
@@ -98,6 +106,28 @@ func Validate(req ReviewRequest) error {
 	default:
 		return fmt.Errorf("invalid review result %q", req.Result)
 	}
+	mode := reviewMode(req)
+	switch mode {
+	case "FULL":
+		if req.Target != nil {
+			return errors.New("FULL review report must not contain target")
+		}
+	case "TARGETED":
+		if req.Target == nil || strings.TrimSpace(req.Target.Symbol) == "" {
+			return errors.New("TARGETED review report requires target")
+		}
+		if req.Target.Kind != "CLASS" && req.Target.Kind != "METHOD" {
+			return fmt.Errorf("invalid review target kind %q", req.Target.Kind)
+		}
+		if len(req.Scope.ScopedFiles) == 0 {
+			return errors.New("TARGETED review report requires scopedFiles")
+		}
+		if len(req.Coverage.CallChains) == 0 {
+			return errors.New("TARGETED review report requires selected callChains")
+		}
+	default:
+		return fmt.Errorf("invalid review mode %q", req.Mode)
+	}
 	switch req.Coverage.Status {
 	case "COMPLETE", "PARTIAL":
 	default:
@@ -140,6 +170,21 @@ func Validate(req ReviewRequest) error {
 	return nil
 }
 
+func reviewMode(req ReviewRequest) string {
+	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
+	if mode == "" {
+		return "FULL"
+	}
+	return mode
+}
+
+func scopeFiles(req ReviewRequest) []string {
+	if reviewMode(req) == "TARGETED" {
+		return req.Scope.ScopedFiles
+	}
+	return req.Scope.ChangedFiles
+}
+
 func validArtifactID(value string) bool {
 	if value == "" || value == "." || value == ".." {
 		return false
@@ -165,7 +210,7 @@ func Render(req ReviewRequest) (string, error) {
 		return b.String(), nil
 	}
 	writeSeverityOverview(&b, req.Findings)
-	writeScope(&b, req.Scope)
+	writeScope(&b, req)
 	writeCallChains(&b, req.Coverage.CallChains)
 	writeCoverage(&b, req.Coverage)
 	writeFindings(&b, req.Findings)
@@ -179,10 +224,17 @@ func writeHeader(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b, "| 项目 | 内容 |")
 	fmt.Fprintln(b, "|---|---|")
 	fmt.Fprintf(b, "| 评审结果 | %s |\n", resultLabel(req.Result))
+	if reviewMode(req) == "TARGETED" {
+		fmt.Fprintln(b, "| 评审模式 | 🎯 定向评审 |")
+		fmt.Fprintf(b, "| 评审目标 | `%s` |\n", singleLine(req.Target.Symbol))
+	} else {
+		fmt.Fprintln(b, "| 评审模式 | 📦 完整评审 |")
+	}
 	fmt.Fprintf(b, "| Harness 版本 | %s |\n", singleLine(req.HarnessVersion))
 	fmt.Fprintf(b, "| 评审基线 | %s |\n", singleLine(req.BaseRef))
 	fmt.Fprintf(b, "| 当前提交 | %s |\n", singleLine(req.Head))
-	fmt.Fprintf(b, "| 变更文件 | %d |\n", len(req.Scope.ChangedFiles))
+	fmt.Fprintf(b, "| Change Set 文件 | %d |\n", len(req.Scope.ChangedFiles))
+	fmt.Fprintf(b, "| 本次 Scope 文件 | %d |\n", len(scopeFiles(req)))
 	fmt.Fprintf(b, "| 已评审文件 | %d |\n", len(req.Coverage.ReviewedFiles))
 	fmt.Fprintf(b, "| 问题数量 | %d |\n", len(req.Findings))
 	fmt.Fprintln(b)
@@ -203,11 +255,11 @@ func writeSeverityOverview(b *strings.Builder, findings []Finding) {
 	fmt.Fprintln(b)
 }
 
-func writeScope(b *strings.Builder, scope ReviewScope) {
+func writeScope(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b, "## 📁 评审范围")
 	fmt.Fprintln(b)
 	var production, tests []string
-	for _, file := range scope.ChangedFiles {
+	for _, file := range scopeFiles(req) {
 		if isTestFile(file) {
 			tests = append(tests, file)
 		} else {
@@ -381,6 +433,7 @@ func writeSummary(b *strings.Builder, req ReviewRequest) {
 	default:
 		fmt.Fprintln(b, "### ⚠️ 需要人工处理")
 	}
+	writeTargetedDisclaimer(b, req)
 }
 
 func writePartial(b *strings.Builder, req ReviewRequest) {
@@ -401,6 +454,15 @@ func writePartial(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b, "### 评审结论")
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "⚠️ 需要人工处理")
+	writeTargetedDisclaimer(b, req)
+}
+
+func writeTargetedDisclaimer(b *strings.Builder, req ReviewRequest) {
+	if reviewMode(req) != "TARGETED" {
+		return
+	}
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, "> 本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。")
 }
 
 func resultLabel(result Result) string {
