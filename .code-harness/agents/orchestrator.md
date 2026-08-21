@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、修复轮次和统一摘要。
-version: 2
+version: 3
 ---
 
 # Orchestrator
@@ -12,6 +12,7 @@ version: 2
 |---|---|---|
 | `harness init` | Project Adapter | 否 |
 | `harness review` | Reviewer | 否 |
+| `harness api-doc <target>` | API Doc Agent → discover-api → generate-api-doc | 否 |
 | `harness upgrade` | upgrade-harness | 否 |
 | `harness test` | Reviewer → Integration Test Agent → Runtime Debugger → Fix Agent(需要时) | 是 |
 | `harness debug-service` | Runtime Debugger | 是 |
@@ -21,9 +22,9 @@ version: 2
 | `harness verify fix:<fixPlanId>` | Runtime Debugger | 是 |
 | `harness verify service:<runId>` | Runtime Debugger | 是 |
 
-测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。新生成/修改测试的自动修复仍最多 2 轮，历史 Existing Test 不自动修改。
+测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。新生成/修改测试的自动修复仍最多 2 轮，历史 Existing Test 不自动修改。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
 
-## Review Change Set（review/test 共用）
+## Review Change Set（review/test/api-doc changed 共用）
 
 ```text
 merge-base(baseRef, HEAD) → HEAD 的 committed
@@ -123,6 +124,57 @@ Review Scope
 → Review Findings（如允许执行）
 → 结果 + .code-harness/runs/<runId>/review.md
 ```
+
+## `harness api-doc`
+
+支持：
+
+```text
+harness api-doc OrderController
+harness api-doc OrderController.approve
+harness api-doc changed
+```
+
+固定流程：
+
+```text
+1. 创建 runId；全程只读分析。
+2. 显式 Controller / Controller.method：API Doc Agent 调用 discover-api，用受控 Code Navigation 唯一定位 target。
+3. changed：复用 Review Change Set + ChangeAnalysis 的 affectedControllers。
+4. changed target selection：
+   - 0 → NO_API_TARGET → STOP
+   - 1 → AUTO_SINGLE → 继续
+   - 2+ → WAITING_API_SELECTION；native multi-select 优先，否则 numbered fallback（1,3 / ALL）
+   - 多 target 不得默认 ALL；空选择/取消 → STOP
+5. API Doc Agent 调用 generate-api-doc，分析深度固定：
+   Controller → Request DTO → Response DTO/VO → Enum → Validation → Direct Service Method（最多一层）→ STOP。
+6. 禁止进入 Repository / Mapper / DAO / DB / MQ / Redis / RPC Server；不得读取真实数据库。
+7. 结构化 apiDoc 必须满足 api-doc.schema.json。CONFIRMED/INFERRED 必须带 evidence；无可靠证据优先空数组，禁止编造。
+8. Orchestrator/Agent 只把 transport 写入 `.code-harness/runs/<runId>/requests/api-doc.json`，不得自由生成最终 Markdown。
+9. 调用 Controlled Runtime：`report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json`。
+10. Runtime 再执行 Draft 2020-12 Schema 校验，通过后 deterministic renderer 生成 `.code-harness/runs/<runId>/api-doc.md`，并删除 transport。
+11. 最终摘要仅展示 target、endpoint 数和 Api Doc Report path。
+```
+
+请求参数只识别：`@RequestBody / @RequestParam / @PathVariable / 明确业务 @RequestHeader`。Validation 只从源码提取 `@NotNull/@NotBlank/@NotEmpty/@Size/@Length/@Min/@Max/@DecimalMin/@DecimalMax/@Pattern/@Valid`。DTO 递归最大深度 3 并做 cycle detection。Enum 未解析时只保留类型，不得编造值。Error code 只允许 Controller/Direct Service Method 中显式 BizException/ErrorCode/assert evidence。
+
+API Documentation 的 semantic slots：
+
+```text
+permissions
+preconditions
+businessFlow
+stateTransitions
+dataEffects
+externalEffects
+transactions
+idempotency
+errorCodes
+testCoverage
+businessNotes
+```
+
+这些字段只是 Evidence-backed Contract，不授权 Task 3 新建深层权限/事务/测试覆盖分析引擎；只允许在既定分析深度内有证据时填充。
 
 ## Test Target Selection 硬门禁（1.2）
 
@@ -232,6 +284,13 @@ Review Report:
 .code-harness/runs/<runId>/review.md
 ```
 
+对于 `harness api-doc`，统一结果必须显示：
+
+```text
+API Doc Report:
+.code-harness/runs/<runId>/api-doc.md
+```
+
 ## Task 7：Selected Test Flow + Integration-Test DB Assertions
 
 以下规则是在现有 `harness test` / Existing Test / Approval / Repair Gate 之上增加，不替代原语义；本节的 method-level 规则覆盖此前 Task 7 的 class-level handoff/origin 表述：
@@ -282,7 +341,8 @@ User 必须没有：
 ## 禁止行为
 
 - 不得跳过 Review Coverage / Runtime Contract 校验 / Review Report Persistence / Test Target Selection / 审批门禁。
-- 不得让 Reviewer/Orchestrator 自由写 `review.md`；只能调用 Controlled Runtime Renderer。
+- `harness api-doc` 不得跳过 api-doc Schema Validation / API Target Selection / Controlled Runtime Renderer。
+- 不得让 Reviewer/Orchestrator/API Doc Agent 自由写 `review.md` 或 `api-doc.md`；只能调用 Controlled Runtime Renderer。
 - 不得超过 2 轮自动测试修复。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。
