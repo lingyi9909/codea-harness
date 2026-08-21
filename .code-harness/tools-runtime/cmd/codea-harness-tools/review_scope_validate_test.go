@@ -43,7 +43,7 @@ func targetedChangeAnalysis(reviewedService bool) string {
   ],
   "externalDependencies":[],
   "riskAreas":[],
-  "reviewCoverage":{"status":"COMPLETE","reviewedFiles":` + reviewed + `,"unresolvedSymbols":[]}
+  "reviewCoverage":{"status":"PARTIAL","reviewedFiles":` + reviewed + `,"unresolvedSymbols":[]}
 }`
 }
 
@@ -66,7 +66,7 @@ func TestValidateReviewScopeUsesScopedCoverageNotFullChangedSet(t *testing.T) {
 	writeFile(t, analysis, targetedChangeAnalysis(true))
 
 	if err := run([]string{"validate", "--schema", ".code-harness/contracts/review-scope.schema.json", "--input", input, "--format", "json", "--change-analysis", analysis}); err != nil {
-		t.Fatalf("targeted scope should validate despite unrelated changed file: %v", err)
+		t.Fatalf("targeted scope should validate with Scoped Coverage COMPLETE even when full reviewCoverage is PARTIAL: %v", err)
 	}
 }
 
