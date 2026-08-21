@@ -74,9 +74,10 @@ TARGETED 的 COMPLETE 只针对经机器验证的 `ReviewScopeSelection`：
 ```text
 scopedFiles ⊆ reviewedFiles
 + selectedCallChains 全部内部 symbols 已解析/读取
++ scopedFiles 与 ChangeAnalysis.symbolLocations 的 exact repository path 证据一致
 ```
 
-与 target 无关的 changed files 可以不进入本次 scopedFiles，但不得标记为已评审，也不得据此声称整个 Change Set 已完成评审。
+与 target 无关的 changed files 可以不进入本次 scopedFiles，但不得标记为已评审，也不得据此声称整个 Change Set 已完成评审。TARGETED 不得仅凭 Agent 自报的 Full `reviewCoverage.status` 放行。
 
 ### PARTIAL / Runtime 校验失败
 
@@ -133,6 +134,7 @@ Reviewer / Orchestrator
 - 无代码变更也必须生成“✅ 通过 / 变更文件 0 / 问题数量 0”的中文报告。
 - Coverage PARTIAL 或 Runtime Contract validation error 必须先把 unresolved、missing reviewed files、Runtime validation error 写入结构化 transport，再生成 `MANUAL_ACTION_REQUIRED` 报告，然后 STOP。
 - Runtime 报告生成失败时不得继续后续流程，统一 `MANUAL_ACTION_REQUIRED`。
+- TARGETED 正式报告中 `Finding.file` 必须属于 Runtime verified `scopedFiles`；Controlled Runtime Renderer 必须拒绝 scope 外 Finding。
 - OpenCode 最终摘要必须同时展示 Review 结果和 `review.md` 路径。
 
 ## `harness review`
@@ -194,20 +196,31 @@ Reviewer / Orchestrator
 
 ```text
 1. 解析 effectiveBaseRef，建立完整 Change Set
-2. Reviewer.analyze-change 建立 ChangeAnalysis 与 confirmed callChains
+2. Reviewer.analyze-change 建立 ChangeAnalysis、confirmed callChains 与 symbolLocations exact path/role evidence
 3. Class → target.kind=CLASS；Class.method → target.kind=METHOD
-4. 从 confirmed callChains 中解析与 target 有证据关系的链
-5. 0 条 → NO_REVIEW_TARGET → STOP
-6. 1 条 → AUTO_SINGLE
-7. 2+ 条 → WAITING_REVIEW_SCOPE_SELECTION
-8. 生成 ReviewScopeSelection(target/selectedCallChains/scopedFiles)
-9. Controlled Runtime validate review-scope.schema.json --change-analysis <ChangeAnalysis>
-10. Runtime 机器 scoped coverage != COMPLETE → MANUAL_ACTION_REQUIRED review.md → STOP
-11. COMPLETE 后才调用 reviewer.review-code，且只允许本次 scopedFiles / selectedCallChains
-12. Controlled Runtime 生成 TARGETED review.md
+4. Runtime/Reviewer 使用 symbolLocations.role 判断 target 是否为 Controller；不得靠类名后缀猜角色
+5. 从 confirmed callChains 中解析与 target 有证据关系的链
+6. 0 条 → NO_REVIEW_TARGET → STOP
+7. Controller CLASS → 自动包含该 Controller 当前 Change Set 中全部相关 confirmed chains
+8. Controller METHOD → 自动包含该 method 当前 Change Set 中全部相关 confirmed chains
+9. Service/其他下游 target：1 条 → AUTO_SINGLE；2+ 条上游业务链 → WAITING_REVIEW_SCOPE_SELECTION
+10. scopedFiles 只能取自 symbolLocations 的 exact repository path；同 basename 的其他模块文件不能替代
+11. 生成 ReviewScopeSelection(target/selectedCallChains/scopedFiles)
+12. Controlled Runtime validate review-scope.schema.json --change-analysis <ChangeAnalysis>
+13. Runtime 重新验证 Controller 防漏链、selected chains、exact scoped paths 与 scoped coverage
+14. Runtime 机器 scoped coverage != COMPLETE → MANUAL_ACTION_REQUIRED review.md → STOP
+15. COMPLETE 后才调用 reviewer.review-code；TARGETED 只允许 Runtime verified scopedFiles / selectedCallChains
+16. Controlled Runtime Renderer 再验证 Finding.file ∈ verified scopedFiles 后生成 TARGETED review.md
 ```
 
-Service target 同样允许；当一个 Service/Class/Method target 解析到 2+ 条 confirmed call chains 时：
+Controller target 不进入用户“挑部分链”流程：
+
+```text
+Controller CLASS  → 自动包含全部相关 confirmed chains
+Controller METHOD → 自动包含该 method 全部相关 confirmed chains
+```
+
+只有 Service/其他下游 target 在解析到 2+ 条上游业务链时才允许用户选择：
 
 - 宿主支持结构化多选 → native multi-select；
 - 否则 numbered fallback：`1` / `1,3` / `ALL`；
@@ -215,6 +228,8 @@ Service target 同样允许；当一个 Service/Class/Method target 解析到 2+
 - 空选择或取消 → STOP；
 - Review Scope Selection 不等于 Test/Fix Approval；
 - `ALL`/编号选择都不能替代 `批准 <planId>` 或 `批准 <fixPlanId>`。
+
+最终 `ReviewScopeSelection` 必须通过 Runtime `reviewscope.Verify`。如果 Controller CLASS/METHOD 漏掉 required confirmed chain，或 scopedFiles 不等于 Code Navigation exact path evidence，Runtime 必须拒绝，不能依赖 Agent 提示词自律。
 
 TARGETED 报告必须包含：
 
