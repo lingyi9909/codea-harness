@@ -16,7 +16,7 @@ func validateReviewScopeAgainstAnalysis(selectionJSON, changeAnalysisJSON []byte
 		return reviewscope.Selection{}, reviewscope.CoverageResult{}, err
 	}
 	if machine.Status != "COMPLETE" {
-		return selection, machine, fmt.Errorf("review scope coverage incomplete: missingFiles=%v", machine.MissingFiles)
+		return selection, machine, fmt.Errorf("review scope coverage incomplete: missingFiles=%v unresolvedSymbols=%v", machine.MissingFiles, machine.UnresolvedSymbols)
 	}
 	return selection, machine, nil
 }
