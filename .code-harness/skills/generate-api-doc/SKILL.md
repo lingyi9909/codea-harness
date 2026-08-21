@@ -12,8 +12,6 @@ version: 1
 
 ## 分析顺序
 
-对每个 endpoint 固定执行：
-
 ```text
 Controller method
 → Request parameter / Request DTO
@@ -29,16 +27,30 @@ Controller method
 
 ## Request
 
-支持：
+支持且必须显式映射参数位置：
 
-- `@RequestBody`
-- `@RequestParam`
-- `@PathVariable`
-- `@RequestHeader`：仅业务 Header
+```text
+@RequestBody   → location=BODY
+@RequestParam  → location=QUERY
+@PathVariable  → location=PATH
+@RequestHeader → location=HEADER（仅明确业务 Header）
+```
 
-`required`、字段名、类型、validation 必须来自代码。
+每个 request field 必须输出：
 
-Validation 支持：
+```text
+name
+type
+location = BODY | QUERY | PATH | HEADER
+required
+description
+validation[]
+enumValues[]
+```
+
+`location` 与 `validation` 是不同语义。禁止把 `@PathVariable`、`@RequestParam`、`@RequestHeader`、`@RequestBody` 写进 `validation[]`。
+
+Validation 只允许代码中的校验约束：
 
 ```text
 @NotNull
@@ -58,9 +70,7 @@ Validation 支持：
 
 支持 regular DTO、nested DTO、`List<T>`、`PageResult<T>`、`Result<T>`。
 
-硬限制：
-
-- 最大递归深度：3。
+- 最大递归深度 3。
 - 使用 visited-type set 做 cycle detection。
 - 达到深度或出现环时停止继续展开，但保留已确认字段 type。
 - 不因无法展开而编造字段。
@@ -74,8 +84,6 @@ type = <原类型>
 enumValues = []
 ```
 
-禁止模型生成“常见值”。
-
 ## Business / Evidence
 
 所有 semantic statement：
@@ -88,73 +96,38 @@ enumValues = []
 }
 ```
 
-规则：
+- CONFIRMED：直接源码证据，evidence >= 1。
+- INFERRED：仅允许有 supporting evidence 的受限推断，evidence >= 1。
+- UNKNOWN：源码范围内确实无法确定且需要显式呈现时使用。
+- 无内容优先 `[]`。
 
-- `CONFIRMED`：直接源码证据，evidence 至少 1 条。
-- `INFERRED`：仅在允许推断且有 supporting evidence 时；evidence 至少 1 条。
-- `UNKNOWN`：源码范围确实无法确定且需要显式呈现时；evidence 可空。
-- 无内容时输出 `[]`，不要机械填 UNKNOWN。
+`permissions / preconditions / businessFlow / stateTransitions / dataEffects / externalEffects / transactions / idempotency / testCoverage / businessNotes` 只在允许分析深度内有证据时填写。
 
-### permissions
-仅代码可见 annotation/guard/direct service check。
-
-### preconditions
-仅显式参数/状态/业务前置判断。
-
-### businessFlow
-只描述前端需要理解的 direct service flow，不暴露后端实现细节。
-
-### stateTransitions / dataEffects / externalEffects / transactions / idempotency / testCoverage
-只有允许分析深度内存在明确 evidence 才填；Task 3 不建立额外深层分析引擎。
-
-### errorCodes
-只允许 Controller 或 Direct Service Method 内显式：
-
-```text
-BizException
-ErrorCode
-assert/guard 显式错误码
-```
-
-禁止从数据库、日志、经验猜 error code。
-
-### businessNotes
-只写前端调用/交互需要知道的信息；禁止记录 Repository/SQL/线程/缓存等内部实现细节。
+`errorCodes` 只允许 Controller 或 Direct Service Method 内显式 `BizException / ErrorCode / assert/guard` 证据。
 
 ## Example
 
-允许生成合理 example value，但以下内容必须来自代码：
-
-```text
-field name
-type
-enum
-required
-response shape
-error code
-```
+example value 可以合理生成，但 field name/type/location/enum/required/response shape/error code 必须来自代码。
 
 ## 输出与 Runtime Gate
 
-输出必须构造成：
+输出：
 
 ```json
 {
   "runId": "...",
   "harnessVersion": "...",
-  "apiDoc": {
-    "controllers": []
-  }
+  "apiDoc": {"controllers": []}
 }
 ```
 
-`apiDoc` 必须通过 `.code-harness/contracts/api-doc.schema.json`，然后写到：
+`apiDoc` 必须通过 `.code-harness/contracts/api-doc.schema.json`，transport 写入：
 
 ```text
 .code-harness/runs/<runId>/requests/api-doc.json
 ```
 
-只调用 Controlled Runtime：
+随后只调用：
 
 ```text
 codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json
