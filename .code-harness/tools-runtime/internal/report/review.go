@@ -110,9 +110,6 @@ func Validate(req ReviewRequest) error {
 		if strings.TrimSpace(chain.EntryPoint) == "" {
 			return fmt.Errorf("call chain %d requires entryPoint", i)
 		}
-		if len(chain.Chain) == 0 {
-			return fmt.Errorf("call chain %q requires chain", chain.EntryPoint)
-		}
 		for j, symbol := range chain.Chain {
 			if strings.TrimSpace(symbol) == "" {
 				return fmt.Errorf("call chain %q has empty symbol at %d", chain.EntryPoint, j)
@@ -184,7 +181,7 @@ func writeHeader(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintf(b, "| 评审结果 | %s |\n", resultLabel(req.Result))
 	fmt.Fprintf(b, "| Harness 版本 | %s |\n", singleLine(req.HarnessVersion))
 	fmt.Fprintf(b, "| 评审基线 | %s |\n", singleLine(req.BaseRef))
-	fmt.Fprintf(b, "| HEAD | %s |\n", singleLine(req.Head))
+	fmt.Fprintf(b, "| 当前提交 | %s |\n", singleLine(req.Head))
 	fmt.Fprintf(b, "| 变更文件 | %d |\n", len(req.Scope.ChangedFiles))
 	fmt.Fprintf(b, "| 已评审文件 | %d |\n", len(req.Coverage.ReviewedFiles))
 	fmt.Fprintf(b, "| 问题数量 | %d |\n", len(req.Findings))
@@ -230,7 +227,7 @@ func writeScope(b *strings.Builder, scope ReviewScope) {
 		fmt.Fprintln(b)
 		writeCodeList(b, tests, "无")
 		fmt.Fprintln(b)
-		fmt.Fprintln(b, "> 测试代码用于覆盖分析，不执行普通代码质量 Review。")
+		fmt.Fprintln(b, "> 测试代码用于覆盖分析，不执行普通代码质量评审。")
 		fmt.Fprintln(b)
 	}
 	if len(production) == 0 && len(tests) == 0 {
@@ -251,9 +248,10 @@ func writeCallChains(b *strings.Builder, chains []CallChain) {
 	}
 	for i, chain := range chains {
 		fmt.Fprintf(b, "### 调用链 %d\n\n", i+1)
-		for j, symbol := range chain.Chain {
+		nodes := normalizeCallChain(chain)
+		for j, symbol := range nodes {
 			fmt.Fprintf(b, "`%s`\n", singleLine(symbol))
-			if j < len(chain.Chain)-1 {
+			if j < len(nodes)-1 {
 				fmt.Fprintln(b, "↓")
 			}
 		}
@@ -261,6 +259,22 @@ func writeCallChains(b *strings.Builder, chains []CallChain) {
 	}
 	fmt.Fprintln(b, "---")
 	fmt.Fprintln(b)
+}
+
+func normalizeCallChain(chain CallChain) []string {
+	entry := strings.TrimSpace(chain.EntryPoint)
+	nodes := make([]string, 0, len(chain.Chain)+1)
+	if entry != "" {
+		nodes = append(nodes, entry)
+	}
+	for i, symbol := range chain.Chain {
+		symbol = strings.TrimSpace(symbol)
+		if i == 0 && symbol == entry {
+			continue
+		}
+		nodes = append(nodes, symbol)
+	}
+	return nodes
 }
 
 func writeCoverage(b *strings.Builder, coverage ReviewCoverage) {
@@ -323,7 +337,9 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 		fmt.Fprintln(b, "**位置**")
 		fmt.Fprintln(b)
 		location := singleLine(f.File)
-		if f.Line > 0 { location += ":" + strconv.Itoa(f.Line) }
+		if f.Line > 0 {
+			location += ":" + strconv.Itoa(f.Line)
+		}
 		fmt.Fprintf(b, "`%s`\n\n", location)
 		writeBoldSection(b, "问题", f.Problem)
 		writeBoldSection(b, "证据", f.Evidence)
@@ -331,7 +347,11 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 		writeBoldSection(b, "修复建议", f.Recommendation)
 		fmt.Fprintln(b, "**是否需要补充测试**")
 		fmt.Fprintln(b)
-		if f.NeedsTest { fmt.Fprintln(b, "是") } else { fmt.Fprintln(b, "否") }
+		if f.NeedsTest {
+			fmt.Fprintln(b, "是")
+		} else {
+			fmt.Fprintln(b, "否")
+		}
 		fmt.Fprintln(b)
 		fmt.Fprintln(b, "**置信度**")
 		fmt.Fprintln(b)
@@ -409,23 +429,33 @@ func severityLabel(severity string) string {
 
 func severityRank(severity string) int {
 	switch strings.ToUpper(severity) {
-	case "CRITICAL": return 0
-	case "HIGH": return 1
-	case "MEDIUM": return 2
-	default: return 3
+	case "CRITICAL":
+		return 0
+	case "HIGH":
+		return 1
+	case "MEDIUM":
+		return 2
+	default:
+		return 3
 	}
 }
 
 func severityCounts(findings []Finding) map[string]int {
 	counts := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-	for _, f := range findings { counts[strings.ToUpper(f.Severity)]++ }
+	for _, f := range findings {
+		counts[strings.ToUpper(f.Severity)]++
+	}
 	return counts
 }
 
 func unresolvedItems(coverage ReviewCoverage) []string {
 	items := append([]string(nil), coverage.Unresolved...)
-	for _, f := range coverage.MissingReviewedFiles { items = append(items, "尚未评审文件: "+f) }
-	for _, e := range coverage.RuntimeErrors { items = append(items, "Runtime Contract 校验错误: "+e) }
+	for _, f := range coverage.MissingReviewedFiles {
+		items = append(items, "尚未评审文件: "+f)
+	}
+	for _, e := range coverage.RuntimeErrors {
+		items = append(items, "Runtime Contract 校验错误: "+e)
+	}
 	sort.Strings(items)
 	return items
 }
@@ -437,57 +467,102 @@ func isTestFile(path string) bool {
 
 func Write(repoRoot string, req ReviewRequest) (string, error) {
 	markdown, err := Render(req)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	root, err := filepath.Abs(repoRoot)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	runsRoot := filepath.Join(root, ".code-harness", "runs")
 	runDir := filepath.Join(runsRoot, req.RunID)
 	rel, err := filepath.Rel(runsRoot, runDir)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return "", errors.New("review report path escapes runs directory") }
-	if err := os.MkdirAll(runDir, 0o755); err != nil { return "", fmt.Errorf("create review report directory: %w", err) }
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", errors.New("review report path escapes runs directory")
+	}
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		return "", fmt.Errorf("create review report directory: %w", err)
+	}
 	realRunsRoot, err := filepath.EvalSymlinks(runsRoot)
-	if err != nil { return "", fmt.Errorf("resolve runs directory: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("resolve runs directory: %w", err)
+	}
 	realRunDir, err := filepath.EvalSymlinks(runDir)
-	if err != nil { return "", fmt.Errorf("resolve review report directory: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("resolve review report directory: %w", err)
+	}
 	realRel, err := filepath.Rel(realRunsRoot, realRunDir)
-	if err != nil || realRel == ".." || strings.HasPrefix(realRel, ".."+string(filepath.Separator)) { return "", errors.New("review report path escapes runs directory") }
+	if err != nil || realRel == ".." || strings.HasPrefix(realRel, ".."+string(filepath.Separator)) {
+		return "", errors.New("review report path escapes runs directory")
+	}
 	path := filepath.Join(runDir, "review.md")
-	if err := os.WriteFile(path, []byte(markdown), 0o600); err != nil { return "", fmt.Errorf("write review report: %w", err) }
+	if err := os.WriteFile(path, []byte(markdown), 0o600); err != nil {
+		return "", fmt.Errorf("write review report: %w", err)
+	}
 	return path, nil
 }
 
 func WriteRequestFile(repoRoot, inputPath string) (string, error) {
-	if filepath.IsAbs(inputPath) || !strings.EqualFold(filepath.Ext(inputPath), ".json") { return "", errors.New("review report input must be a JSON request under .code-harness/runs/<runId>/requests") }
+	if filepath.IsAbs(inputPath) || !strings.EqualFold(filepath.Ext(inputPath), ".json") {
+		return "", errors.New("review report input must be a JSON request under .code-harness/runs/<runId>/requests")
+	}
 	cleanInput := filepath.Clean(inputPath)
 	runsRootRelative := filepath.Clean(filepath.Join(".code-harness", "runs"))
 	runsRel, err := filepath.Rel(runsRootRelative, cleanInput)
-	if err != nil || runsRel == "." || runsRel == ".." || strings.HasPrefix(runsRel, ".."+string(filepath.Separator)) { return "", errors.New("review report input must be under .code-harness/runs/<runId>/requests") }
+	if err != nil || runsRel == "." || runsRel == ".." || strings.HasPrefix(runsRel, ".."+string(filepath.Separator)) {
+		return "", errors.New("review report input must be under .code-harness/runs/<runId>/requests")
+	}
 	data, err := os.ReadFile(cleanInput)
-	if err != nil { return "", fmt.Errorf("read review report request: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("read review report request: %w", err)
+	}
 	req, err := DecodeReviewRequest(data)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	root, err := filepath.Abs(repoRoot)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	inputAbs, err := filepath.Abs(cleanInput)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	requestRoot := filepath.Join(root, ".code-harness", "runs", req.RunID, "requests")
 	rel, err := filepath.Rel(requestRoot, inputAbs)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return "", errors.New("review report input must be under .code-harness/runs/<runId>/requests") }
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", errors.New("review report input must be under .code-harness/runs/<runId>/requests")
+	}
 	realRequestRoot, err := filepath.EvalSymlinks(requestRoot)
-	if err != nil { return "", fmt.Errorf("resolve review report request directory: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("resolve review report request directory: %w", err)
+	}
 	realInput, err := filepath.EvalSymlinks(inputAbs)
-	if err != nil { return "", fmt.Errorf("resolve review report input: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("resolve review report input: %w", err)
+	}
 	realRel, err := filepath.Rel(realRequestRoot, realInput)
-	if err != nil || realRel == "." || realRel == ".." || strings.HasPrefix(realRel, ".."+string(filepath.Separator)) { return "", errors.New("review report input must be under .code-harness/runs/<runId>/requests") }
+	if err != nil || realRel == "." || realRel == ".." || strings.HasPrefix(realRel, ".."+string(filepath.Separator)) {
+		return "", errors.New("review report input must be under .code-harness/runs/<runId>/requests")
+	}
 	path, err := Write(root, req)
-	if err != nil { return "", err }
-	if err := os.Remove(inputAbs); err != nil { return "", fmt.Errorf("remove review report transport after success: %w", err) }
+	if err != nil {
+		return "", err
+	}
+	if err := os.Remove(inputAbs); err != nil {
+		return "", fmt.Errorf("remove review report transport after success: %w", err)
+	}
 	return path, nil
 }
 
 func writeCodeList(b *strings.Builder, values []string, empty string) {
-	if len(values) == 0 { fmt.Fprintln(b, empty); return }
-	for _, v := range values { fmt.Fprintf(b, "- `%s`\n", singleLine(v)) }
+	if len(values) == 0 {
+		fmt.Fprintln(b, empty)
+		return
+	}
+	for _, v := range values {
+		fmt.Fprintf(b, "- `%s`\n", singleLine(v))
+	}
 }
 
 func writeBoldSection(b *strings.Builder, title, content string) {
