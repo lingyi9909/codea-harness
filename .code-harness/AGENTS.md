@@ -2,7 +2,7 @@
 
 ## 范围
 
-本仓库定义 Codea Harness V1。1.1.1 只修复 Upgrade 配置兼容与 Review Call Chain 完整性，不改变现有 Agent 架构、测试复用或审批模型。
+本仓库定义 Codea Harness V1。1.3 在已验收的 Review/Test/Debug/Fix/DB/Upgrade 主流程上增量增强 Review Report、API Documentation 和 Lightweight Code Navigation，不允许借此重构既有主流程。
 
 ## 核心行为
 
@@ -39,18 +39,21 @@
 ```text
 codea-harness-tools upgrade
 codea-harness-tools validate ...
-codea-harness-tools nav find-symbol ...
-codea-harness-tools nav find-references ...
-codea-harness-tools nav find-implementations ...
+codea-harness-tools nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
+codea-harness-tools nav find-references --symbol <symbol> --scope <repo-relative-scope>
+codea-harness-tools nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
+codea-harness-tools nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
+codea-harness-tools nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
+codea-harness-tools nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
+codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
-禁止 `cmd /c`、`powershell -Command`、`bash -c`、shell 求值、管道、重定向或用户命令拼接。Code Navigation 由 Runtime 封装随包 `ast-grep.exe`；Agent/Skill 不得直接调用 ast-grep 或依赖其语法。
+禁止 `cmd /c`、`powershell -Command`、`bash -c`、shell 求值、管道、重定向或用户命令拼接。Code Navigation 由 Runtime 封装随包 `ast-grep.exe`；Agent/Skill 不得直接调用 ast-grep、raw rule、raw pattern、regex 或 arbitrary query language。
 
 ## Upgrade 规则
 
 - 允许**确定性的、版本化的 registered Config Migration**；禁止 AI 猜配置。
-- 1.1.1 的 `add-review-config-v1` 只在顶层 `review` 缺失时追加 detected baseRef + `includeWorkingTree:true`。
-- 已存在 `review` 原样保留。
+- 已存在的 Project State 必须继续保护。
 - baseRef 无法按既定优先级识别 → 0 修改 `MANUAL_ACTION_REQUIRED`。
 - migration 后必须用新版 Schema 校验；失败完整回滚，`rollbackPerformed=true`。
 
