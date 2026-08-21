@@ -29,8 +29,14 @@ type Selection struct {
 }
 
 type CoverageResult struct {
-	Status       string   `json:"status"`
-	MissingFiles []string `json:"missingFiles,omitempty"`
+	Status            string   `json:"status"`
+	MissingFiles      []string `json:"missingFiles,omitempty"`
+	UnresolvedSymbols []string `json:"unresolvedSymbols,omitempty"`
+}
+
+type unresolvedSymbol struct {
+	Symbol string `json:"symbol"`
+	From   string `json:"from"`
 }
 
 type changeAnalysis struct {
@@ -42,6 +48,7 @@ type changeAnalysis struct {
 		ReviewedFiles []struct {
 			Path string `json:"path"`
 		} `json:"reviewedFiles"`
+		UnresolvedSymbols []unresolvedSymbol `json:"unresolvedSymbols"`
 	} `json:"reviewCoverage"`
 }
 
@@ -114,6 +121,11 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 			}
 		}
 		selection.ScopedFiles = uniqueSorted(selection.ScopedFiles)
+		for class := range classes {
+			if !classCoveredByFiles(class, selection.ScopedFiles) {
+				return Selection{}, fmt.Errorf("selected internal symbol class %q has no scoped file", class)
+			}
+		}
 	}
 
 	return selection, nil
@@ -152,7 +164,37 @@ func ComputeCoverageFromAnalysis(selection Selection, changeAnalysisJSON []byte)
 	for _, file := range analysis.ReviewCoverage.ReviewedFiles {
 		reviewed = append(reviewed, file.Path)
 	}
-	return ComputeCoverage(selection, reviewed), nil
+	result := ComputeCoverage(selection, reviewed)
+	result.UnresolvedSymbols = relevantUnresolved(selection, analysis.ReviewCoverage.UnresolvedSymbols)
+	if len(result.UnresolvedSymbols) > 0 {
+		result.Status = "PARTIAL"
+	}
+	return result, nil
+}
+
+func relevantUnresolved(selection Selection, unresolved []unresolvedSymbol) []string {
+	if selection.Mode == "FULL" {
+		values := make([]string, 0, len(unresolved))
+		for _, item := range unresolved {
+			values = append(values, strings.TrimSpace(item.Symbol))
+		}
+		return uniqueSorted(values)
+	}
+	nodes := make(map[string]struct{})
+	for _, chain := range selection.SelectedCallChains {
+		for _, node := range append([]string{chain.EntryPoint}, chain.Chain...) {
+			nodes[strings.TrimSpace(node)] = struct{}{}
+		}
+	}
+	values := make([]string, 0)
+	for _, item := range unresolved {
+		_, symbolSelected := nodes[strings.TrimSpace(item.Symbol)]
+		_, fromSelected := nodes[strings.TrimSpace(item.From)]
+		if symbolSelected || fromSelected {
+			values = append(values, strings.TrimSpace(item.Symbol))
+		}
+	}
+	return uniqueSorted(values)
 }
 
 func parseChangeAnalysis(data []byte) (changeAnalysis, error) {
@@ -233,16 +275,28 @@ func className(symbol, kind string) string {
 	return parts[len(parts)-1]
 }
 
+func classCoveredByFiles(class string, files []string) bool {
+	for _, file := range files {
+		if fileClassName(file) == class {
+			return true
+		}
+	}
+	return false
+}
+
 func fileMatchesClasses(file string, classes map[string]struct{}) bool {
+	_, ok := classes[fileClassName(file)]
+	return ok
+}
+
+func fileClassName(file string) string {
 	base := path.Base(normalizePath(file))
 	for _, suffix := range []string{".java", ".kt", ".xml", ".yml", ".yaml"} {
 		if strings.HasSuffix(base, suffix) {
-			base = strings.TrimSuffix(base, suffix)
-			break
+			return strings.TrimSuffix(base, suffix)
 		}
 	}
-	_, ok := classes[base]
-	return ok
+	return base
 }
 
 func normalizePath(value string) string {
