@@ -80,12 +80,25 @@ func (n Navigator) FindCallers(ctx context.Context,symbol,scope string)(CallerRe
 	for _,call:=range calls{method,ok:=smallestContaining(methods,call); if !ok{continue}; mn:=methodName(method.Text); if mn==""{continue}; caller:=mn; if t:=enclosingTypeName(types,method);t!=""{caller=t+"."+mn}; recv:=receiverName(call.Text,member); cm:=CallerMatch{CallerSymbol:caller,Path:call.Path,Line:call.StartLine,Receiver:recv}
 		if recv==""{cm.Resolution="CANDIDATE"; candidates=appendUniqueCaller(candidates,seen,cm); continue}
 		declName:=recv; if i:=strings.LastIndex(declName,".");i>=0{declName=declName[i+1:]}; if !identRE.MatchString(declName){cm.Resolution="CANDIDATE"; candidates=appendUniqueCaller(candidates,seen,cm); continue}
-		decls,err:=n.runRaw(ctx,scope,fieldPatterns(declName)...); if err!=nil{return CallerResult{},err}; typeSet:=map[string]bool{}; for _,d:=range decls{if d.Path==call.Path{if typ:=simpleType(fieldType(d.Text,declName));typ!=""{typeSet[typ]=true}}}
+		typeSet:=map[string]bool{}
+		if typ,ok:=receiverFieldType(types,call,declName);ok{typeSet[simpleType(typ)]=true}else{
+			decls,err:=n.runRaw(ctx,scope,fieldPatterns(declName)...); if err!=nil{return CallerResult{},err}; for _,d:=range decls{if d.Path==call.Path{if typ:=simpleType(fieldType(d.Text,declName));typ!=""{typeSet[typ]=true}}}
+		}
 		if len(typeSet)==1{for typ:=range typeSet{cm.ReceiverType=typ; if typ==simpleType(owner){cm.Resolution="CONFIRMED"; confirmed=appendUniqueCaller(confirmed,seen,cm)} }} else {cm.Resolution="CANDIDATE"; candidates=appendUniqueCaller(candidates,seen,cm)}
 	}
 	sortCallers(confirmed); sortCallers(candidates); return CallerResult{Symbol:symbol,Scope:scope,Callers:confirmed,Candidates:candidates},nil
 }
 
+func receiverFieldType(types []rawMatch,call rawMatch,name string)(string,bool){
+	t,ok:=smallestContaining(types,call); if !ok{return "",false}
+	for _,line:=range strings.Split(strings.ReplaceAll(t.Text,"\r\n","\n"),"\n"){
+		s:=strings.TrimSpace(line); if s==""||strings.HasPrefix(s,"@")||!strings.HasSuffix(s,";"){continue}
+		if i:=strings.Index(s,"=");i>=0{s=strings.TrimSpace(s[:i])+";"}
+		s=strings.TrimSuffix(strings.TrimSpace(s),";"); parts:=strings.Fields(s); if len(parts)<2||parts[len(parts)-1]!=name{continue}
+		typ:=parts[len(parts)-2]; if identRE.MatchString(simpleType(typ)){return typ,true}
+	}
+	return "",false
+}
 func receiverName(text,member string) string { s:=strings.TrimSpace(text); needle:="."+member+"("; i:=strings.Index(s,needle); if i<0{return ""}; left:=strings.TrimSpace(s[:i]); parts:=strings.Fields(left); if len(parts)>0{return parts[len(parts)-1]}; return left }
 func appendUniqueCaller(dst []CallerMatch,seen map[string]bool,c CallerMatch)[]CallerMatch{ k:=fmt.Sprintf("%s:%d:%s:%s",c.Path,c.Line,c.CallerSymbol,c.Resolution); if seen[k]{return dst}; seen[k]=true; return append(dst,c) }
 func sortCallers(v []CallerMatch){sort.Slice(v,func(i,j int)bool{if v[i].Path==v[j].Path{return v[i].Line<v[j].Line};return v[i].Path<v[j].Path})}
