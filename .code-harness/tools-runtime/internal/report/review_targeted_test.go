@@ -11,6 +11,8 @@ func TestTargetedReviewHeaderAndDisclaimer(t *testing.T) {
 	req.Target = &ReviewTarget{Symbol: "OrderController.approve", Kind: "METHOD"}
 	req.Scope.ScopedFiles = []string{"src/main/java/OrderController.java", "src/main/java/OrderServiceImpl.java"}
 	req.Coverage.CallChains = []CallChain{{EntryPoint: "OrderController.approve", Chain: []string{"OrderController.approve", "OrderService.approve", "OrderServiceImpl.approve"}}}
+	req.Result = ResultPassed
+	req.Findings = nil
 	md, err := Render(req)
 	if err != nil {
 		t.Fatal(err)
@@ -37,6 +39,8 @@ func TestTargetedClassCanRenderMultipleMethodsWithoutFlattening(t *testing.T) {
 		{EntryPoint: "OrderController.approve", Chain: []string{"OrderController.approve", "OrderService.approve"}},
 		{EntryPoint: "OrderController.cancel", Chain: []string{"OrderController.cancel", "OrderService.cancel"}},
 	}
+	req.Result = ResultPassed
+	req.Findings = nil
 	md, err := Render(req)
 	if err != nil {
 		t.Fatal(err)
