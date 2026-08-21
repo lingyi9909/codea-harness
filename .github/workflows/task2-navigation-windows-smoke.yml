@@ -1,0 +1,103 @@
+name: task2-navigation-windows-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - '.code-harness/tools-runtime/**'
+      - '.code-harness/tools/**'
+      - '.code-harness/AGENTS.md'
+      - '.github/workflows/task2-navigation-windows-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  navigation-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+
+      - name: Test and build controlled runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/nav ./internal/schema ./cmd/codea-harness-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:GOOS = 'windows'
+          $env:GOARCH = 'amd64'
+          go build -trimpath -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Vendor pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe'
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: New navigation real ast-grep smoke
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force 'smoke/src/main/java' | Out-Null
+          @'
+          public interface OrderService { void approve(); }
+          '@ | Set-Content 'smoke/src/main/java/OrderService.java'
+          @'
+          public interface AuditService { void approve(); }
+          '@ | Set-Content 'smoke/src/main/java/AuditService.java'
+          @'
+          @RestController
+          public class OrderController {
+              private final OrderService orderService;
+              private final AuditService auditService;
+              public OrderController(OrderService orderService, AuditService auditService) {
+                  this.orderService = orderService;
+                  this.auditService = auditService;
+              }
+              @PostMapping(
+                  value = "/approve"
+              )
+              public Result<Void> approve(
+                  @RequestParam("id") Long id,
+                  @RequestParam(required = false) String reason) {
+                  orderService.approve();
+                  auditService.approve();
+                  return null;
+              }
+          }
+          '@ | Set-Content 'smoke/src/main/java/OrderController.java'
+
+          $info = & '.code-harness/bin/codea-harness-tools.exe' nav get-symbol-info --symbol OrderController.approve --scope smoke/src/main/java
+          if ($LASTEXITCODE -ne 0) { throw "get-symbol-info failed: $($info -join "`n")" }
+          $infoText = $info -join "`n"
+          if ($infoText -notmatch 'OrderController.approve') { throw "symbol info missing: $infoText" }
+          if ($infoText -notmatch 'RequestParam') { throw "Spring parameter annotations were not preserved: $infoText" }
+          if ($infoText -notmatch '/approve') { throw "multiline PostMapping value was not preserved: $infoText" }
+
+          $ann = & '.code-harness/bin/codea-harness-tools.exe' nav find-by-annotation --annotation PostMapping --scope smoke/src/main/java
+          if ($LASTEXITCODE -ne 0) { throw "find-by-annotation failed: $($ann -join "`n")" }
+          if (($ann -join "`n") -notmatch 'OrderController.approve') { throw 'PostMapping method not found' }
+
+          $callers = & '.code-harness/bin/codea-harness-tools.exe' nav find-callers --symbol OrderService.approve --scope smoke/src/main/java
+          if ($LASTEXITCODE -ne 0) { throw "find-callers failed: $($callers -join "`n")" }
+          $callerText = $callers -join "`n"
+          if ($callerText -notmatch 'CONFIRMED') { throw "typed OrderService caller not confirmed: $callerText" }
+          if ($callerText -match 'AuditService.*CONFIRMED') { throw "same-named AuditService call was incorrectly confirmed: $callerText" }
+
+          Remove-Item -Recurse -Force smoke
