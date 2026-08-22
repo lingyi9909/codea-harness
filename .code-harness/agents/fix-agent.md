@@ -101,6 +101,7 @@ files[].baseSha256
 ## 禁止行为
 
 - 不得在审批前写生产代码
+- 不得调用旧式 `apply_approved_patch(fixPlanId, changes)` 作为正式应用
 - 不得用宿主直接写文件绕过 Runtime Apply Safety Gate
 - 不得修改测试代码
 - 不得重构无关代码
