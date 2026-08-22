@@ -99,7 +99,7 @@ func Test14FixedUIIsChinese(t *testing.T) {
 }
 
 func Test14CallChainRolePresentation(t *testing.T) {
-	req := sampleRequest()
+	req := withStandardRoleEvidence(sampleRequest())
 	req.Coverage.CallChains = []CallChain{{
 		EntryPoint: "OrderController.approve",
 		Chain: []string{
@@ -107,20 +107,26 @@ func Test14CallChainRolePresentation(t *testing.T) {
 			"OrderService.approve",
 			"OrderServiceImpl.approve",
 			"OrderMapper.updateStatus",
-			"OrderMapperXml.updateStatus",
+			"OrderMapper.xml#updateStatus",
 			"CustomNode.execute",
 		},
 	}}
+	req.Coverage.SymbolRoleEvidence = append(req.Coverage.SymbolRoleEvidence,
+		SymbolRoleEvidence{Symbol: "OrderMapper.updateStatus", Role: "Mapper", Source: "FIND_SYMBOL"},
+	)
+	req.Coverage.ResourceRoleEvidence = []ResourceRoleEvidence{
+		{Resource: "OrderMapper.xml#updateStatus", Role: "MapperXml", Source: "MAPPER_STATEMENT"},
+	}
 	md, err := Render(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
 		"🌐 接口入口｜`OrderController.approve`",
-		"⚙️ 业务接口｜`OrderService.approve`",
+		"⚙️ 业务服务｜`OrderService.approve`",
 		"🧠 业务实现｜`OrderServiceImpl.approve`",
 		"🗄 数据访问｜`OrderMapper.updateStatus`",
-		"📄 Mapper XML｜`OrderMapperXml.updateStatus`",
+		"📄 Mapper XML｜`OrderMapper.xml#updateStatus`",
 		"🔹 代码节点｜`CustomNode.execute`",
 	} {
 		if !strings.Contains(md, want) {
@@ -215,7 +221,7 @@ func Test14HumanFacingContractsDescribeUnifiedReviewUX(t *testing.T) {
 			"首屏",
 			"下一步",
 			"🌐 接口入口",
-			"⚙️ 业务接口",
+			"⚙️ 业务服务",
 			"🧠 业务实现",
 			"🗄 数据访问",
 			"📄 Mapper XML",
