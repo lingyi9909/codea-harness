@@ -33,7 +33,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|report|apply>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|report|seal-apply|apply>")
 	}
 	switch args[0] {
 	case "upgrade":
@@ -46,6 +46,8 @@ func run(args []string) error {
 		return runDB(args[1:])
 	case "report":
 		return runReport(args[1:])
+	case "seal-apply":
+		return runSealApply(args[1:])
 	case "apply":
 		return runApply(args[1:])
 	default:
@@ -53,9 +55,19 @@ func run(args []string) error {
 	}
 }
 
+func runSealApply(args []string) error {
+	fs := flag.NewFlagSet("seal-apply", flag.ContinueOnError)
+	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests/*.json")
+	if err := fs.Parse(args); err != nil { return err }
+	if fs.NArg() != 0 || *input == "" { return errors.New("seal-apply requires --input") }
+	sealedPath, err := apply.SealRequestFile(".", *input)
+	if err != nil { return err }
+	return writeJSONAndStatus(map[string]any{"status": "SEALED", "sealedPlanPath": sealedPath}, true)
+}
+
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
-	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests")
+	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests/*.json")
 	if err := fs.Parse(args); err != nil { return err }
 	if fs.NArg() != 0 || *input == "" { return errors.New("apply requires --input") }
 	result, evidencePath, err := apply.ApplyRequestFile(".", *input)
