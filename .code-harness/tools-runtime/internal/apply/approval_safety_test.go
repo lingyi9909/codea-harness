@@ -108,10 +108,11 @@ runs: {directory: .code-harness/runs}
 `
 	writeRepoFile(t, root, ".code-harness/harness.yaml", broad)
 	writeRepoFile(t, root, ".git/config", "old\n")
+	writeRepoFile(t, root, ".code-harness/marker.txt", "old\n")
 
 	cases := []struct{ name, path, before string }{
 		{"git hard deny", ".git/config", "old\n"},
-		{"framework hard deny", ".code-harness/harness.yaml", broad},
+		{"framework hard deny", ".code-harness/marker.txt", "old\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
