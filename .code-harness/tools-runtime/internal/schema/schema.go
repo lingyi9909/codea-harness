@@ -46,15 +46,26 @@ func ValidateJSON(schemaBytes, jsonBytes []byte) error {
 			return fmt.Errorf("diagnosis semantic validation failed: %w", err)
 		}
 	}
+	if isApplyRequestSchema(schemaBytes) {
+		if err := validateApplyRequestSemantics(jsonBytes); err != nil {
+			return fmt.Errorf("apply request semantic validation failed: %w", err)
+		}
+	}
 	return nil
 }
 
-func isDiagnosisSchema(schemaBytes []byte) bool {
+func schemaTitle(schemaBytes []byte) string {
 	var meta struct {
 		Title string `json:"title"`
 	}
-	return json.Unmarshal(schemaBytes, &meta) == nil && meta.Title == "Diagnosis"
+	if json.Unmarshal(schemaBytes, &meta) != nil {
+		return ""
+	}
+	return meta.Title
 }
+
+func isDiagnosisSchema(schemaBytes []byte) bool { return schemaTitle(schemaBytes) == "Diagnosis" }
+func isApplyRequestSchema(schemaBytes []byte) bool { return schemaTitle(schemaBytes) == "ApplyRequest" }
 
 func validateDiagnosisSemantics(jsonBytes []byte) error {
 	var diagnosis struct {
@@ -80,6 +91,23 @@ func validateDiagnosisSemantics(jsonBytes []byte) error {
 		if diagnosis.NextAction != "GENERATE_FIX_PLAN" {
 			return fmt.Errorf("PRODUCTION_CODE_ERROR requires nextAction GENERATE_FIX_PLAN")
 		}
+	}
+	return nil
+}
+
+func validateApplyRequestSemantics(jsonBytes []byte) error {
+	var req struct {
+		Files []struct { Path string `json:"path"` } `json:"files"`
+	}
+	if err := json.Unmarshal(jsonBytes, &req); err != nil {
+		return fmt.Errorf("decode apply request: %w", err)
+	}
+	seen := make(map[string]struct{}, len(req.Files))
+	for i, file := range req.Files {
+		if _, ok := seen[file.Path]; ok {
+			return fmt.Errorf("files[%d].path duplicates %q", i, file.Path)
+		}
+		seen[file.Path] = struct{}{}
 	}
 	return nil
 }
@@ -119,9 +147,7 @@ func normalizeYAML(v any) (any, error) {
 		out := make(map[string]any, len(x))
 		for k, value := range x {
 			n, err := normalizeYAML(value)
-			if err != nil {
-				return nil, err
-			}
+			if err != nil { return nil, err }
 			out[k] = n
 		}
 		return out, nil
@@ -129,13 +155,9 @@ func normalizeYAML(v any) (any, error) {
 		out := make(map[string]any, len(x))
 		for key, value := range x {
 			k, ok := key.(string)
-			if !ok {
-				return nil, fmt.Errorf("YAML object key must be a string, got %T", key)
-			}
+			if !ok { return nil, fmt.Errorf("YAML object key must be a string, got %T", key) }
 			n, err := normalizeYAML(value)
-			if err != nil {
-				return nil, err
-			}
+			if err != nil { return nil, err }
 			out[k] = n
 		}
 		return out, nil
@@ -143,9 +165,7 @@ func normalizeYAML(v any) (any, error) {
 		out := make([]any, len(x))
 		for i, value := range x {
 			n, err := normalizeYAML(value)
-			if err != nil {
-				return nil, err
-			}
+			if err != nil { return nil, err }
 			out[i] = n
 		}
 		return out, nil
