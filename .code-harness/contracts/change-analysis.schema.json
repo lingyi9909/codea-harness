@@ -25,7 +25,7 @@
         "baseCommit": { "type": "string", "description": "基线 ref 当前指向的 commit" },
         "mergeBase": { "type": "string", "description": "merge-base(baseRef, HEAD) 的 commit" },
         "headCommit": { "type": "string", "description": "HEAD 指向的 commit" },
-        "includeWorkingTree": { "type": "boolean", "description": "是否纳入 staged、unstaged、untracked 本地变化" }
+        "includeWorkingTree": { "type": "boolean", "description": "是否纳入 staged、unstaged 和 untracked 本地变化" }
       }
     },
     "changedFiles": {
@@ -84,7 +84,7 @@
     "symbolLocations": {
       "type": "array",
       "uniqueItems": true,
-      "description": "Code Navigation 已确定性解析的 Java symbol → exact repository-relative path 证据。TARGETED Runtime 只允许使用这里的精确 Java 路径建立代码 scopedFiles；不得用 basename/className 猜路径。",
+      "description": "Code Navigation 已确定性解析的 Java symbol → exact repository-relative path 证据。TARGETED Runtime 只允许使用这里的精确 Java 路径建立代码 scopedFiles；MapperXml/YamlConfig 必须通过 resourceRelations 表达。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -96,7 +96,7 @@
             "minLength": 1,
             "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
           },
-          "role": { "$ref": "#/$defs/fileRole" },
+          "role": { "$ref": "#/$defs/navigationRole" },
           "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS"] },
           "from": { "type": "string", "minLength": 1, "description": "可选：该定位由哪个已确认 symbol 导航得到，用于证明 target/call-chain 与额外上下文文件的直接关系。" }
         }
@@ -193,6 +193,9 @@
     }
   },
   "$defs": {
+    "navigationRole": {
+      "enum": ["Controller", "Service", "Repository", "Mapper", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
+    },
     "fileRole": {
       "enum": ["Controller", "Service", "Repository", "Mapper", "MapperXml", "YamlConfig", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
     }
