@@ -156,21 +156,27 @@ func applyWithOps(repoRoot string, req Request, ops fileOps) (Result, error) {
 		return result, err
 	}
 	patchByPath := make(map[string]filePatch, len(patches))
+	patchKeys := make(map[string]struct{}, len(patches))
 	for _, patch := range patches {
-		if _, exists := patchByPath[patch.Path]; exists {
+		key := windowsPathKey(patch.Path)
+		if _, exists := patchKeys[key]; exists {
 			return result, fmt.Errorf("DUPLICATE_PATCH_PATH: %s", patch.Path)
 		}
+		patchKeys[key] = struct{}{}
 		patchByPath[patch.Path] = patch
 	}
 	declared := make(map[string]FileRequest, len(req.Files))
+	declaredKeys := make(map[string]struct{}, len(req.Files))
 	for _, file := range req.Files {
 		clean, err := safeRepoPath(file.Path)
 		if err != nil {
 			return result, err
 		}
-		if _, exists := declared[clean]; exists {
+		key := windowsPathKey(clean)
+		if _, exists := declaredKeys[key]; exists {
 			return result, fmt.Errorf("DUPLICATE_DECLARED_PATH: %s", clean)
 		}
+		declaredKeys[key] = struct{}{}
 		if err := policy.Allow(req.PlanType, clean); err != nil {
 			return result, err
 		}
@@ -180,14 +186,14 @@ func applyWithOps(repoRoot string, req Request, ops fileOps) (Result, error) {
 	if len(declared) != len(patchByPath) {
 		return result, errors.New("DECLARED_FILES_MISMATCH")
 	}
-	for path := range patchByPath {
-		if _, ok := declared[path]; !ok {
-			return result, fmt.Errorf("DECLARED_FILES_MISMATCH: patch touches undeclared %q", path)
+	for touched := range patchByPath {
+		if _, ok := declared[touched]; !ok {
+			return result, fmt.Errorf("DECLARED_FILES_MISMATCH: patch touches undeclared %q", touched)
 		}
 	}
-	for path := range declared {
-		if _, ok := patchByPath[path]; !ok {
-			return result, fmt.Errorf("DECLARED_FILES_MISMATCH: declared file %q not touched", path)
+	for declaredPath := range declared {
+		if _, ok := patchByPath[declaredPath]; !ok {
+			return result, fmt.Errorf("DECLARED_FILES_MISMATCH: declared file %q not touched", declaredPath)
 		}
 	}
 
@@ -208,6 +214,9 @@ func applyWithOps(repoRoot string, req Request, ops fileOps) (Result, error) {
 	sort.Strings(paths)
 	states := make([]fileState, 0, len(paths))
 	for i, rel := range paths {
+		if err := ensureNoSymlinkEscape(repoRoot, rel); err != nil {
+			return result, err
+		}
 		fileReq := declared[rel]
 		patch := patchByPath[rel]
 		abs := filepath.Join(repoRoot, filepath.FromSlash(rel))
@@ -256,26 +265,18 @@ func applyWithOps(repoRoot string, req Request, ops fileOps) (Result, error) {
 		result.Files = append(result.Files, FileResult{Path: rel, BeforeSha256: actualBase, AfterSha256: hashBytes(after)})
 	}
 
-	commitStarted := false
 	for _, state := range states {
-		commitStarted = true
 		if state.deleteFile {
 			if err := os.Remove(state.abs); err != nil {
-				rollback(states)
-				result.RollbackPerformed = true
-				return result, fmt.Errorf("apply delete %s: %w", state.path, err)
+				return rollbackFailure(result, states, fmt.Errorf("apply delete %s: %w", state.path, err))
 			}
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(state.abs), 0o755); err != nil {
-			rollback(states)
-			result.RollbackPerformed = true
-			return result, err
+			return rollbackFailure(result, states, err)
 		}
 		if err := ops.replace(state.stage, state.abs); err != nil {
-			rollback(states)
-			result.RollbackPerformed = true
-			return result, fmt.Errorf("apply replace %s: %w", state.path, err)
+			return rollbackFailure(result, states, fmt.Errorf("apply replace %s: %w", state.path, err))
 		}
 	}
 
@@ -283,57 +284,65 @@ func applyWithOps(repoRoot string, req Request, ops fileOps) (Result, error) {
 	result.AppliedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	evidenceBytes, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		if commitStarted {
-			rollback(states)
-			result.RollbackPerformed = true
-		}
-		result.Status = ""
-		result.AppliedAt = ""
-		return result, err
+		return rollbackFailure(result, states, err)
 	}
 	resultSchema, err := os.ReadFile(filepath.Join(repoRoot, ".code-harness", "contracts", "apply-result.schema.json"))
 	if err != nil {
-		if commitStarted {
-			rollback(states)
-			result.RollbackPerformed = true
-		}
-		result.Status = ""
-		result.AppliedAt = ""
-		return result, err
+		return rollbackFailure(result, states, err)
 	}
 	if err := schema.ValidateJSON(resultSchema, evidenceBytes); err != nil {
-		if commitStarted {
-			rollback(states)
-			result.RollbackPerformed = true
-		}
-		result.Status = ""
-		result.AppliedAt = ""
-		return result, err
+		return rollbackFailure(result, states, err)
 	}
-	if err := writeEvidenceAtomic(repoRoot, req, result, evidenceBytes); err != nil {
-		if commitStarted {
-			rollback(states)
-			result.RollbackPerformed = true
-		}
-		result.Status = ""
-		result.AppliedAt = ""
-		return result, err
+	if err := writeEvidenceAtomic(repoRoot, req, evidenceBytes); err != nil {
+		return rollbackFailure(result, states, err)
 	}
 	return result, nil
 }
 
-func rollback(states []fileState) {
-	for _, state := range states {
-		if state.existed {
-			_ = os.MkdirAll(filepath.Dir(state.abs), 0o755)
-			_ = os.WriteFile(state.abs, state.before, state.mode)
-		} else {
-			_ = os.Remove(state.abs)
-		}
+func rollbackFailure(result Result, states []fileState, cause error) (Result, error) {
+	result.Status = ""
+	result.AppliedAt = ""
+	if err := rollback(states); err != nil {
+		result.RollbackPerformed = false
+		return result, fmt.Errorf("ROLLBACK_FAILED: %v; original apply error: %w", err, cause)
 	}
+	result.RollbackPerformed = true
+	return result, cause
 }
 
-func writeEvidenceAtomic(repoRoot string, req Request, result Result, data []byte) error {
+func rollback(states []fileState) error {
+	var failures []string
+	for _, state := range states {
+		if state.existed {
+			if err := os.MkdirAll(filepath.Dir(state.abs), 0o755); err != nil {
+				failures = append(failures, fmt.Sprintf("%s mkdir: %v", state.path, err))
+				continue
+			}
+			if err := os.WriteFile(state.abs, state.before, state.mode); err != nil {
+				failures = append(failures, fmt.Sprintf("%s restore: %v", state.path, err))
+				continue
+			}
+			got, err := os.ReadFile(state.abs)
+			if err != nil || hashBytes(got) != hashBytes(state.before) {
+				failures = append(failures, fmt.Sprintf("%s restore verification failed", state.path))
+			}
+			continue
+		}
+		if err := os.Remove(state.abs); err != nil && !errors.Is(err, os.ErrNotExist) {
+			failures = append(failures, fmt.Sprintf("%s remove created file: %v", state.path, err))
+			continue
+		}
+		if _, err := os.Lstat(state.abs); !errors.Is(err, os.ErrNotExist) {
+			failures = append(failures, fmt.Sprintf("%s created file still exists after rollback", state.path))
+		}
+	}
+	if len(failures) > 0 {
+		return errors.New(strings.Join(failures, "; "))
+	}
+	return nil
+}
+
+func writeEvidenceAtomic(repoRoot string, req Request, data []byte) error {
 	path := evidencePath(repoRoot, req.RunID, req.PlanID)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create apply evidence directory: %w", err)
@@ -370,6 +379,10 @@ func safeRequestPath(repoRoot, inputPath, runID string) bool {
 	base := filepath.Clean(filepath.Join(repoRoot, ".code-harness", "runs", runID, "requests"))
 	rel, err := filepath.Rel(base, clean)
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && strings.EqualFold(filepath.Ext(clean), ".json")
+}
+
+func windowsPathKey(value string) string {
+	return strings.ToLower(strings.ReplaceAll(filepath.Clean(value), "\\", "/"))
 }
 
 func validID(value string) bool {
