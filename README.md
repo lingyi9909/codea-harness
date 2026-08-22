@@ -164,16 +164,18 @@ Change Set 文件数
 下一步
 ```
 
-调用链仍只消费已经通过 Runtime 验证的 `ChangeAnalysis.callChains[]`，Renderer 不自行增加或修改 machine symbol；只为人类阅读增加角色标签：
+调用链仍只消费已经通过 Runtime 验证的 `ChangeAnalysis.callChains[]`，Renderer 不自行增加或修改 machine symbol。角色标签也不能根据类名后缀猜测，只能消费从已验证 `ChangeAnalysis.symbolLocations[] / resourceRelations[]` 原样传递的 role evidence；没有可靠证据时固定降级为 `🔹 代码节点`：
 
 ```text
-🌐 接口入口
-⚙️ 业务接口
-🧠 业务实现
-🗄 数据访问
-📄 Mapper XML
-🔹 代码节点
+🌐 接口入口   ← verified role=Controller
+⚙️ 业务服务   ← verified role=Service
+🧠 业务实现   ← verified role=Service + source=FIND_IMPLEMENTATIONS
+🗄 数据访问   ← verified role=Repository/Mapper
+📄 Mapper XML ← verified resource role=MapperXml
+🔹 代码节点   ← 无可靠 role evidence / Other / 其他角色
 ```
+
+因此，即使源码名称是 `XxxController`、`XxxService` 或 `XxxServiceImpl`，只要机器证据中的真实 role 不匹配，就不得按名称显示对应角色。
 
 Finding 展示固定为一个完整问题块：
 
@@ -187,7 +189,7 @@ Finding 展示固定为一个完整问题块：
 🧪 是否需要测试
 ```
 
-报告末尾固定提供 `## ➡️ 下一步`：FAILED 优先处理阻断 Finding 并可使用 `harness fix finding:<id>`；PASSED 明确无需处理阻断问题；`MANUAL_ACTION_REQUIRED` 明确列出需要处理的未解析项、缺失评审文件或 Runtime 校验错误。
+报告末尾固定提供 `## ➡️ 下一步`：❌ 未通过时优先处理阻断 Finding 并可使用 `harness fix finding:<id>`；✅ 通过时明确无需处理阻断问题；⚠️ 需要人工处理时明确列出需要处理的未解析项、缺失评审文件或运行时契约校验错误。
 
 TARGETED 报告始终保留：
 
@@ -203,7 +205,7 @@ CRITICAL | HIGH | MEDIUM | LOW
 COMPLETE | PARTIAL
 ```
 
-用户报告映射为中文和颜色标识。Runtime 继续按 severity → file → line → id 确定性排序，同一输入必须 byte-for-byte 生成相同 Markdown。
+这些 enum 只用于机器 JSON/内部状态；最终用户摘要和 `review.md` 使用中文显示，其中 `TEST_VALIDITY` 用户侧统一显示为“测试有效性问题”。Runtime 继续按 severity → file → line → id 确定性排序，同一输入必须 byte-for-byte 生成相同 Markdown。
 
 ### Review Finding Scope
 
