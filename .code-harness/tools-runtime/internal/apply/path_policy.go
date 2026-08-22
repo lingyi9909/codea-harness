@@ -59,7 +59,7 @@ func (p Policy) Allow(planType, rawPath string) error {
 	}
 	for _, pattern := range []string{".git", ".git/**", ".code-harness", ".code-harness/**"} {
 		if globMatch(pattern, clean) {
-			return fmt.Errorf("PATH_HARD_DENIED: %q matches runtime hard-deny %q", clean, pattern)
+			return fmt.Errorf("PATH_HARD_DENIED: PATH_DENIED_BY_RUNTIME_HARD_RULE: %q matches runtime hard-deny %q", clean, pattern)
 		}
 	}
 	for _, pattern := range p.Denied {
