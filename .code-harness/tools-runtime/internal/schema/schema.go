@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path"
+	"strings"
 
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -97,17 +99,20 @@ func validateDiagnosisSemantics(jsonBytes []byte) error {
 
 func validateApplyRequestSemantics(jsonBytes []byte) error {
 	var req struct {
-		Files []struct { Path string `json:"path"` } `json:"files"`
+		Files []struct {
+			Path string `json:"path"`
+		} `json:"files"`
 	}
 	if err := json.Unmarshal(jsonBytes, &req); err != nil {
 		return fmt.Errorf("decode apply request: %w", err)
 	}
 	seen := make(map[string]struct{}, len(req.Files))
 	for i, file := range req.Files {
-		if _, ok := seen[file.Path]; ok {
-			return fmt.Errorf("files[%d].path duplicates %q", i, file.Path)
+		key := strings.ToLower(path.Clean(strings.ReplaceAll(strings.TrimSpace(file.Path), "\\", "/")))
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("files[%d].path duplicates Windows-equivalent path %q", i, file.Path)
 		}
-		seen[file.Path] = struct{}{}
+		seen[key] = struct{}{}
 	}
 	return nil
 }
@@ -147,7 +152,9 @@ func normalizeYAML(v any) (any, error) {
 		out := make(map[string]any, len(x))
 		for k, value := range x {
 			n, err := normalizeYAML(value)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 			out[k] = n
 		}
 		return out, nil
@@ -155,9 +162,13 @@ func normalizeYAML(v any) (any, error) {
 		out := make(map[string]any, len(x))
 		for key, value := range x {
 			k, ok := key.(string)
-			if !ok { return nil, fmt.Errorf("YAML object key must be a string, got %T", key) }
+			if !ok {
+				return nil, fmt.Errorf("YAML object key must be a string, got %T", key)
+			}
 			n, err := normalizeYAML(value)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 			out[k] = n
 		}
 		return out, nil
@@ -165,7 +176,9 @@ func normalizeYAML(v any) (any, error) {
 		out := make([]any, len(x))
 		for i, value := range x {
 			n, err := normalizeYAML(value)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 			out[i] = n
 		}
 		return out, nil
