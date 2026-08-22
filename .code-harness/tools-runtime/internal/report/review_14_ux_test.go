@@ -1,6 +1,8 @@
 package report
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -194,5 +196,35 @@ func Test14RenderRemainsByteForByteDeterministic(t *testing.T) {
 	}
 	if first != second {
 		t.Fatal("1.4 review renderer must be byte-for-byte deterministic")
+	}
+}
+
+func Test14HumanFacingContractsDescribeUnifiedReviewUX(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..")
+	files := []string{
+		filepath.Join(root, ".code-harness", "agents", "orchestrator.md"),
+		filepath.Join(root, "README.md"),
+	}
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, want := range []string{
+			"首屏",
+			"下一步",
+			"🌐 接口入口",
+			"⚙️ 业务接口",
+			"🧠 业务实现",
+			"🗄 数据访问",
+			"📄 Mapper XML",
+			"🔹 代码节点",
+			"本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("human-facing Task 3 contract %s missing %q", file, want)
+			}
+		}
 	}
 }
