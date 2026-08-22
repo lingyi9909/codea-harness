@@ -64,6 +64,8 @@ func Test14CallChainWithoutRoleEvidenceDefaultsToCodeNode(t *testing.T) {
 		EntryPoint: "OrderController.approve",
 		Chain:      []string{"OrderController.approve", "OrderService.approve"},
 	}}
+	req.Coverage.SymbolRoleEvidence = nil
+	req.Coverage.ResourceRoleEvidence = nil
 	md, err := Render(req)
 	if err != nil {
 		t.Fatal(err)
@@ -121,6 +123,19 @@ func Test14OrchestratorUserSummaryDoesNotLeakMachineEnums(t *testing.T) {
 			t.Fatalf("user-visible unified summary missing %q:\n%s", want, section)
 		}
 	}
+}
+
+func withStandardRoleEvidence(req ReviewRequest) ReviewRequest {
+	req.Coverage.SymbolRoleEvidence = []SymbolRoleEvidence{
+		{Symbol: "OrderController.approve", Role: "Controller", Source: "FIND_SYMBOL"},
+		{Symbol: "OrderService.approve", Role: "Service", Source: "FIND_SYMBOL"},
+		{Symbol: "OrderServiceImpl.approve", Role: "Service", Source: "FIND_IMPLEMENTATIONS"},
+		{Symbol: "OrderRepository.updateStatus", Role: "Repository", Source: "FIND_SYMBOL"},
+		{Symbol: "OrderController.cancel", Role: "Controller", Source: "FIND_SYMBOL"},
+		{Symbol: "OrderService.cancel", Role: "Service", Source: "FIND_SYMBOL"},
+		{Symbol: "OrderServiceImpl.cancel", Role: "Service", Source: "FIND_IMPLEMENTATIONS"},
+	}
+	return req
 }
 
 func decodeReviewWithRoleEvidence(t *testing.T, req ReviewRequest, symbols, resources []map[string]any) ReviewRequest {
