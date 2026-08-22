@@ -2,6 +2,7 @@ package schema
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -43,14 +44,19 @@ func ValidateJSON(schemaBytes, jsonBytes []byte) error {
 	if err := compiled.Validate(instance); err != nil {
 		return fmt.Errorf("schema validation failed: %w", err)
 	}
-	if isDiagnosisSchema(schemaBytes) {
+	title := schemaTitle(schemaBytes)
+	switch title {
+	case "Diagnosis":
 		if err := validateDiagnosisSemantics(jsonBytes); err != nil {
 			return fmt.Errorf("diagnosis semantic validation failed: %w", err)
 		}
-	}
-	if isApplyRequestSchema(schemaBytes) {
+	case "ApplyRequest":
 		if err := validateApplyRequestSemantics(jsonBytes); err != nil {
 			return fmt.Errorf("apply request semantic validation failed: %w", err)
+		}
+	case "FixPlan", "IntegrationTestPlan":
+		if err := validatePlanPatchIdentity(jsonBytes); err != nil {
+			return fmt.Errorf("plan patch identity validation failed: %w", err)
 		}
 	}
 	return nil
@@ -65,9 +71,6 @@ func schemaTitle(schemaBytes []byte) string {
 	}
 	return meta.Title
 }
-
-func isDiagnosisSchema(schemaBytes []byte) bool { return schemaTitle(schemaBytes) == "Diagnosis" }
-func isApplyRequestSchema(schemaBytes []byte) bool { return schemaTitle(schemaBytes) == "ApplyRequest" }
 
 func validateDiagnosisSemantics(jsonBytes []byte) error {
 	var diagnosis struct {
@@ -106,8 +109,40 @@ func validateApplyRequestSemantics(jsonBytes []byte) error {
 	if err := json.Unmarshal(jsonBytes, &req); err != nil {
 		return fmt.Errorf("decode apply request: %w", err)
 	}
-	seen := make(map[string]struct{}, len(req.Files))
-	for i, file := range req.Files {
+	return validateUniqueWindowsPaths(req.Files)
+}
+
+func validatePlanPatchIdentity(jsonBytes []byte) error {
+	var plan struct {
+		UnifiedDiff string `json:"unifiedDiff"`
+		DiffSha256  string `json:"diffSha256"`
+		Files       []struct {
+			Path string `json:"path"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(jsonBytes, &plan); err != nil {
+		return fmt.Errorf("decode plan: %w", err)
+	}
+	if plan.UnifiedDiff == "" && plan.DiffSha256 == "" && len(plan.Files) == 0 {
+		return nil
+	}
+	actual := fmt.Sprintf("%x", sha256.Sum256([]byte(plan.UnifiedDiff)))
+	if !strings.EqualFold(plan.DiffSha256, actual) {
+		return fmt.Errorf("diffSha256 mismatch: declared=%s actual=%s", plan.DiffSha256, actual)
+	}
+	if err := validateUniqueWindowsPaths(plan.Files); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateUniqueWindowsPaths[T interface{ ~struct{ Path string `json:"path"` } }](files []T) error {
+	seen := make(map[string]struct{}, len(files))
+	for i, raw := range files {
+		// Convert through JSON to keep this helper usable for anonymous contract structs.
+		b, _ := json.Marshal(raw)
+		var file struct{ Path string `json:"path"` }
+		_ = json.Unmarshal(b, &file)
 		key := strings.ToLower(path.Clean(strings.ReplaceAll(strings.TrimSpace(file.Path), "\\", "/")))
 		if _, ok := seen[key]; ok {
 			return fmt.Errorf("files[%d].path duplicates Windows-equivalent path %q", i, file.Path)
