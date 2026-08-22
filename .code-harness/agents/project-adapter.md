@@ -12,6 +12,15 @@ skills:
 
 分析目标项目的目录结构、构建方式、模块划分和测试规范，自动生成 `.code-harness/harness.yaml` 和 `.code-harness/project.md`。只分析，不修改业务代码或项目配置。
 
+1.4 新初始化必须生成 `harness.yaml version: 2`，并启用 Resource Review 默认 Scope：
+
+```text
+scope.mapperIncludes = src/main/resources/**/*Mapper.xml
+scope.configIncludes = src/main/resources/**/*.yml
+```
+
+已有 `version: 1` 配置由 Schema 保持兼容；Project Adapter 不在普通 init 流程中执行历史配置升级，正式 1.3.2→1.4 migration 由 Upgrade Task 负责。
+
 ## 输入
 
 - 目标项目根目录（Orchestrator 传入）
@@ -49,15 +58,19 @@ skills:
    8. 仍无法确定 → 加入 `unresolved`，保持 NEEDS_CONFIRMATION，不得猜测
 
    例如 `originHead -> origin/master`，则生成 `review.baseRef: origin/master`、`review.includeWorkingTree: true`。
-10. **生成配置**：根据识别结果生成 `harness.yaml` 和 `project.md`。
+10. **生成配置**：根据识别结果生成 `harness.yaml` 和 `project.md`。新生成配置固定 `version: 2`。
    - **可以使用约定默认值的字段**（标记来源为 convention-default）：
      - `timeoutSeconds: 600`
      - `reportDir`：标准 Surefire 目录
      - `readiness.pattern: Started`（通用模式）
      - `runs.directory: .code-harness/runs`
-     - `scope.sourceIncludes` / `scope.testIncludes`：标准 Maven 路径
+     - `scope.sourceIncludes`：`src/main/java/**/*.java`
+     - `scope.testIncludes`：`src/test/java/**/*.java`
+     - `scope.mapperIncludes`：`src/main/resources/**/*Mapper.xml`
+     - `scope.configIncludes`：`src/main/resources/**/*.yml`
      - `write.allowedPaths` / `write.deniedPaths`：标准路径
      - `review.includeWorkingTree: true`
+   - Resource Review 默认值只包含上述 Mapper XML / YML，**不得**自动加入 properties、pom.xml、Gradle、SQL migration 或其他 XML。
    - **必须人工确认的字段**（未确认时 status 保持 NEEDS_CONFIRMATION）：
      - `review.baseRef`（无法从本地 refs 确定时）
      - 测试 Profile（`spring.profiles.active`）
@@ -70,7 +83,7 @@ skills:
 11. **设置初始化状态**：
     - 所有字段已确认 → `initialization.status: READY`，`unresolved: []`
     - 存在未确认字段 → `initialization.status: NEEDS_CONFIRMATION`，`unresolved` 列出未确认项
-12. **校验配置**：使用 `.code-harness/contracts/harness-config.schema.json` 校验生成的 `harness.yaml`。
+12. **校验配置**：使用 `.code-harness/contracts/harness-config.schema.json` 校验生成的 `harness.yaml`。新 init 的 `version: 2` 缺少 `mapperIncludes/configIncludes` 必须校验失败。
 13. **输出初始化摘要**：列出已识别项、未确定项和宿主能力。
 
 ### 重新确认（用户回答未确定项后）
@@ -86,7 +99,7 @@ skills:
 
 ## 输出
 
-- `.code-harness/harness.yaml`——项目可执行配置（通过 `.code-harness/contracts/harness-config.schema.json` 校验）
+- `.code-harness/harness.yaml`——项目可执行配置（新 init 为 `version: 2`，通过 `.code-harness/contracts/harness-config.schema.json` 校验）
 - `.code-harness/project.md`——项目适配信息
 - 初始化摘要（已识别 / 未确定 / 宿主能力）
 - 首次初始化后 status 为 `READY` 或 `NEEDS_CONFIRMATION`
