@@ -103,7 +103,11 @@ func DecodeRequest(repoRoot string, data []byte) (Request, error) {
 }
 
 func ApplyRequestFile(repoRoot string, inputPath string) (Result, string, error) {
-	data, err := os.ReadFile(inputPath)
+	pathRunID, absInput, err := validateRequestInputPath(repoRoot, inputPath)
+	if err != nil {
+		return Result{}, "", err
+	}
+	data, err := os.ReadFile(absInput)
 	if err != nil {
 		return Result{}, "", fmt.Errorf("read apply request: %w", err)
 	}
@@ -114,8 +118,11 @@ func ApplyRequestFile(repoRoot string, inputPath string) (Result, string, error)
 	if !validID(req.RunID) || !validID(req.PlanID) {
 		return Result{}, "", errors.New("apply request contains invalid runId/planId")
 	}
-	if !safeRequestPath(repoRoot, inputPath, req.RunID) {
-		return Result{}, "", errors.New("apply input must be under .code-harness/runs/<runId>/requests")
+	if req.RunID != pathRunID {
+		return Result{}, "", runIDPathMismatch(req.RunID, pathRunID)
+	}
+	if err := verifySealedPlan(repoRoot, req); err != nil {
+		return Result{}, "", err
 	}
 	result, err := Apply(repoRoot, req)
 	if err != nil {
@@ -365,20 +372,6 @@ func writeEvidenceAtomic(repoRoot string, req Request, data []byte) error {
 
 func evidencePath(repoRoot, runID, planID string) string {
 	return filepath.Join(repoRoot, ".code-harness", "runs", runID, "evidence", "apply", planID+".json")
-}
-
-func safeRequestPath(repoRoot, inputPath, runID string) bool {
-	if filepath.IsAbs(inputPath) {
-		absRoot, _ := filepath.Abs(repoRoot)
-		absInput, _ := filepath.Abs(inputPath)
-		base := filepath.Join(absRoot, ".code-harness", "runs", runID, "requests")
-		rel, err := filepath.Rel(base, absInput)
-		return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && strings.EqualFold(filepath.Ext(absInput), ".json")
-	}
-	clean := filepath.Clean(inputPath)
-	base := filepath.Clean(filepath.Join(repoRoot, ".code-harness", "runs", runID, "requests"))
-	rel, err := filepath.Rel(base, clean)
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && strings.EqualFold(filepath.Ext(clean), ".json")
 }
 
 func windowsPathKey(value string) string {
