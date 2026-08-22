@@ -188,10 +188,17 @@ category = TEST_VALIDITY
 - `mode = FULL | TARGETED`
 - TARGETED 时 `target = {symbol, kind}`
 - `reviewScope.changedFiles[]` / TARGETED `reviewScope.scopedFiles[]`
-- `reviewCoverage.reviewedFiles[] / callChains[] / externalDependencies[] / unresolved[] / missingReviewedFiles[] / runtimeErrors[] / status`
+- `reviewCoverage.reviewedFiles[] / callChains[] / symbolRoleEvidence[] / resourceRoleEvidence[] / externalDependencies[] / unresolved[] / missingReviewedFiles[] / runtimeErrors[] / status`
 - `findings[]`：`id / category / severity / file / line / problem / evidence / impact / recommendation / needsTest / introducedByChange / confidence`
 
-Resource Review 不新增 Finding category；Mapper/YML 使用 `PRODUCTION_CODE`。Renderer 不推断 relation、调用链或 Finding。
+调用链角色证据只能在 `ChangeAnalysis` 已通过 Runtime 校验之后做**只拷贝、不推断**的 transport 映射：
+
+- `symbolRoleEvidence[] = {symbol, role, source}` 只能来自已验证的 `ChangeAnalysis.symbolLocations[]` 对应项；不得根据 `XxxController/XxxService/XxxServiceImpl/XxxMapper` 等类名后缀补 role。
+- `resourceRoleEvidence[] = {resource, role, source}` 只能来自已验证的 `ChangeAnalysis.resourceRelations[]` 对应项；不得根据资源名猜 `MapperXml/YamlConfig`。
+- Renderer 只消费上述已验证 role evidence 做人类可读标签。某个调用链节点没有对应可靠证据，或证据 role=`Other`，固定显示 `🔹 代码节点`。
+- `role=Controller` 可显示 `🌐 接口入口`；`role=Service` 只表示业务服务，显示 `⚙️ 业务服务`；只有 `role=Service + source=FIND_IMPLEMENTATIONS` 这一机器证据组合才允许显示 `🧠 业务实现`；`Repository/Mapper` 显示 `🗄 数据访问`；已验证 `MapperXml` resource 显示 `📄 Mapper XML`。
+
+Resource Review 不新增 Finding category；Mapper/YML 使用 `PRODUCTION_CODE`。Renderer 不推断 relation、调用链、role 或 Finding。
 
 ## PARTIAL
 
