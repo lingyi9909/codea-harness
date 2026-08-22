@@ -102,7 +102,7 @@ func validateResourceRoles(changed, reviewed []analysisFile) error {
 		p := normalizePath(file.Path)
 		role := strings.TrimSpace(file.Role)
 		changedRole, changedFile := changedRoles[p]
-		if changedFile && (isResourceRole(changedRole) || isResourceRole(role)) && role != changedRole {
+		if changedFile && (isResourceRole(changedRole) || isResourceRole(role) || expectedResourceRole(p) != "") && role != changedRole {
 			return fmt.Errorf("reviewed file role %q for %q does not match changed file role %q", role, p, changedRole)
 		}
 		if err := validateResourcePathRole(p, role); err != nil {
@@ -113,17 +113,31 @@ func validateResourceRoles(changed, reviewed []analysisFile) error {
 }
 
 func validateResourcePathRole(value, role string) error {
+	expected := expectedResourceRole(value)
+	if expected != "" && role != expected {
+		return fmt.Errorf("resource path %q must use role %s, got %q", value, expected, role)
+	}
 	switch role {
 	case "MapperXml":
-		if !strings.HasSuffix(path.Base(value), "Mapper.xml") {
-			return fmt.Errorf("MapperXml path %q must match *Mapper.xml", value)
+		if expected != "MapperXml" {
+			return fmt.Errorf("MapperXml path %q must match src/main/resources/**/*Mapper.xml", value)
 		}
 	case "YamlConfig":
-		if !strings.HasSuffix(value, ".yml") {
-			return fmt.Errorf("YamlConfig path %q must match *.yml", value)
+		if expected != "YamlConfig" {
+			return fmt.Errorf("YamlConfig path %q must match src/main/resources/**/*.yml", value)
 		}
 	}
 	return nil
+}
+
+func expectedResourceRole(value string) string {
+	if strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(path.Base(value), "Mapper.xml") {
+		return "MapperXml"
+	}
+	if strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(value, ".yml") {
+		return "YamlConfig"
+	}
+	return ""
 }
 
 func isResourceRole(role string) bool {
