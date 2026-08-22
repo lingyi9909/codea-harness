@@ -107,7 +107,7 @@ func TestEvaluateRequiredScopeRejectsMissingScopedFile(t *testing.T) {
 }
 
 func TestFullCoverageRejectsUnreadChangedMapperXml(t *testing.T) {
-	b := []byte(`{"changedFiles":[{"path":"src/main/java/OrderMapper.java"},{"path":"src/main/resources/mapper/OrderMapper.xml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/java/OrderMapper.java"}],"unresolvedSymbols":[]}}`)
+	b := []byte(`{"changedFiles":[{"path":"src/main/java/OrderMapper.java","role":"Mapper"},{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/java/OrderMapper.java","role":"Mapper"}],"unresolvedSymbols":[]}}`)
 	r, err := coverage.VerifyAnalysisJSON(b)
 	if err == nil {
 		t.Fatal("changed Mapper.xml must not be silently skipped")
@@ -118,7 +118,7 @@ func TestFullCoverageRejectsUnreadChangedMapperXml(t *testing.T) {
 }
 
 func TestFullCoverageRejectsUnreadChangedYaml(t *testing.T) {
-	b := []byte(`{"changedFiles":[{"path":"src/main/resources/application.yml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[],"unresolvedSymbols":[]}}`)
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/application.yml","role":"YamlConfig"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[],"unresolvedSymbols":[]}}`)
 	r, err := coverage.VerifyAnalysisJSON(b)
 	if err == nil {
 		t.Fatal("changed yml must not be silently skipped")
@@ -129,12 +129,19 @@ func TestFullCoverageRejectsUnreadChangedYaml(t *testing.T) {
 }
 
 func TestFullCoverageAcceptsReviewedMapperAndYaml(t *testing.T) {
-	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml"},{"path":"src/main/resources/application.yml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml"},{"path":"src/main/resources/application.yml"}],"unresolvedSymbols":[]}}`)
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"},{"path":"src/main/resources/application.yml","role":"YamlConfig"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"},{"path":"src/main/resources/application.yml","role":"YamlConfig"}],"unresolvedSymbols":[]}}`)
 	r, err := coverage.VerifyAnalysisJSON(b)
 	if err != nil {
 		t.Fatalf("reviewed resources should satisfy FULL coverage: %v", err)
 	}
 	if r.Status != "COMPLETE" {
 		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestFullCoverageRejectsReviewedResourceRoleMismatch(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"YamlConfig"}],"unresolvedSymbols":[]}}`)
+	if _, err := coverage.VerifyAnalysisJSON(b); err == nil || !strings.Contains(err.Error(), "reviewed file role") {
+		t.Fatalf("reviewed resource role mismatch must be rejected, err=%v", err)
 	}
 }
