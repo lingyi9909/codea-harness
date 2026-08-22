@@ -1,6 +1,6 @@
 ---
 name: fix-bug
-description: 针对已确认生产缺陷设计 exact unified diff，经精确 planId 审批后交给 Controlled Runtime 原子应用。
+description: 针对已确认生产缺陷设计 exact unified diff，经审批前 Runtime seal 与精确 planId 批准后原子应用。
 version: 2
 agent: fix-agent
 tools:
@@ -12,12 +12,12 @@ output_schema: .code-harness/contracts/fix-plan.schema.json
 
 ## 目标
 
-根据用户选定的 Finding 或 `PRODUCTION_CODE_ERROR` Diagnosis 设计最小修复。审批绑定完整 patch identity；正式写入只允许 Controlled Runtime Apply Safety Gate。
+根据用户选定的 Finding 或 `PRODUCTION_CODE_ERROR` Diagnosis 设计最小修复。人工批准必须绑定审批前由 Controlled Runtime 封存的 exact patch identity；正式写入只允许 Runtime Apply Safety Gate。
 
 ## 前置条件
 
 - 有明确 Finding/Diagnosis 和当前源码 Evidence。
-- 未批准前只读。
+- 未批准前只读业务文件。
 
 ## 执行步骤
 
@@ -39,38 +39,54 @@ output_schema: .code-harness/contracts/fix-plan.schema.json
 }
 ```
 
-6. 请求用户精确回复 `批准 <fixPlanId>`。模糊肯定不算批准。
-7. plan 自审批后任何变更（包括空白导致 unifiedDiff bytes 变化）都会改变 `diffSha256`，原审批失效。
-8. 批准后生成 `.code-harness/runs/<runId>/requests/apply.json`，其结构通过 `apply-request.schema.json`：
+6. **审批前**把上述 exact identity 原样写入 `.code-harness/runs/<runId>/requests/apply.json`，并通过 `apply-request.schema.json`：
 
 ```text
 planType=FIX
-planId=<approved fixPlanId>
-unifiedDiff=<approved exact diff>
-diffSha256=<approved hash>
-files[].baseSha256=<approved base hashes>
+planId=<fixPlanId>
+unifiedDiff=<exact diff>
+diffSha256=<exact hash>
+files[].path/baseSha256=<exact file identity>
 ```
 
-9. 调用：
+7. 在提示用户批准之前调用：
+
+```text
+.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+```
+
+只有生成：
+
+```text
+.code-harness/runs/<runId>/sealed-plans/<fixPlanId>.json
+```
+
+才允许请求人工审批。sealed snapshot 是 Runtime-owned approval baseline，固定 `planId / planType / unifiedDiff exact bytes / diffSha256 / files[].path / files[].baseSha256`。
+8. 请求用户精确回复 `批准 <fixPlanId>`。模糊肯定不算批准。
+9. 批准后**不得重新生成 request**。只能使用审批前 sealed 的同一份 `.code-harness/runs/<runId>/requests/apply.json` 调用：
 
 ```text
 .code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
-10. 只有 Runtime 返回 `APPLIED` 且生成：
+10. Runtime 必须先逐字段比对 sealed snapshot。即使 Patch B 的 `diffSha256` 与 Patch B 自己完全自洽，只要它不同于用户批准前 sealed 的 Patch A，就必须 `APPROVAL_IDENTITY_MISMATCH` / STOP / 0 写入。
+11. 只有 Runtime 返回 `APPLIED` 且生成：
 
 ```text
 .code-harness/runs/<runId>/evidence/apply/<fixPlanId>.json
 ```
 
 并通过 `apply-result.schema.json`，才报告正式应用完成。
-11. `BASE_CHANGED`、`PLAN_ALREADY_APPLIED`、diff/hash/path/patch validation failure 或 rollback → STOP，不得使用 direct host write 兜底。
+12. `SEALED_PLAN_NOT_FOUND`、`APPROVAL_IDENTITY_MISMATCH`、`BASE_CHANGED`、`PLAN_ALREADY_APPLIED`、diff/hash/path/patch validation failure 或 rollback → STOP，不得使用 direct host write 兜底。
 
 ## Runtime 不变量
 
 - FIX 只能写 `harness.yaml.write.allowedProductionPaths`。
-- `deniedPaths` 与 Framework Managed `.code-harness/**` 优先拒绝。
+- `.git/**` 与 `.code-harness/**` 是 Runtime hard-deny，不能被 `harness.yaml` 的 `allowedProductionPaths=["**"]` 或空 `deniedPaths` 覆盖。
+- 用户 `deniedPaths` 仍优先于普通 allowlist。
+- `apply --input` 必须先确认路径是 `.code-harness/runs/<runId>/requests/*.json`，再读取 JSON；body `runId` 必须等于 path runId。
 - Runtime 独立重算 `diffSha256` 与原文件 hash。
+- Runtime apply 必须与审批前 sealed snapshot 完整比对 approval identity。
 - patch touched set 必须与声明 `files[]` 完全一致。
 - 多文件操作失败必须 rollback；部分应用不算成功。
 - success evidence 是正式 apply 的唯一完成证明。
@@ -78,11 +94,13 @@ files[].baseSha256=<approved base hashes>
 ## 输出
 
 - Fix Plan（带 `unifiedDiff / diffSha256 / files[].baseSha256`）
+- 审批前 `.code-harness/runs/<runId>/sealed-plans/<fixPlanId>.json`
 - Runtime Apply evidence path
 
 ## 禁止行为
 
-- 不得在审批前修改文件。
+- 不得在审批前修改业务文件。
+- 不得在审批后重新生成不同 patch/request 并沿用旧 planId。
 - 不得调用旧式 `apply_approved_patch(fixPlanId, changes)` 作为正式应用。
 - 不得使用 arbitrary write_file/direct host write 绕过 Runtime。
 - 不得修改测试、执行测试、Shell、commit/push/PR。
