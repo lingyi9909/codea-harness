@@ -51,7 +51,7 @@ func TestR1PassedChineseReport(t *testing.T) {
 	md, err := Render(req)
 	if err != nil { t.Fatal(err) }
 	for _, want := range []string{
-		"# 📝 代码评审报告",
+		"# 🔍 代码评审报告",
 		"| 评审结果 | ✅ 通过 |",
 		"## 📁 评审范围",
 		"## 🔗 代码调用链",
@@ -82,7 +82,12 @@ func TestR2SeverityChineseColorAndDeterministicSort(t *testing.T) {
 func TestR3MultipleCallChainsAreNotFlattened(t *testing.T) {
 	md, err := Render(sampleRequest())
 	if err != nil { t.Fatal(err) }
-	for _, want := range []string{"### 调用链 1", "`OrderController.approve`\n↓\n`OrderService.approve`", "### 调用链 2", "`OrderController.cancel`\n↓\n`OrderService.cancel`"} {
+	for _, want := range []string{
+		"### 调用链 1",
+		"🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务接口｜`OrderService.approve`",
+		"### 调用链 2",
+		"🌐 接口入口｜`OrderController.cancel`\n↓\n⚙️ 业务接口｜`OrderService.cancel`",
+	} {
 		if !strings.Contains(md, want) { t.Fatalf("missing %q in markdown:\n%s", want, md) }
 	}
 }
