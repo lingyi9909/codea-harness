@@ -1,7 +1,7 @@
 ---
 name: adapt-project
 description: 自动分析 Java、Spring Boot、Maven 项目并生成 Harness 项目适配配置。
-version: 1
+version: 2
 agent: project-adapter
 tools:
   - list_project_tree
@@ -14,7 +14,7 @@ tools:
 
 ## 目标
 
-自动扫描目标项目的目录结构、构建配置、模块划分和测试规范，识别关键信息并生成 `harness.yaml` 和 `project.md`。
+自动扫描目标项目的目录结构、构建配置、模块划分和测试规范，识别关键信息并生成 `harness.yaml` 和 `project.md`。1.4 新初始化生成 `harness.yaml version: 2`，并默认启用 Mapper XML / YML Review Scope。
 
 ## 适用场景
 
@@ -148,6 +148,8 @@ readiness:
 
 根据所有识别结果生成 `.code-harness/harness.yaml`。参考模板为 `harness.template.yaml`，但必须根据项目实际情况调整。
 
+**新初始化固定生成 `version: 2`。** 已存在的 version 1 配置不在本 Skill 中主动升级；1.3.2→1.4 migration 由 Upgrade Task 负责。
+
 **可以使用约定默认值的字段**（无需询问用户，标记来源为 convention-default）：
 
 | 字段 | 默认值 | 说明 |
@@ -158,10 +160,14 @@ readiness:
 | `runs.directory` | `.code-harness/runs` | 运行产物目录 |
 | `scope.sourceIncludes` | `src/main/java/**/*.java` | 标准 Maven 源码路径 |
 | `scope.testIncludes` | `src/test/java/**/*.java` | 标准 Maven 测试路径 |
+| `scope.mapperIncludes` | `src/main/resources/**/*Mapper.xml` | 1.4 Mapper XML Review 默认范围 |
+| `scope.configIncludes` | `src/main/resources/**/*.yml` | 1.4 YML Review 默认范围 |
 | `write.allowed*` | 标准 Maven 路径 | 与 scope 一致 |
 | `write.deniedPaths` | `.git/**`、`.github/**`、`target/**`、`.code-harness/agents/**` 等 | 固定排除路径 |
 | `stopService.mode` | `processTree` | 进程树停止 |
 | `review.includeWorkingTree` | `true` | 评审纳入 staged/unstaged/untracked |
+
+Resource Review 只允许上述两个默认模式；不得自动加入 `*.properties`、`pom.xml`、Gradle、Flyway/Liquibase SQL migration 或任意其他 XML。
 
 使用默认值时在初始化报告中注明「使用默认值」。
 
@@ -182,8 +188,9 @@ readiness:
 - 测试报告路径必须根据实际模块结构调整
 - 日志文件路径能识别则填写，不能则填 `null`
 - denied paths 必须包含 `.code-harness/agents/**`、`.code-harness/skills/**`、`.code-harness/contracts/**`、`.code-harness/tools/**`
+- `scope.mapperIncludes` / `scope.configIncludes` 必须保留 1.4 默认值，除非未来版本有新的已批准设计；Task 2 不允许扩大范围
 - 生成后设置 `initialization.status` 和 `initialization.unresolved`
-- 使用 `harness-config.schema.json` 校验生成的配置
+- 使用 `harness-config.schema.json` 校验生成的配置；version 2 缺少 Mapper/YML Scope 必须校验失败
 
 ### 10. 检查宿主能力
 
@@ -235,6 +242,8 @@ Review 配置：
 - 默认基线：origin/master
 - 基线来源：refs/remotes/origin/HEAD
 - includeWorkingTree：true
+- Mapper XML：src/main/resources/**/*Mapper.xml
+- YML：src/main/resources/**/*.yml
 
 未确定：
 - 测试数据库是否允许写入
@@ -245,7 +254,7 @@ Review 配置：
 
 ## 输出
 
-- `.code-harness/harness.yaml`——使用 `write_harness_file` 写入
+- `.code-harness/harness.yaml`——使用 `write_harness_file` 写入；新初始化为 `version: 2`
 - `.code-harness/project.md`——使用 `write_harness_file` 写入
 - 初始化摘要（已识别 / 未确定项列表）
 
@@ -288,7 +297,7 @@ Review 配置：
 - Review 基线：origin/master（refs/remotes/origin/HEAD）
 
 生成的 harness.yaml：
-version: 1
+version: 2
 project:
   type: maven
   root: .
@@ -314,6 +323,15 @@ service:
     type: log
     pattern: Started DemoApplication
   logFile: null
+scope:
+  sourceIncludes:
+    - src/main/java/**/*.java
+  testIncludes:
+    - src/test/java/**/*.java
+  mapperIncludes:
+    - src/main/resources/**/*Mapper.xml
+  configIncludes:
+    - src/main/resources/**/*.yml
 ...
 ```
 
