@@ -61,8 +61,8 @@ type changeAnalysis struct {
 	ChangedFiles []struct {
 		Path string `json:"path"`
 	} `json:"changedFiles"`
-	CallChains        []CallChain       `json:"callChains"`
-	SymbolLocations   []SymbolLocation  `json:"symbolLocations"`
+	CallChains        []CallChain        `json:"callChains"`
+	SymbolLocations   []SymbolLocation   `json:"symbolLocations"`
 	ResourceRelations []ResourceRelation `json:"resourceRelations"`
 	ReviewCoverage    struct {
 		ReviewedFiles []struct {
@@ -163,7 +163,7 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 	selection.ScopedFiles = uniqueSorted(selection.ScopedFiles)
 	for required := range requiredPaths {
 		if _, ok := selectedPaths[required]; !ok {
-			return Selection{}, fmt.Errorf("required targeted scope path %q is missing from scopedFiles", required)
+			return Selection{}, fmt.Errorf("selected internal symbol/resource exact scope path %q is missing from scopedFiles", required)
 		}
 	}
 
