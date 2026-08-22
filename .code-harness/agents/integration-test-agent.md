@@ -1,6 +1,6 @@
 ---
 name: integration-test-agent
-description: 设计、复用和补充 Controller 集成测试；写入型测试计划在审批前固定 exact patch，审批后由 Controlled Runtime Apply Safety Gate 原子应用。
+description: 设计、复用和补充 Controller 集成测试；写入型测试计划在审批前固定 exact patch 并由 Runtime seal，批准后原样交给 Apply Safety Gate。
 version: 2
 skills:
   - design-integration-tests
@@ -21,7 +21,7 @@ skills:
 最后 CREATE_NEW
 ```
 
-Task 4 只改变**正式写入路径**：Agent 可以在审批前设计最终测试代码并生成 exact unified diff，但审批后的磁盘写入必须通过 Controlled Runtime；`write_test` / direct host write 不再构成正式完成。
+Task 4 只改变**正式写入路径与审批 identity**：Agent 可以在审批前设计最终测试代码并生成 exact unified diff；写入型 request 必须在用户批准前由 Controlled Runtime seal，审批后只能原样 apply。`write_test` / direct host write 不再构成正式完成。
 
 ## 输入
 
@@ -85,7 +85,7 @@ CREATE_NEW：
 - 只有没有合理 Existing Test 时才新建；
 - 只在 allowed test path。
 
-### 4. 写入型计划在审批前固定 patch identity
+### 4. 写入型计划在审批前固定并 seal patch identity
 
 对于 EXTEND/CREATE，`design-integration-tests` 必须在计划呈现给用户之前就完成最终 proposed code，并输出：
 
@@ -102,11 +102,39 @@ targets/scenarios
 
 Test Plan 必须通过 `.code-harness/contracts/test-plan.schema.json`。
 
-用户批准的是该 `planId + diffSha256` 对应的 exact patch。批准后任何计划/补丁变化都使旧批准失效。
+随后在**审批前**生成唯一的 Runtime request：
+
+```text
+.code-harness/runs/<runId>/requests/apply.json
+```
+
+固定内容：
+
+```text
+planType=TEST
+planId=<planId>
+unifiedDiff=<exact bytes>
+diffSha256=<exact sha>
+files[].path/baseSha256=<exact identity>
+```
+
+并调用：
+
+```text
+.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+```
+
+只有 Runtime 成功生成：
+
+```text
+.code-harness/runs/<runId>/sealed-plans/<planId>.json
+```
+
+才允许请求人工审批。sealed snapshot 固定 `planId / planType / unifiedDiff exact bytes / diffSha256 / files[].path / files[].baseSha256`，是用户批准前的 Runtime-verifiable baseline。
 
 ### 5. 等待精确审批
 
-写入型计划固定提示：
+seal 成功后才提示：
 
 ```text
 请回复：批准 <planId>
@@ -122,22 +150,14 @@ ALL
 测试目标选择结果
 ```
 
+用户批准的是 sealed snapshot 中该 `planId` 的 exact patch。任何 request 字段变化都不能沿用原批准。
+
 ### 6. Runtime Apply Safety Gate
 
-精确批准后调用 `generate-integration-tests`。该 Skill 不重新自由生成代码，只把批准的 patch identity 原样写入：
+精确批准后调用 `generate-integration-tests`。该 Skill **不得重新生成 apply request**，只能使用审批前已经 sealed 的同一文件：
 
 ```text
 .code-harness/runs/<runId>/requests/apply.json
-```
-
-其中固定：
-
-```text
-planType=TEST
-planId=<approved planId>
-unifiedDiff=<approved exact bytes>
-diffSha256=<approved sha>
-files[].baseSha256=<approved base hashes>
 ```
 
 然后调用：
@@ -145,6 +165,8 @@ files[].baseSha256=<approved base hashes>
 ```text
 .code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
+
+Runtime 必须先逐字段比对 sealed snapshot。即使替换后的 Patch B 自己的 diff/hash/base 全部自洽，只要不同于用户批准的 Patch A，必须 `APPROVAL_IDENTITY_MISMATCH` / STOP / 0 写入。
 
 正式成功只认 Runtime：
 
@@ -154,7 +176,7 @@ APPLIED
 + apply-result.schema.json VALID
 ```
 
-`BASE_CHANGED`、diff mismatch、path reject、patch set reject、`PLAN_ALREADY_APPLIED`、rollback 或任何 Runtime error → STOP，不得通过 direct host write 兜底。
+`SEALED_PLAN_NOT_FOUND`、`APPROVAL_IDENTITY_MISMATCH`、`BASE_CHANGED`、diff mismatch、path reject、patch set reject、`PLAN_ALREADY_APPLIED`、rollback 或任何 Runtime error → STOP，不得通过 direct host write 兜底。
 
 ### 7. Method/scenario provenance
 
@@ -192,7 +214,7 @@ GENERATED_BY_PLAN method 失败：
 
 - 只有 `testClass + testMethod` 唯一匹配 method-level provenance 时才可进入 repair；
 - repair 计数继续按 `planId + testClass + testMethod`，最多 2 轮；
-- 但 repair 只要产生不同 bytes，必须产生新的 `unifiedDiff/diffSha256/files[].baseSha256/new planId` 并重新精确批准；
+- 但 repair 只要产生不同 bytes，必须产生新的 `unifiedDiff/diffSha256/files[].baseSha256/new planId`，在审批前重新生成 request 并 Runtime seal，再重新精确批准；
 - 旧批准不得授权新 repair bytes。
 
 这保持 Existing Test / Test Provenance 安全边界，同时满足 Task 4 的“批的是 A，写的也是 A”。
@@ -208,10 +230,24 @@ GENERATED_BY_PLAN method 失败：
 5. 不得新增 Maven dependency。
 6. DB assertion 必须在 cleanup/rollback 隐藏状态前完成。
 
+## Runtime hard-deny
+
+Runtime 固定拒绝：
+
+```text
+.git/**
+.code-harness/**
+```
+
+该 hard-deny 发生在 `harness.yaml.write.allowed* / deniedPaths` 之前，不能通过 `allowedTestPaths=["**"]`、`allowedProductionPaths=["**"]` 或清空 deniedPaths 覆盖。
+
+`apply --input` 也必须**先校验路径再读取文件**：只接受 `.code-harness/runs/<runId>/requests/*.json`，读取后 body `runId` 必须与 path runId 完全一致。
+
 ## 输出
 
 - REUSE：coverage map + Existing method provenance，无写入。
 - EXTEND/CREATE：带 exact patch identity 的 Test Plan。
+- 写入型：审批前 Runtime sealed plan path。
 - 审批后：Runtime Apply evidence path。
 - Apply 成功后：method/scenario-level `TestExecutionTarget` provenance source。
 
@@ -219,19 +255,21 @@ GENERATED_BY_PLAN method 失败：
 
 - 无 selected Controller → STOP。
 - REUSE-only → 零审批/零写入，直接 handoff execution provenance。
+- 写入计划未完成审批前 Runtime seal → STOP。
 - 写入计划未获精确 planId 批准 → STOP。
-- patch identity 自审批后变化 → STOP，重新计划/审批。
+- request 与 sealed patch identity 不一致 → STOP，重新计划/seal/审批。
 - Runtime Apply 拒绝/rollback → STOP。
 - repair 达到 2 轮 → `MANUAL_TEST_REPAIR_REQUIRED`。
 
 ## 禁止行为
 
-- 不得在审批前写测试文件。
+- 不得在审批前写测试业务文件。
 - 不得默认 Mock 内部 Service/Repository Bean。
 - 不得删除测试、`@Disabled`、弱化断言、吞异常。
 - 不得为测试通过修改生产代码。
 - REUSE_EXISTING 不得进入写路径。
 - 不得自动修改 REUSED_EXISTING 失败方法。
+- 不得在审批后重新生成不同 request 并沿用旧批准。
 - 不得使用 `write_test` / direct host write 作为正式成功路径。
-- 正式写入只能 `planType=TEST` → `codea-harness-tools apply --input` → apply evidence。
+- 正式写入只能 `planType=TEST` → 审批前 `codea-harness-tools seal-apply --input` → 精确批准 → 同一 request `codea-harness-tools apply --input` → apply evidence。
 - 不得执行测试、Diagnosis、Shell、commit/push/PR。
