@@ -196,3 +196,25 @@ func TestTargetedCoverageRejectsReviewedResourceRoleMismatch(t *testing.T) {
 		t.Fatalf("TARGETED reviewed resource role mismatch must be rejected, err=%v", err)
 	}
 }
+
+func TestResourceRelationClassRejectsDifferentClassInSameFile(t *testing.T) {
+	analysis := strings.Replace(resourceAnalysis,
+		`{"symbol":"OrderController","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},`,
+		`{"symbol":"OrderController","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},
+    {"symbol":"OtherController","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},`, 1)
+	analysis = strings.Replace(analysis,
+		`"fromSymbol":"OrderController","fromKind":"CLASS"`,
+		`"fromSymbol":"OtherController","fromKind":"CLASS"`, 1)
+	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "selected chain class") {
+		t.Fatalf("same-file different CLASS must not bind resource relation, err=%v", err)
+	}
+}
+
+func TestResourceRelationClassRejectsMethodSymbol(t *testing.T) {
+	analysis := strings.Replace(resourceAnalysis,
+		`"fromSymbol":"OrderController","fromKind":"CLASS"`,
+		`"fromSymbol":"OrderController.approve","fromKind":"CLASS"`, 1)
+	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "CLASS requires class symbol") {
+		t.Fatalf("fromKind=CLASS must reject method symbol, err=%v", err)
+	}
+}
