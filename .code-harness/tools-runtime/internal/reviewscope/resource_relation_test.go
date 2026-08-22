@@ -51,6 +51,19 @@ func targetedResourceSelection() []byte {
     }`)
 }
 
+func targetedSelectionWithoutYaml() []byte {
+	return []byte(`{
+      "mode":"TARGETED",
+      "target":{"symbol":"OrderController.approve","kind":"METHOD"},
+      "selectedCallChains":[{"entryPoint":"OrderController.approve","chain":["OrderController.approve","OrderMapper.updateStatus"]}],
+      "scopedFiles":[
+        "src/main/java/OrderController.java",
+        "src/main/java/OrderMapper.java",
+        "src/main/resources/mapper/OrderMapper.xml"
+      ]
+    }`)
+}
+
 func TestTargetedScopeRequiresChangedMapperRelatedToSelectedChain(t *testing.T) {
 	selection := []byte(`{
       "mode":"TARGETED",
@@ -162,12 +175,12 @@ func TestResourceRelationClassRejectsMultiModuleDuplicateEvidence(t *testing.T) 
 	}
 }
 
-func TestResourceRelationClassMustResolveToSelectedExactPath(t *testing.T) {
+func TestResourceRelationClassUsesExactPathInsteadOfSimpleClassName(t *testing.T) {
 	analysis := strings.Replace(resourceAnalysis,
 		`{"symbol":"OrderController","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},`,
 		`{"symbol":"OrderController","path":"module-b/src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},`, 1)
-	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "selected exact path") {
-		t.Fatalf("CLASS relation evidence from another module must not bind by simple class name, err=%v", err)
+	if _, err := reviewscope.Verify(targetedSelectionWithoutYaml(), []byte(analysis)); err != nil {
+		t.Fatalf("CLASS relation with evidence in another module must remain outside TARGETED scope, err=%v", err)
 	}
 }
 
