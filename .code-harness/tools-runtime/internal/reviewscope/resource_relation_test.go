@@ -21,7 +21,8 @@ const resourceAnalysis = `{
   "symbolLocations":[
     {"symbol":"OrderController.approve","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},
     {"symbol":"OrderController","path":"src/main/java/OrderController.java","role":"Controller","source":"FIND_SYMBOL"},
-    {"symbol":"OrderMapper.updateStatus","path":"src/main/java/OrderMapper.java","role":"Mapper","source":"FIND_SYMBOL"}
+    {"symbol":"OrderMapper.updateStatus","path":"src/main/java/OrderMapper.java","role":"Mapper","source":"FIND_SYMBOL"},
+    {"symbol":"UserMapper.disable","path":"src/main/java/UserMapper.java","role":"Mapper","source":"FIND_SYMBOL"}
   ],
   "resourceRelations":[
     {"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml","resource":"OrderMapper.xml#updateStatus","fromSymbol":"OrderMapper.updateStatus","fromKind":"METHOD","source":"MAPPER_STATEMENT","evidence":"statement id updateStatus matches selected Mapper method"},
