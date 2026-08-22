@@ -1,6 +1,6 @@
 ---
 name: generate-integration-tests
-description: 对已批准的写入型测试计划只执行 exact approved patch handoff；正式测试写入由 Controlled Runtime Apply Safety Gate 完成。
+description: 对已批准的写入型测试计划只执行审批前 Runtime-sealed exact request；正式测试写入由 Controlled Runtime Apply Safety Gate 完成。
 version: 2
 agent: integration-test-agent
 tools:
@@ -12,15 +12,23 @@ output_schema: null
 
 ## 目标
 
-本 Skill 不再在审批之后自由生成测试代码。`design-integration-tests` 已经在审批前确定最终：
+本 Skill 不再在审批之后自由生成测试代码或 Runtime request。`design-integration-tests` 已经在**审批前**确定最终：
 
 ```text
 unifiedDiff
 diffSha256
 files[].path/baseSha256
+.code-harness/runs/<runId>/requests/apply.json
+.code-harness/runs/<runId>/sealed-plans/<planId>.json
 ```
 
-用户批准 `planId` 后，本 Skill 只能把**同一份 exact patch**交给 Controlled Runtime。
+并调用：
+
+```text
+.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+```
+
+用户批准 `planId` 后，本 Skill 只能把**同一份 sealed exact request**交给 Controlled Runtime。
 
 ## 输入
 
@@ -29,6 +37,8 @@ files[].path/baseSha256
 - `unifiedDiff`
 - `diffSha256`
 - `files[].path/baseSha256`
+- 审批前 sealed apply request path
+- `.code-harness/runs/<runId>/sealed-plans/<planId>.json`
 - targets 的 strategy / scenarios / Existing Test provenance
 - validated TestTargetSelection
 
@@ -36,9 +46,10 @@ files[].path/baseSha256
 
 1. `REUSE_EXISTING` target 不进入写入流程。
 2. 只有存在 EXTEND_EXISTING / CREATE_NEW 才允许 apply。
-3. 用户必须精确回复 `批准 <planId>`。
-4. 当前计划 bytes 必须仍与批准时的 `diffSha256` 一致。
-5. 如果计划自批准后发生任何变化，STOP，回到设计阶段生成新 planId。
+3. `apply.json` 必须在用户批准前已经通过 `apply-request.schema.json` 和 `codea-harness-tools seal-apply --input`。
+4. 对应 `.code-harness/runs/<runId>/sealed-plans/<planId>.json` 必须存在。
+5. 用户必须精确回复 `批准 <planId>`。
+6. 批准后禁止重新生成、改写或 rebase `apply.json`。变化必须回到设计阶段产生新 planId、新 request、新 seal、新批准。
 
 ## 执行流程
 
@@ -57,42 +68,28 @@ CREATE_NEW：
 
 未选择 Controller 的测试文件不得出现在 approved patch 中。
 
-### 2. 不重新生成 approved bytes
+### 2. 不重新生成 approved bytes/request
 
-批准后不得重新“生成一次差不多的代码”。必须直接使用 Test Plan 中的 exact：
-
-```text
-unifiedDiff
-diffSha256
-files[].baseSha256
-```
-
-如当前源码发生变化，Runtime 会返回 `BASE_CHANGED`；不得自行 rebase 并沿用原 planId。
-
-### 3. 生成 Runtime request
-
-把 approved identity 原样写入：
+批准后不得重新“生成一次差不多的代码”，也不得重新构造 request。必须直接使用审批前 sealed 的：
 
 ```text
 .code-harness/runs/<runId>/requests/apply.json
 ```
 
-Contract：`.code-harness/contracts/apply-request.schema.json`。
+其中 exact identity 必须保持：
 
-```json
-{
-  "runId":"<runId>",
-  "planType":"TEST",
-  "planId":"<approved planId>",
-  "diffSha256":"<approved diffSha256>",
-  "files":[{"path":"...","baseSha256":"..."}],
-  "unifiedDiff":"<approved exact unifiedDiff>"
-}
+```text
+planType=TEST
+planId
+unifiedDiff exact bytes
+diffSha256
+files[].path
+files[].baseSha256
 ```
 
-固定语义：`planType=TEST`。
+如 request 被替换成另一个自洽 Patch B，Runtime 会对照 sealed Patch A 返回 `APPROVAL_IDENTITY_MISMATCH`。如当前源码发生变化，Runtime 会返回 `BASE_CHANGED`。两种情况都不得沿用原批准自行修补。
 
-### 4. Controlled Runtime apply
+### 3. Controlled Runtime apply
 
 调用：
 
@@ -102,19 +99,24 @@ Contract：`.code-harness/contracts/apply-request.schema.json`。
 
 Runtime 独立验证：
 
+- `--input` 路径在读取前必须严格匹配 `.code-harness/runs/<runId>/requests/*.json`；
+- 读取后 body `runId` 必须与 path runId 一致；
+- sealed snapshot 存在；
+- `planId / planType / unifiedDiff exact bytes / diffSha256 / files[].path / files[].baseSha256` 与 sealed snapshot 完全一致；
 - request Schema；
 - exact diff hash；
 - 当前 base file hash；
 - patch touched set；
 - `allowedTestPaths`；
-- `deniedPaths`；
+- Runtime hard-deny `.git/**` / `.code-harness/**`；
+- 用户 `deniedPaths`；
 - traversal/binary/unsafe patch；
 - 原子写入/rollback；
 - duplicate planId。
 
-TEST 计划无法写生产路径。
+TEST 计划无法写生产路径；Runtime hard-deny 不能被 `allowedTestPaths=["**"]` 或 `deniedPaths=[]` 覆盖。
 
-### 5. 正式成功条件
+### 4. 正式成功条件
 
 只有 Runtime 返回：
 
@@ -142,7 +144,7 @@ files[].path/beforeSha256/afterSha256
 rollbackPerformed=false
 ```
 
-任何 Runtime reject/rollback → 不得报告成功，也不得改用 `write_test` / direct host write 兜底。
+`SEALED_PLAN_NOT_FOUND`、`APPROVAL_IDENTITY_MISMATCH` 或任何 Runtime reject/rollback → 不得报告成功，也不得改用 `write_test` / direct host write 兜底。
 
 ## Apply 后 provenance
 
@@ -166,8 +168,10 @@ new unifiedDiff
 → new diffSha256
 → new files[].baseSha256
 → new planId
+→ new apply request
+→ 审批前 codea-harness-tools seal-apply --input
 → 新的精确批准
-→ planType=TEST Runtime apply
+→ 同一 sealed request 的 planType=TEST Runtime apply
 ```
 
 旧批准不得授权新的 repair patch。
@@ -179,7 +183,8 @@ new unifiedDiff
 ## 禁止行为
 
 - 不得调用 `write_test` 作为正式成功路径。
-- 不得在批准后重算不同 patch 后继续使用旧 planId。
+- 不得在批准后重算不同 patch/request 后继续使用旧 planId。
+- 不得跳过审批前 sealed plan baseline。
 - 不得写生产代码。
 - 不得触及 unselected target。
 - 不得删除/禁用/弱化 Existing Test。
