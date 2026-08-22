@@ -68,14 +68,15 @@ type changeAnalysis struct {
 	SymbolLocations   []SymbolLocation   `json:"symbolLocations"`
 	ResourceRelations []ResourceRelation `json:"resourceRelations"`
 	ReviewCoverage    struct {
-		ReviewedFiles    []analysisFile      `json:"reviewedFiles"`
+		ReviewedFiles     []analysisFile      `json:"reviewedFiles"`
 		UnresolvedSymbols []unresolvedSymbol `json:"unresolvedSymbols"`
 	} `json:"reviewCoverage"`
 }
 
 type navigationEvidence struct {
-	bySymbol  map[string]SymbolLocation
-	locations []SymbolLocation
+	bySymbol      map[string]SymbolLocation
+	locations     []SymbolLocation
+	methodSymbols map[string]struct{}
 }
 
 func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
@@ -253,32 +254,43 @@ func validateChangedAndReviewedResourceRoles(changed, reviewed []analysisFile) (
 			return nil, fmt.Errorf("reviewed file: %w", err)
 		}
 		role := strings.TrimSpace(file.Role)
+		changedRole, changedFile := changedRoles[p]
+		if changedFile && (isResourceRole(changedRole) || isResourceRole(role) || expectedResourceRole(p) != "") && role != changedRole {
+			return nil, fmt.Errorf("reviewed file role %q for %q does not match changed file role %q", role, p, changedRole)
+		}
 		if err := validateResourcePathRole(p, role); err != nil {
 			return nil, fmt.Errorf("reviewed file: %w", err)
-		}
-		changedRole, changedFile := changedRoles[p]
-		if !changedFile || (!isResourceRole(changedRole) && !isResourceRole(role)) {
-			continue
-		}
-		if role != changedRole {
-			return nil, fmt.Errorf("reviewed file role %q for %q does not match changed file role %q", role, p, changedRole)
 		}
 	}
 	return changedRoles, nil
 }
 
 func validateResourcePathRole(value, role string) error {
+	expected := expectedResourceRole(value)
+	if expected != "" && role != expected {
+		return fmt.Errorf("resource path %q must use role %s, got %q", value, expected, role)
+	}
 	switch role {
 	case "MapperXml":
-		if !strings.HasSuffix(path.Base(value), "Mapper.xml") {
-			return fmt.Errorf("MapperXml path %q must match *Mapper.xml", value)
+		if expected != "MapperXml" {
+			return fmt.Errorf("MapperXml path %q must match src/main/resources/**/*Mapper.xml", value)
 		}
 	case "YamlConfig":
-		if !strings.HasSuffix(value, ".yml") {
-			return fmt.Errorf("YamlConfig path %q must match *.yml", value)
+		if expected != "YamlConfig" {
+			return fmt.Errorf("YamlConfig path %q must match src/main/resources/**/*.yml", value)
 		}
 	}
 	return nil
+}
+
+func expectedResourceRole(value string) string {
+	if strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(path.Base(value), "Mapper.xml") {
+		return "MapperXml"
+	}
+	if strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(value, ".yml") {
+		return "YamlConfig"
+	}
+	return ""
 }
 
 func isResourceRole(role string) bool {
@@ -289,7 +301,11 @@ func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, er
 	if len(locations) == 0 {
 		return navigationEvidence{}, errors.New("TARGETED review requires ChangeAnalysis.symbolLocations from Code Navigation")
 	}
-	e := navigationEvidence{bySymbol: make(map[string]SymbolLocation), locations: make([]SymbolLocation, 0, len(locations))}
+	e := navigationEvidence{
+		bySymbol:      make(map[string]SymbolLocation),
+		locations:     make([]SymbolLocation, 0, len(locations)),
+		methodSymbols: make(map[string]struct{}),
+	}
 	for _, raw := range locations {
 		symbol := strings.TrimSpace(raw.Symbol)
 		if symbol == "" {
@@ -312,6 +328,15 @@ func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, er
 		}
 		e.bySymbol[symbol] = loc
 		e.locations = append(e.locations, loc)
+	}
+	for symbol, loc := range e.bySymbol {
+		parent := parentSymbol(symbol)
+		if parent == "" {
+			continue
+		}
+		if parentLoc, ok := e.bySymbol[parent]; ok && parentLoc.Path == loc.Path {
+			e.methodSymbols[symbol] = struct{}{}
+		}
 	}
 	return e, nil
 }
@@ -391,7 +416,11 @@ func exactScopePaths(target Target, chains []CallChain, evidence navigationEvide
 		if err != nil {
 			return nil, nil, err
 		}
-		if !resourceRelationTouchesSelected(relation, fromLocation, nodes, selectedNavigationPaths) {
+		touches, err := resourceRelationTouchesSelected(relation, fromLocation, nodes, selectedNavigationPaths)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !touches {
 			continue
 		}
 		allowed[relation.Path] = struct{}{}
@@ -469,19 +498,44 @@ func resolveResourceRelationEvidence(relation ResourceRelation, evidence navigat
 	if !ok {
 		return SymbolLocation{}, fmt.Errorf("resource relation fromSymbol %q has no exact Code Navigation path evidence", relation.FromSymbol)
 	}
+	if relation.FromKind == "CLASS" {
+		if _, method := evidence.methodSymbols[relation.FromSymbol]; method {
+			return SymbolLocation{}, fmt.Errorf("resource relation fromKind=CLASS requires class symbol, got method symbol %q", relation.FromSymbol)
+		}
+	}
 	return loc, nil
 }
 
-func resourceRelationTouchesSelected(relation ResourceRelation, fromLocation SymbolLocation, nodes, selectedNavigationPaths map[string]struct{}) bool {
+func resourceRelationTouchesSelected(relation ResourceRelation, fromLocation SymbolLocation, nodes, selectedNavigationPaths map[string]struct{}) (bool, error) {
 	if relation.FromKind == "METHOD" {
 		if _, selected := nodes[relation.FromSymbol]; !selected {
-			return false
+			return false, nil
 		}
 		_, selectedPath := selectedNavigationPaths[fromLocation.Path]
-		return selectedPath
+		return selectedPath, nil
+	}
+
+	classMatched := false
+	for node := range nodes {
+		if parentSymbol(node) == relation.FromSymbol {
+			classMatched = true
+			break
+		}
+	}
+	if !classMatched {
+		return false, fmt.Errorf("resource relation class %q does not match any selected chain class", relation.FromSymbol)
 	}
 	_, selectedPath := selectedNavigationPaths[fromLocation.Path]
-	return selectedPath
+	return selectedPath, nil
+}
+
+func parentSymbol(symbol string) string {
+	symbol = strings.TrimSpace(symbol)
+	index := strings.LastIndex(symbol, ".")
+	if index <= 0 {
+		return ""
+	}
+	return symbol[:index]
 }
 
 func verifyAllControllerChains(target Target, selected, all []CallChain) error {
@@ -544,7 +598,6 @@ func selectedNodes(chains []CallChain) map[string]struct{} {
 			if node != "" {
 				nodes[node] = struct{}{}
 			}
-		}
 	}
 	return nodes
 }
