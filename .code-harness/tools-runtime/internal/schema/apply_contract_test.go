@@ -54,10 +54,15 @@ func TestApplyResultSchemaContract(t *testing.T) {
       "runId":"run-1","planType":"TEST","planId":"test-1",
       "diffSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "status":"APPLIED",
+      "appliedAt":"2026-08-22T09:01:00Z",
       "files":[{"path":"src/test/java/AIT.java","beforeSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
       "rollbackPerformed":false
     }`)
 	if err := ValidateJSON(schemaBytes, valid); err != nil {
 		t.Fatalf("valid apply result rejected: %v", err)
+	}
+	missingAppliedAt := []byte(strings.Replace(string(valid), `"appliedAt":"2026-08-22T09:01:00Z",`, "", 1))
+	if err := ValidateJSON(schemaBytes, missingAppliedAt); err == nil {
+		t.Fatal("successful apply result without appliedAt must be rejected")
 	}
 }
