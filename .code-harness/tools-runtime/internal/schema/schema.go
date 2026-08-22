@@ -44,8 +44,7 @@ func ValidateJSON(schemaBytes, jsonBytes []byte) error {
 	if err := compiled.Validate(instance); err != nil {
 		return fmt.Errorf("schema validation failed: %w", err)
 	}
-	title := schemaTitle(schemaBytes)
-	switch title {
+	switch schemaTitle(schemaBytes) {
 	case "Diagnosis":
 		if err := validateDiagnosisSemantics(jsonBytes); err != nil {
 			return fmt.Errorf("diagnosis semantic validation failed: %w", err)
@@ -109,7 +108,11 @@ func validateApplyRequestSemantics(jsonBytes []byte) error {
 	if err := json.Unmarshal(jsonBytes, &req); err != nil {
 		return fmt.Errorf("decode apply request: %w", err)
 	}
-	return validateUniqueWindowsPaths(req.Files)
+	paths := make([]string, 0, len(req.Files))
+	for _, file := range req.Files {
+		paths = append(paths, file.Path)
+	}
+	return validateUniqueWindowsPaths(paths)
 }
 
 func validatePlanPatchIdentity(jsonBytes []byte) error {
@@ -130,22 +133,19 @@ func validatePlanPatchIdentity(jsonBytes []byte) error {
 	if !strings.EqualFold(plan.DiffSha256, actual) {
 		return fmt.Errorf("diffSha256 mismatch: declared=%s actual=%s", plan.DiffSha256, actual)
 	}
-	if err := validateUniqueWindowsPaths(plan.Files); err != nil {
-		return err
+	paths := make([]string, 0, len(plan.Files))
+	for _, file := range plan.Files {
+		paths = append(paths, file.Path)
 	}
-	return nil
+	return validateUniqueWindowsPaths(paths)
 }
 
-func validateUniqueWindowsPaths[T interface{ ~struct{ Path string `json:"path"` } }](files []T) error {
-	seen := make(map[string]struct{}, len(files))
-	for i, raw := range files {
-		// Convert through JSON to keep this helper usable for anonymous contract structs.
-		b, _ := json.Marshal(raw)
-		var file struct{ Path string `json:"path"` }
-		_ = json.Unmarshal(b, &file)
-		key := strings.ToLower(path.Clean(strings.ReplaceAll(strings.TrimSpace(file.Path), "\\", "/")))
+func validateUniqueWindowsPaths(paths []string) error {
+	seen := make(map[string]struct{}, len(paths))
+	for i, value := range paths {
+		key := strings.ToLower(path.Clean(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")))
 		if _, ok := seen[key]; ok {
-			return fmt.Errorf("files[%d].path duplicates Windows-equivalent path %q", i, file.Path)
+			return fmt.Errorf("files[%d].path duplicates Windows-equivalent path %q", i, value)
 		}
 		seen[key] = struct{}{}
 	}
