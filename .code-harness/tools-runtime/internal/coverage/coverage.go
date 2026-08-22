@@ -101,15 +101,12 @@ func validateResourceRoles(changed, reviewed []analysisFile) error {
 	for _, file := range reviewed {
 		p := normalizePath(file.Path)
 		role := strings.TrimSpace(file.Role)
+		changedRole, changedFile := changedRoles[p]
+		if changedFile && (isResourceRole(changedRole) || isResourceRole(role)) && role != changedRole {
+			return fmt.Errorf("reviewed file role %q for %q does not match changed file role %q", role, p, changedRole)
+		}
 		if err := validateResourcePathRole(p, role); err != nil {
 			return fmt.Errorf("reviewed file: %w", err)
-		}
-		changedRole, changedFile := changedRoles[p]
-		if !changedFile || (!isResourceRole(changedRole) && !isResourceRole(role)) {
-			continue
-		}
-		if role != changedRole {
-			return fmt.Errorf("reviewed file role %q for %q does not match changed file role %q", role, p, changedRole)
 		}
 	}
 	return nil
