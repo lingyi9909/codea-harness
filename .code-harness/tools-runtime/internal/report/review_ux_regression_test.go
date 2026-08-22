@@ -32,7 +32,7 @@ func TestReviewCodeSkillContractMatches132FindingRules(t *testing.T) {
 }
 
 func TestCallChainEntryPointAlreadyFirstIsNotDuplicated(t *testing.T) {
-	req := sampleRequest()
+	req := withStandardRoleEvidence(sampleRequest())
 	req.Coverage.CallChains = []CallChain{{
 		EntryPoint: "OrderController.approve",
 		Chain: []string{
@@ -47,13 +47,13 @@ func TestCallChainEntryPointAlreadyFirstIsNotDuplicated(t *testing.T) {
 	if strings.Count(md, "`OrderController.approve`") != 1 {
 		t.Fatalf("entryPoint duplicated in markdown:\n%s", md)
 	}
-	if !strings.Contains(md, "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务接口｜`OrderService.approve`") {
+	if !strings.Contains(md, "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务服务｜`OrderService.approve`") {
 		t.Fatalf("normalized call chain missing:\n%s", md)
 	}
 }
 
 func TestCallChainEntryPointMissingFromChainIsPrepended(t *testing.T) {
-	req := sampleRequest()
+	req := withStandardRoleEvidence(sampleRequest())
 	req.Coverage.CallChains = []CallChain{{
 		EntryPoint: "OrderController.approve",
 		Chain: []string{
@@ -65,14 +65,14 @@ func TestCallChainEntryPointMissingFromChainIsPrepended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务接口｜`OrderService.approve`\n↓\n🧠 业务实现｜`OrderServiceImpl.approve`"
+	want := "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务服务｜`OrderService.approve`\n↓\n🧠 业务实现｜`OrderServiceImpl.approve`"
 	if !strings.Contains(md, want) {
 		t.Fatalf("entryPoint was not prepended:\n%s", md)
 	}
 }
 
 func TestCallChainEmptyChainStillRendersEntryPoint(t *testing.T) {
-	req := sampleRequest()
+	req := withStandardRoleEvidence(sampleRequest())
 	req.Coverage.CallChains = []CallChain{{EntryPoint: "OrderController.approve"}}
 	md, err := Render(req)
 	if err != nil {
