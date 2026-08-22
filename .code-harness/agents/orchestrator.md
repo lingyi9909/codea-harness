@@ -92,7 +92,7 @@ scopedFiles ⊆ reviewedFiles
 
 **此时禁止调用 `review-code`，禁止输出 Review PASSED，禁止进入 Integration Test Agent。**
 
-## Review Report Persistence（1.3.2 UX）
+## Review Report Persistence（1.4 Human Report UX）
 
 `harness review` 与 `harness test` 的 Review 阶段都必须生成正式 Artifact：
 
@@ -122,6 +122,56 @@ Reviewer / Orchestrator
 - TARGETED 的 report `callChains[]` 只能使用 Runtime 验证后的 `selectedCallChains`
 - `findings[]`：`id / category / severity / file / line / problem / evidence / impact / recommendation / needsTest / introducedByChange / confidence`
 - `category` 只允许 `PRODUCTION_CODE | TEST_VALIDITY`
+
+1.4 用户可见报告固定使用统一首屏。用户无需先滚动到报告尾部，就必须能看到：
+
+```text
+评审结果
+评审模式
+评审目标（TARGETED）
+Change Set 文件数
+本次 Scope 文件数
+已评审文件数
+问题数量
+下一步
+```
+
+代码调用链只做展示增强，不修改任何机器 symbol。Runtime 对已有 symbol 使用以下人类可读角色标签；无法识别时使用通用标签，不得编造新的调用节点：
+
+```text
+🌐 接口入口
+⚙️ 业务接口
+🧠 业务实现
+🗄 数据访问
+📄 Mapper XML
+🔹 代码节点
+```
+
+Finding 展示块固定为：
+
+```text
+### <severity emoji> <findingId>｜<中文级别>
+📍 位置
+❗ 问题
+🔎 证据
+💥 影响
+🛠 修复建议
+🧪 是否需要测试
+```
+
+报告末尾必须有 `## ➡️ 下一步`：
+
+```text
+FAILED  → 优先处理阻断问题；可使用 harness fix finding:<id>
+PASSED  → 无需处理阻断问题
+MANUAL_ACTION_REQUIRED → 明确列出未解析项、缺失评审文件或 Runtime 校验错误对应动作
+```
+
+TARGETED 报告必须保留固定免责声明：
+
+```text
+本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。
+```
 
 硬规则：
 
@@ -161,10 +211,14 @@ Reviewer / Orchestrator
 用户可见顺序固定为：
 
 ```text
-评审范围
+统一首屏（结果 / 模式 / 目标 / 数量 / 下一步）
+→ 问题概览
+→ 评审范围
+→ 代码调用链
 → 评审覆盖
 → 问题清单（如允许执行）
-→ 评审结论 + .code-harness/runs/<runId>/review.md
+→ 评审结论
+→ 下一步 + .code-harness/runs/<runId>/review.md
 ```
 
 ## Targeted Review（1.4）
