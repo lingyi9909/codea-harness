@@ -145,3 +145,17 @@ func TestFullCoverageRejectsReviewedResourceRoleMismatch(t *testing.T) {
 		t.Fatalf("reviewed resource role mismatch must be rejected, err=%v", err)
 	}
 }
+
+func TestFullCoverageRejectsMapperXmlPathWithOtherRole(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"Other"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"Other"}],"unresolvedSymbols":[]}}`)
+	if _, err := coverage.VerifyAnalysisJSON(b); err == nil || !strings.Contains(err.Error(), "must use role MapperXml") {
+		t.Fatalf("*Mapper.xml must require MapperXml role, err=%v", err)
+	}
+}
+
+func TestFullCoverageRejectsYamlPathWithOtherRole(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/application.yml","role":"Other"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/application.yml","role":"Other"}],"unresolvedSymbols":[]}}`)
+	if _, err := coverage.VerifyAnalysisJSON(b); err == nil || !strings.Contains(err.Error(), "must use role YamlConfig") {
+		t.Fatalf("src/main/resources/**/*.yml must require YamlConfig role, err=%v", err)
+	}
+}
