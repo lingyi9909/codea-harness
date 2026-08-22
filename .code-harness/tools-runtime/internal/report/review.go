@@ -223,6 +223,7 @@ func Render(req ReviewRequest) (string, error) {
 	writeHeader(&b, req)
 	if req.Coverage.Status == "PARTIAL" {
 		writePartial(&b, req)
+		writeNextStep(&b, req)
 		return b.String(), nil
 	}
 	writeSeverityOverview(&b, req.Findings)
@@ -231,11 +232,12 @@ func Render(req ReviewRequest) (string, error) {
 	writeCoverage(&b, req.Coverage)
 	writeFindings(&b, req.Findings)
 	writeSummary(&b, req)
+	writeNextStep(&b, req)
 	return b.String(), nil
 }
 
 func writeHeader(b *strings.Builder, req ReviewRequest) {
-	fmt.Fprintln(b, "# 📝 代码评审报告")
+	fmt.Fprintln(b, "# 🔍 代码评审报告")
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "| 项目 | 内容 |")
 	fmt.Fprintln(b, "|---|---|")
@@ -253,7 +255,25 @@ func writeHeader(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintf(b, "| 本次 Scope 文件 | %d |\n", len(scopeFiles(req)))
 	fmt.Fprintf(b, "| 已评审文件 | %d |\n", len(req.Coverage.ReviewedFiles))
 	fmt.Fprintf(b, "| 问题数量 | %d |\n", len(req.Findings))
+	fmt.Fprintf(b, "| 下一步 | %s |\n", firstScreenNextAction(req))
 	fmt.Fprintln(b)
+}
+
+func firstScreenNextAction(req ReviewRequest) string {
+	switch req.Result {
+	case ResultPassed:
+		return "无需处理阻断问题"
+	case ResultFailed:
+		if id := primaryFindingID(req.Findings); id != "" {
+			return fmt.Sprintf("优先处理阻断问题；可使用 `harness fix finding:%s`", singleLine(id))
+		}
+		return "优先处理阻断问题"
+	default:
+		if len(req.Coverage.RuntimeErrors) > 0 {
+			return "处理 Runtime 校验错误后重新评审"
+		}
+		return "处理未解析项/缺失评审文件后重新评审"
+	}
 }
 
 func writeSeverityOverview(b *strings.Builder, findings []Finding) {
@@ -318,7 +338,7 @@ func writeCallChains(b *strings.Builder, chains []CallChain) {
 		fmt.Fprintf(b, "### 调用链 %d\n\n", i+1)
 		nodes := normalizeCallChain(chain)
 		for j, symbol := range nodes {
-			fmt.Fprintf(b, "`%s`\n", singleLine(symbol))
+			fmt.Fprintf(b, "%s｜`%s`\n", callChainRoleLabel(symbol), singleLine(symbol))
 			if j < len(nodes)-1 {
 				fmt.Fprintln(b, "↓")
 			}
@@ -343,6 +363,40 @@ func normalizeCallChain(chain CallChain) []string {
 		nodes = append(nodes, symbol)
 	}
 	return nodes
+}
+
+func callChainRoleLabel(symbol string) string {
+	class := callChainClass(symbol)
+	lower := strings.ToLower(symbol)
+	switch {
+	case strings.Contains(lower, ".xml#") || strings.HasSuffix(class, "MapperXml"):
+		return "📄 Mapper XML"
+	case strings.HasSuffix(class, "Controller"):
+		return "🌐 接口入口"
+	case strings.HasSuffix(class, "ServiceImpl"):
+		return "🧠 业务实现"
+	case strings.HasSuffix(class, "Service"):
+		return "⚙️ 业务接口"
+	case strings.HasSuffix(class, "Repository"), strings.HasSuffix(class, "Mapper"), strings.HasSuffix(class, "DAO"), strings.HasSuffix(class, "Dao"):
+		return "🗄 数据访问"
+	default:
+		return "🔹 代码节点"
+	}
+}
+
+func callChainClass(symbol string) string {
+	symbol = strings.TrimSpace(symbol)
+	if symbol == "" {
+		return ""
+	}
+	if idx := strings.Index(symbol, "#"); idx >= 0 {
+		symbol = symbol[:idx]
+	}
+	parts := strings.Split(symbol, ".")
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return parts[len(parts)-2]
 }
 
 func writeCoverage(b *strings.Builder, coverage ReviewCoverage) {
@@ -386,6 +440,37 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 	}
 	fmt.Fprintln(b, "# 🚨 问题清单")
 	fmt.Fprintln(b)
+	for _, f := range sortedFindings(findings) {
+		emoji, name := severityDisplayParts(f.Severity)
+		fmt.Fprintf(b, "### %s %s｜%s\n\n", emoji, singleLine(f.ID), name)
+		fmt.Fprintln(b, "📍 **位置**")
+		fmt.Fprintln(b)
+		location := singleLine(f.File)
+		if f.Line > 0 {
+			location += ":" + strconv.Itoa(f.Line)
+		}
+		fmt.Fprintf(b, "`%s`\n\n", location)
+		writeIconSection(b, "❗", "问题", f.Problem)
+		writeIconSection(b, "🔎", "证据", f.Evidence)
+		writeIconSection(b, "💥", "影响", f.Impact)
+		writeIconSection(b, "🛠", "修复建议", f.Recommendation)
+		fmt.Fprintln(b, "🧪 **是否需要测试**")
+		fmt.Fprintln(b)
+		if f.NeedsTest {
+			fmt.Fprintln(b, "是")
+		} else {
+			fmt.Fprintln(b, "否")
+		}
+		fmt.Fprintln(b)
+		fmt.Fprintln(b, "**置信度**")
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, "%d%%\n\n", int(f.Confidence*100+0.5))
+		fmt.Fprintln(b, "---")
+		fmt.Fprintln(b)
+	}
+}
+
+func sortedFindings(findings []Finding) []Finding {
 	sorted := append([]Finding(nil), findings...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		a, c := sorted[i], sorted[j]
@@ -400,33 +485,15 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 		}
 		return a.ID < c.ID
 	})
-	for _, f := range sorted {
-		fmt.Fprintf(b, "### %s｜%s\n\n", severityLabel(f.Severity), singleLine(f.ID))
-		fmt.Fprintln(b, "**位置**")
-		fmt.Fprintln(b)
-		location := singleLine(f.File)
-		if f.Line > 0 {
-			location += ":" + strconv.Itoa(f.Line)
-		}
-		fmt.Fprintf(b, "`%s`\n\n", location)
-		writeBoldSection(b, "问题", f.Problem)
-		writeBoldSection(b, "证据", f.Evidence)
-		writeBoldSection(b, "影响", f.Impact)
-		writeBoldSection(b, "修复建议", f.Recommendation)
-		fmt.Fprintln(b, "**是否需要补充测试**")
-		fmt.Fprintln(b)
-		if f.NeedsTest {
-			fmt.Fprintln(b, "是")
-		} else {
-			fmt.Fprintln(b, "否")
-		}
-		fmt.Fprintln(b)
-		fmt.Fprintln(b, "**置信度**")
-		fmt.Fprintln(b)
-		fmt.Fprintf(b, "%d%%\n\n", int(f.Confidence*100+0.5))
-		fmt.Fprintln(b, "---")
-		fmt.Fprintln(b)
+	return sorted
+}
+
+func primaryFindingID(findings []Finding) string {
+	sorted := sortedFindings(findings)
+	if len(sorted) == 0 {
+		return ""
 	}
+	return strings.TrimSpace(sorted[0].ID)
 }
 
 func writeSummary(b *strings.Builder, req ReviewRequest) {
@@ -459,7 +526,12 @@ func writePartial(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "### 未解析项")
 	fmt.Fprintln(b)
-	writeCodeList(b, unresolvedItems(req.Coverage), "无")
+	items := append([]string(nil), req.Coverage.Unresolved...)
+	for _, e := range req.Coverage.RuntimeErrors {
+		items = append(items, "Runtime Contract 校验错误: "+e)
+	}
+	sort.Strings(items)
+	writeCodeList(b, items, "无")
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "### 尚未评审文件")
 	fmt.Fprintln(b)
@@ -471,6 +543,60 @@ func writePartial(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "⚠️ 需要人工处理")
 	writeTargetedDisclaimer(b, req)
+}
+
+func writeNextStep(b *strings.Builder, req ReviewRequest) {
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, "## ➡️ 下一步")
+	fmt.Fprintln(b)
+	switch req.Result {
+	case ResultPassed:
+		fmt.Fprintln(b, "下一步：无需处理阻断问题。")
+	case ResultFailed:
+		if id := primaryFindingID(req.Findings); id != "" {
+			fmt.Fprintf(b, "下一步：优先处理阻断问题；可使用 `harness fix finding:%s`。\n", singleLine(id))
+		} else {
+			fmt.Fprintln(b, "下一步：优先处理阻断问题。")
+		}
+	default:
+		fmt.Fprintln(b, manualNextAction(req.Coverage))
+	}
+}
+
+func manualNextAction(coverage ReviewCoverage) string {
+	unresolved := append([]string(nil), coverage.Unresolved...)
+	missing := append([]string(nil), coverage.MissingReviewedFiles...)
+	runtimeErrors := append([]string(nil), coverage.RuntimeErrors...)
+	sort.Strings(unresolved)
+	sort.Strings(missing)
+	sort.Strings(runtimeErrors)
+
+	if len(runtimeErrors) == 0 && len(unresolved) == 1 && len(missing) == 1 {
+		return fmt.Sprintf("请先处理未解析项 `%s`，并补充评审文件 `%s`。", singleLine(unresolved[0]), singleLine(missing[0]))
+	}
+	var lines []string
+	if len(runtimeErrors) > 0 {
+		lines = append(lines, "请先处理以下 Runtime Contract 校验错误：")
+		for _, item := range runtimeErrors {
+			lines = append(lines, fmt.Sprintf("- `%s`", singleLine(item)))
+		}
+	}
+	if len(unresolved) > 0 {
+		lines = append(lines, "请先处理以下未解析项：")
+		for _, item := range unresolved {
+			lines = append(lines, fmt.Sprintf("- `%s`", singleLine(item)))
+		}
+	}
+	if len(missing) > 0 {
+		lines = append(lines, "请补充以下评审文件：")
+		for _, item := range missing {
+			lines = append(lines, fmt.Sprintf("- `%s`", singleLine(item)))
+		}
+	}
+	if len(lines) == 0 {
+		return "请根据上方人工处理项完成补充后重新评审。"
+	}
+	return strings.Join(lines, "\n")
 }
 
 func writeTargetedDisclaimer(b *strings.Builder, req ReviewRequest) {
@@ -493,15 +619,20 @@ func resultLabel(result Result) string {
 }
 
 func severityLabel(severity string) string {
+	emoji, name := severityDisplayParts(severity)
+	return emoji + " " + name
+}
+
+func severityDisplayParts(severity string) (string, string) {
 	switch strings.ToUpper(severity) {
 	case "CRITICAL":
-		return "🔴 严重"
+		return "🔴", "严重"
 	case "HIGH":
-		return "🟠 高"
+		return "🟠", "高"
 	case "MEDIUM":
-		return "🟡 中"
+		return "🟡", "中"
 	default:
-		return "🟢 低"
+		return "🟢", "低"
 	}
 }
 
@@ -645,6 +776,12 @@ func writeCodeList(b *strings.Builder, values []string, empty string) {
 
 func writeBoldSection(b *strings.Builder, title, content string) {
 	fmt.Fprintf(b, "**%s**\n\n", title)
+	fmt.Fprintln(b, strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n")))
+	fmt.Fprintln(b)
+}
+
+func writeIconSection(b *strings.Builder, icon, title, content string) {
+	fmt.Fprintf(b, "%s **%s**\n\n", icon, title)
 	fmt.Fprintln(b, strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n")))
 	fmt.Fprintln(b)
 }
