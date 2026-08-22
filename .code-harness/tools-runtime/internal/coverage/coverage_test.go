@@ -105,3 +105,36 @@ func TestEvaluateRequiredScopeRejectsMissingScopedFile(t *testing.T) {
 		t.Fatalf("result=%+v", r)
 	}
 }
+
+func TestFullCoverageRejectsUnreadChangedMapperXml(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/java/OrderMapper.java"},{"path":"src/main/resources/mapper/OrderMapper.xml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/java/OrderMapper.java"}],"unresolvedSymbols":[]}}`)
+	r, err := coverage.VerifyAnalysisJSON(b)
+	if err == nil {
+		t.Fatal("changed Mapper.xml must not be silently skipped")
+	}
+	if r.Status != "PARTIAL" || len(r.MissingChangedFiles) != 1 || r.MissingChangedFiles[0] != "src/main/resources/mapper/OrderMapper.xml" {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestFullCoverageRejectsUnreadChangedYaml(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/application.yml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[],"unresolvedSymbols":[]}}`)
+	r, err := coverage.VerifyAnalysisJSON(b)
+	if err == nil {
+		t.Fatal("changed yml must not be silently skipped")
+	}
+	if r.Status != "PARTIAL" || len(r.MissingChangedFiles) != 1 || r.MissingChangedFiles[0] != "src/main/resources/application.yml" {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestFullCoverageAcceptsReviewedMapperAndYaml(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml"},{"path":"src/main/resources/application.yml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml"},{"path":"src/main/resources/application.yml"}],"unresolvedSymbols":[]}}`)
+	r, err := coverage.VerifyAnalysisJSON(b)
+	if err != nil {
+		t.Fatalf("reviewed resources should satisfy FULL coverage: %v", err)
+	}
+	if r.Status != "COMPLETE" {
+		t.Fatalf("result=%+v", r)
+	}
+}
