@@ -1,157 +1,186 @@
 ---
 name: generate-integration-tests
-description: 根据已审批的测试计划，按 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW 策略生成 @SpringBootTest + @AutoConfigureMockMvc 集成测试，只补缺失场景，真实调用内部 Bean。
-version: 1
+description: 对已批准的写入型测试计划只执行 exact approved patch handoff；正式测试写入由 Controlled Runtime Apply Safety Gate 完成。
+version: 2
 agent: integration-test-agent
 tools:
   - read_code
-  - write_test
 output_schema: null
 ---
 
-# 生成集成测试
+# 应用已批准的集成测试补丁
 
 ## 目标
 
-根据经人工审批的测试计划，使用 `@SpringBootTest` + `@AutoConfigureMockMvc` 生成或修改集成测试类，真实调用内部 Bean，使用项目已有的测试数据库配置。**严格按计划中每个 target 的 `strategy` 执行**：复用不写代码、扩展只补缺失场景、新建才建类。
+本 Skill 不再在审批之后自由生成测试代码。`design-integration-tests` 已经在审批前确定最终：
 
-## 适用场景
+```text
+unifiedDiff
+diffSha256
+files[].path/baseSha256
+```
 
-- 用户以精确 `planId` 明确审批测试计划后（如「批准 test-plan-20260818-001」）
-- Integration Test Agent 从计划审批阶段进入代码生成阶段
-
-## 不适用场景
-
-- 测试计划尚未被明确审批
-- 审批表述模糊（「好」「继续」）——必须包含精确的 `planId`
-- 计划自审批以来已被修改——需先生成新的 `planId`
-- `strategy = REUSE_EXISTING` 的 target——不进入本 Skill（直接执行现有测试）
+用户批准 `planId` 后，本 Skill 只能把**同一份 exact patch**交给 Controlled Runtime。
 
 ## 输入
 
-- 已审批的测试计划（`planId` 必须已经人工明确审批），含每个 target 的 `strategy`、`existingTests`、scenarios 的 `coverageStatus`
-- 目标项目已有的测试目录结构和约定
-- 项目已有的 `@SpringBootTest` 配置（测试数据库、外部 Mock 设置）
+- 已精确批准的 Test Plan
+- `planId`
+- `unifiedDiff`
+- `diffSha256`
+- `files[].path/baseSha256`
+- targets 的 strategy / scenarios / Existing Test provenance
+- validated TestTargetSelection
 
-## 允许使用的工具
+## 前置门禁
 
-- `read_code`——读取已有测试文件、测试配置和源码
-- `write_test`——在允许的测试路径下创建或修改测试文件
+1. `REUSE_EXISTING` target 不进入写入流程。
+2. 只有存在 EXTEND_EXISTING / CREATE_NEW 才允许 apply。
+3. 用户必须精确回复 `批准 <planId>`。
+4. 当前计划 bytes 必须仍与批准时的 `diffSha256` 一致。
+5. 如果计划自批准后发生任何变化，STOP，回到设计阶段生成新 planId。
 
-## 前置条件
+## 执行流程
 
-- 测试计划已获人工审批
-- 目标项目的测试目录结构可访问
-- `harness.yaml` 中 `write.allowedTestPaths` 配置有效
+### 1. 保持 Existing Test 保护
 
-## 执行步骤
+EXTEND_EXISTING：
 
-1. **验证审批**：确认以 `planId` 标识的测试计划已被人工明确审批，审批消息中包含精确的 `planId`。如未审批，停止并请求审批。
-2. **检查 strategy**：读取计划中每个 target 的 `strategy`，严格遵守：
-   - `REUSE_EXISTING`：**禁止调用 `write_test`**。不生成、不修改任何测试代码，直接返回 `existingTests` 中的现有测试类。
-   - `EXTEND_EXISTING`：只能修改 `existingTests` 中指定的测试文件；只能新增计划中 `coverageStatus = MISSING` 的场景；禁止重新生成 `coverageStatus = COVERED` 的场景。
-   - `CREATE_NEW`：才允许新建测试类。
-3. **学习约定**：阅读项目中 1-2 个已有的集成测试文件（扩展时优先阅读 `existingTests` 指定的文件），了解：
-   - 基类或通用注解
-   - 测试类命名规则（如 `XxxControllerIT`、`XxxIntegrationTest`）
-   - 断言库（AssertJ、Hamcrest、JUnit assertions）
-   - 外部依赖的 Mock 方式（`@MockBean`、测试配置、WireMock）
-   - 测试数据准备方式（SQL 脚本、`@BeforeEach`、Builder 方法）
-   - 测试中的认证/租户上下文设置
-4. **确定测试类位置**：
-   - `EXTEND_EXISTING`：修改 `existingTests` 中指定的现有测试类。
-   - `CREATE_NEW`：将新测试放在 `src/test/java/` 下，镜像生产包结构，遵循项目已有的命名约定。
-5. **编写或修改测试类**：
-   - 使用 `@SpringBootTest` 和 `@AutoConfigureMockMvc` 注解
-   - 使用 `@Autowired MockMvc` 发送请求
-   - 使用 `@Autowired` 注入真实 Controller、Service、Repository Bean（用于 setup/verification）
-   - 仅 Mock 外部依赖（RPC、MQ、第三方接口），沿用项目已有方式
-   - 使用项目已有的测试数据库 profile/配置
-6. **只实现 MISSING 场景**：
-   - **准备**：构造前置条件（通过 Controller 请求或 Repository 操作创建数据）
-   - **执行**：通过 `MockMvc.perform()` 发送请求
-   - **断言**：验证 HTTP 状态码、响应体关键字段和数据库状态变更
-   - **清理**：依赖 `@Transactional` 回滚或项目已有的清理机制
-7. **处理错误场景**：对 4xx/5xx 预期响应，断言错误码/消息结构匹配项目统一错误响应格式。
-8. **保留已有测试**：绝不删除、禁用或弱化已有的测试断言；`EXTEND_EXISTING` 时只追加新测试方法，不改动 `coverageStatus = COVERED` 的既有方法。
+- 只能触及计划 `existingTests` 指定文件；
+- 只能实现计划中 MISSING 场景；
+- COVERED Existing Test method 不得被删除、禁用、弱化或重写。
 
-## 输出
+CREATE_NEW：
 
-- 新建或修改的测试文件（位于 `write.allowedTestPaths` 下）
-- 每个新增测试方法对应审批通过的计划中的一个 `MISSING` 场景
+- 只允许计划中已经批准的新文件；
+- 不得临时换文件名、包名或目标路径。
 
-## 停止条件
+未选择 Controller 的测试文件不得出现在 approved patch 中。
 
-- 测试计划未获审批 → 停止并请求审批
-- `strategy = REUSE_EXISTING` → 不写代码，直接返回现有测试类
-- 测试路径不在允许的路径中 → 停止并报告
-- 无法确定已有测试约定 → 标记并询问
+### 2. 不重新生成 approved bytes
 
-## 禁止行为
+批准后不得重新“生成一次差不多的代码”。必须直接使用 Test Plan 中的 exact：
 
-- 不得在计划审批通过前编写测试代码
-- 不得默认 Mock 项目内部的 Service 或 Repository Bean
-- 不得删除已有测试、添加 `@Disabled`、注释掉断言或弱化断言
-- 不得访问生产数据或系统
-- 不得为让测试通过而修改生产代码
-- 如果已有测试类可合理扩展，禁止为方便而创建第二个重复测试类
-- `strategy = REUSE_EXISTING` 时禁止调用 `write_test`
-- `EXTEND_EXISTING` 时禁止重新生成 `COVERED` 场景、禁止新建类
+```text
+unifiedDiff
+diffSha256
+files[].baseSha256
+```
 
-## 示例
+如当前源码发生变化，Runtime 会返回 `BASE_CHANGED`；不得自行 rebase 并沿用原 planId。
 
-```java
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
-class OrderControllerIT {
+### 3. 生成 Runtime request
 
-    @Autowired
-    private MockMvc mockMvc;
+把 approved identity 原样写入：
 
-    @Autowired
-    private OrderRepository orderRepository;
+```text
+.code-harness/runs/<runId>/requests/apply.json
+```
 
-    @MockBean
-    private OrderRpcClient orderRpcClient;
+Contract：`.code-harness/contracts/apply-request.schema.json`。
 
-    @Test
-    void shouldApprovePendingOrder() throws Exception {
-        // 准备：创建待处理订单
-        Order order = orderRepository.save(
-            new Order().setStatus(Status.PENDING).setTenantId("t1"));
-
-        // Mock 外部 RPC
-        when(orderRpcClient.notifyErp(any())).thenReturn(true);
-
-        // 执行
-        mockMvc.perform(post("/api/order/approve")
-                .contentType(MediaType.APPLICATION_JSON)
-                .header("X-Tenant-Id", "t1")
-                .content("{\"orderId\": " + order.getId() + "}"))
-            // 断言
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("APPROVED"));
-
-        // 验证数据库
-        Order updated = orderRepository.findById(order.getId()).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo(Status.APPROVED);
-    }
+```json
+{
+  "runId":"<runId>",
+  "planType":"TEST",
+  "planId":"<approved planId>",
+  "diffSha256":"<approved diffSha256>",
+  "files":[{"path":"...","baseSha256":"..."}],
+  "unifiedDiff":"<approved exact unifiedDiff>"
 }
 ```
 
-## Task 7：Selection 与 DB Assertion 增量规则
+固定语义：`planType=TEST`。
 
-1. 本 Skill 同时接收 validated `TestTargetSelection`；计划中的每个 target 都必须属于 `selectedControllerIds`。发现越界 target 立即 `SCOPE_VIOLATION`，不得调用 `write_test`。
-2. 对计划中非空的 `expected.databaseAssertions[]`，必须真正生成对应 DB assertion，优先级固定为：
+### 4. Controlled Runtime apply
+
+调用：
 
 ```text
-1 existing test helper / repository pattern
-2 existing JdbcTemplate pattern
-3 existing fixture / assertion utility
+.code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
-3. 不得为了 DB assertion 单独新增 Maven dependency。
-4. DB assertion 必须在 cleanup、fixture reset 或 `@Transactional` rollback 隐藏状态之前完成。
-5. `REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW`、精确 `批准 <planId>`、只补 MISSING、不得弱化 Existing Test 等原规则全部保持不变。
-6. 未选择 Controller 的测试文件禁止生成或修改。
+Runtime 独立验证：
+
+- request Schema；
+- exact diff hash；
+- 当前 base file hash；
+- patch touched set；
+- `allowedTestPaths`；
+- `deniedPaths`；
+- traversal/binary/unsafe patch；
+- 原子写入/rollback；
+- duplicate planId。
+
+TEST 计划无法写生产路径。
+
+### 5. 正式成功条件
+
+只有 Runtime 返回：
+
+```text
+status=APPLIED
+```
+
+且生成：
+
+```text
+.code-harness/runs/<runId>/evidence/apply/<planId>.json
+```
+
+并符合 `apply-result.schema.json`，才算测试代码修改完成。
+
+Evidence 至少包含：
+
+```text
+runId
+planType=TEST
+planId
+diffSha256
+appliedAt
+files[].path/beforeSha256/afterSha256
+rollbackPerformed=false
+```
+
+任何 Runtime reject/rollback → 不得报告成功，也不得改用 `write_test` / direct host write 兜底。
+
+## Apply 后 provenance
+
+Runtime APPLIED 后，继续按既有 method/scenario 粒度返回：
+
+```text
+历史 Existing Test method → REUSED_EXISTING
+本次 approved patch 新增/修改 method → GENERATED_BY_PLAN + planId
+```
+
+同一个 EXTEND_EXISTING class 中两种 origin 必须保持分离。
+
+## Repair
+
+只有失败 method `origin=GENERATED_BY_PLAN` 且能唯一追溯 planId 时才可进入 repair 分析；历史 `REUSED_EXISTING` method 永不自动修改。
+
+最多 2 轮 repair 计数继续保留。但只要 repair 产生不同代码 bytes：
+
+```text
+new unifiedDiff
+→ new diffSha256
+→ new files[].baseSha256
+→ new planId
+→ 新的精确批准
+→ planType=TEST Runtime apply
+```
+
+旧批准不得授权新的 repair patch。
+
+## DB Assertion
+
+如果 approved MISSING scenario 含 `expected.databaseAssertions[]`，补丁必须真实包含对应断言，并沿用已有 helper/repository/JdbcTemplate/fixture pattern；不得新增 Maven dependency。断言必须发生在 cleanup/rollback 隐藏状态之前。
+
+## 禁止行为
+
+- 不得调用 `write_test` 作为正式成功路径。
+- 不得在批准后重算不同 patch 后继续使用旧 planId。
+- 不得写生产代码。
+- 不得触及 unselected target。
+- 不得删除/禁用/弱化 Existing Test。
+- 不得自行执行测试、Shell、commit/push/PR。
