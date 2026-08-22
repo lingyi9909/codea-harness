@@ -117,9 +117,11 @@ Reviewer / Orchestrator
 - `runId`, `harnessVersion`, `baseRef`, `head`, `result`
 - `reviewScope.changedFiles[]`
 - TARGETED 额外包含 `mode=TARGETED`、`target`、`reviewScope.scopedFiles[]`
-- `reviewCoverage.reviewedFiles[] / callChains[] / externalDependencies[] / unresolved[] / missingReviewedFiles[] / runtimeErrors[] / status`
+- `reviewCoverage.reviewedFiles[] / callChains[] / symbolRoleEvidence[] / resourceRoleEvidence[] / externalDependencies[] / unresolved[] / missingReviewedFiles[] / runtimeErrors[] / status`
 - `callChains[]` 每项保持 `entryPoint + chain[]`，必须直接来自已通过 Runtime 校验的 `ChangeAnalysis.callChains[]`；支持 0/1/多条，不得压平、推断或编造
 - TARGETED 的 report `callChains[]` 只能使用 Runtime 验证后的 `selectedCallChains`
+- `symbolRoleEvidence[] = {symbol, role, source}` 只能逐项复制自已通过 Runtime 校验的 `ChangeAnalysis.symbolLocations[]`；不得由 Reviewer/Orchestrator 根据类名补 role
+- `resourceRoleEvidence[] = {resource, role, source}` 只能逐项复制自已通过 Runtime 校验的 `ChangeAnalysis.resourceRelations[]`；不得根据资源名补 role
 - `findings[]`：`id / category / severity / file / line / problem / evidence / impact / recommendation / needsTest / introducedByChange / confidence`
 - `category` 只允许 `PRODUCTION_CODE | TEST_VALIDITY`
 
@@ -136,15 +138,15 @@ Change Set 文件数
 下一步
 ```
 
-代码调用链只做展示增强，不修改任何机器 symbol。Runtime 对已有 symbol 使用以下人类可读角色标签；无法识别时使用通用标签，不得编造新的调用节点：
+代码调用链只做展示增强，不修改任何机器 symbol，也不得根据 `XxxController/XxxService/XxxServiceImpl/XxxMapper` 等名称后缀猜角色。Renderer 只能使用上述机器验证后的 role evidence 映射人类可读标签；节点无可靠 role evidence 或 role=`Other` 时固定显示 `🔹 代码节点`：
 
 ```text
-🌐 接口入口
-⚙️ 业务接口
-🧠 业务实现
-🗄 数据访问
-📄 Mapper XML
-🔹 代码节点
+🌐 接口入口   ← verified role=Controller
+⚙️ 业务服务   ← verified role=Service
+🧠 业务实现   ← verified role=Service + source=FIND_IMPLEMENTATIONS
+🗄 数据访问   ← verified role=Repository/Mapper
+📄 Mapper XML ← verified resource role=MapperXml
+🔹 代码节点   ← 无可靠证据 / Other / 其他角色
 ```
 
 Finding 展示块固定为：
@@ -162,9 +164,9 @@ Finding 展示块固定为：
 报告末尾必须有 `## ➡️ 下一步`：
 
 ```text
-FAILED  → 优先处理阻断问题；可使用 harness fix finding:<id>
-PASSED  → 无需处理阻断问题
-MANUAL_ACTION_REQUIRED → 明确列出未解析项、缺失评审文件或 Runtime 校验错误对应动作
+❌ 未通过       → 优先处理阻断问题；可使用 harness fix finding:<id>
+✅ 通过         → 无需处理阻断问题
+⚠️ 需要人工处理 → 明确列出未解析项、缺失评审文件或运行时契约校验错误对应动作
 ```
 
 TARGETED 报告必须保留固定免责声明：
@@ -179,13 +181,13 @@ TARGETED 报告必须保留固定免责声明：
 - Reviewer/Orchestrator 不得使用 arbitrary write_file 自由生成 Markdown。
 - `PASSED / FAILED / MANUAL_ACTION_REQUIRED` 都必须生成报告。
 - 固定 UI 文案以及 `summary/problem/evidence/impact/recommendation` 默认中文；Java 类名、方法名、文件路径、SQL、异常名、RPC 名、技术名词保持原文。
-- 机器 enum 保持英文：`PASSED/FAILED/MANUAL_ACTION_REQUIRED`、`CRITICAL/HIGH/MEDIUM/LOW`、`COMPLETE/PARTIAL`。
-- 测试代码仍必须读取并参与 Coverage；普通测试代码质量不得产生 Finding，只有 Reviewer Test Validity Gate 允许 `TEST_VALIDITY`。
+- 机器 enum 保持英文：`PASSED/FAILED/MANUAL_ACTION_REQUIRED`、`CRITICAL/HIGH/MEDIUM/LOW`、`COMPLETE/PARTIAL`；它们只存在于机器 Contract/内部状态，不得直接作为最终用户摘要文案。
+- 测试代码仍必须读取并参与 Coverage；普通测试代码质量不得产生 Finding，只有 Reviewer Test Validity Gate 允许 `TEST_VALIDITY`；用户侧统一显示“测试有效性问题”。
 - 无代码变更也必须生成“✅ 通过 / 变更文件 0 / 问题数量 0”的中文报告。
 - Coverage PARTIAL 或 Runtime Contract validation error 必须先把 unresolved、missing reviewed files、Runtime validation error 写入结构化 transport，再生成 `MANUAL_ACTION_REQUIRED` 报告，然后 STOP。
 - Runtime 报告生成失败时不得继续后续流程，统一 `MANUAL_ACTION_REQUIRED`。
 - TARGETED 正式报告中 `Finding.file` 必须属于 Runtime verified `scopedFiles`；Controlled Runtime Renderer 必须拒绝 scope 外 Finding。
-- OpenCode 最终摘要必须同时展示 Review 结果和 `review.md` 路径。
+- OpenCode 最终摘要必须同时展示中文 Review 结果和 `review.md` 路径，不得泄漏 machine enum。
 
 ## `harness review`
 
@@ -435,8 +437,10 @@ TestExecutionTarget
 
 ## 统一结果
 
+以下是**用户可见统一摘要**；机器状态只保留在 JSON/内部状态，不能直接输出到该摘要：
+
 ```text
-结果：PASSED | FAILED | WAITING_APPROVAL | MANUAL_ACTION_REQUIRED
+评审结果：✅ 通过 | ❌ 未通过 | ⏳ 等待批准 | ⚠️ 需要人工处理
 
 完成：
 - 评审 N 个文件
@@ -445,24 +449,24 @@ TestExecutionTarget
 
 发现：
 - X 个生产代码问题
-- Y 个 TEST_VALIDITY 问题
+- Y 个测试有效性问题
 
 下一步：
 - 请批准 <planId> | <fixPlanId>
 - 或：所有测试通过，无需进一步操作
 ```
 
-对于包含 Review 阶段的 `harness review` / `harness test`，统一结果中还必须显示：
+对于包含 Review 阶段的 `harness review` / `harness test`，统一摘要中还必须显示：
 
 ```text
 代码评审报告：
 .code-harness/runs/<runId>/review.md
 ```
 
-对于 `harness api-doc`，统一结果必须显示：
+对于 `harness api-doc`，统一摘要必须显示：
 
 ```text
-API Doc Report:
+API 文档报告：
 .code-harness/runs/<runId>/api-doc.md
 ```
 
