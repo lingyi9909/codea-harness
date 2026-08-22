@@ -42,6 +42,16 @@ type SymbolLocation struct {
 	From   string `json:"from,omitempty"`
 }
 
+type ResourceRelation struct {
+	Path       string `json:"path"`
+	Role       string `json:"role"`
+	Resource   string `json:"resource"`
+	FromSymbol string `json:"fromSymbol"`
+	FromKind   string `json:"fromKind"`
+	Source     string `json:"source"`
+	Evidence   string `json:"evidence"`
+}
+
 type unresolvedSymbol struct {
 	Symbol string `json:"symbol"`
 	From   string `json:"from"`
@@ -51,9 +61,10 @@ type changeAnalysis struct {
 	ChangedFiles []struct {
 		Path string `json:"path"`
 	} `json:"changedFiles"`
-	CallChains      []CallChain      `json:"callChains"`
-	SymbolLocations []SymbolLocation `json:"symbolLocations"`
-	ReviewCoverage  struct {
+	CallChains        []CallChain       `json:"callChains"`
+	SymbolLocations   []SymbolLocation  `json:"symbolLocations"`
+	ResourceRelations []ResourceRelation `json:"resourceRelations"`
+	ReviewCoverage    struct {
 		ReviewedFiles []struct {
 			Path string `json:"path"`
 		} `json:"reviewedFiles"`
@@ -96,10 +107,12 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 	}
 
 	selection.allChangedFiles = make([]string, 0, len(analysis.ChangedFiles))
+	changedPaths := make(map[string]struct{}, len(analysis.ChangedFiles))
 	for _, f := range analysis.ChangedFiles {
 		p := normalizePath(f.Path)
 		if p != "" && p != "." {
 			selection.allChangedFiles = append(selection.allChangedFiles, p)
+			changedPaths[p] = struct{}{}
 		}
 	}
 	selection.allChangedFiles = uniqueSorted(selection.allChangedFiles)
@@ -131,7 +144,7 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 		}
 	}
 
-	allowedPaths, requiredPaths, err := exactScopePaths(*selection.Target, selection.SelectedCallChains, evidence)
+	allowedPaths, requiredPaths, err := exactScopePaths(*selection.Target, selection.SelectedCallChains, evidence, analysis.ResourceRelations, changedPaths)
 	if err != nil {
 		return Selection{}, err
 	}
@@ -143,14 +156,14 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 		}
 		selection.ScopedFiles[i] = p
 		if _, ok := allowedPaths[p]; !ok {
-			return Selection{}, fmt.Errorf("scoped file %q is not an exact Code Navigation path for the selected target/call chains", f)
+			return Selection{}, fmt.Errorf("scoped file %q is not an exact Code Navigation path or evidence-related changed resource for the selected target/call chains", f)
 		}
 		selectedPaths[p] = struct{}{}
 	}
 	selection.ScopedFiles = uniqueSorted(selection.ScopedFiles)
 	for required := range requiredPaths {
 		if _, ok := selectedPaths[required]; !ok {
-			return Selection{}, fmt.Errorf("selected internal symbol exact Code Navigation path %q is missing from scopedFiles", required)
+			return Selection{}, fmt.Errorf("required targeted scope path %q is missing from scopedFiles", required)
 		}
 	}
 
@@ -260,7 +273,7 @@ func resolveTargetRole(target Target, evidence navigationEvidence) (string, erro
 	return "", errors.New("unreachable target role")
 }
 
-func exactScopePaths(target Target, chains []CallChain, evidence navigationEvidence) (map[string]struct{}, map[string]struct{}, error) {
+func exactScopePaths(target Target, chains []CallChain, evidence navigationEvidence, relations []ResourceRelation, changedPaths map[string]struct{}) (map[string]struct{}, map[string]struct{}, error) {
 	nodes := selectedNodes(chains)
 	allowed := make(map[string]struct{})
 	required := make(map[string]struct{})
@@ -280,7 +293,70 @@ func exactScopePaths(target Target, chains []CallChain, evidence navigationEvide
 			allowed[loc.Path] = struct{}{}
 		}
 	}
+
+	for _, raw := range relations {
+		relation, err := normalizeResourceRelation(raw)
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, changed := changedPaths[relation.Path]; !changed {
+			continue
+		}
+		if !resourceRelationTouchesSelected(relation, nodes) {
+			continue
+		}
+		allowed[relation.Path] = struct{}{}
+		required[relation.Path] = struct{}{}
+	}
 	return allowed, required, nil
+}
+
+func normalizeResourceRelation(raw ResourceRelation) (ResourceRelation, error) {
+	relation := raw
+	p, err := normalizeScopedPath(raw.Path)
+	if err != nil {
+		return ResourceRelation{}, fmt.Errorf("resource relation: %w", err)
+	}
+	relation.Path = p
+	relation.Role = strings.TrimSpace(raw.Role)
+	relation.Resource = strings.TrimSpace(raw.Resource)
+	relation.FromSymbol = strings.TrimSpace(raw.FromSymbol)
+	relation.FromKind = strings.TrimSpace(raw.FromKind)
+	relation.Source = strings.TrimSpace(raw.Source)
+	relation.Evidence = strings.TrimSpace(raw.Evidence)
+	if relation.Resource == "" || relation.FromSymbol == "" || relation.Evidence == "" {
+		return ResourceRelation{}, fmt.Errorf("resource relation %q requires resource, fromSymbol, and evidence", relation.Path)
+	}
+	if relation.FromKind != "CLASS" && relation.FromKind != "METHOD" {
+		return ResourceRelation{}, fmt.Errorf("resource relation %q has invalid fromKind %q", relation.Path, relation.FromKind)
+	}
+	switch relation.Role {
+	case "MapperXml":
+		if relation.Source != "MAPPER_STATEMENT" {
+			return ResourceRelation{}, fmt.Errorf("MapperXml resource relation %q requires MAPPER_STATEMENT source", relation.Path)
+		}
+	case "YamlConfig":
+		if relation.Source != "CONFIG_REFERENCE" {
+			return ResourceRelation{}, fmt.Errorf("YamlConfig resource relation %q requires CONFIG_REFERENCE source", relation.Path)
+		}
+	default:
+		return ResourceRelation{}, fmt.Errorf("resource relation %q has unsupported role %q", relation.Path, relation.Role)
+	}
+	return relation, nil
+}
+
+func resourceRelationTouchesSelected(relation ResourceRelation, nodes map[string]struct{}) bool {
+	if relation.FromKind == "METHOD" {
+		_, ok := nodes[relation.FromSymbol]
+		return ok
+	}
+	fromClass := className(relation.FromSymbol, "CLASS")
+	for node := range nodes {
+		if className(node, "METHOD") == fromClass || className(node, "CLASS") == fromClass {
+			return true
+		}
+	}
+	return false
 }
 
 func verifyAllControllerChains(target Target, selected, all []CallChain) error {
