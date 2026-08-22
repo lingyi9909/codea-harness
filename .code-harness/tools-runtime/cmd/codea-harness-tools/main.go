@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"codea-harness-tools/internal/apply"
 	"codea-harness-tools/internal/coverage"
 	"codea-harness-tools/internal/dbconfig"
 	"codea-harness-tools/internal/dbevidence"
@@ -32,7 +33,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|report>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|report|apply>")
 	}
 	switch args[0] {
 	case "upgrade":
@@ -45,9 +46,21 @@ func run(args []string) error {
 		return runDB(args[1:])
 	case "report":
 		return runReport(args[1:])
+	case "apply":
+		return runApply(args[1:])
 	default:
 		return fmt.Errorf("unknown subcommand %q", args[0])
 	}
+}
+
+func runApply(args []string) error {
+	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
+	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests")
+	if err := fs.Parse(args); err != nil { return err }
+	if fs.NArg() != 0 || *input == "" { return errors.New("apply requires --input") }
+	result, evidencePath, err := apply.ApplyRequestFile(".", *input)
+	if err != nil { return err }
+	return writeJSONAndStatus(map[string]any{"status": result.Status, "result": result, "evidencePath": evidencePath}, true)
 }
 
 func runUpgrade(args []string) error {
