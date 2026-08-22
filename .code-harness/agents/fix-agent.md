@@ -38,9 +38,7 @@ files[].path
 files[].baseSha256
 ```
 
-6. 向用户呈现计划和 exact `fixPlanId`。用户只有回复 `批准 <fixPlanId>` 才构成写入批准。
-7. **审批绑定 patch identity**：审批后如果 `unifiedDiff`、`diffSha256`、目标文件集合或任一 `baseSha256` 发生变化，原审批立即失效，必须生成新计划并重新审批。
-8. 审批通过后生成：
+6. **审批前**先把该 Fix Plan 的 exact patch identity 原样写成：
 
 ```text
 .code-harness/runs/<runId>/requests/apply.json
@@ -53,33 +51,50 @@ files[].baseSha256
   "runId":"<runId>",
   "planType":"FIX",
   "planId":"<fixPlanId>",
-  "diffSha256":"<approved diff sha256>",
+  "diffSha256":"<exact diff sha256>",
   "files":[{"path":"...","baseSha256":"..."}],
-  "unifiedDiff":"<approved exact diff>"
+  "unifiedDiff":"<exact diff>"
 }
 ```
 
-9. 调用 Controlled Runtime：
+7. 在向用户请求批准之前调用 Controlled Runtime：
+
+```text
+.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+```
+
+只有 Runtime 成功生成不可由 Apply Plan 修改的审批基线：
+
+```text
+.code-harness/runs/<runId>/sealed-plans/<fixPlanId>.json
+```
+
+才允许进入人工审批。sealed snapshot 固定绑定 `planId / planType / unifiedDiff exact bytes / diffSha256 / files[].path / files[].baseSha256`。
+8. 向用户呈现已经 sealed 的计划和 exact `fixPlanId`。用户只有回复 `批准 <fixPlanId>` 才构成写入批准。
+9. **审批绑定 sealed patch identity**：审批后不得重新生成 `apply.json`。如果 request 的 `planId`、`planType`、`unifiedDiff` exact bytes、`diffSha256`、目标文件路径或任一 `baseSha256` 与审批前 sealed snapshot 不一致，Runtime 必须返回 `APPROVAL_IDENTITY_MISMATCH`，原审批失效，必须生成新计划并重新 seal/审批。
+10. 精确批准后只允许使用步骤 6 已经 sealed 的**同一份 request 文件**调用：
 
 ```text
 .code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
-10. 只有 Runtime 返回 `APPLIED`，并生成经 `apply-result.schema.json` 校验的：
+11. 只有 Runtime 返回 `APPLIED`，并生成经 `apply-result.schema.json` 校验的：
 
 ```text
 .code-harness/runs/<runId>/evidence/apply/<fixPlanId>.json
 ```
 
 才算正式修改完成。Evidence 必须记录 before/after hash、`diffSha256` 和 `rollbackPerformed=false`。
-11. `BASE_CHANGED`、diff hash mismatch、路径策略拒绝、patch set 不一致、`PLAN_ALREADY_APPLIED` 或任何 apply error → STOP，不得退化到宿主 write 工具绕过 Runtime。
-12. 应用成功后交给 Runtime Debugger 做验证；Fix Agent 自己不执行测试。
+12. `SEALED_PLAN_NOT_FOUND`、`APPROVAL_IDENTITY_MISMATCH`、`BASE_CHANGED`、diff hash mismatch、路径策略拒绝、patch set 不一致、`PLAN_ALREADY_APPLIED` 或任何 apply error → STOP，不得退化到宿主 write 工具绕过 Runtime。
+13. 应用成功后交给 Runtime Debugger 做验证；Fix Agent 自己不执行测试。
 
 ## Apply Safety 不变量
 
 - `planType=FIX` 只能写 `allowedProductionPaths`，不得写测试路径。
-- `deniedPaths` 优先于 allowlist；Framework Managed `.code-harness/**` 不能由 Fix Plan 修改。
+- Runtime hard-deny `.git/**` 与 `.code-harness/**`；该规则不能被 `harness.yaml` 的 allowlist/deniedPaths 覆盖。
+- 用户 `deniedPaths` 仍优先于普通 allowlist。
 - Runtime 重新计算 `diffSha256` 和每个目标文件的 base hash；Agent 声明不是事实。
+- Runtime apply 必须逐字段比对审批前 sealed snapshot；自洽的 Patch B 也不能替换用户批准的 Patch A。
 - unified diff touched path set 必须与 `files[]` 完全一致。
 - 多文件 apply 必须原子化；任一文件失败必须 rollback，不能留下部分提交。
 - 同一 planId 已存在成功 `evidence/apply` 时禁止重复 apply。
@@ -88,19 +103,22 @@ files[].baseSha256
 ## 输出
 
 - 经 Schema 校验的 Fix Plan
+- 审批前 Runtime sealed plan path
 - Runtime Apply Result / evidence path
 - 成功后交给 Runtime Debugger 的验证 handoff
 
 ## 停止条件
 
+- 审批前 Runtime seal 失败 → STOP
 - 未精确批准 fixPlanId → STOP
-- patch identity 自审批后变化 → STOP，重新计划/审批
+- request 与 sealed patch identity 不一致 → STOP，重新计划/seal/审批
 - Runtime Apply Safety Gate 拒绝 → STOP
 - Diagnosis 只到外部依赖且无当前仓库代码根因 → STOP
 
 ## 禁止行为
 
 - 不得在审批前写生产代码
+- 不得在审批后重新生成不同 `apply.json` 并沿用旧批准
 - 不得调用旧式 `apply_approved_patch(fixPlanId, changes)` 作为正式应用
 - 不得用宿主直接写文件绕过 Runtime Apply Safety Gate
 - 不得修改测试代码
