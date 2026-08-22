@@ -52,22 +52,23 @@ type ResourceRelation struct {
 	Evidence   string `json:"evidence"`
 }
 
+type analysisFile struct {
+	Path string `json:"path"`
+	Role string `json:"role"`
+}
+
 type unresolvedSymbol struct {
 	Symbol string `json:"symbol"`
 	From   string `json:"from"`
 }
 
 type changeAnalysis struct {
-	ChangedFiles []struct {
-		Path string `json:"path"`
-	} `json:"changedFiles"`
+	ChangedFiles      []analysisFile     `json:"changedFiles"`
 	CallChains        []CallChain        `json:"callChains"`
 	SymbolLocations   []SymbolLocation   `json:"symbolLocations"`
 	ResourceRelations []ResourceRelation `json:"resourceRelations"`
 	ReviewCoverage    struct {
-		ReviewedFiles []struct {
-			Path string `json:"path"`
-		} `json:"reviewedFiles"`
+		ReviewedFiles    []analysisFile      `json:"reviewedFiles"`
 		UnresolvedSymbols []unresolvedSymbol `json:"unresolvedSymbols"`
 	} `json:"reviewCoverage"`
 }
@@ -106,18 +107,30 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 		}
 	}
 
+	changedRoles, err := validateChangedAndReviewedResourceRoles(analysis.ChangedFiles, analysis.ReviewCoverage.ReviewedFiles)
+	if err != nil {
+		return Selection{}, err
+	}
+
 	selection.allChangedFiles = make([]string, 0, len(analysis.ChangedFiles))
-	changedPaths := make(map[string]struct{}, len(analysis.ChangedFiles))
 	for _, f := range analysis.ChangedFiles {
 		p := normalizePath(f.Path)
 		if p != "" && p != "." {
 			selection.allChangedFiles = append(selection.allChangedFiles, p)
-			changedPaths[p] = struct{}{}
 		}
 	}
 	selection.allChangedFiles = uniqueSorted(selection.allChangedFiles)
 
 	if selection.Mode == "FULL" {
+		if len(analysis.ResourceRelations) > 0 {
+			evidence, err := buildNavigationEvidence(analysis.SymbolLocations)
+			if err != nil {
+				return Selection{}, err
+			}
+			if err := validateResourceRelationsBase(analysis.ResourceRelations, changedRoles, evidence); err != nil {
+				return Selection{}, err
+			}
+		}
 		return selection, nil
 	}
 
@@ -144,7 +157,7 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 		}
 	}
 
-	allowedPaths, requiredPaths, err := exactScopePaths(*selection.Target, selection.SelectedCallChains, evidence, analysis.ResourceRelations, changedPaths)
+	allowedPaths, requiredPaths, err := exactScopePaths(*selection.Target, selection.SelectedCallChains, evidence, analysis.ResourceRelations, changedRoles)
 	if err != nil {
 		return Selection{}, err
 	}
@@ -203,6 +216,9 @@ func ComputeCoverageFromAnalysis(selection Selection, changeAnalysisJSON []byte)
 	if err != nil {
 		return CoverageResult{}, err
 	}
+	if _, err := validateChangedAndReviewedResourceRoles(analysis.ChangedFiles, analysis.ReviewCoverage.ReviewedFiles); err != nil {
+		return CoverageResult{}, err
+	}
 	reviewed := make([]string, 0, len(analysis.ReviewCoverage.ReviewedFiles))
 	for _, file := range analysis.ReviewCoverage.ReviewedFiles {
 		reviewed = append(reviewed, file.Path)
@@ -213,6 +229,60 @@ func ComputeCoverageFromAnalysis(selection Selection, changeAnalysisJSON []byte)
 		result.Status = "PARTIAL"
 	}
 	return result, nil
+}
+
+func validateChangedAndReviewedResourceRoles(changed, reviewed []analysisFile) (map[string]string, error) {
+	changedRoles := make(map[string]string, len(changed))
+	for _, file := range changed {
+		p, err := normalizeScopedPath(file.Path)
+		if err != nil {
+			return nil, fmt.Errorf("changed file: %w", err)
+		}
+		role := strings.TrimSpace(file.Role)
+		if err := validateResourcePathRole(p, role); err != nil {
+			return nil, fmt.Errorf("changed file: %w", err)
+		}
+		if previous, exists := changedRoles[p]; exists && previous != role {
+			return nil, fmt.Errorf("changed file %q has conflicting roles %q and %q", p, previous, role)
+		}
+		changedRoles[p] = role
+	}
+	for _, file := range reviewed {
+		p, err := normalizeScopedPath(file.Path)
+		if err != nil {
+			return nil, fmt.Errorf("reviewed file: %w", err)
+		}
+		role := strings.TrimSpace(file.Role)
+		if err := validateResourcePathRole(p, role); err != nil {
+			return nil, fmt.Errorf("reviewed file: %w", err)
+		}
+		changedRole, changedFile := changedRoles[p]
+		if !changedFile || (!isResourceRole(changedRole) && !isResourceRole(role)) {
+			continue
+		}
+		if role != changedRole {
+			return nil, fmt.Errorf("reviewed file role %q for %q does not match changed file role %q", role, p, changedRole)
+		}
+	}
+	return changedRoles, nil
+}
+
+func validateResourcePathRole(value, role string) error {
+	switch role {
+	case "MapperXml":
+		if !strings.HasSuffix(path.Base(value), "Mapper.xml") {
+			return fmt.Errorf("MapperXml path %q must match *Mapper.xml", value)
+		}
+	case "YamlConfig":
+		if !strings.HasSuffix(value, ".yml") {
+			return fmt.Errorf("YamlConfig path %q must match *.yml", value)
+		}
+	}
+	return nil
+}
+
+func isResourceRole(role string) bool {
+	return role == "MapperXml" || role == "YamlConfig"
 }
 
 func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, error) {
@@ -286,10 +356,11 @@ func resolveTargetRole(target Target, evidence navigationEvidence) (string, erro
 	return "", errors.New("unreachable target role")
 }
 
-func exactScopePaths(target Target, chains []CallChain, evidence navigationEvidence, relations []ResourceRelation, changedPaths map[string]struct{}) (map[string]struct{}, map[string]struct{}, error) {
+func exactScopePaths(target Target, chains []CallChain, evidence navigationEvidence, relations []ResourceRelation, changedRoles map[string]string) (map[string]struct{}, map[string]struct{}, error) {
 	nodes := selectedNodes(chains)
 	allowed := make(map[string]struct{})
 	required := make(map[string]struct{})
+	selectedNavigationPaths := make(map[string]struct{})
 	for node := range nodes {
 		loc, ok := evidence.bySymbol[node]
 		if !ok {
@@ -297,6 +368,7 @@ func exactScopePaths(target Target, chains []CallChain, evidence navigationEvide
 		}
 		allowed[loc.Path] = struct{}{}
 		required[loc.Path] = struct{}{}
+		selectedNavigationPaths[loc.Path] = struct{}{}
 	}
 	for _, loc := range evidence.locations {
 		_, symbolSelected := nodes[loc.Symbol]
@@ -312,16 +384,47 @@ func exactScopePaths(target Target, chains []CallChain, evidence navigationEvide
 		if err != nil {
 			return nil, nil, err
 		}
-		if _, changed := changedPaths[relation.Path]; !changed {
-			continue
+		if err := validateResourceRelationChangedRole(relation, changedRoles); err != nil {
+			return nil, nil, err
 		}
-		if !resourceRelationTouchesSelected(relation, nodes) {
+		fromLocation, err := resolveResourceRelationEvidence(relation, evidence)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !resourceRelationTouchesSelected(relation, fromLocation, nodes, selectedNavigationPaths) {
 			continue
 		}
 		allowed[relation.Path] = struct{}{}
 		required[relation.Path] = struct{}{}
 	}
 	return allowed, required, nil
+}
+
+func validateResourceRelationsBase(relations []ResourceRelation, changedRoles map[string]string, evidence navigationEvidence) error {
+	for _, raw := range relations {
+		relation, err := normalizeResourceRelation(raw)
+		if err != nil {
+			return err
+		}
+		if err := validateResourceRelationChangedRole(relation, changedRoles); err != nil {
+			return err
+		}
+		if _, err := resolveResourceRelationEvidence(relation, evidence); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateResourceRelationChangedRole(relation ResourceRelation, changedRoles map[string]string) error {
+	changedRole, changed := changedRoles[relation.Path]
+	if !changed {
+		return fmt.Errorf("resource relation path %q is not present in changedFiles", relation.Path)
+	}
+	if changedRole != relation.Role {
+		return fmt.Errorf("resource relation role %q for %q does not match changed file role %q", relation.Role, relation.Path, changedRole)
+	}
+	return nil
 }
 
 func normalizeResourceRelation(raw ResourceRelation) (ResourceRelation, error) {
@@ -343,6 +446,9 @@ func normalizeResourceRelation(raw ResourceRelation) (ResourceRelation, error) {
 	if relation.FromKind != "CLASS" && relation.FromKind != "METHOD" {
 		return ResourceRelation{}, fmt.Errorf("resource relation %q has invalid fromKind %q", relation.Path, relation.FromKind)
 	}
+	if err := validateResourcePathRole(relation.Path, relation.Role); err != nil {
+		return ResourceRelation{}, fmt.Errorf("resource relation: %w", err)
+	}
 	switch relation.Role {
 	case "MapperXml":
 		if relation.Source != "MAPPER_STATEMENT" {
@@ -358,18 +464,24 @@ func normalizeResourceRelation(raw ResourceRelation) (ResourceRelation, error) {
 	return relation, nil
 }
 
-func resourceRelationTouchesSelected(relation ResourceRelation, nodes map[string]struct{}) bool {
+func resolveResourceRelationEvidence(relation ResourceRelation, evidence navigationEvidence) (SymbolLocation, error) {
+	loc, ok := evidence.bySymbol[relation.FromSymbol]
+	if !ok {
+		return SymbolLocation{}, fmt.Errorf("resource relation fromSymbol %q has no exact Code Navigation path evidence", relation.FromSymbol)
+	}
+	return loc, nil
+}
+
+func resourceRelationTouchesSelected(relation ResourceRelation, fromLocation SymbolLocation, nodes, selectedNavigationPaths map[string]struct{}) bool {
 	if relation.FromKind == "METHOD" {
-		_, ok := nodes[relation.FromSymbol]
-		return ok
-	}
-	fromClass := className(relation.FromSymbol, "CLASS")
-	for node := range nodes {
-		if className(node, "METHOD") == fromClass || className(node, "CLASS") == fromClass {
-			return true
+		if _, selected := nodes[relation.FromSymbol]; !selected {
+			return false
 		}
+		_, selectedPath := selectedNavigationPaths[fromLocation.Path]
+		return selectedPath
 	}
-	return false
+	_, selectedPath := selectedNavigationPaths[fromLocation.Path]
+	return selectedPath
 }
 
 func verifyAllControllerChains(target Target, selected, all []CallChain) error {
