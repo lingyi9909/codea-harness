@@ -1,7 +1,7 @@
 ---
 name: orchestrator
-description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、修复轮次和统一摘要。
-version: 5
+description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、Runtime Apply Safety Gate、修复轮次和统一摘要。
+version: 6
 ---
 
 # Orchestrator
@@ -34,7 +34,7 @@ harness review <Class>` → TARGETED CLASS
 harness review <Class.method>` → TARGETED METHOD
 ```
 
-测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。新生成/修改测试的自动修复仍最多 2 轮，历史 Existing Test 不自动修改。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
+测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。历史 Existing Test 不自动修改。对 GENERATED_BY_PLAN 测试仍保留最多 2 轮 repair 计数，但 Task 4 后每个实际发生变化的 repair patch 都必须生成新的 patch identity 与新 planId 并重新精确批准，旧批准不得授权不同 bytes。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
 
 ## Review Change Set（review/test/api-doc changed 共用）
 
@@ -376,10 +376,83 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 
 宿主 UI 的确认、`ALL`、`DIRECT_ONLY`、编号选择都不能替代任何写操作审批。
 
+## Runtime Apply Safety Gate（1.4 Task 4）
+
+所有经过人工批准的生产代码/测试代码正式写入统一走：
+
+```text
+Agent 设计 exact patch
+→ planId/fixPlanId + unifiedDiff + diffSha256 + files[].baseSha256
+→ 用户精确批准该 planId
+→ .code-harness/runs/<runId>/requests/apply.json
+→ apply-request.schema.json
+→ .code-harness/bin/codea-harness-tools apply --input <request>
+→ Runtime 原子应用
+→ apply-result.schema.json
+→ .code-harness/runs/<runId>/evidence/apply/<planId>.json
+```
+
+### Approval identity
+
+用户批准时确认的 patch identity 必须满足：
+
+```text
+批准时的 diffSha256
+=
+Runtime request.diffSha256
+=
+Runtime 对 request.unifiedDiff exact UTF-8 bytes 重新计算的 SHA256
+=
+Runtime 实际应用的 unifiedDiff
+```
+
+审批之后只要 `unifiedDiff`、目标文件集合、`baseSha256` 或任何 patch bytes 改变，原批准立即失效，必须生成新 planId 并重新精确批准。
+
+### Runtime 强制校验
+
+Runtime 不信任 Agent 自报结果，必须独立检查：
+
+1. request 位于匹配 runId 的 `.code-harness/runs/<runId>/requests/`。
+2. `apply-request.schema.json` 合法且无 unknown fields/duplicate paths。
+3. `diffSha256` 与 exact unifiedDiff 一致。
+4. 当前目标文件 exact bytes SHA256 与 `files[].baseSha256` 一致；否则 `BASE_CHANGED`，0 写入。
+5. unified diff 实际 touched path set 与 `files[]` 完全一致。
+6. `planType=TEST` 只能写 `allowedTestPaths`；`planType=FIX` 只能写 `allowedProductionPaths`。
+7. `deniedPaths` 永远优先；`.code-harness/**` Framework Managed 固定禁止通过 apply 修改。
+8. traversal、absolute path、binary patch、unsafe rename 等不安全 patch 拒绝。
+9. 所有文件先读取/校验/stage；任一前置失败必须 0 业务文件写入。
+10. 多文件正式提交期间任一失败必须 restore 全部原始 bytes；不得留下半应用状态。
+11. 同一成功 planId 已有 evidence 时返回 `PLAN_ALREADY_APPLIED`，不得重复应用。
+
+### 正式完成证据
+
+只有以下条件全部成立才允许 Orchestrator 报告“代码修改完成”：
+
+```text
+Runtime status=APPLIED
+apply-result.schema.json VALID
+.code-harness/runs/<runId>/evidence/apply/<planId>.json 存在
+rollbackPerformed=false
+```
+
+Evidence 至少包含：
+
+```text
+runId
+planType
+planId
+diffSha256
+appliedAt
+files[].path/beforeSha256/afterSha256
+rollbackPerformed
+```
+
+`BASE_CHANGED`、`PLAN_ALREADY_APPLIED`、路径拒绝、diff/hash mismatch、patch set mismatch、rollback 或任何 apply error 都必须 STOP。**direct host write、`write_test`、`apply_approved_patch`、arbitrary write_file 不能作为正式完成或兜底路径。**
+
 ## `harness test`
 
 ```text
-0. 要求 initialization.status=READY，且当前宿主具备文件读写、Maven 执行、超时控制
+0. 要求 initialization.status=READY，且当前宿主具备文件读取、Maven 执行、超时控制；写入型步骤还要求可调用 Controlled Runtime apply
 1. 与 harness review 完全相同地解析 Change Set 并执行 analyze-change
 2. Tool Runtime: validate_contract(ChangeAnalysis JSON)，执行 JSON Schema + 机器 Coverage 校验
 3. 输出 评审范围 + 评审覆盖（含 validated callChains[]）
@@ -393,12 +466,12 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 11. 只有 `TEST_TARGETS_SELECTED` 且 selection artifact 机器验证通过，才把 **selected affectedControllers** 交给 Integration Test Agent
 12. Integration Test Agent 只对 selected targets 做 Existing Test Coverage Analysis
 13. 每个 selected target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW；未选择 target 不得生成计划
-14. REUSE_EXISTING 直接执行；其余输出 Test Plan，仍需精确 `批准 <planId>` 后才写测试
+14. REUSE_EXISTING 直接执行、无审批、零写入；EXTEND/CREATE 必须在审批前产出最终 `unifiedDiff/diffSha256/files[].baseSha256`，精确 `批准 <planId>` 后生成 `planType=TEST` apply request，并且只有 Runtime `APPLIED + evidence/apply/<planId>.json` 才算写入完成
 15. Integration Test Agent 返回 method/scenario 级 provenance；Orchestrator 形成 `TestExecutionTarget(testClass,testMethods[],selector,controllerId,origin,planId?)`
 16. selected-only execution gate：整类 selector 仅允许该 class 本次相关 methods 全部属于 selected targets；混合 selected+unselected class 必须收窄到 selected method selector；无法安全表达 method selector → `MANUAL_ACTION_REQUIRED`，不得整类执行
 17. Runtime Debugger 独占测试执行、日志和 Diagnosis；Surefire `failedTests.testClass + testMethod` 必须回查具体 TestExecutionTarget 判定 method-level origin
-18. 新生成/修改测试若 TEST_ERROR：仅失败方法 `origin=GENERATED_BY_PLAN` 且能唯一追溯 approved planId 时可自动修复，按 `planId+testClass+testMethod` 最多 2 轮；同 class 历史 Existing Test method 永不自动修改
-19. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
+18. 新生成/修改测试若 TEST_ERROR：仅失败方法 `origin=GENERATED_BY_PLAN` 且能唯一追溯原 planId 时进入 repair 分析，最多 2 轮；每个不同 repair bytes 必须生成新的 patch identity/new planId 并重新精确批准后才可 Runtime apply；同 class 历史 Existing Test method 永不自动修改
+19. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可生成 Fix Plan，但 Fix Plan 同样必须在审批前绑定 exact patch identity，fixPlanId 未批准且 Runtime apply 未成功前不得修改生产代码
 ```
 
 ## `harness upgrade`
@@ -409,7 +482,7 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 
 - `harness init`：Project Adapter 识别 Maven/模块/Profile/测试规范/baseRef，生成 `harness.yaml`/`project.md`；不确定项保持 `NEEDS_CONFIRMATION`。
 - `harness debug-service`：Runtime Debugger 启动服务，等待人工触发请求，采集日志，诊断，停止本次 processGroup。
-- `harness fix finding:<id>` / `fix diagnosis:<runId>`：Fix Agent 先生成最小 Fix Plan；精确 `fixPlanId` 批准后才能 `apply_approved_patch`；验证由 Runtime Debugger 完成。
+- `harness fix finding:<id>` / `fix diagnosis:<runId>`：Fix Agent 先生成带 `unifiedDiff/diffSha256/files[].baseSha256` 的最小 Fix Plan；精确 `批准 <fixPlanId>` 后只允许通过 Runtime Apply Safety Gate 正式写入；成功 Apply evidence 后再由 Runtime Debugger 验证。
 - `harness verify test/fix/service`：由 Runtime Debugger 执行既有验证路径，不改变审批状态。
 
 ## Test Origin / Repair Gate
@@ -430,10 +503,11 @@ TestExecutionTarget
 
 - `EXTEND_EXISTING` 的同一 class 可以同时包含两种 origin；禁止把整个 class 一刀切标成 GENERATED_BY_PLAN 或 REUSED_EXISTING。
 - Surefire 返回失败方法后，用 `failedTests.testClass + testMethod` 唯一匹配 TestExecutionTarget。
-- 只有匹配到 `GENERATED_BY_PLAN` 的具体失败 method 才进入自动修复轮次；对应 approved `planId` 必须存在。
+- 只有匹配到 `GENERATED_BY_PLAN` 的具体失败 method 才进入 repair 轮次；对应来源 planId 必须存在。
 - `REUSED_EXISTING` method 永不自动修改，即使它与 GENERATED_BY_PLAN method 位于同一个 class。
-- `testMethod=null`、provenance 冲突或无法唯一匹配时默认走安全路径：不得自动 repair，进入测试修改计划 / `MANUAL_ACTION_REQUIRED`。
-- 自动 repair 计数键为 `planId + testClass + testMethod`，最多 2 轮；达到上限 → `MANUAL_TEST_REPAIR_REQUIRED`。
+- `testMethod=null`、provenance 冲突或无法唯一匹配时默认走安全路径：不得 repair，进入测试修改计划 / `MANUAL_ACTION_REQUIRED`。
+- repair 计数仍按来源 `planId + testClass + testMethod`，最多 2 轮；达到上限 → `MANUAL_TEST_REPAIR_REQUIRED`。
+- 每轮 repair 如果产生不同代码 bytes，就必须生成新的 `unifiedDiff/diffSha256/files[].baseSha256/new planId` 并获得新的精确批准；旧批准不能直接 authorize 新 patch。
 
 ## 统一结果
 
@@ -470,6 +544,15 @@ API 文档报告：
 .code-harness/runs/<runId>/api-doc.md
 ```
 
+对于成功执行 Runtime Apply 的测试/修复，统一摘要还必须显示：
+
+```text
+代码修改证据：
+.code-harness/runs/<runId>/evidence/apply/<planId>.json
+```
+
+不得把宿主 direct host write 的成功响应当作该证据。
+
 ## Task 7：Selected Test Flow + Integration-Test DB Assertions
 
 以下规则是在现有 `harness test` / Existing Test / Approval / Repair Gate 之上增加，不替代原语义；本节的 method-level 规则覆盖此前 Task 7 的 class-level handoff/origin 表述：
@@ -492,7 +575,7 @@ origin=GENERATED_BY_PLAN
 planId=test-plan-xxx
 ```
 
-`oldTestA` 失败永不自动改；只有 `newMissingTest` 失败且 Diagnosis=`REPAIR_TEST` 才进入最多 2 轮 repair。
+`oldTestA` 失败永不自动改；只有 `newMissingTest` 失败且 Diagnosis=`REPAIR_TEST` 才进入最多 2 轮 repair 分析；任何不同 repair patch 仍需新 patch identity + 新 planId 精确批准 + Runtime apply。
 6. Synthetic Golden Flow 必须满足：
 
 ```text
@@ -500,7 +583,7 @@ Affected Controllers: Order, Payment, User
 Selection: Order + Payment
 
 Order -> REUSE_EXISTING -> no approval/no write -> selected-only TestExecutionTarget
-Payment -> EXTEND_EXISTING -> exact 批准 <paymentPlanId> -> modify only MISSING -> method-level provenance
+Payment -> EXTEND_EXISTING -> exact patch identity -> 精确批准 <paymentPlanId> -> planType=TEST Runtime apply -> modify only MISSING -> method-level provenance
 User -> unselected
 
 User 必须没有：
@@ -515,7 +598,7 @@ User 必须没有：
 ```
 
 7. 任意阶段把 User 或其他 unselected Controller 自动补回，均视为 `SCOPE_VIOLATION`。
-8. `REUSE_EXISTING -> run/no approval/no modification`、`EXTEND_EXISTING -> only MISSING + exact planId approval`、`CREATE_NEW -> exact planId approval`、historical Existing Test method never auto-edit、GENERATED_BY_PLAN method repair max 2 rounds 全部保持不变。
+8. `REUSE_EXISTING -> run/no approval/no modification`、`EXTEND_EXISTING -> only MISSING + exact planId approval + Runtime Apply`、`CREATE_NEW -> exact planId approval + Runtime Apply`、historical Existing Test method never auto-edit、GENERATED_BY_PLAN method repair max 2 rounds 全部保持不变。
 
 ## 禁止行为
 
@@ -523,6 +606,8 @@ User 必须没有：
 - `harness api-doc` 不得跳过 api-doc Schema Validation / API Target Selection / Controlled Runtime Renderer。
 - 不得让 Reviewer/Orchestrator/API Doc Agent 自由写 `review.md` 或 `api-doc.md`；只能调用 Controlled Runtime Renderer。
 - 不得把 TARGETED 结果表述成整个 Change Set 已完整评审。
-- 不得超过 2 轮自动测试修复。
+- 不得把任何 direct host write / `write_test` / `apply_approved_patch` / arbitrary write_file 作为生产或测试代码正式写入成功。
+- 不得在 patch identity 变化后复用旧批准。
+- 不得超过 2 轮 GENERATED_BY_PLAN repair 计数。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。
