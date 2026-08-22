@@ -1,6 +1,6 @@
 ---
 name: design-integration-tests
-description: 设计以 Controller 为入口的 Spring Boot 集成测试；先做 Existing Test 行为覆盖分析，写入型计划在审批前生成 exact unified diff 与 base hashes。
+description: 设计以 Controller 为入口的 Spring Boot 集成测试；写入型计划在审批前生成 exact patch、Runtime request 并 seal approval baseline。
 version: 2
 agent: integration-test-agent
 tools:
@@ -23,7 +23,7 @@ CREATE_NEW
 
 选择最小测试策略。
 
-Task 4 增量规则：**任何会写测试代码的 EXTEND_EXISTING / CREATE_NEW 计划，必须在请求人工批准之前就生成最终 exact patch identity**：
+Task 4 增量规则：**任何会写测试代码的 EXTEND_EXISTING / CREATE_NEW 计划，必须在请求人工批准之前就生成最终 exact patch identity，并由 Controlled Runtime seal 为不可复用到其他 patch 的审批 baseline**：
 
 ```text
 planId
@@ -33,7 +33,7 @@ files[].path
 files[].baseSha256
 ```
 
-审批的是这份 exact patch，不是一个可在批准后自由变化的自然语言意图。
+审批的是这份 sealed exact patch，不是一个可在批准后自由变化的自然语言意图。
 
 ## 输入
 
@@ -48,7 +48,7 @@ files[].baseSha256
 - `list_project_tree`
 - `read_code`
 
-本 Skill **不写文件**。正式测试代码写入只允许 `codea-harness-tools apply --input ...`。
+本 Skill **不写测试业务文件**。正式测试代码写入只允许审批前 Runtime seal + 批准后同一 request 的 `codea-harness-tools apply --input ...`。
 
 ## 执行步骤
 
@@ -149,7 +149,7 @@ existing helper/repository pattern
 
 ### 6. 写入型计划在审批前生成 exact patch
 
-对 EXTEND_EXISTING / CREATE_NEW，先基于当前已读取文件生成**最终计划写入后的完整测试代码**，但不要写磁盘。
+对 EXTEND_EXISTING / CREATE_NEW，先基于当前已读取文件生成**最终计划写入后的完整测试代码**，但不要写业务磁盘。
 
 然后构造标准 UTF-8 unified diff：
 
@@ -188,15 +188,47 @@ targets[]
 
 并通过 `.code-harness/contracts/test-plan.schema.json`。
 
-### 7. 人工审批
+### 7. 审批前生成并 seal Runtime request
 
-只对写入型计划提示：
+在向用户显示批准提示之前，把计划 identity 原样写入：
+
+```text
+.code-harness/runs/<runId>/requests/apply.json
+```
+
+内容固定：
+
+```text
+planType=TEST
+planId=<planId>
+unifiedDiff=<exact bytes>
+diffSha256=<exact sha>
+files[].path/baseSha256=<exact identity>
+```
+
+通过 `apply-request.schema.json` 后调用：
+
+```text
+.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+```
+
+Runtime 必须生成：
+
+```text
+.code-harness/runs/<runId>/sealed-plans/<planId>.json
+```
+
+该 sealed snapshot 固定 `planId / planType / unifiedDiff exact bytes / diffSha256 / files[].path / files[].baseSha256`。seal 失败不得请求批准。
+
+### 8. 人工审批
+
+只有 seal 成功后才提示：
 
 ```text
 请回复：批准 <planId>
 ```
 
-用户批准时确认的是当前计划内 `diffSha256` 对应的 exact unifiedDiff。
+用户批准时确认的是审批前 Runtime sealed 的 exact request。
 
 任何变化，包括：
 
@@ -206,13 +238,26 @@ targets[]
 - 目标文件发生变化；
 - base hash 变化；
 
-都必须生成新 patch identity；原批准不得复用。
+都必须生成新 patch identity、新 planId、新 request，并重新 Runtime seal；原批准不得复用。
 
-批准后由 Generate Skill 生成 `planType=TEST` 的 apply request，并调用：
+批准后 Generate Skill 只能消费同一份 sealed request，再调用：
 
 ```text
 .code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
+
+Runtime 会逐字段比对 sealed snapshot；自洽 Patch B 不得替换用户批准的 Patch A。
+
+## Runtime hard-deny
+
+写入型 Test Plan 永远不能覆盖 Runtime 固定 hard-deny：
+
+```text
+.git/**
+.code-harness/**
+```
+
+即使 `harness.yaml` 配置 `allowedTestPaths=["**"]`、`allowedProductionPaths=["**"]`、`deniedPaths=[]`，Runtime 也必须拒绝。
 
 ## Method-level provenance
 
@@ -235,7 +280,7 @@ GENERATED_BY_PLAN + planId
 
 历史 Existing Test method 永不自动修改。
 
-对 `GENERATED_BY_PLAN` 方法发生 TEST_ERROR：仍保留 method-level provenance 和最多 2 轮 repair 计数，但**每个实际写入的新 repair patch 都是新的 patch identity**。若 repair 改变 `unifiedDiff`，必须生成新的 `planId/diffSha256/baseSha256` 并重新获得精确批准；原批准不能授权不同 bytes。
+对 `GENERATED_BY_PLAN` 方法发生 TEST_ERROR：仍保留 method-level provenance 和最多 2 轮 repair 计数，但**每个实际写入的新 repair patch 都是新的 patch identity**。若 repair 改变 `unifiedDiff`，必须生成新的 `planId/diffSha256/baseSha256`，生成新 request，审批前重新 seal，再获得新的精确批准；原批准不能授权不同 bytes。
 
 ## 输出
 
@@ -249,13 +294,15 @@ EXTEND/CREATE：输出通过 `test-plan.schema.json` 的计划，包含：
 - `unifiedDiff`
 - `diffSha256`
 - `files[].path/baseSha256`
+- 审批前 `.code-harness/runs/<runId>/sealed-plans/<planId>.json`
 
 ## 禁止行为
 
 - 不得分析未选择 Controller。
-- 不得在审批前写测试文件。
-- 不得在审批后重新生成不同补丁并沿用旧 planId。
+- 不得在审批前写测试业务文件。
+- 不得在审批前跳过 `codea-harness-tools seal-apply --input`。
+- 不得在审批后重新生成不同补丁/request 并沿用旧 planId。
 - 不得默认 Mock 内部 Service/Repository Bean。
 - 不得弱化 Existing Test 断言、删除测试或添加 `@Disabled`。
 - 不得用 `write_test` / arbitrary direct host write 作为正式写入路径。
-- 正式写入只能 `planType=TEST` → `codea-harness-tools apply --input` → Apply evidence。
+- 正式写入只能 `planType=TEST` → 审批前 Runtime seal → 精确批准 → 同一 request Runtime apply → Apply evidence。
