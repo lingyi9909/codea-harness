@@ -165,6 +165,16 @@ func Run(o Options) Result {
 		migrated = append(migrated, []byte(fmt.Sprintf("\nreview:\n  baseRef: %s\n  includeWorkingTree: true\n", base))...)
 		r.Migrations = append(r.Migrations, "add-review-config-v1")
 	}
+	if cmp(newV, [3]int{1, 4, 0}) >= 0 {
+		var changed bool
+		migrated, changed, err = migrateConfigV1ToV2ResourceScopes(migrated)
+		if err != nil {
+			return failManual(r, fmt.Errorf("migrate 1.4 harness config: %w", err))
+		}
+		if changed {
+			r.Migrations = append(r.Migrations, "upgrade-config-v1-to-v2-resource-scopes")
+		}
+	}
 
 	parent := filepath.Dir(filepath.Clean(o.TargetDir))
 	id := strconv.FormatInt(time.Now().UnixNano(), 10)
