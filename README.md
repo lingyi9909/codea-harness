@@ -137,16 +137,62 @@ runs/**
 .code-harness/runs/<runId>/review.md
 ```
 
+1.4 Human Report UX 在 1.3.2 中文报告基础上统一首屏。报告打开后第一屏即可看到：
+
+```text
+评审结果
+评审模式
+评审目标（TARGETED）
+Change Set 文件数
+本次 Scope 文件数
+已评审文件数
+问题数量
+下一步
+```
+
 最终报告固定展示：
 
 ```text
-中文顶部摘要
+# 🔍 代码评审报告
+统一首屏摘要
 问题概览
 生产/测试代码评审范围
 真实多条代码调用链
 评审覆盖
 按严重级别排序的问题清单
 中文评审结论
+下一步
+```
+
+调用链仍只消费已经通过 Runtime 验证的 `ChangeAnalysis.callChains[]`，Renderer 不自行增加或修改 machine symbol；只为人类阅读增加角色标签：
+
+```text
+🌐 接口入口
+⚙️ 业务接口
+🧠 业务实现
+🗄 数据访问
+📄 Mapper XML
+🔹 代码节点
+```
+
+Finding 展示固定为一个完整问题块：
+
+```text
+### <severity emoji> <findingId>｜<中文级别>
+📍 位置
+❗ 问题
+🔎 证据
+💥 影响
+🛠 修复建议
+🧪 是否需要测试
+```
+
+报告末尾固定提供 `## ➡️ 下一步`：FAILED 优先处理阻断 Finding 并可使用 `harness fix finding:<id>`；PASSED 明确无需处理阻断问题；`MANUAL_ACTION_REQUIRED` 明确列出需要处理的未解析项、缺失评审文件或 Runtime 校验错误。
+
+TARGETED 报告始终保留：
+
+```text
+本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。
 ```
 
 机器 Contract 继续使用：
@@ -157,7 +203,7 @@ CRITICAL | HIGH | MEDIUM | LOW
 COMPLETE | PARTIAL
 ```
 
-用户报告映射为中文和颜色标识。调用链只消费已经通过 Runtime 验证的 `ChangeAnalysis.callChains[]`，Renderer 不自行推断。
+用户报告映射为中文和颜色标识。Runtime 继续按 severity → file → line → id 确定性排序，同一输入必须 byte-for-byte 生成相同 Markdown。
 
 ### Review Finding Scope
 
