@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 - 2026-08-22
+
+- **Targeted Review**：新增 `harness review <Class>` / `<Class.method>` 与 `harness review list`；定向 Scope 由 Runtime 基于已验证调用链和 exact path evidence 机器校验，不能把定向结论冒充整个 Change Set 已完成评审。
+- **Mapper.xml / YML Review**：`*Mapper.xml` 与 `src/main/resources/**/*.yml` 纳入正式 Review Change Set、FULL Coverage 和 evidence-related TARGETED Scope，仅检查与本次变化相关的高价值 Mapper/配置风险。
+- **Human Report UX Standard**：`review.md` 统一中文首屏、机器 role evidence 驱动的调用链角色、标准 Finding 块和明确下一步；无可靠 role evidence 时降级为普通代码节点。
+- **Runtime Apply Safety**：Fix/Test 正式写入统一经过 Controlled Runtime；审批前 seal exact plan，审批后校验 diff/base hash/path/hard-deny，执行原子多文件 apply/rollback 并生成机器 evidence。
+- **1.3.2 → 1.4.0 Upgrade Gate**：registered migration 将旧 `harness.yaml version=1` 升为 v2，并在保留用户现有配置的同时补充 Mapper/YML scope；正式升级由目标版本 Runtime 执行，继续保护 `project.md`、`database.yaml`、`runs/**` 和非 migration 用户配置。
+
 ## 1.3.2 - 2026-08-21
 
 - **Review Report UX Fix**：`review.md` 固定 UI 中文化，支持多条真实 `callChains[]` 展示、🔴🟠🟡🟢 严重级别与确定性排序，并将测试代码 Finding 限定为 `TEST_VALIDITY`，普通测试代码质量问题不再产生 Finding。
