@@ -598,6 +598,7 @@ func selectedNodes(chains []CallChain) map[string]struct{} {
 			if node != "" {
 				nodes[node] = struct{}{}
 			}
+		}
 	}
 	return nodes
 }
