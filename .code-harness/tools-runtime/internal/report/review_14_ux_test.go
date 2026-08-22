@@ -16,6 +16,7 @@ func Test14FullFirstScreenSummary(t *testing.T) {
 		"| 评审结果 | ❌ 未通过 |",
 		"| 评审模式 | 📦 完整评审 |",
 		"| 问题数量 | 4 |",
+		"| 下一步 | 优先处理阻断问题；可使用 `harness fix finding:F-001` |",
 	} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("FULL first-screen summary missing %q:\n%s", want, md)
@@ -66,6 +67,7 @@ func Test14PartialFirstScreenAndExactNextStep(t *testing.T) {
 	for _, want := range []string{
 		"# 🔍 代码评审报告",
 		"| 评审结果 | ⚠️ 需要人工处理 |",
+		"| 下一步 | 处理未解析项/缺失评审文件后重新评审 |",
 		"## ➡️ 下一步",
 		"请先处理未解析项 `OrderService.approve - 原因：未找到实现`，并补充评审文件 `src/main/java/OrderServiceImpl.java`。",
 	} {
@@ -174,6 +176,9 @@ func Test14NextStepByResult(t *testing.T) {
 	}
 	if !strings.Contains(passedMD, "下一步：无需处理阻断问题。") {
 		t.Fatalf("PASSED next step missing:\n%s", passedMD)
+	}
+	if !strings.Contains(passedMD, "| 下一步 | 无需处理阻断问题 |") {
+		t.Fatalf("PASSED first-screen next action missing:\n%s", passedMD)
 	}
 }
 
