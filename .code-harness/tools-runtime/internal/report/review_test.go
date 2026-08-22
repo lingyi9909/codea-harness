@@ -80,13 +80,14 @@ func TestR2SeverityChineseColorAndDeterministicSort(t *testing.T) {
 }
 
 func TestR3MultipleCallChainsAreNotFlattened(t *testing.T) {
-	md, err := Render(sampleRequest())
+	req := withStandardRoleEvidence(sampleRequest())
+	md, err := Render(req)
 	if err != nil { t.Fatal(err) }
 	for _, want := range []string{
 		"### 调用链 1",
-		"🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务接口｜`OrderService.approve`",
+		"🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务服务｜`OrderService.approve`",
 		"### 调用链 2",
-		"🌐 接口入口｜`OrderController.cancel`\n↓\n⚙️ 业务接口｜`OrderService.cancel`",
+		"🌐 接口入口｜`OrderController.cancel`\n↓\n⚙️ 业务服务｜`OrderService.cancel`",
 	} {
 		if !strings.Contains(md, want) { t.Fatalf("missing %q in markdown:\n%s", want, md) }
 	}
