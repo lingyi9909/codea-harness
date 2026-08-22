@@ -39,7 +39,7 @@ codea-harness-<version>-windows-x64-upgrade.zip
 读取 .code-harness-upgrade/upgrade.md，执行升级
 ```
 
-不要直接跳过本文件调用 Runtime。旧 Runtime 无法可靠判断“新版 Runtime 自己缺失”这一类错误，因此正式包检查必须先由 Agent 做只读 bootstrap/preflight。
+不要直接跳过本文件调用 Runtime。正式包检查必须先由 Agent 做只读 bootstrap/preflight；Package Preflight 通过后才允许进入 Runtime 升级事务。
 
 ## Agent 层 Package Preflight（必须先执行）
 
@@ -106,18 +106,20 @@ STOP
 
 1. 读取新版 `.code-harness-upgrade/AGENTS.md`。
 2. 读取新版 `.code-harness-upgrade/agents/orchestrator.md` 的 `harness upgrade` 约束。
-3. 调用**当前已安装**的 `.code-harness/bin/codea-harness-tools.exe upgrade` 执行既有受控升级事务。
-4. Runtime 再执行自己的 required-source preflight；因为 Agent 层已经完整检查，正常路径不应再出现 package 缺失。
-5. Package 完整后进入既有 Upgrade transaction。
-6. 根据 `UpgradeResult` 输出结果。
+3. 调用新版升级包中的 `.code-harness-upgrade/bin/codea-harness-tools.exe upgrade` 执行受控升级事务。
+4. 新版 Runtime 再执行自己的 required-source preflight；因为 Agent 层已经完整检查，正常路径不应再出现 package 缺失。
+5. Package 完整后进入既有 Upgrade transaction，并执行新版登记的确定性 Config Migration。
+6. Windows 下如果正在执行的新版 Runtime 位于 `.code-harness-upgrade/bin/`，Runtime 会在成功应用 Framework 后先把自身可执行文件移动到同卷、升级目录外的临时位置，再消费 `.code-harness-upgrade/`；Agent 不参与文件事务。
+7. 根据 `UpgradeResult` 输出结果。
 
-这里故意继续使用当前已安装 Runtime 执行事务，而不是执行 `.code-harness-upgrade/bin/codea-harness-tools.exe`：这样保持既有 Windows running-exe staged replacement 与成功后删除 `.code-harness-upgrade/` 的语义不变。
+必须使用新版升级包 Runtime 的原因是：registered migration 属于目标版本 Runtime。旧版本 Runtime 不会预先拥有未来版本新增的确定性 migration；正式升级必须由目标版本 Runtime 负责 migration + transaction，才能保证 Framework 与配置版本一起升级。
 
 ## 约束
 
 - 所有升级文件事务必须由 Tool Runtime 完成。
 - Agent 层只允许做上述只读 package bootstrap/preflight；不得自行复制、覆盖、删除 Harness 文件。
 - 不修改既有 staged replace、Windows running-exe replacement、rollback 核心语义。
+- `.code-harness-upgrade/bin/codea-harness-tools.exe upgrade` 是 Package Preflight 通过后的唯一升级事务入口。
 - `harness.yaml`、`project.md`、`database.yaml`、`runs/**` 是 Project State，升级时保护。
 - `database.yaml` 必须 byte-for-byte 保持不变。
 - `harness.yaml` 只允许执行新版登记的确定性 Config Migration；AI 不得猜配置。
