@@ -143,6 +143,8 @@ src/main/resources/**/*.yml        -> YamlConfig
 
 ## E. TARGETED Review
 
+TARGETED 的选择数据继续使用独立 `.code-harness/contracts/review-scope.schema.json`；Task 2 只扩展该 Scope 的 Resource Evidence，不改变 Task 1 的 ReviewScopeSelection Contract。
+
 26. 从 confirmed `ChangeAnalysis.callChains[]` 解析 target，并用 `symbolLocations[].role` 判断 target 属于 Controller 还是 Service/其他下游角色；不得靠命名后缀猜角色。
 27. 多链语义保持 Task 1：
 
@@ -191,6 +193,8 @@ ChangeAnalysis 继续符合 `.code-harness/contracts/change-analysis.schema.json
 - `externalDependencies[]`
 - `riskAreas[]`
 - `reviewCoverage`
+
+TARGETED 额外生成的 ReviewScopeSelection 必须继续通过 `.code-harness/contracts/review-scope.schema.json`，然后由 Controlled Runtime 对照 ChangeAnalysis 验证。
 
 `resourceRelations[]` 是可选证据集合；FULL 可没有 relation 但不能漏读 changed resources。TARGETED 只有 relation 被机器验证后才允许资源进入 Scope。
 
