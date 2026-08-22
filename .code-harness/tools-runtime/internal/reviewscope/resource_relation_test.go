@@ -112,12 +112,12 @@ func TestTargetedScopePassesWithOnlyEvidenceRelatedResources(t *testing.T) {
 	}
 }
 
-func TestResourceRelationRoleMustMatchChangedFileRole(t *testing.T) {
+func TestResourceRelationRejectsChangedFileWithWrongRole(t *testing.T) {
 	analysis := strings.Replace(resourceAnalysis,
 		`{"path":"src/main/resources/application.yml","role":"YamlConfig"}`,
 		`{"path":"src/main/resources/application.yml","role":"Other"}`, 1)
-	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "changed file role") {
-		t.Fatalf("resource relation role mismatch must be rejected, err=%v", err)
+	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "must use role YamlConfig") {
+		t.Fatalf("resource path with wrong changed-file role must be rejected before relation binding, err=%v", err)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestYamlConfigRejectsJavaPathMasquerade(t *testing.T) {
 	analysis := strings.Replace(resourceAnalysis,
 		`{"path":"src/main/java/OrderController.java","role":"Controller"}`,
 		`{"path":"src/main/java/OrderController.java","role":"YamlConfig"}`, 1)
-	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "*.yml") {
+	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "src/main/resources/**/*.yml") {
 		t.Fatalf("Java path must not masquerade as YamlConfig, err=%v", err)
 	}
 }
@@ -134,7 +134,7 @@ func TestYamlConfigRejectsMapperXmlMasquerade(t *testing.T) {
 	analysis := strings.Replace(resourceAnalysis,
 		`{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"}`,
 		`{"path":"src/main/resources/mapper/OrderMapper.xml","role":"YamlConfig"}`, 1)
-	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "*.yml") {
+	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "must use role MapperXml") {
 		t.Fatalf("Mapper XML path must not masquerade as YamlConfig, err=%v", err)
 	}
 }
@@ -143,7 +143,7 @@ func TestMapperXmlRoleRequiresMapperXmlPath(t *testing.T) {
 	analysis := strings.Replace(resourceAnalysis,
 		`{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"}`,
 		`{"path":"src/main/resources/mapper/order.xml","role":"MapperXml"}`, 1)
-	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "*Mapper.xml") {
+	if _, err := reviewscope.Verify(targetedResourceSelection(), []byte(analysis)); err == nil || !strings.Contains(err.Error(), "src/main/resources/**/*Mapper.xml") {
 		t.Fatalf("non-Mapper XML path must not masquerade as MapperXml, err=%v", err)
 	}
 }
@@ -190,8 +190,10 @@ func TestTargetedCoverageRejectsReviewedResourceRoleMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	analysis := strings.Replace(resourceAnalysis,
-		`{"path":"src/main/resources/application.yml","role":"YamlConfig"}`,
-		`{"path":"src/main/resources/application.yml","role":"Other"}`, 1)
+		`{"path":"src/main/resources/application.yml","role":"YamlConfig"}
+  ],"unresolvedSymbols":[]}`,
+		`{"path":"src/main/resources/application.yml","role":"Other"}
+  ],"unresolvedSymbols":[]}`, 1)
 	if _, err := reviewscope.ComputeCoverageFromAnalysis(selection, []byte(analysis)); err == nil || !strings.Contains(err.Error(), "reviewed file role") {
 		t.Fatalf("TARGETED reviewed resource role mismatch must be rejected, err=%v", err)
 	}
