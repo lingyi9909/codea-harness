@@ -3,7 +3,9 @@ package coverage
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"sort"
+	"strings"
 )
 
 type Result struct {
@@ -37,15 +39,16 @@ func EvaluateRequired(required, reviewed, unresolved []string) Result {
 	return Result{Status: status, MissingChangedFiles: missing, UnresolvedSymbols: append([]string(nil), unresolved...)}
 }
 
+type analysisFile struct {
+	Path string `json:"path"`
+	Role string `json:"role"`
+}
+
 type analysis struct {
-	ChangedFiles []struct {
-		Path string `json:"path"`
-	} `json:"changedFiles"`
+	ChangedFiles []analysisFile `json:"changedFiles"`
 	ReviewCoverage struct {
-		Status        string `json:"status"`
-		ReviewedFiles []struct {
-			Path string `json:"path"`
-		} `json:"reviewedFiles"`
+		Status            string         `json:"status"`
+		ReviewedFiles     []analysisFile `json:"reviewedFiles"`
 		UnresolvedSymbols []struct {
 			Symbol string `json:"symbol"`
 		} `json:"unresolvedSymbols"`
@@ -56,6 +59,9 @@ func VerifyAnalysisJSON(data []byte) (Result, error) {
 	var a analysis
 	if err := json.Unmarshal(data, &a); err != nil {
 		return Result{}, fmt.Errorf("parse change analysis: %w", err)
+	}
+	if err := validateResourceRoles(a.ChangedFiles, a.ReviewCoverage.ReviewedFiles); err != nil {
+		return Result{}, err
 	}
 	changed := make([]string, 0, len(a.ChangedFiles))
 	for _, f := range a.ChangedFiles {
@@ -77,4 +83,57 @@ func VerifyAnalysisJSON(data []byte) (Result, error) {
 		return r, fmt.Errorf("review coverage incomplete: missingChangedFiles=%v unresolvedSymbols=%v", r.MissingChangedFiles, r.UnresolvedSymbols)
 	}
 	return r, nil
+}
+
+func validateResourceRoles(changed, reviewed []analysisFile) error {
+	changedRoles := make(map[string]string, len(changed))
+	for _, file := range changed {
+		p := normalizePath(file.Path)
+		role := strings.TrimSpace(file.Role)
+		if err := validateResourcePathRole(p, role); err != nil {
+			return fmt.Errorf("changed file: %w", err)
+		}
+		if previous, exists := changedRoles[p]; exists && previous != role {
+			return fmt.Errorf("changed file %q has conflicting roles %q and %q", p, previous, role)
+		}
+		changedRoles[p] = role
+	}
+	for _, file := range reviewed {
+		p := normalizePath(file.Path)
+		role := strings.TrimSpace(file.Role)
+		if err := validateResourcePathRole(p, role); err != nil {
+			return fmt.Errorf("reviewed file: %w", err)
+		}
+		changedRole, changedFile := changedRoles[p]
+		if !changedFile || (!isResourceRole(changedRole) && !isResourceRole(role)) {
+			continue
+		}
+		if role != changedRole {
+			return fmt.Errorf("reviewed file role %q for %q does not match changed file role %q", role, p, changedRole)
+		}
+	}
+	return nil
+}
+
+func validateResourcePathRole(value, role string) error {
+	switch role {
+	case "MapperXml":
+		if !strings.HasSuffix(path.Base(value), "Mapper.xml") {
+			return fmt.Errorf("MapperXml path %q must match *Mapper.xml", value)
+		}
+	case "YamlConfig":
+		if !strings.HasSuffix(value, ".yml") {
+			return fmt.Errorf("YamlConfig path %q must match *.yml", value)
+		}
+	}
+	return nil
+}
+
+func isResourceRole(role string) bool {
+	return role == "MapperXml" || role == "YamlConfig"
+}
+
+func normalizePath(value string) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	return path.Clean(value)
 }
