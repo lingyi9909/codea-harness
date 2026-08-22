@@ -5,6 +5,13 @@ import (
 	"testing"
 )
 
+func TestSealApplySubcommandIsWired(t *testing.T) {
+	err := run([]string{"seal-apply"})
+	if err == nil || !strings.Contains(err.Error(), "seal-apply requires --input") {
+		t.Fatalf("seal-apply subcommand not wired: %v", err)
+	}
+}
+
 func TestApplySubcommandIsWired(t *testing.T) {
 	err := run([]string{"apply"})
 	if err == nil || !strings.Contains(err.Error(), "apply requires --input") {
@@ -19,9 +26,9 @@ func TestApplyDoesNotAcceptPatchCLIArguments(t *testing.T) {
 	}
 }
 
-func TestUsageListsApply(t *testing.T) {
+func TestUsageListsSealAndApply(t *testing.T) {
 	err := run(nil)
-	if err == nil || !strings.Contains(err.Error(), "report|apply") {
-		t.Fatalf("usage missing apply: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "seal-apply|apply") {
+		t.Fatalf("usage missing seal/apply: %v", err)
 	}
 }
