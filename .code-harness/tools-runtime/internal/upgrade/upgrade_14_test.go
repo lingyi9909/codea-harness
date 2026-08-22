@@ -2,7 +2,9 @@ package upgrade
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -85,9 +87,9 @@ func TestUpgrade132To140MigratesResourceScopesAndPreservesProjectState(t *testin
 	}
 
 	for path, want := range map[string][]byte{
-		"project.md":                    originalProject,
-		"database.yaml":                 originalDatabase,
-		"runs/run-140/evidence.json":    originalRun,
+		"project.md":                 originalProject,
+		"database.yaml":              originalDatabase,
+		"runs/run-140/evidence.json": originalRun,
 	} {
 		got, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(path)))
 		if err != nil {
@@ -125,5 +127,65 @@ func TestUpgrade132To140MigratesResourceScopesAndPreservesProjectState(t *testin
 	}
 	if len(matches) != 0 {
 		t.Fatalf("stage/backup leaked after 1.4 upgrade: %v", matches)
+	}
+}
+
+func TestUpgradeBootstrapUsesNewRuntimeForRegisteredMigrations(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "upgrade.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	if !strings.Contains(text, ".code-harness-upgrade/bin/codea-harness-tools.exe upgrade") {
+		t.Fatal("1.4 upgrade bootstrap must execute the new runtime so registered migrations are available")
+	}
+	if strings.Contains(text, "调用**当前已安装**的 `.code-harness/bin/codea-harness-tools.exe upgrade`") {
+		t.Fatal("1.4 upgrade bootstrap must not delegate migration execution to the old installed runtime")
+	}
+}
+
+func TestWindowsUpgradeCanRunFromUpgradePackageAndConsumeItsSource(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows running executable cleanup contract")
+	}
+	if os.Getenv("CODEA_14_SOURCE_RUNTIME_HELPER") == "1" {
+		source := os.Getenv("CODEA_14_SOURCE")
+		target := os.Getenv("CODEA_14_TARGET")
+		result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}, RunningExecutable: os.Args[0]})
+		if result.Status != StatusUpgraded {
+			t.Fatalf("source runtime upgrade failed: %+v", result)
+		}
+		return
+	}
+
+	source, target := make14Pair(t, validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n"))
+	testExe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeBytes, err := os.ReadFile(testExe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceExe := filepath.Join(source, "bin", "codea-harness-tools.exe")
+	if err := os.WriteFile(sourceExe, runtimeBytes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(sourceExe, "-test.run=TestWindowsUpgradeCanRunFromUpgradePackageAndConsumeItsSource")
+	cmd.Env = append(os.Environ(),
+		"CODEA_14_SOURCE_RUNTIME_HELPER=1",
+		"CODEA_14_SOURCE="+source,
+		"CODEA_14_TARGET="+target,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("source runtime process failed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("source package survived source-runtime upgrade: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(target, "VERSION")); err != nil || strings.TrimSpace(string(got)) != "1.4.0" {
+		t.Fatalf("target not upgraded to 1.4.0: version=%q err=%v", got, err)
 	}
 }
