@@ -351,9 +351,17 @@ jobs:
             if (Get-ChildItem -Force -Name '.code-harness-backup-*' -ErrorAction SilentlyContinue) { throw 'backup directory leaked' }
             if ((Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash -ne $expectedRuntimeHash) { throw 'installed runtime does not match accepted 1.4 runtime' }
 
-            $applyProbe = & '.\.code-harness\bin\codea-harness-tools.exe' apply 2>&1
-            $applyProbeText = $applyProbe -join "`n"
-            if ($LASTEXITCODE -eq 0 -or $applyProbeText -notmatch 'apply requires --input') { throw "installed 1.4 runtime does not expose apply subcommand: $applyProbeText" }
+            $applyProbeOut = Join-Path $env:RUNNER_TEMP 'codea-apply-probe.out'
+            $applyProbeErr = Join-Path $env:RUNNER_TEMP 'codea-apply-probe.err'
+            Remove-Item $applyProbeOut,$applyProbeErr -Force -ErrorAction SilentlyContinue
+            $applyProbeExe = (Resolve-Path '.\.code-harness\bin\codea-harness-tools.exe').Path
+            $applyProbe = Start-Process -FilePath $applyProbeExe -ArgumentList @('apply') -Wait -PassThru -RedirectStandardOutput $applyProbeOut -RedirectStandardError $applyProbeErr
+            $applyProbeText = @(
+              Get-Content $applyProbeOut -ErrorAction SilentlyContinue
+              Get-Content $applyProbeErr -ErrorAction SilentlyContinue
+            ) -join "`n"
+            if ($applyProbe.ExitCode -eq 0 -or $applyProbeText -notmatch 'apply requires --input') { throw "installed 1.4 runtime does not expose apply subcommand: $applyProbeText" }
+            $global:LASTEXITCODE = 0
           } finally {
             Pop-Location
           }
