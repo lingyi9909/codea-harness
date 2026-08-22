@@ -30,7 +30,7 @@
     },
     "changedFiles": {
       "type": "array",
-      "description": "完整 Change Set 变更文件列表。TARGETED 也不得从这里删除 scope 外 changed file。",
+      "description": "完整 Change Set 变更文件列表。TARGETED 也不得从这里删除 scope 外 changed file。MapperXml/YamlConfig 一旦进入 FULL changedFiles 即进入机器 Coverage required set。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -84,7 +84,7 @@
     "symbolLocations": {
       "type": "array",
       "uniqueItems": true,
-      "description": "Code Navigation 已确定性解析的 symbol → exact repository-relative path 证据。TARGETED Runtime 只允许使用这里的精确路径建立 scopedFiles；不得用 basename/className 猜路径。",
+      "description": "Code Navigation 已确定性解析的 Java symbol → exact repository-relative path 证据。TARGETED Runtime 只允许使用这里的精确 Java 路径建立代码 scopedFiles；不得用 basename/className 猜路径。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -100,6 +100,39 @@
           "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS"] },
           "from": { "type": "string", "minLength": 1, "description": "可选：该定位由哪个已确认 symbol 导航得到，用于证明 target/call-chain 与额外上下文文件的直接关系。" }
         }
+      }
+    },
+    "resourceRelations": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Mapper.xml/YML 与已确认 Java symbol 的证据关系。只用于 1.4 Resource Review；TARGETED Runtime 仅把 changed 且 relation 命中 selected target/call-chain 的资源纳入 scopedFiles。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role", "resource", "fromSymbol", "fromKind", "source", "evidence"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
+          },
+          "role": { "enum": ["MapperXml", "YamlConfig"] },
+          "resource": { "type": "string", "minLength": 1, "description": "资源内的 statement/key 标识，例如 OrderMapper.xml#updateStatus 或 order.timeout-ms" },
+          "fromSymbol": { "type": "string", "minLength": 1, "description": "与资源存在确定性关系的 Java class/method symbol" },
+          "fromKind": { "enum": ["CLASS", "METHOD"] },
+          "source": { "enum": ["MAPPER_STATEMENT", "CONFIG_REFERENCE"] },
+          "evidence": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "role": { "const": "MapperXml" } }, "required": ["role"] },
+            "then": { "properties": { "source": { "const": "MAPPER_STATEMENT" } } }
+          },
+          {
+            "if": { "properties": { "role": { "const": "YamlConfig" } }, "required": ["role"] },
+            "then": { "properties": { "source": { "const": "CONFIG_REFERENCE" } } }
+          }
+        ]
       }
     },
     "externalDependencies": {
@@ -161,7 +194,7 @@
   },
   "$defs": {
     "fileRole": {
-      "enum": ["Controller", "Service", "Repository", "Mapper", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
+      "enum": ["Controller", "Service", "Repository", "Mapper", "MapperXml", "YamlConfig", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
     }
   }
 }
