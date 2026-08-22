@@ -244,6 +244,22 @@ func Run(o Options) Result {
 		return r
 	}
 
+	// When the 1.4 upgrade package runtime executes the transaction itself on Windows,
+	// move that live executable to a same-volume sibling before removing the consumed
+	// source tree. Installed-runtime upgrades do not need this step.
+	parkedRuntime, err := parkRunningExecutableOutsideSource(o.SourceDir, o.RunningExecutable)
+	if err != nil {
+		rbErr := restoreFromBackup(backup, o.TargetDir, o.RunningExecutable)
+		r.Status = StatusUpgradeFailed
+		r.RollbackPerformed = rbErr == nil
+		r.Errors = []string{err.Error()}
+		if rbErr != nil {
+			r.Errors = append(r.Errors, "rollback: "+rbErr.Error())
+		}
+		cleanup(stage, backup)
+		return r
+	}
+
 	// Success cleanup semantics: stage + backup + consumed source package are removed.
 	// A renamed live executable may remain in a same-volume sibling temp path until
 	// process exit; it is outside the Harness tree and is best-effort cleaned.
@@ -251,6 +267,9 @@ func Run(o Options) Result {
 		r.Status = StatusUpgradeFailed
 		r.Errors = []string{"upgrade applied but cleanup failed: " + err.Error()}
 		return r
+	}
+	if parkedRuntime != "" {
+		_ = os.Remove(parkedRuntime)
 	}
 	r.Status = StatusUpgraded
 	return r
