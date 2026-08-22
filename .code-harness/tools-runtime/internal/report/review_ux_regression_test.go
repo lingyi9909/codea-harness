@@ -47,7 +47,7 @@ func TestCallChainEntryPointAlreadyFirstIsNotDuplicated(t *testing.T) {
 	if strings.Count(md, "`OrderController.approve`") != 1 {
 		t.Fatalf("entryPoint duplicated in markdown:\n%s", md)
 	}
-	if !strings.Contains(md, "`OrderController.approve`\n↓\n`OrderService.approve`") {
+	if !strings.Contains(md, "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务接口｜`OrderService.approve`") {
 		t.Fatalf("normalized call chain missing:\n%s", md)
 	}
 }
@@ -65,7 +65,7 @@ func TestCallChainEntryPointMissingFromChainIsPrepended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "`OrderController.approve`\n↓\n`OrderService.approve`\n↓\n`OrderServiceImpl.approve`"
+	want := "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务接口｜`OrderService.approve`\n↓\n🧠 业务实现｜`OrderServiceImpl.approve`"
 	if !strings.Contains(md, want) {
 		t.Fatalf("entryPoint was not prepended:\n%s", md)
 	}
@@ -78,7 +78,7 @@ func TestCallChainEmptyChainStillRendersEntryPoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(md, "### 调用链 1\n\n`OrderController.approve`") {
+	if !strings.Contains(md, "### 调用链 1\n\n🌐 接口入口｜`OrderController.approve`") {
 		t.Fatalf("entryPoint-only call chain missing:\n%s", md)
 	}
 }
