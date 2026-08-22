@@ -49,14 +49,28 @@ type CallChain struct {
 	Chain      []string `json:"chain"`
 }
 
+type SymbolRoleEvidence struct {
+	Symbol string `json:"symbol"`
+	Role   string `json:"role"`
+	Source string `json:"source"`
+}
+
+type ResourceRoleEvidence struct {
+	Resource string `json:"resource"`
+	Role     string `json:"role"`
+	Source   string `json:"source"`
+}
+
 type ReviewCoverage struct {
-	ReviewedFiles        []string    `json:"reviewedFiles"`
-	CallChains           []CallChain `json:"callChains"`
-	ExternalDependencies []string    `json:"externalDependencies"`
-	Unresolved           []string    `json:"unresolved"`
-	MissingReviewedFiles []string    `json:"missingReviewedFiles"`
-	RuntimeErrors        []string    `json:"runtimeErrors"`
-	Status               string      `json:"status"`
+	ReviewedFiles        []string               `json:"reviewedFiles"`
+	CallChains           []CallChain            `json:"callChains"`
+	SymbolRoleEvidence   []SymbolRoleEvidence   `json:"symbolRoleEvidence,omitempty"`
+	ResourceRoleEvidence []ResourceRoleEvidence `json:"resourceRoleEvidence,omitempty"`
+	ExternalDependencies []string               `json:"externalDependencies"`
+	Unresolved           []string               `json:"unresolved"`
+	MissingReviewedFiles []string               `json:"missingReviewedFiles"`
+	RuntimeErrors        []string               `json:"runtimeErrors"`
+	Status               string                 `json:"status"`
 }
 
 type Finding struct {
@@ -146,6 +160,9 @@ func Validate(req ReviewRequest) error {
 			}
 		}
 	}
+	if err := validateRoleEvidence(req.Coverage); err != nil {
+		return err
+	}
 	var targetedFiles map[string]struct{}
 	if mode == "TARGETED" {
 		targetedFiles = make(map[string]struct{}, len(req.Scope.ScopedFiles))
@@ -178,6 +195,53 @@ func Validate(req ReviewRequest) error {
 		if f.Confidence < 0 || f.Confidence > 1 {
 			return fmt.Errorf("finding %q has invalid confidence", f.ID)
 		}
+	}
+	return nil
+}
+
+func validateRoleEvidence(coverage ReviewCoverage) error {
+	seen := make(map[string]string, len(coverage.SymbolRoleEvidence)+len(coverage.ResourceRoleEvidence))
+	for i, evidence := range coverage.SymbolRoleEvidence {
+		symbol := strings.TrimSpace(evidence.Symbol)
+		if symbol == "" {
+			return fmt.Errorf("symbol role evidence %d requires symbol", i)
+		}
+		switch evidence.Role {
+		case "Controller", "Service", "Repository", "Mapper", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other":
+		default:
+			return fmt.Errorf("symbol role evidence %q has invalid role %q", symbol, evidence.Role)
+		}
+		switch evidence.Source {
+		case "FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS":
+		default:
+			return fmt.Errorf("symbol role evidence %q has invalid source %q", symbol, evidence.Source)
+		}
+		if previous, ok := seen[symbol]; ok {
+			return fmt.Errorf("duplicate role evidence for %q (%s and symbol)", symbol, previous)
+		}
+		seen[symbol] = "symbol"
+	}
+	for i, evidence := range coverage.ResourceRoleEvidence {
+		resource := strings.TrimSpace(evidence.Resource)
+		if resource == "" {
+			return fmt.Errorf("resource role evidence %d requires resource", i)
+		}
+		switch evidence.Role {
+		case "MapperXml":
+			if evidence.Source != "MAPPER_STATEMENT" {
+				return fmt.Errorf("resource role evidence %q requires MAPPER_STATEMENT source", resource)
+			}
+		case "YamlConfig":
+			if evidence.Source != "CONFIG_REFERENCE" {
+				return fmt.Errorf("resource role evidence %q requires CONFIG_REFERENCE source", resource)
+			}
+		default:
+			return fmt.Errorf("resource role evidence %q has invalid role %q", resource, evidence.Role)
+		}
+		if previous, ok := seen[resource]; ok {
+			return fmt.Errorf("duplicate role evidence for %q (%s and resource)", resource, previous)
+		}
+		seen[resource] = "resource"
 	}
 	return nil
 }
@@ -228,7 +292,7 @@ func Render(req ReviewRequest) (string, error) {
 	}
 	writeSeverityOverview(&b, req.Findings)
 	writeScope(&b, req)
-	writeCallChains(&b, req.Coverage.CallChains)
+	writeCallChains(&b, req.Coverage)
 	writeCoverage(&b, req.Coverage)
 	writeFindings(&b, req.Findings)
 	writeSummary(&b, req)
@@ -270,7 +334,7 @@ func firstScreenNextAction(req ReviewRequest) string {
 		return "优先处理阻断问题"
 	default:
 		if len(req.Coverage.RuntimeErrors) > 0 {
-			return "处理 Runtime 校验错误后重新评审"
+			return "处理运行时契约校验错误后重新评审"
 		}
 		return "处理未解析项/缺失评审文件后重新评审"
 	}
@@ -326,19 +390,24 @@ func writeScope(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b)
 }
 
-func writeCallChains(b *strings.Builder, chains []CallChain) {
+func writeCallChains(b *strings.Builder, coverage ReviewCoverage) {
 	fmt.Fprintln(b, "## 🔗 代码调用链")
 	fmt.Fprintln(b)
-	if len(chains) == 0 {
+	if len(coverage.CallChains) == 0 {
 		fmt.Fprintln(b, "未发现需要展开的项目内部调用链。")
 		fmt.Fprintln(b)
 		return
 	}
-	for i, chain := range chains {
+	labels := callChainRoleLabels(coverage)
+	for i, chain := range coverage.CallChains {
 		fmt.Fprintf(b, "### 调用链 %d\n\n", i+1)
 		nodes := normalizeCallChain(chain)
 		for j, symbol := range nodes {
-			fmt.Fprintf(b, "%s｜`%s`\n", callChainRoleLabel(symbol), singleLine(symbol))
+			label := labels[strings.TrimSpace(symbol)]
+			if label == "" {
+				label = "🔹 代码节点"
+			}
+			fmt.Fprintf(b, "%s｜`%s`\n", label, singleLine(symbol))
 			if j < len(nodes)-1 {
 				fmt.Fprintln(b, "↓")
 			}
@@ -365,38 +434,34 @@ func normalizeCallChain(chain CallChain) []string {
 	return nodes
 }
 
-func callChainRoleLabel(symbol string) string {
-	class := callChainClass(symbol)
-	lower := strings.ToLower(symbol)
-	switch {
-	case strings.Contains(lower, ".xml#") || strings.HasSuffix(class, "MapperXml"):
-		return "📄 Mapper XML"
-	case strings.HasSuffix(class, "Controller"):
-		return "🌐 接口入口"
-	case strings.HasSuffix(class, "ServiceImpl"):
-		return "🧠 业务实现"
-	case strings.HasSuffix(class, "Service"):
-		return "⚙️ 业务接口"
-	case strings.HasSuffix(class, "Repository"), strings.HasSuffix(class, "Mapper"), strings.HasSuffix(class, "DAO"), strings.HasSuffix(class, "Dao"):
-		return "🗄 数据访问"
-	default:
-		return "🔹 代码节点"
+func callChainRoleLabels(coverage ReviewCoverage) map[string]string {
+	labels := make(map[string]string, len(coverage.SymbolRoleEvidence)+len(coverage.ResourceRoleEvidence))
+	for _, evidence := range coverage.SymbolRoleEvidence {
+		symbol := strings.TrimSpace(evidence.Symbol)
+		switch evidence.Role {
+		case "Controller":
+			labels[symbol] = "🌐 接口入口"
+		case "Service":
+			if evidence.Source == "FIND_IMPLEMENTATIONS" {
+				labels[symbol] = "🧠 业务实现"
+			} else {
+				labels[symbol] = "⚙️ 业务服务"
+			}
+		case "Repository", "Mapper":
+			labels[symbol] = "🗄 数据访问"
+		default:
+			labels[symbol] = "🔹 代码节点"
+		}
 	}
-}
-
-func callChainClass(symbol string) string {
-	symbol = strings.TrimSpace(symbol)
-	if symbol == "" {
-		return ""
+	for _, evidence := range coverage.ResourceRoleEvidence {
+		resource := strings.TrimSpace(evidence.Resource)
+		if evidence.Role == "MapperXml" {
+			labels[resource] = "📄 Mapper XML"
+		} else {
+			labels[resource] = "🔹 代码节点"
+		}
 	}
-	if idx := strings.Index(symbol, "#"); idx >= 0 {
-		symbol = symbol[:idx]
-	}
-	parts := strings.Split(symbol, ".")
-	if len(parts) == 1 {
-		return parts[0]
-	}
-	return parts[len(parts)-2]
+	return labels
 }
 
 func writeCoverage(b *strings.Builder, coverage ReviewCoverage) {
@@ -528,7 +593,7 @@ func writePartial(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b)
 	items := append([]string(nil), req.Coverage.Unresolved...)
 	for _, e := range req.Coverage.RuntimeErrors {
-		items = append(items, "Runtime Contract 校验错误: "+e)
+		items = append(items, "运行时契约校验错误: "+e)
 	}
 	sort.Strings(items)
 	writeCodeList(b, items, "无")
@@ -576,7 +641,7 @@ func manualNextAction(coverage ReviewCoverage) string {
 	}
 	var lines []string
 	if len(runtimeErrors) > 0 {
-		lines = append(lines, "请先处理以下 Runtime Contract 校验错误：")
+		lines = append(lines, "请先处理以下运行时契约校验错误：")
 		for _, item := range runtimeErrors {
 			lines = append(lines, fmt.Sprintf("- `%s`", singleLine(item)))
 		}
@@ -663,7 +728,7 @@ func unresolvedItems(coverage ReviewCoverage) []string {
 		items = append(items, "尚未评审文件: "+f)
 	}
 	for _, e := range coverage.RuntimeErrors {
-		items = append(items, "Runtime Contract 校验错误: "+e)
+		items = append(items, "运行时契约校验错误: "+e)
 	}
 	sort.Strings(items)
 	return items
