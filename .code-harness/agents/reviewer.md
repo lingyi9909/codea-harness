@@ -4,6 +4,7 @@ description: 基于完整 Git Change Set 建立可验证调用链与资源关系
 version: 4
 skills:
   - analyze-change
+  - discover-chain
   - review-code
 ---
 
@@ -75,7 +76,7 @@ FULL 保持 1.3.2 主语义，并扩展 Resource required scope：
 
 ```text
 Controller CLASS  → 自动包含该 Controller 在当前 Change Set 中全部 confirmed chains
-Controller METHOD → 自动包含该 method 在当前 Change Set 中全部 confirmed chains
+Controller METHOD → 自动包含该 method 当前 Change Set 中全部 confirmed chains
 Service/其他下游 target → 若命中 1 条链自动继续；若命中 2+ 条上游业务链才进入用户选择
 ```
 
@@ -199,6 +200,36 @@ category = TEST_VALIDITY
 - `role=Controller` 可显示 `🌐 接口入口`；`role=Service` 只表示业务服务，显示 `⚙️ 业务服务`；只有 `role=Service + source=FIND_IMPLEMENTATIONS` 这一机器证据组合才允许显示 `🧠 业务实现`；`Repository/Mapper` 显示 `🗄 数据访问`；已验证 `MapperXml` resource 显示 `📄 Mapper XML`。
 
 Resource Review 不新增 Finding category；Mapper/YML 使用 `PRODUCTION_CODE`。Renderer 不推断 relation、调用链、role 或 Finding。
+
+## Lazy Chain Discovery（1.5 Task 2）
+
+Reviewer 负责协调 `analyze-change → discover-chain → Controlled Runtime`，但不自己生成 Chain 事实。支持：
+
+```text
+harness chain discover
+harness chain discover OrderController
+harness chain discover OrderController.approve
+```
+
+必须先取得并机器验证当前 ChangeAnalysis。Discovery 的 Java exact symbol/path/role 只能来自 `ChangeAnalysis.symbolLocations[]`；Mapper.xml/YML relation 只能来自 `ChangeAnalysis.resourceRelations[]`。**生产 Controller Method** 是唯一允许持久化的 EntryPoint 类型；不得根据类名后缀、basename 或同名文件猜 Controller/Service/Impl/Mapper role/path。
+
+Lazy Scope 固定为当前 Change Set/target：无 target 只看 affectedControllers；Controller target 只看对应 affected endpoint；Service/其他下游 target 只能沿当前 verified confirmed callChains 向上解析 production Controller method，不得进行全仓 Controller 扫描。
+
+Reviewer 创建同 run 的 controlled request 后，只调用：
+
+```text
+codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/chain-discover.json
+```
+
+Runtime 输出只允许：
+
+```text
+.code-harness/runs/<runId>/analysis/discovered-chains/<id>.yaml
+```
+
+即 `runs/<runId>/analysis/discovered-chains/`；Task 2 不得写 `.code-harness/chains/**`。结果保持 `DISCOVERED`。
+
+如果 Runtime 返回 `PARTIAL`，Reviewer 必须展示 unresolved/ambiguity，并明确本次 Chain 发现不完整；不得补猜事实、不得标记 ACCEPTED、不得进入 Task 3 的 validate/accept/refresh。多个入口只有 verified core path 完全一致才允许 canonicalize 合并，不使用 fuzzy/name similarity。
 
 ## PARTIAL
 
