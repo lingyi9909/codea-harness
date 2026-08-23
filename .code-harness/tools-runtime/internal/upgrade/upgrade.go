@@ -107,7 +107,7 @@ var managedFiles = map[string]bool{
 	"AGENTS.md": true, "bootstrap.md": true, "upgrade.md": true, "VERSION": true, ".gitignore": true,
 	"harness.template.yaml": true, "project.template.md": true, "database.template.yaml": true,
 }
-var managedDirs = []string{"agents", "skills", "contracts", "tools", "bin", "tools-runtime"}
+var managedDirs = []string{"agents", "skills", "contracts", "tools", "templates", "bin", "tools-runtime"}
 
 var projectStateFiles = map[string]bool{
 	"harness.yaml":  true,
@@ -380,7 +380,6 @@ func copyManaged(src, dst string) error {
 							ok = true
 							break
 						}
-					}
 					if !ok {
 						return filepath.SkipDir
 					}
