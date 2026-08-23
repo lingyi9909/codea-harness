@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -105,7 +106,7 @@ func Discover(root string, in DiscoverInput) (DiscoveryResult, error) {
 			if in.Target != "" && !endpointMatchesTarget(endpoint, affected, in.Target, in.ChangeAnalysis.CallChains) {
 				continue
 			}
-			entry, ok, unresolved := resolveEntry(endpoint, in.ChangeAnalysis.SymbolLocations)
+			entry, ok, unresolved := resolveEntry(endpoint, affected.Controller, in.ChangeAnalysis.SymbolLocations)
 			if unresolved != "" {
 				result.Status = DiscoveryPartial
 				result.Unresolved = append(result.Unresolved, unresolved)
@@ -147,7 +148,12 @@ func Discover(root string, in DiscoverInput) (DiscoveryResult, error) {
 	return result, nil
 }
 
-func resolveEntry(symbol string, locations []SymbolLocationEvidence) (EntryPoint, bool, string) {
+func resolveEntry(symbol, affectedController string, locations []SymbolLocationEvidence) (EntryPoint, bool, string) {
+	symbol = strings.TrimSpace(symbol)
+	controller := strings.TrimSpace(affectedController)
+	if parentSymbol(symbol) == "" || parentSymbol(symbol) != controller {
+		return EntryPoint{}, false, "ENTRYPOINT_NOT_AFFECTED_CONTROLLER_METHOD: " + symbol
+	}
 	var matches []SymbolLocationEvidence
 	for _, location := range locations {
 		if location.Symbol != symbol || location.Role != "Controller" || !isProductionControllerPath(location.Path) {
@@ -171,7 +177,6 @@ func buildDiscoveredChain(entry EntryPoint, branch CallChainEvidence, analysis C
 	}
 	candidate := Chain{
 		Version:     1,
-		ID:          discoveredID(entry.Symbol),
 		Name:        entry.Symbol,
 		Status:      StatusDiscovered,
 		EntryPoints: []EntryPoint{entry},
@@ -195,7 +200,7 @@ func buildDiscoveredChain(entry EntryPoint, branch CallChainEvidence, analysis C
 	}
 
 	for _, relation := range analysis.ResourceRelations {
-		if !coreSymbols[relation.FromSymbol] {
+		if !resourceRelationTouchesCore(relation, coreSymbols) {
 			continue
 		}
 		role := resourceRole(relation.Role)
@@ -214,6 +219,7 @@ func buildDiscoveredChain(entry EntryPoint, branch CallChainEvidence, analysis C
 		}
 	}
 	candidate.Boundaries = uniqueBoundaries(candidate.Boundaries)
+	candidate.ID = discoveredID(candidate)
 	return candidate, nil
 }
 
@@ -268,11 +274,6 @@ func endpointMatchesTarget(endpoint string, affected AffectedControllerEvidence,
 	if target == "" || symbolMatchesTarget(endpoint, target) || symbolMatchesTarget(affected.Controller, target) {
 		return true
 	}
-	for _, source := range affected.SourceSymbols {
-		if symbolMatchesTarget(source, target) {
-			return true
-		}
-	}
 	for _, chain := range chains {
 		if chain.EntryPoint != endpoint {
 			continue
@@ -308,6 +309,24 @@ func callChainsForEntry(entry string, chains []CallChainEvidence) []CallChainEvi
 		}
 	}
 	return out
+}
+
+func resourceRelationTouchesCore(relation ResourceRelationEvidence, coreSymbols map[string]bool) bool {
+	switch strings.TrimSpace(relation.FromKind) {
+	case "METHOD":
+		return coreSymbols[strings.TrimSpace(relation.FromSymbol)]
+	case "CLASS":
+		fromClass := strings.TrimSpace(relation.FromSymbol)
+		if fromClass == "" {
+			return false
+		}
+		for symbol := range coreSymbols {
+			if parentSymbol(symbol) == fromClass {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func nodeRole(role string) string {
@@ -375,36 +394,9 @@ func normalizeRepoPath(path string) string {
 	return strings.ReplaceAll(filepath.ToSlash(filepath.Clean(path)), "\\", "/")
 }
 
-func discoveredID(symbol string) string {
-	var b strings.Builder
-	lastDash := true
-	for _, r := range symbol {
-		if r >= 'A' && r <= 'Z' {
-			if !lastDash && b.Len() > 0 {
-				b.WriteByte('-')
-			}
-			b.WriteRune(r + ('a' - 'A'))
-			lastDash = false
-			continue
-		}
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			b.WriteRune(r)
-			lastDash = false
-			continue
-		}
-		if !lastDash && b.Len() > 0 {
-			b.WriteByte('-')
-			lastDash = true
-		}
-	}
-	id := strings.Trim(b.String(), "-")
-	if len(id) > 64 {
-		id = strings.TrimRight(id[:64], "-")
-	}
-	if ValidateID(id) != nil {
-		return "discovered-chain"
-	}
-	return id
+func discoveredID(c Chain) string {
+	sum := sha256.Sum256([]byte(coreSignature(c)))
+	return fmt.Sprintf("%x", sum[:])
 }
 
 func persistDiscovered(root, runID string, chains []Chain) error {
