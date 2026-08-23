@@ -26,6 +26,12 @@ func TestChainsAreNeverFrameworkManaged(t *testing.T) {
 	}
 }
 
+func TestChainTemplateIsFrameworkManaged(t *testing.T) {
+	if !isManaged("templates/chain.template.yaml") {
+		t.Fatal("templates/chain.template.yaml must be Framework Managed")
+	}
+}
+
 func TestUpgradePreservesChainsByteForByteAndReportsProjectState(t *testing.T) {
 	source, target := makePair(t, validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n"))
 	original := []byte("# user-owned business knowledge\r\nversion: 1\r\nid: order-approve\r\n")
