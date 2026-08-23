@@ -1,0 +1,43 @@
+# Codea Harness Business Chain
+#
+# 这是项目长期业务 Chain，可直接编辑。
+# 修改后请执行：harness chain validate <id>
+# 代码结构变化后请执行：harness chain refresh <id>
+# symbol/path/call relation 必须真实存在，Runtime 会重新校验。
+# 本文件属于 Project State，Harness 升级不会覆盖。
+
+version: 1
+
+id: order-approve
+name: 订单审批
+status: ACCEPTED
+
+entryPoints:
+  - symbol: OrderControllerV1.approve
+    path: src/main/java/com/example/order/OrderControllerV1.java
+  - symbol: OrderControllerV2.approve
+    path: src/main/java/com/example/order/OrderControllerV2.java
+
+nodes:
+  - symbol: OrderService.approve
+    path: src/main/java/com/example/order/OrderService.java
+    role: SERVICE
+  - symbol: OrderServiceImpl.approve
+    path: src/main/java/com/example/order/OrderServiceImpl.java
+    role: SERVICE
+  - symbol: OrderMapper.updateStatus
+    path: src/main/java/com/example/order/OrderMapper.java
+    role: MAPPER
+
+resources:
+  - path: src/main/resources/mapper/OrderMapper.xml
+    symbol: OrderMapper.updateStatus
+    role: MAPPER_XML
+
+boundaries:
+  - symbol: PaymentRpcClient.notify
+    path: src/main/java/com/example/client/PaymentRpcClient.java
+    role: EXTERNAL
+
+notes: |
+  V1、V2 接口共用同一套订单审批核心逻辑。
