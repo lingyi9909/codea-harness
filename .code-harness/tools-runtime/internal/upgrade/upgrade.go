@@ -116,7 +116,7 @@ var projectStateFiles = map[string]bool{
 }
 
 func Run(o Options) Result {
-	r := Result{PreservedFiles: []string{"harness.yaml", "project.md", "database.yaml", "runs/**"}, Errors: []string{}}
+	r := Result{PreservedFiles: []string{"harness.yaml", "project.md", "database.yaml", "chains/**", "runs/**"}, Errors: []string{}}
 	oldB, err := os.ReadFile(filepath.Join(o.TargetDir, "VERSION"))
 	if err != nil {
 		return failManual(r, err)
@@ -292,7 +292,7 @@ func hasTopLevelReview(b []byte) bool {
 
 func isProjectState(rel string) bool {
 	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
-	return projectStateFiles[rel] || rel == "runs" || strings.HasPrefix(rel, "runs/")
+	return projectStateFiles[rel] || rel == "chains" || strings.HasPrefix(rel, "chains/") || rel == "runs" || strings.HasPrefix(rel, "runs/")
 }
 
 func isManaged(rel string) bool {
