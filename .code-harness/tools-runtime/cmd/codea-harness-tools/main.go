@@ -33,7 +33,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|report|seal-apply|apply>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|chain|report|seal-apply|apply>")
 	}
 	switch args[0] {
 	case "upgrade":
@@ -44,6 +44,8 @@ func run(args []string) error {
 		return runNav(args[1:])
 	case "db":
 		return runDB(args[1:])
+	case "chain":
+		return runChain(args[1:])
 	case "report":
 		return runReport(args[1:])
 	case "seal-apply":
