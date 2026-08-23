@@ -76,7 +76,7 @@ FULL 保持 1.3.2 主语义，并扩展 Resource required scope：
 
 ```text
 Controller CLASS  → 自动包含该 Controller 在当前 Change Set 中全部 confirmed chains
-Controller METHOD → 自动包含该 method 当前 Change Set 中全部 confirmed chains
+Controller METHOD → 自动包含该 method 在当前 Change Set 中全部 confirmed chains
 Service/其他下游 target → 若命中 1 条链自动继续；若命中 2+ 条上游业务链才进入用户选择
 ```
 
