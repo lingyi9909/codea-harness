@@ -198,6 +198,43 @@ TARGETED 额外生成的 ReviewScopeSelection 必须继续通过 `.code-harness/
 
 `resourceRelations[]` 是可选证据集合；FULL 可没有 relation 但不能漏读 changed resources。TARGETED 只有 relation 被机器验证后才允许资源进入 Scope。
 
+## Lazy Chain Discovery（1.5 Task 2）
+
+`analyze-change` 仍然负责建立唯一的机器证据源；Chain Discovery 不重新解析 Java，也不得覆盖 ChangeAnalysis 事实。
+
+当用户发起：
+
+```text
+harness chain discover
+harness chain discover <Class>
+harness chain discover <Class.method>
+```
+
+必须先完成当前 Change Set 的 ChangeAnalysis，并通过 `change-analysis.schema.json` 与 Runtime machine coverage。之后 `discover-chain` 只消费已验证的：
+
+```text
+ChangeAnalysis.affectedControllers[]
+ChangeAnalysis.callChains[]
+ChangeAnalysis.symbolLocations[]
+ChangeAnalysis.resourceRelations[]
+ChangeAnalysis.externalDependencies[]
+ChangeAnalysis.reviewCoverage.unresolvedSymbols[]
+```
+
+EntryPoint 只允许 **生产 Controller Method**。exact path 与 role 必须来自 `ChangeAnalysis.symbolLocations[]`；Mapper.xml/YML 只允许来自 `ChangeAnalysis.resourceRelations[]`。不得根据类名后缀、basename 或同名文件猜 Controller/Service/Impl/Mapper role/path。
+
+Lazy 范围固定：无 target 只处理当前 Change Set 的 affectedControllers；有 target 只处理当前 confirmed callChains 中与 target 有关系的入口/分支。Service 等下游 target 可以沿 verified callChains 向上解析生产 Controller Method，但不得因此全仓扫描所有 Controller。
+
+存在内部 unresolved、entry/core exact path ambiguity 或缺失 confirmed path 时，Discovery 必须 `PARTIAL`；不得为了生成 Chain 补猜 evidence。V1/V2 只有 verified core facts 完全一致时才允许合并 entryPoints，不使用名称相似度或 fuzzy threshold。
+
+Task 2 发现结果只写：
+
+```text
+.code-harness/runs/<runId>/analysis/discovered-chains/<id>.yaml
+```
+
+即 `runs/<runId>/analysis/discovered-chains/`。所有结果保持 `status: DISCOVERED`；不得写 `.code-harness/chains/**`，不得提前执行 Task 3 的 validate/accept/refresh。
+
 ## 禁止行为
 
 - 不得跳过 Change Set 计算。
