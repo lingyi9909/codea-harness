@@ -17,7 +17,14 @@ func setupTask4ReviewContextProject(t *testing.T) string {
 	writeFile(t, filepath.Join(".code-harness", "chains", "order-approve.yaml"), task3AcceptedYAML)
 	runID := "run-task4-review"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
-	writeFile(t, analysisPath, task3AnalysisJSON(false))
+	analysis := task3AnalysisJSON(false)
+	analysis = strings.Replace(analysis,
+		`"changedFiles":[{"path":"src/main/java/com/example/order/OrderServiceImpl.java","role":"Service","sources":["COMMITTED"]}]`,
+		`"changedFiles":[{"path":"src/main/java/com/example/order/OrderServiceImpl.java","role":"Service","sources":["COMMITTED"]},{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml","sources":["COMMITTED"]}]`, 1)
+	analysis = strings.Replace(analysis,
+		`{"path":"src/main/java/com/example/order/OrderServiceImpl.java","role":"Service","reason":"CHANGED"},`,
+		`{"path":"src/main/java/com/example/order/OrderServiceImpl.java","role":"Service","reason":"CHANGED"},{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml","reason":"CHANGED"},`, 1)
+	writeFile(t, analysisPath, analysis)
 	return analysisPath
 }
 
@@ -52,7 +59,8 @@ func TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted(t *testing
 	      "src/main/java/com/example/order/OrderController.java",
 	      "src/main/java/com/example/order/OrderService.java",
 	      "src/main/java/com/example/order/OrderServiceImpl.java",
-	      "src/main/java/com/example/order/OrderMapper.java"
+	      "src/main/java/com/example/order/OrderMapper.java",
+	      "src/main/resources/mapper/OrderMapper.xml"
 	    ]
 	  }
 	}`
