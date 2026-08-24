@@ -233,6 +233,7 @@ func validateProjectIdentity(root, id string) []string {
 		return []string{"CHAIN_PROJECT_STATE_READ_FAILED: " + err.Error()}
 	}
 	var matches []string
+	mismatch := ""
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".yaml") {
 			continue
@@ -246,13 +247,16 @@ func validateProjectIdentity(root, id string) []string {
 			continue
 		}
 		matches = append(matches, entry.Name())
-		if strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())) != id {
-			return []string{fmt.Sprintf("CHAIN_ID_FILENAME_MISMATCH: id %q is stored in %q", id, entry.Name())}
+		if strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())) != id && mismatch == "" {
+			mismatch = entry.Name()
 		}
 	}
 	if len(matches) > 1 {
 		sort.Strings(matches)
 		return []string{fmt.Sprintf("DUPLICATE_PROJECT_CHAIN_ID: %q appears in %s", id, strings.Join(matches, ", "))}
+	}
+	if mismatch != "" {
+		return []string{fmt.Sprintf("CHAIN_ID_FILENAME_MISMATCH: id %q is stored in %q", id, mismatch)}
 	}
 	return nil
 }
