@@ -88,6 +88,9 @@ func TestValidateDistinguishesValidStaleAndInvalid(t *testing.T) {
 	writeTask3Resource(t, root)
 	chain := task3Chain()
 	evidence := EvidenceSnapshot(task3Evidence())
+	if err := SaveAccepted(root, chain, ""); err != nil {
+		t.Fatalf("persist validation baseline: %v", err)
+	}
 
 	if got := Validate(root, chain, evidence); got.Status != ValidationValid || len(got.Errors) != 0 {
 		t.Fatalf("valid chain rejected: %+v", got)
@@ -97,7 +100,7 @@ func TestValidateDistinguishesValidStaleAndInvalid(t *testing.T) {
 	stale.Nodes = append([]Node(nil), chain.Nodes...)
 	stale.Nodes[1].Path = "src/main/java/com/example/order/RenamedServiceImpl.java"
 	if got := Validate(root, stale, evidence); got.Status != ValidationStale || len(got.Errors) == 0 {
-		t.Fatalf("accepted code-fact mismatch must be STALE: %+v", got)
+		t.Fatalf("persisted code-fact mismatch must be STALE: %+v", got)
 	}
 
 	invalid := chain
@@ -111,6 +114,9 @@ func TestValidateRejectsEntryNodeResourceBoundaryAndOrderRegressions(t *testing.
 	root := t.TempDir()
 	writeTask3Resource(t, root)
 	base := task3Chain()
+	if err := SaveAccepted(root, base, ""); err != nil {
+		t.Fatal(err)
+	}
 	evidence := EvidenceSnapshot(task3Evidence())
 
 	cases := map[string]func(Chain) Chain{
