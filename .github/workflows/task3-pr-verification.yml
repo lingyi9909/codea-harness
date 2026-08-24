@@ -1,0 +1,38 @@
+name: task3-pr-verification
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.code-harness/**'
+      - '.github/workflows/task3-pr-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  task3-gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+      - name: Task 3 targeted chain tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/chain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Full Go tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
