@@ -4,13 +4,11 @@ Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Har
 
 ## 1.5.0
 
-1. **Business Chain Project State**：支持一条业务链一个 YAML，提供 `harness chain list/show/discover/refresh/validate`；EntryPoint 只允许生产 Controller Method，Java path/role/resource relation 必须来自机器验证证据。
-2. **Lazy Discovery + Exact Canonicalization**：只在当前 Change Set 或显式 target 范围发现 Chain；V1/V2 仅在 verified core facts 完全一致时合并，不使用 fuzzy/name similarity。
-3. **Review Consumes Verified Chains**：FULL/TARGETED Review 优先复用当前代码事实仍然 VALID 的 ACCEPTED Chain；缺失时使用当前 Run 的 `DISCOVERED + TEMPORARY` Chain；STALE 必须由用户明确选择临时使用、刷新或停止。
-4. **Review provenance**：`review.md` 可展示业务链、Chain ID、来源和状态；临时 Chain 会提示尚未沉淀。Chain 不能改变 1.4 的 Change Set、ReviewScopeSelection、Coverage 或 Finding Gate。
-5. **1.4.0 → 1.5.0 Windows Upgrade Gate**：`chains/**` 与其他 Project State 一样受保护；1.4→1.5 没有新的配置 migration，因此 `harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**` 均保持原内容，其中业务 Chain 必须 byte-for-byte 保持。
-
-**1.5.0 的 Chain 仅接入 Review；不支持 Test/Debug/Fix Chain。** Test、Debug、Fix、Verify 继续沿用既有 1.4 语义，不把 Chain 自动作为它们的新 Scope 真相源。
+1. **Chain Management**：新增一链一 YAML 的业务 Chain Project State，以及 `harness chain list/show/discover/refresh/validate`、lazy discovery、exact canonicalization、STALE 检测和用户确认后的安全持久化。
+2. **Review Consumes Verified Chains**：FULL/TARGETED Review 优先复用经当前代码事实重新验证的 ACCEPTED Chain；缺失时 lazy discover 当前 Run 的临时 Chain；STALE Chain 必须由用户明确选择临时使用、刷新或停止。
+3. **Review provenance**：`review.md` 增加业务链、Chain ID、来源与状态；临时 Chain 明确提示尚未沉淀。Chain 不改变 1.4 的 Change Set、ReviewScopeSelection、Coverage 或 Finding Gate。
+4. **1.4.0 → 1.5.0 Windows Upgrade Gate**：安装完整 Chain Framework；`harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**` 保持原内容，其中 `chains/**` 必须 byte-for-byte 保持。
+5. **Release boundary**：**Chain 仅接入 Review；不支持 Test/Debug/Fix Chain。** Test、Debug、Fix、Verify 继续保持既有 1.4 语义。
 
 1.5.0 继续只发布 Windows x64；不包含 Maven Doctor、Linux/macOS、Gradle、JDT LS、JaCoCo、PIT 或 SARIF。
 
@@ -21,6 +19,21 @@ Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Har
 3. **Human Report UX Standard**：`review.md` 使用统一中文首屏、机器 role evidence 驱动的调用链标签、标准 Finding 块和明确下一步。Renderer 不根据类名后缀猜角色。
 4. **Runtime Apply Safety**：Fix/Test 正式写入必须先 seal exact plan，再经 Runtime 校验 approved diff、base hash、声明文件集和路径策略，原子 apply/rollback 并生成 apply evidence；`.git/**` 与 `.code-harness/**` 为不可配置 hard-deny。
 5. **1.3.2 → 1.4.0 升级兼容**：旧 `harness.yaml version=1` 由目标版本 Runtime 的 registered migration 升到 v2，并补充 Mapper/YML scope；用户已有配置保持不变，除登记 migration 修改外不做全量重写。
+
+1.4.0 继续只发布 Windows x64；不包含 Maven Doctor、Linux/macOS、Gradle、JDT LS、JaCoCo、PIT 或 SARIF。
+
+## 1.3.2 Review Report UX Fix
+
+1. `review.md` 固定 UI 全中文，机器 Contract enum 继续保持英文。
+2. Review Report transport 使用 `callChains[] {entryPoint, chain[]}`，支持 0/1/多条真实调用链，不再压平。
+3. Finding 严重级别固定映射为 `🔴 严重 / 🟠 高 / 🟡 中 / 🟢 低`，并由 Runtime 按 severity → file → line → id 确定性排序。
+4. 测试代码仍必须参与 Review Coverage，但默认不做普通代码质量 Review；只有测试失真才允许 `TEST_VALIDITY` Finding。
+
+## 1.3.1 Release Packaging Fix
+
+1. Windows Release 拆分为首次安装包和升级包。
+2. 正式包包含 `RELEASE-MANIFEST.json`，记录版本、平台、架构、Runtime/ast-grep 版本与 SHA256。
+3. 升级统一通过 `.code-harness-upgrade/upgrade.md` bootstrap；在调用 Runtime 前先验证正式升级包完整性。
 
 ## 不要使用 GitHub Source Code 安装/升级
 
@@ -69,7 +82,7 @@ codea-harness-1.5.0-windows-x64-install.zip
 读取 .code-harness/bootstrap.md，执行 harness init
 ```
 
-初始化或后续使用可能生成本机 Project State：
+初始化或后续使用生成的本机 Project State 包括：
 
 ```text
 .code-harness/harness.yaml
@@ -79,7 +92,7 @@ codea-harness-1.5.0-windows-x64-install.zip
 .code-harness/chains/**
 ```
 
-正式 install ZIP 不包含这些 Project State 实例；特别是不会预置任何业务 `chains/*.yaml`。
+正式 install/upgrade ZIP 不包含任何上述 Project State 实例，不会预置业务 `chains/*.yaml`。
 
 ## 版本升级
 
@@ -119,17 +132,17 @@ registered migration 属于目标版本 Runtime，因此不能依赖旧安装 Ru
 
 ### 1.4.0 → 1.5.0
 
-1.5.0 不新增 `harness.yaml` migration。升级只 replace Framework Managed 内容并安装 Chain Framework；Project State 不参与 managed replace：
+1.5.0 不新增 `harness.yaml` migration。升级只替换 Framework Managed 内容并安装 Chain Framework，因此以下 Project State 在升级前后保持 **byte-for-byte**：
 
 ```text
-harness.yaml          # byte-for-byte 保持
-project.md            # byte-for-byte 保持
-database.yaml         # byte-for-byte 保持
-runs/**               # byte-for-byte 保持
-chains/**             # byte-for-byte 保持
+harness.yaml
+project.md
+database.yaml
+runs/**
+chains/**
 ```
 
-`chains/**` 永远是 Project State。即使正式包或异常 source tree 中出现同名业务 Chain，Runtime 也不得用它覆盖用户已有 Chain；`removedFiles` 也不得包含 `chains/**`。
+`chains/**` 永远是 Project State，不属于 Framework Managed；即使异常升级 source 中出现业务 Chain，也不得覆盖项目已有 Chain，`removedFiles` 也不得出现 `chains/**`。
 
 ### 1.3.2 → 1.4.0 历史 migration
 
@@ -143,6 +156,15 @@ scope:
     - src/main/resources/**/*Mapper.xml
   configIncludes:
     - src/main/resources/**/*.yml
+```
+
+Project State 持续保护：
+
+```text
+harness.yaml          # 仅允许 registered migration 改动
+project.md            # 保持原内容
+database.yaml         # byte-for-byte 保持
+runs/**               # 保持原内容
 ```
 
 成功后 `.code-harness-upgrade/`、stage 和 backup 都必须清理。
@@ -165,7 +187,7 @@ scope:
 
 ## Chain Management
 
-用户意图固定为：
+1.5 用户意图固定为：
 
 ```text
 harness chain list
@@ -175,15 +197,7 @@ harness chain refresh <id>
 harness chain validate [id]
 ```
 
-不增加 `chain accept/merge/split/edit/ignore` 用户命令。`discover` 只写当前 Run 的 `analysis/discovered-chains/**`；保存/refresh Project State 必须经过显式用户确认、Runtime validate 和安全持久化。
-
-开发者可以直接编辑：
-
-```text
-.code-harness/chains/*.yaml
-```
-
-编辑后应执行 `harness chain validate <id>`。Runtime 会重新验证 entryPoint/node/resource/boundary/id/path/call relation，不能因为 YAML 中写了事实就直接相信。
+不新增 `chain accept/merge/split/edit/ignore` 用户命令。开发者可直接编辑 `.code-harness/chains/*.yaml`，修改后通过 `harness chain validate <id>` 重新验证代码事实。
 
 ## Review
 
@@ -193,7 +207,9 @@ harness chain validate [id]
 harness review
 ```
 
-始终执行 FULL Review。定向 Review：
+始终执行 FULL Review，保持 1.3.2 既有语义。
+
+1.4 新增：
 
 ```text
 harness review list
@@ -202,18 +218,9 @@ harness review OrderController.approve
 harness review OrderService.approve
 ```
 
-Review Chain flow 固定为：
+`review list` 只列本次 Change Set 已确认调用链，不生成 Finding。`Class` / `Class.method` 进入 TARGETED Review；Service/下游 target 若关联 2+ 条业务链，必须由用户选择，禁止默认 ALL。
 
-```text
-verified ChangeAnalysis / Review Scope
-→ Accepted Chain lookup + validate
-→ valid accepted chain: reuse
-→ missing: lazy DISCOVERED temporary chain
-→ stale: user decision gate
-→ review.md provenance
-```
-
-Chain 是业务上下文，不是新的 Review Scope 真相源：FULL 仍覆盖完整 required Change Set；TARGETED 仍使用 Runtime verified `selectedCallChains/scopedFiles`；scope-out Finding 仍被拒绝。
+1.5 在上述机器 Scope Gate 之后增加 Review Chain Context：有效 ACCEPTED Chain 优先复用；缺失时当前 Run lazy discover；STALE 必须用户决策。Chain 只补充业务上下文，不改变 FULL/TARGETED Coverage 或 Finding Scope。
 
 TARGETED 报告始终保留：
 
@@ -223,7 +230,7 @@ TARGETED 报告始终保留：
 
 ### Mapper.xml / YML Review
 
-默认 scope：
+默认 1.4 scope：
 
 ```yaml
 scope:
@@ -239,6 +246,10 @@ scope:
 
 FULL Review 中 changed Mapper/YML 不能静默跳过；未读取会使 Coverage 进入 PARTIAL。TARGETED 只有存在经过验证的 resource relation 时才把资源文件加入本次 Scope。
 
+Mapper.xml 只关注本次变化引入的高价值风险，例如 UPDATE/DELETE WHERE 弱化、tenant/org/user 隔离条件弱化、statement/method/parameter/result 映射不一致和无边界批量写；不得因 XML 风格、缩进或命名产生 Finding。
+
+YML 只关注 changed key 对 datasource/pool、timeout/thread/queue、Redis/MQ/RPC、日志级别、profile/feature switch、敏感信息和 `@Value/@ConfigurationProperties` 映射的影响；不得泛化审查未变化配置。
+
 ## Review Report
 
 `harness review` 与 `harness test` 的 Review 阶段由 Controlled Runtime 确定性生成：
@@ -247,7 +258,34 @@ FULL Review 中 changed Mapper/YML 不能静默跳过；未读取会使 Coverage
 .code-harness/runs/<runId>/review.md
 ```
 
-1.4/1.5 继续保留统一中文**首屏**与明确**下一步**。调用链角色展示只消费 Runtime 已验证的 role evidence，固定映射保持：
+1.4 Human Report UX 统一首屏，打开报告即可看到：
+
+```text
+评审结果
+评审模式
+评审目标（TARGETED）
+Change Set 文件数
+本次 Scope 文件数
+已评审文件数
+问题数量
+下一步
+```
+
+最终报告固定展示：
+
+```text
+# 🔍 代码评审报告
+统一首屏摘要
+问题概览
+生产/测试代码评审范围
+真实多条代码调用链
+评审覆盖
+按严重级别排序的问题清单
+中文评审结论
+下一步
+```
+
+调用链只消费已经通过 Runtime 验证的 `ChangeAnalysis.callChains[]`。角色标签只能消费已验证 `ChangeAnalysis.symbolLocations[] / resourceRelations[]` 原样传递的 role evidence；不能根据 `XxxController/XxxService/XxxServiceImpl` 等名称后缀猜测。没有可靠证据时固定降级为 `🔹 代码节点`：
 
 ```text
 🌐 接口入口   ← verified role=Controller
@@ -258,16 +296,35 @@ FULL Review 中 changed Mapper/YML 不能静默跳过；未读取会使 Coverage
 🔹 代码节点   ← 无可靠 role evidence / Other / 其他角色
 ```
 
-存在明确 Chain context 时首屏额外显示：
+1.5 当存在一个明确 Chain context 时，首屏额外展示业务链、Chain ID、来源和状态；临时 Chain 明确提示尚未沉淀。
+
+Finding 展示固定为：
 
 ```text
-业务链
-Chain ID
-Chain 来源：项目已确认 / 本次临时发现
-Chain 状态
+### <severity emoji> <findingId>｜<中文级别>
+📍 位置
+❗ 问题
+🔎 证据
+💥 影响
+🛠 修复建议
+🧪 是否需要测试
 ```
 
-临时 Chain 会显示尚未沉淀提示。调用链和角色仍只能消费机器验证过的 evidence，不根据类名后缀猜角色。
+报告末尾固定提供 `## ➡️ 下一步`。机器 enum 仍只用于 JSON/内部状态；用户侧显示中文，其中 `TEST_VALIDITY` 显示为“测试有效性问题”。
+
+### Review Finding Scope
+
+生产代码正常 Review：
+
+```text
+category = PRODUCTION_CODE
+```
+
+测试代码仍必须读取并参与 Review Coverage / Existing Test Coverage，但普通命名、结构、风格、重复、可维护性问题不得产生 Finding。只有有明确 false-positive 证据时才允许：
+
+```text
+category = TEST_VALIDITY
+```
 
 ## Runtime Apply Safety
 
@@ -282,7 +339,23 @@ Chain 状态
 → evidence/apply/<planId>.json
 ```
 
-1.5 没有把 Chain 接入上述 Test/Fix 写入或 Debug/Verify 流程；**不支持 Test/Debug/Fix Chain**。
+Runtime 会独立验证：
+
+```text
+planId / planType
+unifiedDiff exact bytes / diffSha256
+files[].path / files[].baseSha256
+实际 touched file set
+TEST/FIX allowlist
+deniedPaths
+.git/** 与 .code-harness/** hard-deny
+path traversal / binary / unsafe patch
+多文件原子 apply 与 rollback
+```
+
+批准 Patch A 后把 request 改成自洽 Patch B 仍会因为 sealed approval identity 不一致而拒绝。direct host write、`write_test`、`apply_approved_patch` 等不能作为正式完成路径。
+
+1.5 **不支持 Test/Debug/Fix Chain**；Chain 不改变上述 Test/Fix 写入或 Debug/Verify 语义。
 
 ## Frontend API Documentation
 
@@ -299,6 +372,8 @@ harness api-doc changed
 ```text
 .code-harness/runs/<runId>/api-doc.md
 ```
+
+分析深度固定：Controller → Request DTO → Response DTO/VO → Enum → Validation → Direct Service Method（最多一层）→ STOP。
 
 ## Lightweight Code Navigation
 
@@ -317,7 +392,7 @@ Agent 不得传 raw ast-grep rule/pattern/regex/arbitrary query。
 
 ## Test / DB / Failure Navigation 既有语义
 
-- `harness test` 继续执行 ChangeAnalysis + Runtime Coverage Gate、Test Target Selection 与既有 Existing Test 语义；1.5 Chain 不自动改变测试 target。
+- `harness test` 先做 ChangeAnalysis + Runtime Coverage Gate，再执行 Test Target Selection；多 Controller 不默认 ALL。
 - Existing Test：`REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW`，历史 Existing Test 永不自动修改。
 - Database Evidence 仅支持 TEST/LOCAL MySQL，经过 schema allowlist、AST SQL Safety、预算、超时、行数上限和脱敏 Evidence Gate。
 - Failure Navigation evidence-first；内部根因必须读取实际源码，外部依赖不猜服务端实现。
@@ -342,4 +417,4 @@ go test -count=1 ./...
 go vet ./...
 ```
 
-Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 1.5 Chain/Review/Apply/Upgrade suites、全量 Go test/vet、真实 ast-grep Navigation smoke、正式 install/upgrade ZIP layout、Manifest、**真实 accepted 1.4.0 baseline → 1.5.0** live upgrade、Project State 与 `chains/**` byte-for-byte preservation、stale framework removal、Runtime replacement、installed `chain validate` capability probe、source/stage/backup cleanup 和 artifact upload。
+Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 1.5 Chain/Review/Apply/Upgrade suites、全量 Go test/vet、真实 ast-grep Navigation smoke、正式 install/upgrade ZIP layout、Manifest、**真实 accepted 1.4.0 baseline → 1.5.0** live upgrade、`harness.yaml/project.md/database.yaml/runs/**/chains/**` preservation、stale framework removal、Runtime replacement、installed `chain validate` capability probe、source/stage/backup cleanup 和 artifact upload。
