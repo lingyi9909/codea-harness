@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -87,66 +89,99 @@ func Test151ChainDiscoverBootstrapContractIsSelfContained(t *testing.T) {
 func Test151DirectDiscoverSupportsFreshAddedControllerServiceMapperStack(t *testing.T) {
 	withTempProject(t)
 	installChangeAnalysisSchema(t)
+	setup151FreshGitFixture(t)
 
 	runID := "run-151-bootstrap"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
-	analysis := `{
-  "reviewScope":{"currentBranch":"feature/new-approval","baseRef":"origin/develop","baseCommit":"base","mergeBase":"base","headCommit":"head-new","includeWorkingTree":true},
-  "changedFiles":[
-    {"path":"src/main/java/com/example/approval/NewController.java","role":"Controller","sources":["UNTRACKED"]},
-    {"path":"src/main/java/com/example/approval/ApprovalService.java","role":"Service","sources":["STAGED"]},
-    {"path":"src/main/java/com/example/approval/ApprovalServiceImpl.java","role":"Service","sources":["UNSTAGED"]},
-    {"path":"src/main/java/com/example/approval/ApprovalMapper.java","role":"Mapper","sources":["COMMITTED"]},
-    {"path":"src/main/resources/mapper/ApprovalMapper.xml","role":"MapperXml","sources":["UNTRACKED"]}
-  ],
-  "affectedControllers":[
-    {"controller":"NewController","endpoints":["NewController.approve"],"impactType":"DIRECT_CHANGE","sourceSymbols":["NewController.approve"]}
-  ],
-  "callChains":[
-    {"entryPoint":"NewController.approve","chain":["NewController.approve","ApprovalService.approve","ApprovalServiceImpl.approve","ApprovalMapper.updateStatus"]}
-  ],
-  "symbolLocations":[
-    {"symbol":"NewController.approve","path":"src/main/java/com/example/approval/NewController.java","role":"Controller","source":"FIND_SYMBOL"},
-    {"symbol":"ApprovalService.approve","path":"src/main/java/com/example/approval/ApprovalService.java","role":"Service","source":"FIND_SYMBOL"},
-    {"symbol":"ApprovalServiceImpl.approve","path":"src/main/java/com/example/approval/ApprovalServiceImpl.java","role":"Service","source":"FIND_IMPLEMENTATIONS","from":"ApprovalService.approve"},
-    {"symbol":"ApprovalMapper.updateStatus","path":"src/main/java/com/example/approval/ApprovalMapper.java","role":"Mapper","source":"FIND_SYMBOL"}
-  ],
-  "resourceRelations":[
-    {"path":"src/main/resources/mapper/ApprovalMapper.xml","role":"MapperXml","resource":"ApprovalMapper.xml#updateStatus","fromSymbol":"ApprovalMapper.updateStatus","fromKind":"METHOD","source":"MAPPER_STATEMENT","evidence":"statement id updateStatus matches ApprovalMapper.updateStatus"}
-  ],
-  "externalDependencies":[],
-  "riskAreas":[],
-  "reviewCoverage":{"status":"COMPLETE","reviewedFiles":[
-    {"path":"src/main/java/com/example/approval/NewController.java","role":"Controller","reason":"CHANGED"},
-    {"path":"src/main/java/com/example/approval/ApprovalService.java","role":"Service","reason":"CHANGED"},
-    {"path":"src/main/java/com/example/approval/ApprovalServiceImpl.java","role":"Service","reason":"CHANGED"},
-    {"path":"src/main/java/com/example/approval/ApprovalMapper.java","role":"Mapper","reason":"CHANGED"},
-    {"path":"src/main/resources/mapper/ApprovalMapper.xml","role":"MapperXml","reason":"CHANGED"}
-  ],"unresolvedSymbols":[]}
-}`
-	writeFile(t, analysisPath, analysis)
-	requestPath := writeQueryRequest(t, runID, "chain-discover.json", `{"runId":"run-151-bootstrap","target":"NewController","changeAnalysisPath":".code-harness/runs/run-151-bootstrap/analysis/change-analysis.json"}`)
+	if _, err := os.Stat(filepath.Join(".code-harness", "runs")); !os.IsNotExist(err) {
+		t.Fatalf("precondition: no historical run allowed, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(".code-harness", "chains")); !os.IsNotExist(err) {
+		t.Fatalf("precondition: no historical chains/** allowed, err=%v", err)
+	}
+	if _, err := os.Stat(analysisPath); !os.IsNotExist(err) {
+		t.Fatalf("precondition: test must not prewrite change-analysis.json, err=%v", err)
+	}
 
-	if err := run([]string{"chain", "discover", "--input", requestPath}); err != nil {
+	if err := executeHarnessDiscoverIntent151("harness chain discover NewController", runID); err != nil {
 		t.Fatal(err)
 	}
 
-	discoveredDir := filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains")
-	entries, err := os.ReadDir(discoveredDir)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("expected exactly one DISCOVERED chain, entries=%v err=%v", entries, err)
+	if _, err := os.Stat(analysisPath); err != nil {
+		t.Fatalf("bootstrap must generate change-analysis.json: %v", err)
 	}
-	yamlBytes, err := os.ReadFile(filepath.Join(discoveredDir, entries[0].Name()))
+	if _, err := os.Stat(filepath.Join(".code-harness", "chains")); !os.IsNotExist(err) {
+		t.Fatalf("direct discovery must not create chains/**, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(".code-harness", "runs", runID, "review.md")); !os.IsNotExist(err) {
+		t.Fatalf("direct discovery must not generate review.md, err=%v", err)
+	}
+}
+
+func setup151FreshGitFixture(t *testing.T) {
+	t.Helper()
+	git151(t, "init", "-b", "develop")
+	git151(t, "config", "user.email", "codea@example.invalid")
+	git151(t, "config", "user.name", "Codea Test")
+	git151(t, "add", ".code-harness/contracts/change-analysis.schema.json")
+	git151(t, "commit", "-m", "baseline")
+	git151(t, "checkout", "-b", "feature/new-approval")
+
+	writeFile(t, "src/main/java/com/example/approval/NewController.java", `package com.example.approval;
+@RestController
+public class NewController {
+    private final ApprovalService approvalService;
+    public NewController(ApprovalService approvalService) { this.approvalService = approvalService; }
+    @PostMapping("/approve")
+    public void approve() { approvalService.approve(); }
+}
+`)
+	writeFile(t, "src/main/java/com/example/approval/ApprovalService.java", `package com.example.approval;
+public interface ApprovalService { void approve(); }
+`)
+	writeFile(t, "src/main/java/com/example/approval/ApprovalServiceImpl.java", `package com.example.approval;
+@Service
+public class ApprovalServiceImpl implements ApprovalService {
+    private final ApprovalMapper mapper;
+    public ApprovalServiceImpl(ApprovalMapper mapper) { this.mapper = mapper; }
+    public void approve() { mapper.updateStatus(); }
+}
+`)
+	writeFile(t, "src/main/java/com/example/approval/ApprovalMapper.java", `package com.example.approval;
+@Mapper
+public interface ApprovalMapper { void updateStatus(); }
+`)
+	writeFile(t, "src/main/resources/mapper/ApprovalMapper.xml", `<mapper namespace="com.example.approval.ApprovalMapper"><update id="updateStatus">update approval set status='DONE'</update></mapper>`)
+
+	git151(t, "add",
+		"src/main/java/com/example/approval/NewController.java",
+		"src/main/java/com/example/approval/ApprovalService.java",
+		"src/main/java/com/example/approval/ApprovalServiceImpl.java",
+		"src/main/java/com/example/approval/ApprovalMapper.java",
+	)
+	f, err := os.OpenFile("src/main/java/com/example/approval/ApprovalServiceImpl.java", os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	yamlText := string(yamlBytes)
-	for _, want := range []string{"status: DISCOVERED", "NewController.approve", "ApprovalServiceImpl.approve", "ApprovalMapper.updateStatus", "MAPPER_XML"} {
-		if !strings.Contains(yamlText, want) {
-			t.Fatalf("discovered YAML missing %q:\n%s", want, yamlText)
-		}
+	if _, err := f.WriteString("// unstaged follow-up\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(".code-harness", "chains")); !os.IsNotExist(err) {
-		t.Fatalf("direct discovery must not create Project State chains/**, err=%v", err)
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
 	}
+}
+
+func git151(t *testing.T, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func executeHarnessDiscoverIntent151(intent, runID string) error {
+	return errors.New("CHAIN_DISCOVER_BOOTSTRAP_NOT_EXECUTED: " + intent + " run=" + runID)
 }
