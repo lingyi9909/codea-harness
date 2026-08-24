@@ -8,8 +8,8 @@ import (
 )
 
 func TestRelease15DocumentationAndWindowsPackagingContract(t *testing.T) {
-	harnessRoot := filepath.Clean(filepath.Join("..", "..", ".."))
-	repoRoot := filepath.Dir(harnessRoot)
+	repoRoot := filepath.Clean(filepath.Join("..", "..", "..", ".."))
+	harnessRoot := filepath.Join(repoRoot, ".code-harness")
 
 	mustRead := func(path string) string {
 		t.Helper()
