@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"codea-harness-tools/internal/apply"
 	"codea-harness-tools/internal/coverage"
 	"codea-harness-tools/internal/dbconfig"
 	"codea-harness-tools/internal/dbevidence"
@@ -32,7 +33,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|report>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|chain|report|seal-apply|apply>")
 	}
 	switch args[0] {
 	case "upgrade":
@@ -43,11 +44,37 @@ func run(args []string) error {
 		return runNav(args[1:])
 	case "db":
 		return runDB(args[1:])
+	case "chain":
+		return runChain(args[1:])
 	case "report":
 		return runReport(args[1:])
+	case "seal-apply":
+		return runSealApply(args[1:])
+	case "apply":
+		return runApply(args[1:])
 	default:
 		return fmt.Errorf("unknown subcommand %q", args[0])
 	}
+}
+
+func runSealApply(args []string) error {
+	fs := flag.NewFlagSet("seal-apply", flag.ContinueOnError)
+	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests/*.json")
+	if err := fs.Parse(args); err != nil { return err }
+	if fs.NArg() != 0 || *input == "" { return errors.New("seal-apply requires --input") }
+	sealedPath, err := apply.SealRequestFile(".", *input)
+	if err != nil { return err }
+	return writeJSONAndStatus(map[string]any{"status": "SEALED", "sealedPlanPath": sealedPath}, true)
+}
+
+func runApply(args []string) error {
+	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
+	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests/*.json")
+	if err := fs.Parse(args); err != nil { return err }
+	if fs.NArg() != 0 || *input == "" { return errors.New("apply requires --input") }
+	result, evidencePath, err := apply.ApplyRequestFile(".", *input)
+	if err != nil { return err }
+	return writeJSONAndStatus(map[string]any{"status": result.Status, "result": result, "evidencePath": evidencePath}, true)
 }
 
 func runUpgrade(args []string) error {
@@ -100,14 +127,41 @@ func runValidate(args []string) error {
 			return err
 		}
 		out := map[string]any{"status": "VALID", "format": "json"}
-		if filepath.Base(*schemaPath) == "change-analysis.schema.json" {
+		baseSchema := filepath.Base(*schemaPath)
+		if baseSchema == "change-analysis.schema.json" {
 			machine, err := coverage.VerifyAnalysisJSON(ib)
 			if err != nil {
 				return err
 			}
 			out["reviewCoverage"] = machine
 		}
-		if filepath.Base(*schemaPath) == "test-target-selection.schema.json" {
+		if baseSchema == "review-scope.schema.json" {
+			if *changeAnalysisPath == "" {
+				return errors.New("review scope validation requires --change-analysis")
+			}
+			if !safeHarnessPath(*changeAnalysisPath, "") {
+				return errors.New("change analysis path outside .code-harness is not allowed")
+			}
+			changeAnalysisJSON, err := os.ReadFile(*changeAnalysisPath)
+			if err != nil {
+				return err
+			}
+			changeAnalysisSchemaPath := filepath.Join(".code-harness", "contracts", "change-analysis.schema.json")
+			changeAnalysisSchema, err := os.ReadFile(changeAnalysisSchemaPath)
+			if err != nil {
+				return err
+			}
+			if err := schema.ValidateJSON(changeAnalysisSchema, changeAnalysisJSON); err != nil {
+				return err
+			}
+			verifiedScope, machine, err := validateReviewScopeAgainstAnalysis(ib, changeAnalysisJSON)
+			if err != nil {
+				return err
+			}
+			out["reviewScope"] = verifiedScope
+			out["reviewCoverage"] = machine
+		}
+		if baseSchema == "test-target-selection.schema.json" {
 			if *changeAnalysisPath == "" {
 				return errors.New("test target selection validation requires --change-analysis")
 			}

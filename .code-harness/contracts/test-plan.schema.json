@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "IntegrationTestPlan",
-  "description": "集成测试计划，由 Integration Test Agent 设计。仅当存在 EXTEND_EXISTING / CREATE_NEW 目标时需 planId 人工审批；全部 REUSE_EXISTING 时无 planId、无需审批。",
+  "description": "集成测试计划。REUSE_EXISTING 保持无写入；存在 EXTEND_EXISTING / CREATE_NEW 时，人工审批绑定 planId + unifiedDiff exact bytes + diffSha256 + files[].baseSha256。",
   "type": "object",
   "additionalProperties": false,
   "required": ["targets"],
@@ -9,7 +9,26 @@
     "planId": {
       "type": "string",
       "minLength": 1,
-      "description": "测试计划唯一标识。仅当存在 EXTEND_EXISTING / CREATE_NEW 目标时必填；全部 REUSE_EXISTING 时省略。"
+      "description": "仅写测试代码的计划需要；用户必须精确批准该 planId。"
+    },
+    "unifiedDiff": {
+      "type": "string",
+      "minLength": 1,
+      "description": "存在测试写入时，用户审批的 exact UTF-8 unified diff bytes。"
+    },
+    "diffSha256": { "$ref": "#/$defs/sha256" },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "baseSha256"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "baseSha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
     },
     "targets": {
       "type": "array",
@@ -20,24 +39,14 @@
         "additionalProperties": false,
         "required": ["controller", "endpoint", "strategy", "existingTests", "scenarios"],
         "properties": {
-          "controller": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Controller 类名"
-          },
-          "endpoint": {
-            "type": "string",
-            "minLength": 1,
-            "description": "接口路径，如 POST /api/order/approve"
-          },
+          "controller": { "type": "string", "minLength": 1 },
+          "endpoint": { "type": "string", "minLength": 1 },
           "strategy": {
             "type": "string",
-            "enum": ["REUSE_EXISTING", "EXTEND_EXISTING", "CREATE_NEW"],
-            "description": "测试策略：复用现有测试 / 扩展现有测试 / 新建测试类"
+            "enum": ["REUSE_EXISTING", "EXTEND_EXISTING", "CREATE_NEW"]
           },
           "existingTests": {
             "type": "array",
-            "description": "可复用或可扩展的现有测试。REUSE_EXISTING / EXTEND_EXISTING 至少 1 个；CREATE_NEW 必须为空。",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -48,102 +57,45 @@
               }
             }
           },
-          "serviceChain": {
-            "type": "array",
-            "description": "涉及的 Service 调用链",
-            "items": { "type": "string" }
-          },
-          "repositoryChain": {
-            "type": "array",
-            "description": "涉及的 Repository 调用链",
-            "items": { "type": "string" }
-          },
-          "externalMocks": {
-            "type": "array",
-            "description": "需要 Mock 的外部依赖",
-            "items": { "type": "string" }
-          },
+          "serviceChain": { "type": "array", "items": { "type": "string" } },
+          "repositoryChain": { "type": "array", "items": { "type": "string" } },
+          "externalMocks": { "type": "array", "items": { "type": "string" } },
           "scenarios": {
             "type": "array",
             "minItems": 1,
-            "description": "测试场景列表，含覆盖状态（COVERED / MISSING）",
             "items": {
               "type": "object",
               "additionalProperties": false,
               "required": ["name", "coverageStatus", "coveredBy"],
               "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "场景名称"
-                },
-                "coverageStatus": {
-                  "type": "string",
-                  "enum": ["COVERED", "MISSING"],
-                  "description": "该场景是否已被现有测试覆盖"
-                },
-                "coveredBy": {
-                  "type": "array",
-                  "description": "覆盖该场景的现有测试方法，如 OrderControllerIT.shouldApprovePendingOrder。COVERED 至少 1 个；MISSING 必须为空数组。",
-                  "items": { "type": "string" }
-                },
-                "preconditions": {
-                  "type": "array",
-                  "description": "前置条件",
-                  "items": { "type": "string" }
-                },
+                "name": { "type": "string", "minLength": 1 },
+                "coverageStatus": { "type": "string", "enum": ["COVERED", "MISSING"] },
+                "coveredBy": { "type": "array", "items": { "type": "string" } },
+                "preconditions": { "type": "array", "items": { "type": "string" } },
                 "request": {
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["method", "path"],
-                  "description": "HTTP 请求定义（MISSING 场景必填，COVERED 场景可省略）",
                   "properties": {
-                    "method": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "HTTP 方法"
-                    },
-                    "path": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "请求路径"
-                    },
-                    "headers": {
-                      "type": "object",
-                      "description": "请求头"
-                    },
-                    "body": {
-                      "type": "object",
-                      "description": "请求体"
-                    }
+                    "method": { "type": "string", "minLength": 1 },
+                    "path": { "type": "string", "minLength": 1 },
+                    "headers": { "type": "object" },
+                    "body": { "type": "object" }
                   }
                 },
                 "expected": {
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["httpStatus"],
-                  "description": "预期结果（MISSING 场景必填，COVERED 场景可省略）",
                   "properties": {
-                    "httpStatus": {
-                      "type": "integer",
-                      "description": "预期 HTTP 状态码"
-                    },
-                    "responseAssertions": {
-                      "type": "array",
-                      "description": "响应断言列表",
-                      "items": { "type": "string" }
-                    },
-                    "databaseAssertions": {
-                      "type": "array",
-                      "description": "数据库断言列表",
-                      "items": { "type": "string" }
-                    },
+                    "httpStatus": { "type": "integer" },
+                    "responseAssertions": { "type": "array", "items": { "type": "string" } },
+                    "databaseAssertions": { "type": "array", "items": { "type": "string" } },
                     "stateTransition": {
                       "type": "object",
-                      "description": "状态流转",
                       "properties": {
-                        "from": { "type": "string", "description": "变更前状态" },
-                        "to": { "type": "string", "description": "变更后状态" }
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
                       }
                     }
                   }
@@ -151,19 +103,11 @@
               },
               "allOf": [
                 {
-                  "if": {
-                    "properties": { "coverageStatus": { "const": "COVERED" } },
-                    "required": ["coverageStatus"]
-                  },
-                  "then": {
-                    "properties": { "coveredBy": { "minItems": 1 } }
-                  }
+                  "if": { "properties": { "coverageStatus": { "const": "COVERED" } }, "required": ["coverageStatus"] },
+                  "then": { "properties": { "coveredBy": { "minItems": 1 } } }
                 },
                 {
-                  "if": {
-                    "properties": { "coverageStatus": { "const": "MISSING" } },
-                    "required": ["coverageStatus"]
-                  },
+                  "if": { "properties": { "coverageStatus": { "const": "MISSING" } }, "required": ["coverageStatus"] },
                   "then": {
                     "required": ["request", "expected"],
                     "properties": { "coveredBy": { "maxItems": 0 } }
@@ -175,10 +119,7 @@
         },
         "allOf": [
           {
-            "if": {
-              "properties": { "strategy": { "const": "REUSE_EXISTING" } },
-              "required": ["strategy"]
-            },
+            "if": { "properties": { "strategy": { "const": "REUSE_EXISTING" } }, "required": ["strategy"] },
             "then": {
               "properties": {
                 "existingTests": { "minItems": 1 },
@@ -192,10 +133,7 @@
             }
           },
           {
-            "if": {
-              "properties": { "strategy": { "const": "EXTEND_EXISTING" } },
-              "required": ["strategy"]
-            },
+            "if": { "properties": { "strategy": { "const": "EXTEND_EXISTING" } }, "required": ["strategy"] },
             "then": {
               "properties": {
                 "existingTests": { "minItems": 1 },
@@ -209,10 +147,7 @@
             }
           },
           {
-            "if": {
-              "properties": { "strategy": { "const": "CREATE_NEW" } },
-              "required": ["strategy"]
-            },
+            "if": { "properties": { "strategy": { "const": "CREATE_NEW" } }, "required": ["strategy"] },
             "then": {
               "properties": {
                 "existingTests": { "maxItems": 0 },
@@ -237,16 +172,15 @@
           "targets": {
             "contains": {
               "required": ["strategy"],
-              "properties": {
-                "strategy": { "not": { "const": "REUSE_EXISTING" } }
-              }
+              "properties": { "strategy": { "not": { "const": "REUSE_EXISTING" } } }
             }
           }
         }
       },
-      "then": {
-        "required": ["planId"]
-      }
+      "then": { "required": ["planId", "unifiedDiff", "diffSha256", "files"] }
     }
-  ]
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
 }

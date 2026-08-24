@@ -2,8 +2,11 @@ package schema
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"path"
+	"strings"
 
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -41,19 +44,31 @@ func ValidateJSON(schemaBytes, jsonBytes []byte) error {
 	if err := compiled.Validate(instance); err != nil {
 		return fmt.Errorf("schema validation failed: %w", err)
 	}
-	if isDiagnosisSchema(schemaBytes) {
+	switch schemaTitle(schemaBytes) {
+	case "Diagnosis":
 		if err := validateDiagnosisSemantics(jsonBytes); err != nil {
 			return fmt.Errorf("diagnosis semantic validation failed: %w", err)
+		}
+	case "ApplyRequest":
+		if err := validateApplyRequestSemantics(jsonBytes); err != nil {
+			return fmt.Errorf("apply request semantic validation failed: %w", err)
+		}
+	case "FixPlan", "IntegrationTestPlan":
+		if err := validatePlanPatchIdentity(jsonBytes); err != nil {
+			return fmt.Errorf("plan patch identity validation failed: %w", err)
 		}
 	}
 	return nil
 }
 
-func isDiagnosisSchema(schemaBytes []byte) bool {
+func schemaTitle(schemaBytes []byte) string {
 	var meta struct {
 		Title string `json:"title"`
 	}
-	return json.Unmarshal(schemaBytes, &meta) == nil && meta.Title == "Diagnosis"
+	if json.Unmarshal(schemaBytes, &meta) != nil {
+		return ""
+	}
+	return meta.Title
 }
 
 func validateDiagnosisSemantics(jsonBytes []byte) error {
@@ -80,6 +95,59 @@ func validateDiagnosisSemantics(jsonBytes []byte) error {
 		if diagnosis.NextAction != "GENERATE_FIX_PLAN" {
 			return fmt.Errorf("PRODUCTION_CODE_ERROR requires nextAction GENERATE_FIX_PLAN")
 		}
+	}
+	return nil
+}
+
+func validateApplyRequestSemantics(jsonBytes []byte) error {
+	var req struct {
+		Files []struct {
+			Path string `json:"path"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(jsonBytes, &req); err != nil {
+		return fmt.Errorf("decode apply request: %w", err)
+	}
+	paths := make([]string, 0, len(req.Files))
+	for _, file := range req.Files {
+		paths = append(paths, file.Path)
+	}
+	return validateUniqueWindowsPaths(paths)
+}
+
+func validatePlanPatchIdentity(jsonBytes []byte) error {
+	var plan struct {
+		UnifiedDiff string `json:"unifiedDiff"`
+		DiffSha256  string `json:"diffSha256"`
+		Files       []struct {
+			Path string `json:"path"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(jsonBytes, &plan); err != nil {
+		return fmt.Errorf("decode plan: %w", err)
+	}
+	if plan.UnifiedDiff == "" && plan.DiffSha256 == "" && len(plan.Files) == 0 {
+		return nil
+	}
+	actual := fmt.Sprintf("%x", sha256.Sum256([]byte(plan.UnifiedDiff)))
+	if !strings.EqualFold(plan.DiffSha256, actual) {
+		return fmt.Errorf("diffSha256 mismatch: declared=%s actual=%s", plan.DiffSha256, actual)
+	}
+	paths := make([]string, 0, len(plan.Files))
+	for _, file := range plan.Files {
+		paths = append(paths, file.Path)
+	}
+	return validateUniqueWindowsPaths(paths)
+}
+
+func validateUniqueWindowsPaths(paths []string) error {
+	seen := make(map[string]struct{}, len(paths))
+	for i, value := range paths {
+		key := strings.ToLower(path.Clean(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")))
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("files[%d].path duplicates Windows-equivalent path %q", i, value)
+		}
+		seen[key] = struct{}{}
 	}
 	return nil
 }

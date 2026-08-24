@@ -116,7 +116,7 @@ var projectStateFiles = map[string]bool{
 }
 
 func Run(o Options) Result {
-	r := Result{PreservedFiles: []string{"harness.yaml", "project.md", "database.yaml", "runs/**"}, Errors: []string{}}
+	r := Result{PreservedFiles: []string{"harness.yaml", "project.md", "database.yaml", "chains/**", "runs/**"}, Errors: []string{}}
 	oldB, err := os.ReadFile(filepath.Join(o.TargetDir, "VERSION"))
 	if err != nil {
 		return failManual(r, err)
@@ -164,6 +164,16 @@ func Run(o Options) Result {
 		}
 		migrated = append(migrated, []byte(fmt.Sprintf("\nreview:\n  baseRef: %s\n  includeWorkingTree: true\n", base))...)
 		r.Migrations = append(r.Migrations, "add-review-config-v1")
+	}
+	if cmp(newV, [3]int{1, 4, 0}) >= 0 {
+		var changed bool
+		migrated, changed, err = migrateConfigV1ToV2ResourceScopes(migrated)
+		if err != nil {
+			return failManual(r, fmt.Errorf("migrate 1.4 harness config: %w", err))
+		}
+		if changed {
+			r.Migrations = append(r.Migrations, "upgrade-config-v1-to-v2-resource-scopes")
+		}
 	}
 
 	parent := filepath.Dir(filepath.Clean(o.TargetDir))
@@ -234,6 +244,22 @@ func Run(o Options) Result {
 		return r
 	}
 
+	// When the 1.4 upgrade package runtime executes the transaction itself on Windows,
+	// move that live executable to a same-volume sibling before removing the consumed
+	// source tree. Installed-runtime upgrades do not need this step.
+	parkedRuntime, err := parkRunningExecutableOutsideSource(o.SourceDir, o.RunningExecutable)
+	if err != nil {
+		rbErr := restoreFromBackup(backup, o.TargetDir, o.RunningExecutable)
+		r.Status = StatusUpgradeFailed
+		r.RollbackPerformed = rbErr == nil
+		r.Errors = []string{err.Error()}
+		if rbErr != nil {
+			r.Errors = append(r.Errors, "rollback: "+rbErr.Error())
+		}
+		cleanup(stage, backup)
+		return r
+	}
+
 	// Success cleanup semantics: stage + backup + consumed source package are removed.
 	// A renamed live executable may remain in a same-volume sibling temp path until
 	// process exit; it is outside the Harness tree and is best-effort cleaned.
@@ -241,6 +267,9 @@ func Run(o Options) Result {
 		r.Status = StatusUpgradeFailed
 		r.Errors = []string{"upgrade applied but cleanup failed: " + err.Error()}
 		return r
+	}
+	if parkedRuntime != "" {
+		_ = os.Remove(parkedRuntime)
 	}
 	r.Status = StatusUpgraded
 	return r
@@ -263,7 +292,7 @@ func hasTopLevelReview(b []byte) bool {
 
 func isProjectState(rel string) bool {
 	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
-	return projectStateFiles[rel] || rel == "runs" || strings.HasPrefix(rel, "runs/")
+	return projectStateFiles[rel] || rel == "chains" || strings.HasPrefix(rel, "chains/") || rel == "runs" || strings.HasPrefix(rel, "runs/")
 }
 
 func isManaged(rel string) bool {

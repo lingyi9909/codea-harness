@@ -1,7 +1,7 @@
 ---
 name: analyze-change
-description: 计算完整 Review Change Set，读取所有变更文件，并通过受控 Code Navigation Contract 确定性展开与变更直接相关的项目内部调用链。
-version: 2
+description: 计算完整 Review Change Set，并按 FULL/TARGETED 意图通过受控 Code Navigation 与资源关系证据建立可机器验证的 Review Scope。
+version: 4
 agent: reviewer
 tools:
   - git_diff
@@ -17,118 +17,256 @@ output_schema: .code-harness/contracts/change-analysis.schema.json
 
 ## 目标
 
-计算本次 Review 的完整 Change Set：`merge-base(baseRef, HEAD) → HEAD` 的已提交变化，加上 staged、unstaged、untracked；**读取所有 changed source/test files**，再通过 Code Navigation Contract 定位与本次变更直接相关的上游、下游和接口实现，直到 Repository / Mapper 或外部边界。最终输出可机器校验的 `reviewCoverage`。
+所有 Review 都先计算同一个完整 Change Set：`merge-base(baseRef, HEAD) → HEAD` 的 committed，加上 staged、unstaged、untracked。1.4 正式 Review Scope 包含：
+
+```text
+sourceIncludes -> src/main/java/**/*.java
+testIncludes   -> src/test/java/**/*.java
+mapperIncludes -> src/main/resources/**/*Mapper.xml
+configIncludes -> src/main/resources/**/*.yml
+```
+
+只新增 `mapperIncludes` 与 `configIncludes`；不得把 properties、pom.xml、Gradle、SQL migration 或任意 XML 扩进 Task 2。
+
+之后根据意图分为：
+
+```text
+FULL      → 完整读取并机器验证整个 Change Set required scope
+TARGETED  → 从完整 Change Set 的 confirmed callChains 中解析 target，只读取并机器验证 selectedCallChains + evidence-related resources + scopedFiles
+LIST      → 仅列调用链，不执行 Finding Review
+```
+
+TARGETED 不是 sampled review。只有它声明的全部 scopedFiles 与 selectedCallChains 被完整覆盖后才允许 COMPLETE；不得把 TARGETED 结果表述成整个 Change Set 已评审。
 
 ## 关键原则
 
-1. Change Set 是唯一入口，`harness review` 与 `harness test` 必须复用完全相同的语义。
-2. 所有匹配 `scope.sourceIncludes` / `scope.testIncludes` 的 `changedFiles` 必须 `read_code`，不能只读 Controller。
-3. Controller、Service、Repository、Mapper、DTO、Validator 等**任何发生变更的文件**都属于 Review 起点。
-4. 符号定位必须使用 `find_symbol` / `find_references` / `find_implementations`，不得靠文件名猜路径。
-5. Agent/Skill 禁止依赖 ast-grep 语法；ast-grep 只是 Code Navigation Contract 的当前实现。
-6. 调用链只围绕本次 Change Set 的直接相关路径展开，不扫描整个仓库。
-7. Agent 声明的 `reviewCoverage.status` 不是最终事实；输出后必须交给 Tool Runtime 做机器校验。
+1. Change Set 是唯一入口，不因 target 改变 committed/staged/unstaged/untracked 的计算语义。
+2. FULL 必须读取所有匹配 source/test/mapper/config scope 的 changedFiles；Mapper.xml/YML 不能静默跳过。
+3. TARGETED 允许与 target 无关的 changed file 留在 Change Set 但不进入 scopedFiles；这些文件不计为 reviewed。
+4. `selectedCallChains` 必须逐条来自 `ChangeAnalysis.callChains[]`，不得编造或压平。
+5. 每次确定性 Code Navigation 都必须把 Java `symbol → exact repository path + role + source` 固化到 `ChangeAnalysis.symbolLocations[]`；由另一个已确认 symbol 导航得到时可记录 `from`。
+6. Mapper.xml/YML 与 Java target/call-chain 的关系必须单独固化到 `ChangeAnalysis.resourceRelations[]`；不得把资源伪装成 Java symbolLocation。
+7. Java scopedFiles 必须使用 `symbolLocations[]` exact path；资源 scopedFiles 必须使用 `resourceRelations[]` exact path + relation evidence。
+8. 符号定位只能使用 `find_symbol` / `find_references` / `find_implementations`；不得靠 basename/简单类名猜路径。
+9. Agent 声明 COMPLETE 不是事实，必须经过 Runtime machine gate。
+10. **不允许 sampled review** 进入 COMPLETE/PASSED。
 
-## 执行步骤
+## A. 建立完整 Change Set
 
-### A. 建立完整 Change Set
+1. 读取 `harness.yaml.review.baseRef` / `includeWorkingTree` 以及 `scope.sourceIncludes/testIncludes/mapperIncludes/configIncludes`。
+2. 校验 baseRef 本地存在；不存在 → `MANUAL_ACTION_REQUIRED`，不得自动换 main/develop。
+3. 使用 `git_diff` 获取 committed/staged/unstaged/untracked。
+4. 同路径多来源合并去重，保留 `sources`。
+5. 对匹配资源 scope 的 changed file 使用显式 role：
 
-1. 读取 `harness.yaml.review.baseRef` / `includeWorkingTree`。
-2. 校验 baseRef 本地存在；不存在则 `MANUAL_ACTION_REQUIRED`，不得自动换 main/develop。
-3. 使用 `git_diff` 获取：
-   - committed：`merge-base(baseRef, HEAD) → HEAD`
-   - staged
-   - unstaged
-   - untracked
-4. 同一路径多来源合并去重，保留 `sources`。
-5. 生成 `reviewScope`。
-
-### B. 强制读取所有变更文件
-
-6. 分类全部 `changedFiles`。
-7. 对每个匹配 source/test scope 的 changed file 调用 `read_code` 读取完整内容。测试文件同样必须读取。
-8. 每个成功读取的 changed file 立即记入：
-
-```json
-{"path":"...","role":"Service","reason":"CHANGED"}
+```text
+*Mapper.xml                         -> MapperXml
+src/main/resources/**/*.yml        -> YamlConfig
 ```
 
-读取失败不得静默跳过：必须记入 unresolved / limitation，最终 coverage 为 `PARTIAL`。
+不得把这两类官方 Scope 降级为 `Other`。
+6. 生成完整 `changedFiles[]`；TARGETED 也不得丢掉 scope 外 changed file 的 Change Set 元数据。
 
-### C. 从 changed symbols 双向展开调用链
+## B. 建立 confirmed callChains 与 Navigation Evidence
 
-9. 从 Diff + 完整文件识别本次变更涉及的类、接口和方法符号。
-10. **Controller 变更**：从 Controller 方法向下，通过 `find_symbol` / `find_implementations` 定位 Service 实现，再继续向下。
-11. **Service 自身变更**：Service 方法本身作为入口：
-    - `find_references` 找项目内部上游调用者，定位可能受影响的 Controller / Service；
-    - 同时向下定位直接调用的 Service / Repository / Mapper。
-12. **接口必须解析实现**：例如 `OrderService` 被调用时：
-    - `find_symbol(OrderService)` 确认接口；
-    - `find_implementations(OrderService)` 定位 `OrderServiceImpl`；
-    - 对实现文件 `read_code`；
-    - 若找不到实现，记录 `IMPLEMENTATION_NOT_FOUND`，不得假装完成。
-13. **允许多层 Service**：例如 Controller → ServiceA → ServiceB → Repository，与本次变更路径直接相关时必须继续追踪 ServiceB，直到边界。
-14. 每个通过导航加入上下文并成功 `read_code` 的非 changed 文件，记录 `reason: CALL_CHAIN`。
-14a. 生成 `affectedControllers[]` 时必须为每个 Controller 写明影响来源：
-    - Controller 自身位于 Change Set → `impactType: DIRECT_CHANGE`；
-    - 通过 changed Service/Repository 等符号反向 `find_references` 定位到 Controller → `impactType: AFFECTED_BY_CALL_CHAIN`；
-    - `sourceSymbols` 至少包含 1 个实际已导航/读取的符号，用来解释该 Controller 为什么受影响；不得仅凭文件名或猜测填充。
-
-### D. 停止边界
-
-15. 在以下边界停止向下展开：
-    - Repository / Mapper / DAO
-    - 已确认的外部 RPC / HTTP client
-    - MQ producer/consumer client
-    - Cache client
-    - 第三方 SDK
-    - JDK / Spring Framework
-16. 外部依赖写入 `externalDependencies[]`；确认 external 后不要求读取第三方源码。
-17. 不得因一个符号难定位而扩大成全仓库无界扫描。
-
-### E. Review Coverage 硬判定
-
-18. `reviewCoverage.status = COMPLETE` **必须同时满足**：
-    - 每个 changed source/test file 都已 `read_code`；
-    - `callChains` 中每个项目内部符号都已确定性定位并读取；
-    - 或该符号已明确记录为 `externalDependencies`；
-    - `unresolvedSymbols` 为空。
-19. 任一条件不满足 → `PARTIAL`。
-20. 典型未解析项：
+7. 从 Diff 和必要的源码证据识别 changed symbols。
+8. Controller 变更：从 Controller method 向下导航 Service/实现/Repository/Mapper。
+9. Service/Repository 等下游变更：使用 `find_references` 反向定位上游 Controller/Service，同时向下导航到停止边界。
+10. 接口必须 `find_implementations`；找不到实现记录 `IMPLEMENTATION_NOT_FOUND`，不得假装 confirmed。
+11. 允许多层 Service，直到 Repository/Mapper/DAO 或明确外部边界。
+12. 每个确定性 Code Navigation 结果记录到 `symbolLocations[]`：
 
 ```json
 {
-  "symbol": "OrderService.approve",
-  "from": "OrderController.approve",
-  "reason": "IMPLEMENTATION_NOT_FOUND"
+  "symbol":"OrderMapper.updateStatus",
+  "path":"src/main/java/com/acme/order/OrderMapper.java",
+  "role":"Mapper",
+  "source":"FIND_SYMBOL"
 }
 ```
 
-21. 组装完整 ChangeAnalysis JSON 后调用 `validate_contract`：使用 `change-analysis.schema.json` 做 JSON Schema 校验，并由 Tool Runtime **重新计算机器 Coverage**。Runtime 至少校验：
-    - `changedFiles[].path` 全部存在于 `reviewCoverage.reviewedFiles[].path`；
-    - `unresolvedSymbols` 为空；
-    - Agent 声明的 `status` 必须与机器计算结果一致。
-22. `validate_contract` 失败或机器 Coverage 不是 `COMPLETE` → 交给 Orchestrator 以 `MANUAL_ACTION_REQUIRED` 停止；不得继续 `review-code` 或测试计划。
+13. `path` 必须是 Navigation 返回并实际读取/确认的 repository-relative exact path；同一个 symbol 得到两个不同 exact path/role 时必须视为 ambiguity。
+14. confirmed chain 写入 `callChains[]`；candidate/unresolved 只进入 unresolved/limitation。
+15. `affectedControllers[]` 仍必须提供真实 `impactType/sourceSymbols` 证据。
+
+## C. Resource Relation Evidence
+
+### Mapper.xml
+
+16. 对 changed `*Mapper.xml` 读取 XML，并把当前变更涉及的 statement 与 Java Mapper method 做证据关联。确认关系时写入：
+
+```json
+{
+  "path":"src/main/resources/mapper/OrderMapper.xml",
+  "role":"MapperXml",
+  "resource":"OrderMapper.xml#updateStatus",
+  "fromSymbol":"OrderMapper.updateStatus",
+  "fromKind":"METHOD",
+  "source":"MAPPER_STATEMENT",
+  "evidence":"statement id updateStatus matches OrderMapper.updateStatus"
+}
+```
+
+17. statement id / namespace / Java Mapper method 无法确定性对应时，不得伪造 relation；记录 limitation/unresolved，必要时使声明 Scope PARTIAL。
+18. 动态 SQL 无法归一化时可以保留为待人工/LLM 结合源码证据判断，不得把不确定语义包装为确定性事实。
+
+### YML
+
+19. changed `.yml` 只有在能证明 key 与 Java target/call-chain consumer 存在直接关系时才写 `CONFIG_REFERENCE`：
+
+```json
+{
+  "path":"src/main/resources/application.yml",
+  "role":"YamlConfig",
+  "resource":"order.timeout-ms",
+  "fromSymbol":"OrderService",
+  "fromKind":"CLASS",
+  "source":"CONFIG_REFERENCE",
+  "evidence":"OrderService configuration binding consumes order.timeout-ms"
+}
+```
+
+证据可来自已读取代码中的 `@Value`、`@ConfigurationProperties` 或明确配置绑定关系。不得仅因 key 名相似建立 relation。
+20. `resourceRelations[].path` 必须是 Change Set 中的 exact repository-relative resource path；`evidence` 不得为空。
+
+## D. FULL Review
+
+21. 对所有匹配 source/test/mapper/config scope 的 changed file 读取完整内容。
+22. 对 FULL 所有相关内部 call-chain 文件读取完整内容，非 changed Java 文件记 `reason: CALL_CHAIN`。
+23. changed Mapper.xml/YML 读取后进入 `reviewCoverage.reviewedFiles[]`，role 分别为 `MapperXml` / `YamlConfig`，reason=`CHANGED`。
+24. `reviewCoverage.status=COMPLETE` 仅当：
+    - 全 changed Java/test/Mapper.xml/YML required files 已读；
+    - 全部相关项目内部 chain symbols 已解析/读取；
+    - 外部边界已明确列为 `externalDependencies`；
+    - `unresolvedSymbols` 为空。
+25. 组装 ChangeAnalysis 后用 `change-analysis.schema.json` + Runtime FULL Coverage 验证；不得跳过 `coverage.VerifyAnalysisJSON`。
+
+## E. TARGETED Review
+
+TARGETED 的选择数据继续使用独立 `.code-harness/contracts/review-scope.schema.json`；Task 2 只扩展该 Scope 的 Resource Evidence，不改变 Task 1 的 ReviewScopeSelection Contract。
+
+26. 从 confirmed `ChangeAnalysis.callChains[]` 解析 target，并用 `symbolLocations[].role` 判断 target 属于 Controller 还是 Service/其他下游角色；不得靠命名后缀猜角色。
+27. 多链语义保持 Task 1：
+
+```text
+Controller CLASS  → 自动包含该 Controller 当前 Change Set 中全部相关 confirmed chains
+Controller METHOD → 自动包含该 method 当前 Change Set 中全部相关 confirmed chains
+Service/其他下游 target → 1 条链自动继续；2+ 条上游业务链才要求用户选择
+```
+
+28. `selectedCallChains` 必须是 confirmed chains 的真实子集。
+29. Java `scopedFiles` 从 `symbolLocations[]` exact path 推导；selected internal symbol 的 exact path 全部必须包含。
+30. 对资源文件，Runtime 只接受以下同时成立的 relation：
+
+```text
+resource file ∈ changedFiles
+resourceRelations.path == exact changed resource path
+resourceRelations.fromSymbol 命中 selectedCallChains（METHOD exact match；CLASS 按 selected node 的 class match）
+role/source 合法：MapperXml/MAPPER_STATEMENT 或 YamlConfig/CONFIG_REFERENCE
+```
+
+31. 满足上述条件的 changed Mapper.xml/YML 必须加入 TARGETED scopedFiles；遗漏时 Runtime 拒绝。与 selected chain 无关的 changed resource 必须留在完整 Change Set，但不得加入本次 scopedFiles。
+32. **无法证明关联时不得加入 TARGETED scopedFiles**；不得为了“多看一点”把 UserMapper.xml 或无关 YML 塞进定向 Scope。
+33. 读取所有 verified scopedFiles；任一缺失都必须 PARTIAL。
+34. Controlled Runtime `reviewscope.Verify` 必须重新验证：selected chain、Controller 防漏链、Java exact path、resource relation exact path、required resources、scoped coverage。
+35. TARGETED 不允许使用 FULL Coverage 去要求 unrelated changed files 被读取；但也不得仅凭 Agent 自报 COMPLETE 放行。
+
+## F. `harness review list`
+
+36. LIST 只建立 Change Set + confirmed/candidate/unresolved chain 信息。
+37. 不调用 `review-code`，不产生 Finding，不把 candidate/unresolved 伪装为 confirmed。
+
+## 停止边界
+
+向下 Java 导航仍在以下边界停止：Repository / Mapper / DAO、明确 RPC/HTTP/MQ/Cache/第三方 SDK、JDK/Spring Framework。Task 2 允许读取 changed Mapper.xml/YML 本身，但不因此继续深入 DB、Redis、MQ、RPC 内部链路。
 
 ## 输出
 
-输出必须通过 `.code-harness/contracts/change-analysis.schema.json` 与 Tool Runtime 的机器 Coverage 校验：
+ChangeAnalysis 继续符合 `.code-harness/contracts/change-analysis.schema.json`，可包含：
 
 - `reviewScope`
 - `changedFiles[]`
-- `affectedControllers[]`（每项必须包含 `controller/endpoints/impactType/sourceSymbols`）
+- `affectedControllers[]`
 - `callChains[]`
+- `symbolLocations[]`
+- `resourceRelations[]`
 - `externalDependencies[]`
 - `riskAreas[]`
-- `reviewCoverage`（REQUIRED）
+- `reviewCoverage`
+
+TARGETED 额外生成的 ReviewScopeSelection 必须继续通过 `.code-harness/contracts/review-scope.schema.json`，然后由 Controlled Runtime 对照 ChangeAnalysis 验证。
+
+`resourceRelations[]` 是可选证据集合；FULL 可没有 relation 但不能漏读 changed resources。TARGETED 只有 relation 被机器验证后才允许资源进入 Scope。
+
+## Lazy Chain Discovery（1.5 Task 2）
+
+`analyze-change` 仍然负责建立唯一的机器证据源；Chain Discovery 不重新解析 Java，也不得覆盖 ChangeAnalysis 事实。
+
+当用户发起：
+
+```text
+harness chain discover
+harness chain discover <Class>
+harness chain discover <Class.method>
+```
+
+必须先完成当前 Change Set 的 ChangeAnalysis，并通过 `change-analysis.schema.json` 与 Runtime machine coverage。之后 `discover-chain` 只消费已验证的：
+
+```text
+ChangeAnalysis.affectedControllers[]
+ChangeAnalysis.callChains[]
+ChangeAnalysis.symbolLocations[]
+ChangeAnalysis.resourceRelations[]
+ChangeAnalysis.externalDependencies[]
+ChangeAnalysis.reviewCoverage.unresolvedSymbols[]
+```
+
+EntryPoint 只允许 **生产 Controller Method**。exact path 与 role 必须来自 `ChangeAnalysis.symbolLocations[]`；Mapper.xml/YML 只允许来自 `ChangeAnalysis.resourceRelations[]`。不得根据类名后缀、basename 或同名文件猜 Controller/Service/Impl/Mapper role/path。
+
+Lazy 范围固定：无 target 只处理当前 Change Set 的 affectedControllers；有 target 只处理当前 confirmed callChains 中与 target 有关系的入口/分支。Service 等下游 target 可以沿 verified callChains 向上解析生产 Controller Method，但不得因此全仓扫描所有 Controller。
+
+存在内部 unresolved、entry/core exact path ambiguity 或缺失 confirmed path 时，Discovery 必须 `PARTIAL`；不得为了生成 Chain 补猜 evidence。V1/V2 只有 verified core facts 完全一致时才允许合并 entryPoints，不使用名称相似度或 fuzzy threshold。
+
+Task 2 发现结果只写：
+
+```text
+.code-harness/runs/<runId>/analysis/discovered-chains/<id>.yaml
+```
+
+即 `runs/<runId>/analysis/discovered-chains/`。所有结果保持 `status: DISCOVERED`；不得写 `.code-harness/chains/**`，不得提前执行 Task 3 的 validate/accept/refresh。
+
+## Review Chain Context（1.5 Task 4）
+
+Review 使用 Chain 时仍必须**先完成 ChangeAnalysis**；Chain 解析不建立第二套 Java/resource 事实源。
+
+固定顺序：
+
+1. 按本 Skill 原流程建立完整 Change Set、ChangeAnalysis、symbolLocations/resourceRelations/callChains。
+2. FULL 先通过原 FULL machine coverage；TARGETED 先生成并通过 Runtime verified ReviewScopeSelection + scoped coverage。
+3. 将已经验证的 Review Scope 连同同 run `changeAnalysisPath` 写入 controlled request。
+4. 由 Orchestrator 调用：
+
+```text
+codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+```
+
+5. Runtime 才能决定复用 `ACCEPTED + VALID`、缺失时 lazy discover `DISCOVERED + TEMPORARY`，或返回 STALE/partial 决策状态。
+
+**不得因为存在 Chain 而减少 changedFiles**；FULL 的 Change Set 与 required coverage 完全不变。
+**不得因为存在 Chain 而减少 scopedFiles**；TARGETED 的 scopedFiles 仍只能由 verified ChangeAnalysis + ReviewScopeSelection 决定。
+
+Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 symbol/path/role/resource relation，不得用 `.code-harness/chains/*.yaml` 替代 Code Navigation evidence。
 
 ## 禁止行为
 
-- 不得只 Review Controller。
-- 不得通过类名/文件名猜 Service 实现路径。
-- 不得跳过 changed test/source files。
-- 不得扫描整个仓库。
-- 不得直接调用 `ast-grep.exe`；只能使用受控 Code Navigation Contract。
-- 不得跳过 `validate_contract` 并直接相信 Agent 填写的 `COMPLETE`。
+- 不得跳过 Change Set 计算。
+- FULL 不得跳过 changed Java/test/Mapper.xml/YML required files。
+- TARGETED 不得把 scope 外 changed files 标为 reviewed。
+- 不得通过类名/文件名猜实现路径或 scopedFiles。
+- 不得用同 basename 的其他模块文件替代 exact path。
+- 不得把 properties、pom.xml、Gradle、SQL migration 或任意 XML 加入 Task 2 Resource Review。
+- 不得直接调用 `ast-grep.exe`。
+- 不得跳过 Runtime machine gate 并相信 Agent COMPLETE。
+- 不得 sampled review。
 - 不得执行任意 Shell、`git fetch` 或 `git pull`。
 - 不得修改文件。

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BusinessChain",
+  "description": "Codea Harness 1.5 Business Chain Project State contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "name", "status", "entryPoints", "nodes"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+    "name": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["DISCOVERED", "ACCEPTED", "STALE"] },
+    "entryPoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entryPoint" }
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "resources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resource" }
+    },
+    "boundaries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/boundary" }
+    },
+    "notes": { "type": "string" }
+  },
+  "$defs": {
+    "entryPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "path"],
+      "properties": {
+        "symbol": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "path", "role"],
+      "properties": {
+        "symbol": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["SERVICE", "REPOSITORY", "MAPPER", "OTHER"] }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "symbol": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["MAPPER_XML", "YAML_CONFIG"] }
+      }
+    },
+    "boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "path", "role"],
+      "properties": {
+        "symbol": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["EXTERNAL", "CACHE", "MQ"] }
+      }
+    }
+  }
+}

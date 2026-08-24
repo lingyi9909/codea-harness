@@ -1,7 +1,7 @@
 ---
 name: orchestrator
-description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、修复轮次和统一摘要。
-version: 4
+description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、Runtime Apply Safety Gate、修复轮次和统一摘要。
+version: 7
 ---
 
 # Orchestrator
@@ -12,7 +12,15 @@ version: 4
 |---|---|---|
 | `harness init` | Project Adapter | 否 |
 | `harness review` | Reviewer | 否 |
+| `harness review list` | Reviewer（LIST） | 否 |
+| `harness review <Class>` | Reviewer（TARGETED CLASS） | 否 |
+| `harness review <Class.method>` | Reviewer（TARGETED METHOD） | 否 |
 | `harness api-doc <target>` | API Doc Agent → discover-api → generate-api-doc | 否 |
+| `harness chain list` | Orchestrator → validate-chain | 否 |
+| `harness chain show <id\|target>` | Orchestrator → validate-chain | 否 |
+| `harness chain discover [target]` | Reviewer → discover-chain | 否 |
+| `harness chain refresh <id>` | Orchestrator → discover-chain → validate-chain | 否 |
+| `harness chain validate [id]` | Orchestrator → validate-chain | 否 |
 | `harness upgrade` | upgrade-harness | 否 |
 | `harness test` | Reviewer → Integration Test Agent → Runtime Debugger → Fix Agent(需要时) | 是 |
 | `harness debug-service` | Runtime Debugger | 是 |
@@ -22,7 +30,135 @@ version: 4
 | `harness verify fix:<fixPlanId>` | Runtime Debugger | 是 |
 | `harness verify service:<runId>` | Runtime Debugger | 是 |
 
-测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。新生成/修改测试的自动修复仍最多 2 轮，历史 Existing Test 不自动修改。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
+1.4 Review intent 规范：
+
+```text
+harness review` → FULL
+harness review list` → LIST
+harness review <Class>` → TARGETED CLASS
+harness review <Class.method>` → TARGETED METHOD
+```
+
+测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。历史 Existing Test 不自动修改。对 GENERATED_BY_PLAN 测试仍保留最多 2 轮 repair 计数，但 Task 4 后每个实际发生变化的 repair patch 都必须生成新的 patch identity 与新 planId，并在审批前重新 Runtime seal 后再获得精确批准，旧批准不得授权不同 bytes。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
+
+## Chain Management（1.5 Task 3）
+
+Task 3 只负责 Chain 的 list/show/discover/validate/refresh 与用户确认后的 Project State 持久化，不把 Chain 接入 Review/Test/Debug/Fix/Verify。
+
+用户意图固定为：
+
+```text
+harness chain list
+harness chain show <id|target>
+harness chain discover [target]
+harness chain refresh <id>
+harness chain validate [id]
+```
+
+不得新增 `chain accept/merge/split/edit/ignore` 用户命令；保存/更新 Chain 是上述流程中的用户确认动作，不是新的用户 CLI。
+
+### list / show
+
+- 只读取 `.code-harness/chains/*.yaml`；不得修改 Project State。
+- `show` 只允许 exact id / exact Controller / exact Controller.method 命中；多条命中必须报告歧义，不得 fuzzy 选取。
+- 用户侧状态与内容固定中文；节点角色只使用已验证/已保存 role，不得根据类名后缀补角色。
+
+### validate
+
+1. Orchestrator 针对 Chain/target 建立当前 source 的 ChangeAnalysis。
+2. ChangeAnalysis 必须先通过 `change-analysis.schema.json` 与 Runtime machine coverage 校验。
+3. 调用 Controlled Runtime `chain validate` 验证 exact EntryPoint、node、call order、resource relation、boundary、id/filename/project uniqueness。
+4. `notes` 不参与代码事实判断。
+5. machine `VALID / STALE / INVALID` 只保留在内部结构化结果；用户摘要固定翻译为“Chain 验证通过 / Chain 已过期，需要刷新 / Chain 无效，需要修正”。
+6. validate 不得静默修改 `.code-harness/chains/**`。
+
+### refresh：diff-first + 用户确认
+
+固定流程：
+
+```text
+现有 Project State Chain
+→ 当前 source 的 verified ChangeAnalysis
+→ Lazy Discover 当前 candidate
+→ Controlled Runtime refresh
+→ .code-harness/runs/<runId>/analysis/refresh-candidates/<id>.yaml
+→ 展示 deterministic added/removed facts + existingHash
+→ 等待用户明确确认保存/更新
+```
+
+在用户确认前：
+
+- 不得调用内部 `chain persist`；
+- 不得覆盖 `.code-harness/chains/**`；
+- 不得把 refresh candidate 宣称为已保存 Chain。
+
+用户明确确认保存/更新后，Orchestrator 才能生成同 run 的 `chain-persist.json` 并调用内部 Controlled Runtime `chain persist`。Runtime 必须按顺序执行：
+
+```text
+candidate code-fact validation == VALID
+→ existing Chain 时 expectedExistingHash 精确匹配
+→ status=ACCEPTED
+→ atomic replace .code-harness/chains/<id>.yaml
+```
+
+首次保存不存在 existing Chain 时 expected hash 为空；已有同 id Chain 没有 expected hash、hash 已变化、validation 非 VALID、duplicate id 或 path/contract 不安全时一律 0 Project State writes。
+
+**“继续/可以/好/ok”不能在没有明确保存/更新对象与 refresh diff 上下文时自动触发 Project State 写入。** refresh 的确认只授权该次 Chain candidate，不构成 Test/Fix Approval，也不得复用为其他写操作审批。
+
+## Review Consumes Verified Chains（1.5 Task 4）
+
+Task 4 只把已验证 Chain 作为 Review 的业务上下文，不改变 1.4 的 Change Set、ReviewScopeSelection、Coverage 或 Finding 边界：
+
+```text
+Change Set = 变化事实边界
+Chain = 业务上下文边界
+```
+
+### FULL / TARGETED 固定流程
+
+1. 先按原 1.4 流程完成 `analyze-change`，生成同一完整 Change Set 与 ChangeAnalysis。
+2. FULL 必须先满足原 FULL machine coverage；TARGETED 必须先得到 Runtime verified `ReviewScopeSelection` 与 COMPLETE scoped coverage。Chain 不能替代这些 Gate。
+3. Orchestrator 生成同 run 的 `.code-harness/runs/<runId>/requests/chain-review-context.json`，只携带 `runId / changeAnalysisPath / reviewScope / allowTemporaryForStale`。
+4. 调用 Controlled Runtime：
+
+```text
+codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+```
+
+5. Runtime 只接受同 run 路径，并重新验证 ChangeAnalysis Schema、ReviewScope Schema、selectedCallChains/scopedFiles 与对应 coverage，然后解析 Chain context。
+6. 命中项目 `ACCEPTED` Chain 时必须重新 validate；只有 `ACCEPTED + VALID` 才可直接复用。
+7. 当前 Review 所需入口没有可用 Accepted Chain 时，Runtime 才基于同一份 verified ChangeAnalysis lazy discover，并只写 `runs/<runId>/analysis/discovered-chains/**`；返回 `DISCOVERED + TEMPORARY`，不得写 Project State。
+
+### STALE 决策门禁
+
+Runtime 返回 `STALE_REQUIRES_DECISION` 时，Orchestrator 必须展示且只允许用户明确选择：
+
+- **使用本次临时发现的 Chain 继续评审**：同一请求显式设置 `allowTemporaryForStale=true` 后重新调用 `chain review-context`；只使用 Run State，不刷新 Project State。
+- **刷新项目 Chain**：进入 Task 3 的 `chain refresh` diff-first 流程，仍需用户明确确认后才能 persist；刷新本身不自动代表继续 Review。
+- **停止本次评审**：STOP。
+
+不得默认第一项，不得把 STALE Chain 静默当 VALID 使用，也不得因为 Review 需要上下文而自动 refresh/overwrite `.code-harness/chains/**`。
+
+`PARTIAL` / unresolved Chain context 进入需要人工处理，不得调用 `review-code`。
+
+### Coverage 与报告保持原语义
+
+- FULL 即使复用多个 Accepted Chain，required coverage 仍是完整 Change Set；不得因为 Chain 已覆盖部分调用链而把缺失 changed file 判为 COMPLETE。
+- TARGETED required coverage 仍是 Runtime verified `scopedFiles`；不得因为 Chain 节点更多/更少改变 Scope。
+- `Finding.file` 仍受原 FULL/TARGETED Gate 约束。
+- 当本次正式报告只有一个明确 Chain context 时，transport 增加 `chainContext={id,name,source,status}`；`source/status` 只允许 `ACCEPTED+VALID` 或 `DISCOVERED+TEMPORARY`。
+- 临时 Chain 的 `review.md` 必须显示“本次临时发现”与未沉淀提示；TARGETED 免责声明保持不变。
+
+### Review 后沉淀建议
+
+如果本次 Review 使用 `DISCOVERED + TEMPORARY` Chain，评审结束后可以提示：
+
+```text
+本次识别到新的业务链“<name>”。
+是否沉淀到项目 `.code-harness/chains/`？
+```
+
+**不得自动保存 DISCOVERED Chain**。只有用户明确确认保存具体 candidate 后，才复用 Task 3 的 validate + controlled `chain persist` 流程；Review 成功本身不构成 Project State 写入授权。
 
 ## Review Change Set（review/test/api-doc changed 共用）
 
@@ -35,6 +171,8 @@ merge-base(baseRef, HEAD) → HEAD 的 committed
 
 `effectiveBaseRef = 用户本次 base:<ref> > harness.yaml.review.baseRef`。不执行 `git fetch`。baseRef 缺失/不存在 → `MANUAL_ACTION_REQUIRED`，不得猜。
 
+FULL / TARGETED / LIST 都从同一完整 Change Set 开始；TARGETED 只改变正式评审 Scope，不改变 Change Set 事实。
+
 ## Review Coverage 硬门禁（1.1.1）
 
 Reviewer 的 `analyze-change` 必须先产生 `ChangeAnalysis` JSON，然后交给 Tool Runtime 执行 `validate_contract`：
@@ -45,7 +183,7 @@ Reviewer 的 `analyze-change` 必须先产生 `ChangeAnalysis` JSON，然后交�
 
 ### COMPLETE
 
-仅当：
+FULL 保持原语义，仅当：
 
 1. 所有 changed source/test files 已读取；
 2. 与变更直接相关的内部 call-chain symbol 均已确定性定位并读取；
@@ -55,20 +193,30 @@ Reviewer 的 `analyze-change` 必须先产生 `ChangeAnalysis` JSON，然后交�
 
 才允许继续。
 
+TARGETED 的 COMPLETE 只针对经机器验证的 `ReviewScopeSelection`：
+
+```text
+scopedFiles ⊆ reviewedFiles
++ selectedCallChains 全部内部 symbols 已解析/读取
++ scopedFiles 与 ChangeAnalysis.symbolLocations 的 exact repository path 证据一致
+```
+
+与 target 无关的 changed files 可以不进入本次 scopedFiles，但不得标记为已评审，也不得据此声称整个 Change Set 已完成评审。TARGETED 不得仅凭 Agent 自报的 Full `reviewCoverage.status` 放行。
+
 ### PARTIAL / Runtime 校验失败
 
-任何 changed file 未读、内部 symbol 无法解析、Schema 不合法、机器 Coverage 不完整，统一：
+任何声明 Scope 内文件未读、内部 symbol 无法解析、Schema 不合法、机器 Coverage 不完整，统一：
 
 ```text
 结果：MANUAL_ACTION_REQUIRED
 
 评审未完整完成：
-- <missing changed file / unresolved symbol / contract validation error>
+- <missing scoped/changed file / unresolved symbol / contract validation error>
 ```
 
 **此时禁止调用 `review-code`，禁止输出 Review PASSED，禁止进入 Integration Test Agent。**
 
-## Review Report Persistence（1.3.2 UX）
+## Review Report Persistence（1.4 Human Report UX）
 
 `harness review` 与 `harness test` 的 Review 阶段都必须生成正式 Artifact：
 
@@ -92,10 +240,64 @@ Reviewer / Orchestrator
 
 - `runId`, `harnessVersion`, `baseRef`, `head`, `result`
 - `reviewScope.changedFiles[]`
-- `reviewCoverage.reviewedFiles[] / callChains[] / externalDependencies[] / unresolved[] / missingReviewedFiles[] / runtimeErrors[] / status`
+- TARGETED 额外包含 `mode=TARGETED`、`target`、`reviewScope.scopedFiles[]`
+- `reviewCoverage.reviewedFiles[] / callChains[] / symbolRoleEvidence[] / resourceRoleEvidence[] / externalDependencies[] / unresolved[] / missingReviewedFiles[] / runtimeErrors[] / status`
 - `callChains[]` 每项保持 `entryPoint + chain[]`，必须直接来自已通过 Runtime 校验的 `ChangeAnalysis.callChains[]`；支持 0/1/多条，不得压平、推断或编造
+- TARGETED 的 report `callChains[]` 只能使用 Runtime 验证后的 `selectedCallChains`
+- `symbolRoleEvidence[] = {symbol, role, source}` 只能逐项复制自已通过 Runtime 校验的 `ChangeAnalysis.symbolLocations[]`；不得由 Reviewer/Orchestrator 根据类名补 role
+- `resourceRoleEvidence[] = {resource, role, source}` 只能逐项复制自已通过 Runtime 校验的 `ChangeAnalysis.resourceRelations[]`；不得根据资源名补 role
 - `findings[]`：`id / category / severity / file / line / problem / evidence / impact / recommendation / needsTest / introducedByChange / confidence`
 - `category` 只允许 `PRODUCTION_CODE | TEST_VALIDITY`
+
+1.4 用户可见报告固定使用统一首屏。用户无需先滚动到报告尾部，就必须能看到：
+
+```text
+评审结果
+评审模式
+评审目标（TARGETED）
+Change Set 文件数
+本次 Scope 文件数
+已评审文件数
+问题数量
+下一步
+```
+
+代码调用链只做展示增强，不修改任何机器 symbol，也不得根据 `XxxController/XxxService/XxxServiceImpl/XxxMapper` 等名称后缀猜角色。Renderer 只能使用上述机器验证后的 role evidence 映射人类可读标签；节点无可靠 role evidence 或 role=`Other` 时固定显示 `🔹 代码节点`：
+
+```text
+🌐 接口入口   ← verified role=Controller
+⚙️ 业务服务   ← verified role=Service
+🧠 业务实现   ← verified role=Service + source=FIND_IMPLEMENTATIONS
+🗄 数据访问   ← verified role=Repository/Mapper
+📄 Mapper XML ← verified resource role=MapperXml
+🔹 代码节点   ← 无可靠证据 / Other / 其他角色
+```
+
+Finding 展示块固定为：
+
+```text
+### <severity emoji> <findingId>｜<中文级别>
+📍 位置
+❗ 问题
+🔎 证据
+💥 影响
+🛠 修复建议
+🧪 是否需要测试
+```
+
+报告末尾必须有 `## ➡️ 下一步`：
+
+```text
+❌ 未通过       → 优先处理阻断问题；可使用 harness fix finding:<id>
+✅ 通过         → 无需处理阻断问题
+⚠️ 需要人工处理 → 明确列出未解析项、缺失评审文件或运行时契约校验错误对应动作
+```
+
+TARGETED 报告必须保留固定免责声明：
+
+```text
+本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。
+```
 
 硬规则：
 
@@ -103,14 +305,17 @@ Reviewer / Orchestrator
 - Reviewer/Orchestrator 不得使用 arbitrary write_file 自由生成 Markdown。
 - `PASSED / FAILED / MANUAL_ACTION_REQUIRED` 都必须生成报告。
 - 固定 UI 文案以及 `summary/problem/evidence/impact/recommendation` 默认中文；Java 类名、方法名、文件路径、SQL、异常名、RPC 名、技术名词保持原文。
-- 机器 enum 保持英文：`PASSED/FAILED/MANUAL_ACTION_REQUIRED`、`CRITICAL/HIGH/MEDIUM/LOW`、`COMPLETE/PARTIAL`。
-- 测试代码仍必须读取并参与 Coverage；普通测试代码质量不得产生 Finding，只有 Reviewer Test Validity Gate 允许 `TEST_VALIDITY`。
+- 机器 enum 保持英文：`PASSED/FAILED/MANUAL_ACTION_REQUIRED`、`CRITICAL/HIGH/MEDIUM/LOW`、`COMPLETE/PARTIAL`；它们只存在于机器 Contract/内部状态，不得直接作为最终用户摘要文案。
+- 测试代码仍必须读取并参与 Coverage；普通测试代码质量不得产生 Finding，只有 Reviewer Test Validity Gate 允许 `TEST_VALIDITY`；用户侧统一显示“测试有效性问题”。
 - 无代码变更也必须生成“✅ 通过 / 变更文件 0 / 问题数量 0”的中文报告。
 - Coverage PARTIAL 或 Runtime Contract validation error 必须先把 unresolved、missing reviewed files、Runtime validation error 写入结构化 transport，再生成 `MANUAL_ACTION_REQUIRED` 报告，然后 STOP。
 - Runtime 报告生成失败时不得继续后续流程，统一 `MANUAL_ACTION_REQUIRED`。
-- OpenCode 最终摘要必须同时展示 Review 结果和 `review.md` 路径。
+- TARGETED 正式报告中 `Finding.file` 必须属于 Runtime verified `scopedFiles`；Controlled Runtime Renderer 必须拒绝 scope 外 Finding。
+- OpenCode 最终摘要必须同时展示中文 Review 结果和 `review.md` 路径，不得泄漏 machine enum。
 
 ## `harness review`
+
+默认 `harness review` 始终是 FULL，保持 1.3.2 语义：
 
 ```text
 1. 解析并校验 effectiveBaseRef
@@ -132,11 +337,91 @@ Reviewer / Orchestrator
 用户可见顺序固定为：
 
 ```text
-评审范围
+统一首屏（结果 / 模式 / 目标 / 数量 / 下一步）
+→ 问题概览
+→ 评审范围
+→ 代码调用链
 → 评审覆盖
 → 问题清单（如允许执行）
-→ 评审结论 + .code-harness/runs/<runId>/review.md
+→ 评审结论
+→ 下一步 + .code-harness/runs/<runId>/review.md
 ```
+
+## Targeted Review（1.4）
+
+### `harness review list`
+
+只分析当前完整 Change Set 并列出链：
+
+```text
+已确认调用链
+- <confirmed ChangeAnalysis.callChains[]>
+
+候选/未解析
+- <candidate / unresolved symbol + reason>
+```
+
+硬规则：
+
+- confirmed 只来自确定性 Code Navigation 已确认的 `ChangeAnalysis.callChains[]`；
+- 候选/未解析必须单独展示；
+- 不得把 candidate/unresolved 包装成 confirmed；
+- 不调用 `review-code`；
+- 不生成 Finding；
+- LIST 不输出 Review PASSED/FAILED 结论。
+
+### `harness review <Class>` / `<Class.method>`
+
+固定流程：
+
+```text
+1. 解析 effectiveBaseRef，建立完整 Change Set
+2. Reviewer.analyze-change 建立 ChangeAnalysis、confirmed callChains 与 symbolLocations exact path/role evidence
+3. Class → target.kind=CLASS；Class.method → target.kind=METHOD
+4. Runtime/Reviewer 使用 symbolLocations.role 判断 target 是否为 Controller；不得靠类名后缀猜角色
+5. 从 confirmed callChains 中解析与 target 有证据关系的链
+6. 0 条 → NO_REVIEW_TARGET → STOP
+7. Controller CLASS → 自动包含该 Controller 当前 Change Set 中全部相关 confirmed chains
+8. Controller METHOD → 自动包含该 method 当前 Change Set 中全部相关 confirmed chains
+9. Service/其他下游 target：1 条 → AUTO_SINGLE；2+ 条上游业务链 → WAITING_REVIEW_SCOPE_SELECTION
+10. scopedFiles 只能取自 symbolLocations 的 exact repository path；同 basename 的其他模块文件不能替代
+11. 生成 ReviewScopeSelection(target/selectedCallChains/scopedFiles)
+12. Controlled Runtime validate review-scope.schema.json --change-analysis <ChangeAnalysis>
+13. Runtime 重新验证 Controller 防漏链、selected chains、exact scoped paths 与 scoped coverage
+14. Runtime 机器 scoped coverage != COMPLETE → MANUAL_ACTION_REQUIRED review.md → STOP
+15. COMPLETE 后才调用 reviewer.review-code；TARGETED 只允许 Runtime verified scopedFiles / selectedCallChains
+16. Controlled Runtime Renderer 再验证 Finding.file ∈ verified scopedFiles 后生成 TARGETED review.md
+```
+
+Controller target 不进入用户“挑部分链”流程：
+
+```text
+Controller CLASS  → 自动包含全部相关 confirmed chains
+Controller METHOD → 自动包含该 method 全部相关 confirmed chains
+```
+
+只有 Service/其他下游 target 在解析到 2+ 条上游业务链时才允许用户选择：
+
+- 宿主支持结构化多选 → native multi-select；
+- 否则 numbered fallback：`1` / `1,3` / `ALL`；
+- **不得默认 `ALL`**；
+- 空选择或取消 → STOP；
+- Review Scope Selection 不等于 Test/Fix Approval；
+- `ALL`/编号选择都不能替代 `批准 <planId>` 或 `批准 <fixPlanId>`。
+
+最终 `ReviewScopeSelection` 必须通过 Runtime `reviewscope.Verify`。如果 Controller CLASS/METHOD 漏掉 required confirmed chain，或 scopedFiles 不等于 Code Navigation exact path evidence，Runtime 必须拒绝，不能依赖 Agent 提示词自律。
+
+TARGETED 报告必须包含：
+
+```text
+评审模式：定向评审
+评审目标：<target>
+Change Set 文件：N
+本次 Scope 文件：M
+本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。
+```
+
+`harness test` 仍按既有 FULL Review 执行；1.4 Targeted Review 不自动改变 Test Target Selection。
 
 ## `harness api-doc`
 
@@ -215,10 +500,101 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 
 宿主 UI 的确认、`ALL`、`DIRECT_ONLY`、编号选择都不能替代任何写操作审批。
 
+## Runtime Apply Safety Gate（1.4 Task 4）
+
+所有经过人工批准的生产代码/测试代码正式写入统一走：
+
+```text
+Agent 设计 exact patch
+→ planId/fixPlanId + unifiedDiff + diffSha256 + files[].baseSha256
+→ .code-harness/runs/<runId>/requests/apply.json
+→ apply-request.schema.json
+→ .code-harness/bin/codea-harness-tools seal-apply --input <request>
+→ .code-harness/runs/<runId>/sealed-plans/<planId>.json
+→ 用户精确批准该 planId
+→ 保持同一份 requests/apply.json，不得重新生成
+→ .code-harness/bin/codea-harness-tools apply --input <same request>
+→ Runtime 对照 sealed snapshot 验证 approval identity
+→ Runtime 原子应用
+→ apply-result.schema.json
+→ .code-harness/runs/<runId>/evidence/apply/<planId>.json
+```
+
+### Approval identity
+
+**seal 必须发生在用户批准之前。** 用户批准的是 Runtime 已封存的 immutable approval baseline，而不是“当前碰巧自洽”的 request。
+
+sealed snapshot 固定并在 apply 时逐字段比对：
+
+```text
+planId
+planType
+unifiedDiff exact bytes
+diffSha256
+files[].path
+files[].baseSha256
+```
+
+因此：
+
+```text
+审批前 seal Patch A
+→ 用户批准 Patch A 的 planId
+→ request 被替换成自洽 Patch B
+→ Runtime compare sealed Patch A vs request Patch B
+→ APPROVAL_IDENTITY_MISMATCH
+→ 0 写入
+```
+
+审批之后只要上述任一字段或 patch bytes 改变，原批准立即失效，必须生成新 planId、新 request，并重新 seal/精确批准。
+
+### Runtime 强制校验
+
+Runtime 不信任 Agent 自报结果，必须独立检查，且顺序固定：
+
+1. **读取 request 之前**先校验 `--input` 路径，只允许精确 `.code-harness/runs/<pathRunId>/requests/*.json`；outside、nested、非 JSON 或 symlink/junction escape 必须在读取前拒绝。
+2. 路径通过后才允许读取/解析 JSON；body `runId` 必须与 path runId 一致，否则 `RUN_ID_PATH_MISMATCH`。
+3. apply 前必须存在 `.code-harness/runs/<runId>/sealed-plans/<planId>.json`，并逐字段验证 approval identity；缺失 → `SEALED_PLAN_NOT_FOUND`，不一致 → `APPROVAL_IDENTITY_MISMATCH`。
+4. `apply-request.schema.json` 合法且无 unknown fields/duplicate paths。
+5. `diffSha256` 与 exact unifiedDiff 一致。
+6. 当前目标文件 exact bytes SHA256 与 `files[].baseSha256` 一致；否则 `BASE_CHANGED`，0 写入。
+7. unified diff 实际 touched path set 与 `files[]` 完全一致。
+8. `.git/**` 与 `.code-harness/**` 是 **Runtime hard-deny**，在用户 `harness.yaml.write` 之前执行；即使 `allowedProductionPaths=["**"]` / `allowedTestPaths=["**"]` 且 `deniedPaths=[]` 也必须拒绝，用户配置不得覆盖。
+9. hard-deny 通过后，再执行用户 `deniedPaths` 与普通 allowlist：`planType=TEST` 只能写 `allowedTestPaths`；`planType=FIX` 只能写 `allowedProductionPaths`。
+10. traversal、absolute path、binary patch、unsafe rename 等不安全 patch 拒绝。
+11. 所有文件先读取/校验/stage；任一前置失败必须 0 业务文件写入。
+12. 多文件正式提交期间任一失败必须 restore 全部原始 bytes；不得留下半应用状态。
+13. 同一成功 planId 已有 evidence 时返回 `PLAN_ALREADY_APPLIED`，不得重复应用。
+
+### 正式完成证据
+
+只有以下条件全部成立才允许 Orchestrator 报告“代码修改完成”：
+
+```text
+Runtime status=APPLIED
+apply-result.schema.json VALID
+.code-harness/runs/<runId>/evidence/apply/<planId>.json 存在
+rollbackPerformed=false
+```
+
+Evidence 至少包含：
+
+```text
+runId
+planType
+planId
+diffSha256
+appliedAt
+files[].path/beforeSha256/afterSha256
+rollbackPerformed
+```
+
+`SEALED_PLAN_NOT_FOUND`、`APPROVAL_IDENTITY_MISMATCH`、`RUN_ID_PATH_MISMATCH`、`BASE_CHANGED`、`PLAN_ALREADY_APPLIED`、hard-deny/路径拒绝、diff/hash mismatch、patch set mismatch、rollback 或任何 apply error 都必须 STOP。**direct host write、`write_test`、`apply_approved_patch`、arbitrary write_file 不能作为正式完成或兜底路径。**
+
 ## `harness test`
 
 ```text
-0. 要求 initialization.status=READY，且当前宿主具备文件读写、Maven 执行、超时控制
+0. 要求 initialization.status=READY，且当前宿主具备文件读取、Maven 执行、超时控制；写入型步骤还要求可调用 Controlled Runtime apply
 1. 与 harness review 完全相同地解析 Change Set 并执行 analyze-change
 2. Tool Runtime: validate_contract(ChangeAnalysis JSON)，执行 JSON Schema + 机器 Coverage 校验
 3. 输出 评审范围 + 评审覆盖（含 validated callChains[]）
@@ -232,12 +608,12 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 11. 只有 `TEST_TARGETS_SELECTED` 且 selection artifact 机器验证通过，才把 **selected affectedControllers** 交给 Integration Test Agent
 12. Integration Test Agent 只对 selected targets 做 Existing Test Coverage Analysis
 13. 每个 selected target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW；未选择 target 不得生成计划
-14. REUSE_EXISTING 直接执行；其余输出 Test Plan，仍需精确 `批准 <planId>` 后才写测试
+14. REUSE_EXISTING 直接执行、无审批、零写入；EXTEND/CREATE 必须在审批前产出最终 `unifiedDiff/diffSha256/files[].baseSha256`，生成 `planType=TEST` apply request 并通过 `codea-harness-tools seal-apply --input` 形成 `sealed-plans/<planId>.json`；seal 成功后才允许精确 `批准 <planId>`，批准后只能让同一 request Runtime apply，只有 `APPLIED + evidence/apply/<planId>.json` 才算写入完成
 15. Integration Test Agent 返回 method/scenario 级 provenance；Orchestrator 形成 `TestExecutionTarget(testClass,testMethods[],selector,controllerId,origin,planId?)`
 16. selected-only execution gate：整类 selector 仅允许该 class 本次相关 methods 全部属于 selected targets；混合 selected+unselected class 必须收窄到 selected method selector；无法安全表达 method selector → `MANUAL_ACTION_REQUIRED`，不得整类执行
 17. Runtime Debugger 独占测试执行、日志和 Diagnosis；Surefire `failedTests.testClass + testMethod` 必须回查具体 TestExecutionTarget 判定 method-level origin
-18. 新生成/修改测试若 TEST_ERROR：仅失败方法 `origin=GENERATED_BY_PLAN` 且能唯一追溯 approved planId 时可自动修复，按 `planId+testClass+testMethod` 最多 2 轮；同 class 历史 Existing Test method 永不自动修改
-19. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可自动生成 Fix Plan，但 fixPlanId 未批准前不得修改生产代码
+18. 新生成/修改测试若 TEST_ERROR：仅失败方法 `origin=GENERATED_BY_PLAN` 且能唯一追溯原 planId 时进入 repair 分析，最多 2 轮；每个不同 repair bytes 必须生成新的 patch identity/new planId/new request，并在审批前重新 Runtime seal，再精确批准后让同一 request apply；同 class 历史 Existing Test method 永不自动修改
+19. Existing Test 失败禁止自动修改；PRODUCTION_CODE_ERROR 可生成 Fix Plan，但 Fix Plan 同样必须在审批前生成 apply request 并 Runtime seal exact patch identity，fixPlanId 未批准且同一 sealed request Runtime apply 未成功前不得修改生产代码
 ```
 
 ## `harness upgrade`
@@ -248,7 +624,7 @@ Selection != 批准 <planId> != 批准 <fixPlanId>
 
 - `harness init`：Project Adapter 识别 Maven/模块/Profile/测试规范/baseRef，生成 `harness.yaml`/`project.md`；不确定项保持 `NEEDS_CONFIRMATION`。
 - `harness debug-service`：Runtime Debugger 启动服务，等待人工触发请求，采集日志，诊断，停止本次 processGroup。
-- `harness fix finding:<id>` / `fix diagnosis:<runId>`：Fix Agent 先生成最小 Fix Plan；精确 `fixPlanId` 批准后才能 `apply_approved_patch`；验证由 Runtime Debugger 完成。
+- `harness fix finding:<id>` / `fix diagnosis:<runId>`：Fix Agent 先生成带 `unifiedDiff/diffSha256/files[].baseSha256` 的最小 Fix Plan；审批前生成 apply request 并调用 `codea-harness-tools seal-apply --input` 形成 `sealed-plans/<fixPlanId>.json`；只有 seal 成功后才请求精确 `批准 <fixPlanId>`，批准后只允许同一 request 通过 Runtime Apply Safety Gate 正式写入；成功 Apply evidence 后再由 Runtime Debugger 验证。
 - `harness verify test/fix/service`：由 Runtime Debugger 执行既有验证路径，不改变审批状态。
 
 ## Test Origin / Repair Gate
@@ -269,15 +645,18 @@ TestExecutionTarget
 
 - `EXTEND_EXISTING` 的同一 class 可以同时包含两种 origin；禁止把整个 class 一刀切标成 GENERATED_BY_PLAN 或 REUSED_EXISTING。
 - Surefire 返回失败方法后，用 `failedTests.testClass + testMethod` 唯一匹配 TestExecutionTarget。
-- 只有匹配到 `GENERATED_BY_PLAN` 的具体失败 method 才进入自动修复轮次；对应 approved `planId` 必须存在。
+- 只有匹配到 `GENERATED_BY_PLAN` 的具体失败 method 才进入 repair 轮次；对应来源 planId 必须存在。
 - `REUSED_EXISTING` method 永不自动修改，即使它与 GENERATED_BY_PLAN method 位于同一个 class。
-- `testMethod=null`、provenance 冲突或无法唯一匹配时默认走安全路径：不得自动 repair，进入测试修改计划 / `MANUAL_ACTION_REQUIRED`。
-- 自动 repair 计数键为 `planId + testClass + testMethod`，最多 2 轮；达到上限 → `MANUAL_TEST_REPAIR_REQUIRED`。
+- `testMethod=null`、provenance 冲突或无法唯一匹配时默认走安全路径：不得 repair，进入测试修改计划 / `MANUAL_ACTION_REQUIRED`。
+- repair 计数仍按来源 `planId + testClass + testMethod`，最多 2 轮；达到上限 → `MANUAL_TEST_REPAIR_REQUIRED`。
+- 每轮 repair 如果产生不同代码 bytes，就必须生成新的 `unifiedDiff/diffSha256/files[].baseSha256/new planId/new request`，审批前重新 Runtime seal，再获得新的精确批准；旧批准不能直接 authorize 新 patch。
 
 ## 统一结果
 
+以下是**用户可见统一摘要**；机器状态只保留在 JSON/内部状态，不能直接输出到该摘要：
+
 ```text
-结果：PASSED | FAILED | WAITING_APPROVAL | MANUAL_ACTION_REQUIRED
+评审结果：✅ 通过 | ❌ 未通过 | ⏳ 等待批准 | ⚠️ 需要人工处理
 
 完成：
 - 评审 N 个文件
@@ -286,26 +665,35 @@ TestExecutionTarget
 
 发现：
 - X 个生产代码问题
-- Y 个 TEST_VALIDITY 问题
+- Y 个测试有效性问题
 
 下一步：
 - 请批准 <planId> | <fixPlanId>
 - 或：所有测试通过，无需进一步操作
 ```
 
-对于包含 Review 阶段的 `harness review` / `harness test`，统一结果中还必须显示：
+对于包含 Review 阶段的 `harness review` / `harness test`，统一摘要中还必须显示：
 
 ```text
 代码评审报告：
 .code-harness/runs/<runId>/review.md
 ```
 
-对于 `harness api-doc`，统一结果必须显示：
+对于 `harness api-doc`，统一摘要必须显示：
 
 ```text
-API Doc Report:
+API 文档报告：
 .code-harness/runs/<runId>/api-doc.md
 ```
+
+对于成功执行 Runtime Apply 的测试/修复，统一摘要还必须显示：
+
+```text
+代码修改证据：
+.code-harness/runs/<runId>/evidence/apply/<planId>.json
+```
+
+不得把宿主 direct host write 的成功响应当作该证据。
 
 ## Task 7：Selected Test Flow + Integration-Test DB Assertions
 
@@ -329,7 +717,7 @@ origin=GENERATED_BY_PLAN
 planId=test-plan-xxx
 ```
 
-`oldTestA` 失败永不自动改；只有 `newMissingTest` 失败且 Diagnosis=`REPAIR_TEST` 才进入最多 2 轮 repair。
+`oldTestA` 失败永不自动改；只有 `newMissingTest` 失败且 Diagnosis=`REPAIR_TEST` 才进入最多 2 轮 repair 分析；任何不同 repair patch 仍需新 patch identity + 新 planId + 审批前 Runtime seal + 精确批准 + 同一 request Runtime apply。
 6. Synthetic Golden Flow 必须满足：
 
 ```text
@@ -337,7 +725,7 @@ Affected Controllers: Order, Payment, User
 Selection: Order + Payment
 
 Order -> REUSE_EXISTING -> no approval/no write -> selected-only TestExecutionTarget
-Payment -> EXTEND_EXISTING -> exact 批准 <paymentPlanId> -> modify only MISSING -> method-level provenance
+Payment -> EXTEND_EXISTING -> exact patch identity -> planType=TEST request -> pre-approval Runtime seal -> 精确批准 <paymentPlanId> -> same request Runtime apply -> modify only MISSING -> method-level provenance
 User -> unselected
 
 User 必须没有：
@@ -352,13 +740,16 @@ User 必须没有：
 ```
 
 7. 任意阶段把 User 或其他 unselected Controller 自动补回，均视为 `SCOPE_VIOLATION`。
-8. `REUSE_EXISTING -> run/no approval/no modification`、`EXTEND_EXISTING -> only MISSING + exact planId approval`、`CREATE_NEW -> exact planId approval`、historical Existing Test method never auto-edit、GENERATED_BY_PLAN method repair max 2 rounds 全部保持不变。
+8. `REUSE_EXISTING -> run/no approval/no modification`、`EXTEND_EXISTING -> only MISSING + pre-approval seal + exact planId approval + same request Runtime Apply`、`CREATE_NEW -> pre-approval seal + exact planId approval + same request Runtime Apply`、historical Existing Test method never auto-edit、GENERATED_BY_PLAN method repair max 2 rounds 全部保持不变。
 
 ## 禁止行为
 
 - 不得跳过 Review Coverage / Runtime Contract 校验 / Review Report Persistence / Test Target Selection / 审批门禁。
 - `harness api-doc` 不得跳过 api-doc Schema Validation / API Target Selection / Controlled Runtime Renderer。
 - 不得让 Reviewer/Orchestrator/API Doc Agent 自由写 `review.md` 或 `api-doc.md`；只能调用 Controlled Runtime Renderer。
-- 不得超过 2 轮自动测试修复。
+- 不得把 TARGETED 结果表述成整个 Change Set 已完整评审。
+- 不得把任何 direct host write / `write_test` / `apply_approved_patch` / arbitrary write_file 作为生产或测试代码正式写入成功。
+- 不得跳过审批前 `codea-harness-tools seal-apply --input` 或修改 sealed request 后复用旧批准。
+- 不得超过 2 轮 GENERATED_BY_PLAN repair 计数。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。

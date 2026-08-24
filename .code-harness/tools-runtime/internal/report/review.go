@@ -27,13 +27,29 @@ type ReviewRequest struct {
 	BaseRef        string         `json:"baseRef"`
 	Head           string         `json:"head"`
 	Result         Result         `json:"result"`
+	Mode           string         `json:"mode,omitempty"`
+	Target         *ReviewTarget  `json:"target,omitempty"`
+	ChainContext   *ChainContext  `json:"chainContext,omitempty"`
 	Scope          ReviewScope    `json:"reviewScope"`
 	Coverage       ReviewCoverage `json:"reviewCoverage"`
 	Findings       []Finding      `json:"findings"`
 }
 
+type ReviewTarget struct {
+	Symbol string `json:"symbol"`
+	Kind   string `json:"kind"`
+}
+
+type ChainContext struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Source string `json:"source"` // ACCEPTED | DISCOVERED
+	Status string `json:"status"` // VALID | TEMPORARY
+}
+
 type ReviewScope struct {
 	ChangedFiles []string `json:"changedFiles"`
+	ScopedFiles  []string `json:"scopedFiles,omitempty"`
 }
 
 type CallChain struct {
@@ -41,14 +57,28 @@ type CallChain struct {
 	Chain      []string `json:"chain"`
 }
 
+type SymbolRoleEvidence struct {
+	Symbol string `json:"symbol"`
+	Role   string `json:"role"`
+	Source string `json:"source"`
+}
+
+type ResourceRoleEvidence struct {
+	Resource string `json:"resource"`
+	Role     string `json:"role"`
+	Source   string `json:"source"`
+}
+
 type ReviewCoverage struct {
-	ReviewedFiles        []string    `json:"reviewedFiles"`
-	CallChains           []CallChain `json:"callChains"`
-	ExternalDependencies []string    `json:"externalDependencies"`
-	Unresolved           []string    `json:"unresolved"`
-	MissingReviewedFiles []string    `json:"missingReviewedFiles"`
-	RuntimeErrors        []string    `json:"runtimeErrors"`
-	Status               string      `json:"status"`
+	ReviewedFiles        []string               `json:"reviewedFiles"`
+	CallChains           []CallChain            `json:"callChains"`
+	SymbolRoleEvidence   []SymbolRoleEvidence   `json:"symbolRoleEvidence,omitempty"`
+	ResourceRoleEvidence []ResourceRoleEvidence `json:"resourceRoleEvidence,omitempty"`
+	ExternalDependencies []string               `json:"externalDependencies"`
+	Unresolved           []string               `json:"unresolved"`
+	MissingReviewedFiles []string               `json:"missingReviewedFiles"`
+	RuntimeErrors        []string               `json:"runtimeErrors"`
+	Status               string                 `json:"status"`
 }
 
 type Finding struct {
@@ -98,6 +128,31 @@ func Validate(req ReviewRequest) error {
 	default:
 		return fmt.Errorf("invalid review result %q", req.Result)
 	}
+	if err := validateChainContext(req.ChainContext); err != nil {
+		return err
+	}
+	mode := reviewMode(req)
+	switch mode {
+	case "FULL":
+		if req.Target != nil {
+			return errors.New("FULL review report must not contain target")
+		}
+	case "TARGETED":
+		if req.Target == nil || strings.TrimSpace(req.Target.Symbol) == "" {
+			return errors.New("TARGETED review report requires target")
+		}
+		if req.Target.Kind != "CLASS" && req.Target.Kind != "METHOD" {
+			return fmt.Errorf("invalid review target kind %q", req.Target.Kind)
+		}
+		if len(req.Scope.ScopedFiles) == 0 {
+			return errors.New("TARGETED review report requires scopedFiles")
+		}
+		if len(req.Coverage.CallChains) == 0 {
+			return errors.New("TARGETED review report requires selected callChains")
+		}
+	default:
+		return fmt.Errorf("invalid review mode %q", req.Mode)
+	}
 	switch req.Coverage.Status {
 	case "COMPLETE", "PARTIAL":
 	default:
@@ -106,19 +161,34 @@ func Validate(req ReviewRequest) error {
 	if req.Coverage.Status == "PARTIAL" && req.Result != ResultManualActionRequired {
 		return errors.New("PARTIAL coverage requires MANUAL_ACTION_REQUIRED result")
 	}
-	for i, chain := range req.Coverage.CallChains {
-		if strings.TrimSpace(chain.EntryPoint) == "" {
+	for i, callChain := range req.Coverage.CallChains {
+		if strings.TrimSpace(callChain.EntryPoint) == "" {
 			return fmt.Errorf("call chain %d requires entryPoint", i)
 		}
-		for j, symbol := range chain.Chain {
+		for j, symbol := range callChain.Chain {
 			if strings.TrimSpace(symbol) == "" {
-				return fmt.Errorf("call chain %q has empty symbol at %d", chain.EntryPoint, j)
+				return fmt.Errorf("call chain %q has empty symbol at %d", callChain.EntryPoint, j)
 			}
+		}
+	}
+	if err := validateRoleEvidence(req.Coverage); err != nil {
+		return err
+	}
+	var targetedFiles map[string]struct{}
+	if mode == "TARGETED" {
+		targetedFiles = make(map[string]struct{}, len(req.Scope.ScopedFiles))
+		for _, file := range req.Scope.ScopedFiles {
+			targetedFiles[normalizeReportPath(file)] = struct{}{}
 		}
 	}
 	for i, f := range req.Findings {
 		if strings.TrimSpace(f.ID) == "" || strings.TrimSpace(f.File) == "" || strings.TrimSpace(f.Problem) == "" || strings.TrimSpace(f.Evidence) == "" || strings.TrimSpace(f.Impact) == "" || strings.TrimSpace(f.Recommendation) == "" {
 			return fmt.Errorf("finding %d has missing required fields", i)
+		}
+		if mode == "TARGETED" {
+			if _, ok := targetedFiles[normalizeReportPath(f.File)]; !ok {
+				return fmt.Errorf("finding %q file %q is outside verified scopedFiles", f.ID, f.File)
+			}
 		}
 		switch f.Category {
 		case "PRODUCTION_CODE", "TEST_VALIDITY":
@@ -138,6 +208,94 @@ func Validate(req ReviewRequest) error {
 		}
 	}
 	return nil
+}
+
+func validateChainContext(context *ChainContext) error {
+	if context == nil {
+		return nil
+	}
+	if strings.TrimSpace(context.ID) == "" || strings.TrimSpace(context.Name) == "" {
+		return errors.New("review chainContext requires id and name")
+	}
+	switch context.Source {
+	case "ACCEPTED":
+		if context.Status != "VALID" {
+			return errors.New("ACCEPTED review chainContext requires VALID status")
+		}
+	case "DISCOVERED":
+		if context.Status != "TEMPORARY" {
+			return errors.New("DISCOVERED review chainContext requires TEMPORARY status")
+		}
+	default:
+		return fmt.Errorf("invalid review chainContext source %q", context.Source)
+	}
+	return nil
+}
+
+func validateRoleEvidence(coverage ReviewCoverage) error {
+	seen := make(map[string]string, len(coverage.SymbolRoleEvidence)+len(coverage.ResourceRoleEvidence))
+	for i, evidence := range coverage.SymbolRoleEvidence {
+		symbol := strings.TrimSpace(evidence.Symbol)
+		if symbol == "" {
+			return fmt.Errorf("symbol role evidence %d requires symbol", i)
+		}
+		switch evidence.Role {
+		case "Controller", "Service", "Repository", "Mapper", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other":
+		default:
+			return fmt.Errorf("symbol role evidence %q has invalid role %q", symbol, evidence.Role)
+		}
+		switch evidence.Source {
+		case "FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS":
+		default:
+			return fmt.Errorf("symbol role evidence %q has invalid source %q", symbol, evidence.Source)
+		}
+		if previous, ok := seen[symbol]; ok {
+			return fmt.Errorf("duplicate role evidence for %q (%s and symbol)", symbol, previous)
+		}
+		seen[symbol] = "symbol"
+	}
+	for i, evidence := range coverage.ResourceRoleEvidence {
+		resource := strings.TrimSpace(evidence.Resource)
+		if resource == "" {
+			return fmt.Errorf("resource role evidence %d requires resource", i)
+		}
+		switch evidence.Role {
+		case "MapperXml":
+			if evidence.Source != "MAPPER_STATEMENT" {
+				return fmt.Errorf("resource role evidence %q requires MAPPER_STATEMENT source", resource)
+			}
+		case "YamlConfig":
+			if evidence.Source != "CONFIG_REFERENCE" {
+				return fmt.Errorf("resource role evidence %q requires CONFIG_REFERENCE source", resource)
+			}
+		default:
+			return fmt.Errorf("resource role evidence %q has invalid role %q", resource, evidence.Role)
+		}
+		if previous, ok := seen[resource]; ok {
+			return fmt.Errorf("duplicate role evidence for %q (%s and resource)", resource, previous)
+		}
+		seen[resource] = "resource"
+	}
+	return nil
+}
+
+func reviewMode(req ReviewRequest) string {
+	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
+	if mode == "" {
+		return "FULL"
+	}
+	return mode
+}
+
+func scopeFiles(req ReviewRequest) []string {
+	if reviewMode(req) == "TARGETED" {
+		return req.Scope.ScopedFiles
+	}
+	return req.Scope.ChangedFiles
+}
+
+func normalizeReportPath(value string) string {
+	return filepath.ToSlash(filepath.Clean(strings.TrimSpace(value)))
 }
 
 func validArtifactID(value string) bool {
@@ -162,30 +320,81 @@ func Render(req ReviewRequest) (string, error) {
 	writeHeader(&b, req)
 	if req.Coverage.Status == "PARTIAL" {
 		writePartial(&b, req)
+		writeNextStep(&b, req)
 		return b.String(), nil
 	}
 	writeSeverityOverview(&b, req.Findings)
-	writeScope(&b, req.Scope)
-	writeCallChains(&b, req.Coverage.CallChains)
+	writeScope(&b, req)
+	writeCallChains(&b, req.Coverage)
 	writeCoverage(&b, req.Coverage)
 	writeFindings(&b, req.Findings)
 	writeSummary(&b, req)
+	writeNextStep(&b, req)
 	return b.String(), nil
 }
 
 func writeHeader(b *strings.Builder, req ReviewRequest) {
-	fmt.Fprintln(b, "# 📝 代码评审报告")
+	fmt.Fprintln(b, "# 🔍 代码评审报告")
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "| 项目 | 内容 |")
 	fmt.Fprintln(b, "|---|---|")
 	fmt.Fprintf(b, "| 评审结果 | %s |\n", resultLabel(req.Result))
+	if reviewMode(req) == "TARGETED" {
+		fmt.Fprintln(b, "| 评审模式 | 🎯 定向评审 |")
+		fmt.Fprintf(b, "| 评审目标 | `%s` |\n", singleLine(req.Target.Symbol))
+	} else {
+		fmt.Fprintln(b, "| 评审模式 | 📦 完整评审 |")
+	}
+	if req.ChainContext != nil {
+		fmt.Fprintf(b, "| 业务链 | %s |\n", singleLine(req.ChainContext.Name))
+		fmt.Fprintf(b, "| Chain ID | `%s` |\n", singleLine(req.ChainContext.ID))
+		fmt.Fprintf(b, "| Chain 来源 | %s |\n", chainSourceLabel(req.ChainContext.Source))
+		fmt.Fprintf(b, "| Chain 状态 | %s |\n", chainStatusLabel(req.ChainContext.Status))
+	}
 	fmt.Fprintf(b, "| Harness 版本 | %s |\n", singleLine(req.HarnessVersion))
 	fmt.Fprintf(b, "| 评审基线 | %s |\n", singleLine(req.BaseRef))
 	fmt.Fprintf(b, "| 当前提交 | %s |\n", singleLine(req.Head))
-	fmt.Fprintf(b, "| 变更文件 | %d |\n", len(req.Scope.ChangedFiles))
+	fmt.Fprintf(b, "| Change Set 文件 | %d |\n", len(req.Scope.ChangedFiles))
+	fmt.Fprintf(b, "| 本次 Scope 文件 | %d |\n", len(scopeFiles(req)))
 	fmt.Fprintf(b, "| 已评审文件 | %d |\n", len(req.Coverage.ReviewedFiles))
 	fmt.Fprintf(b, "| 问题数量 | %d |\n", len(req.Findings))
+	fmt.Fprintf(b, "| 下一步 | %s |\n", firstScreenNextAction(req))
 	fmt.Fprintln(b)
+	if req.ChainContext != nil && req.ChainContext.Source == "DISCOVERED" {
+		fmt.Fprintln(b, "⚠️ 本次评审使用临时发现的业务链，尚未沉淀到项目 Chain。")
+		fmt.Fprintln(b)
+	}
+}
+
+func chainSourceLabel(source string) string {
+	if source == "ACCEPTED" {
+		return "项目已确认"
+	}
+	return "本次临时发现"
+}
+
+func chainStatusLabel(status string) string {
+	if status == "VALID" {
+		return "已确认"
+	}
+	return "临时"
+}
+
+func firstScreenNextAction(req ReviewRequest) string {
+	switch req.Result {
+	case ResultPassed:
+		return "无需处理阻断问题"
+	case ResultFailed:
+		if id := primaryFindingID(req.Findings); id != "" {
+			return fmt.Sprintf("优先处理阻断问题；可使用 `harness fix finding:%s`", singleLine(id))
+		}
+		return "优先处理阻断问题"
+	default:
+		if len(req.Coverage.RuntimeErrors) > 0 {
+			return "处理运行时契约校验错误后重新评审"
+		}
+		return "处理未解析项/缺失评审文件后重新评审"
+	}
 }
 
 func writeSeverityOverview(b *strings.Builder, findings []Finding) {
@@ -203,11 +412,11 @@ func writeSeverityOverview(b *strings.Builder, findings []Finding) {
 	fmt.Fprintln(b)
 }
 
-func writeScope(b *strings.Builder, scope ReviewScope) {
+func writeScope(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b, "## 📁 评审范围")
 	fmt.Fprintln(b)
 	var production, tests []string
-	for _, file := range scope.ChangedFiles {
+	for _, file := range scopeFiles(req) {
 		if isTestFile(file) {
 			tests = append(tests, file)
 		} else {
@@ -238,19 +447,24 @@ func writeScope(b *strings.Builder, scope ReviewScope) {
 	fmt.Fprintln(b)
 }
 
-func writeCallChains(b *strings.Builder, chains []CallChain) {
+func writeCallChains(b *strings.Builder, coverage ReviewCoverage) {
 	fmt.Fprintln(b, "## 🔗 代码调用链")
 	fmt.Fprintln(b)
-	if len(chains) == 0 {
+	if len(coverage.CallChains) == 0 {
 		fmt.Fprintln(b, "未发现需要展开的项目内部调用链。")
 		fmt.Fprintln(b)
 		return
 	}
-	for i, chain := range chains {
+	labels := callChainRoleLabels(coverage)
+	for i, callChain := range coverage.CallChains {
 		fmt.Fprintf(b, "### 调用链 %d\n\n", i+1)
-		nodes := normalizeCallChain(chain)
+		nodes := normalizeCallChain(callChain)
 		for j, symbol := range nodes {
-			fmt.Fprintf(b, "`%s`\n", singleLine(symbol))
+			label := labels[strings.TrimSpace(symbol)]
+			if label == "" {
+				label = "🔹 代码节点"
+			}
+			fmt.Fprintf(b, "%s｜`%s`\n", label, singleLine(symbol))
 			if j < len(nodes)-1 {
 				fmt.Fprintln(b, "↓")
 			}
@@ -261,13 +475,13 @@ func writeCallChains(b *strings.Builder, chains []CallChain) {
 	fmt.Fprintln(b)
 }
 
-func normalizeCallChain(chain CallChain) []string {
-	entry := strings.TrimSpace(chain.EntryPoint)
-	nodes := make([]string, 0, len(chain.Chain)+1)
+func normalizeCallChain(callChain CallChain) []string {
+	entry := strings.TrimSpace(callChain.EntryPoint)
+	nodes := make([]string, 0, len(callChain.Chain)+1)
 	if entry != "" {
 		nodes = append(nodes, entry)
 	}
-	for i, symbol := range chain.Chain {
+	for i, symbol := range callChain.Chain {
 		symbol = strings.TrimSpace(symbol)
 		if i == 0 && symbol == entry {
 			continue
@@ -275,6 +489,36 @@ func normalizeCallChain(chain CallChain) []string {
 		nodes = append(nodes, symbol)
 	}
 	return nodes
+}
+
+func callChainRoleLabels(coverage ReviewCoverage) map[string]string {
+	labels := make(map[string]string, len(coverage.SymbolRoleEvidence)+len(coverage.ResourceRoleEvidence))
+	for _, evidence := range coverage.SymbolRoleEvidence {
+		symbol := strings.TrimSpace(evidence.Symbol)
+		switch evidence.Role {
+		case "Controller":
+			labels[symbol] = "🌐 接口入口"
+		case "Service":
+			if evidence.Source == "FIND_IMPLEMENTATIONS" {
+				labels[symbol] = "🧠 业务实现"
+			} else {
+				labels[symbol] = "⚙️ 业务服务"
+			}
+		case "Repository", "Mapper":
+			labels[symbol] = "🗄 数据访问"
+		default:
+			labels[symbol] = "🔹 代码节点"
+		}
+	}
+	for _, evidence := range coverage.ResourceRoleEvidence {
+		resource := strings.TrimSpace(evidence.Resource)
+		if evidence.Role == "MapperXml" {
+			labels[resource] = "📄 Mapper XML"
+		} else {
+			labels[resource] = "🔹 代码节点"
+		}
+	}
+	return labels
 }
 
 func writeCoverage(b *strings.Builder, coverage ReviewCoverage) {
@@ -318,6 +562,37 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 	}
 	fmt.Fprintln(b, "# 🚨 问题清单")
 	fmt.Fprintln(b)
+	for _, f := range sortedFindings(findings) {
+		emoji, name := severityDisplayParts(f.Severity)
+		fmt.Fprintf(b, "### %s %s｜%s\n\n", emoji, singleLine(f.ID), name)
+		fmt.Fprintln(b, "📍 **位置**")
+		fmt.Fprintln(b)
+		location := singleLine(f.File)
+		if f.Line > 0 {
+			location += ":" + strconv.Itoa(f.Line)
+		}
+		fmt.Fprintf(b, "`%s`\n\n", location)
+		writeIconSection(b, "❗", "问题", f.Problem)
+		writeIconSection(b, "🔎", "证据", f.Evidence)
+		writeIconSection(b, "💥", "影响", f.Impact)
+		writeIconSection(b, "🛠", "修复建议", f.Recommendation)
+		fmt.Fprintln(b, "🧪 **是否需要测试**")
+		fmt.Fprintln(b)
+		if f.NeedsTest {
+			fmt.Fprintln(b, "是")
+		} else {
+			fmt.Fprintln(b, "否")
+		}
+		fmt.Fprintln(b)
+		fmt.Fprintln(b, "**置信度**")
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, "%d%%\n\n", int(f.Confidence*100+0.5))
+		fmt.Fprintln(b, "---")
+		fmt.Fprintln(b)
+	}
+}
+
+func sortedFindings(findings []Finding) []Finding {
 	sorted := append([]Finding(nil), findings...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		a, c := sorted[i], sorted[j]
@@ -332,33 +607,15 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 		}
 		return a.ID < c.ID
 	})
-	for _, f := range sorted {
-		fmt.Fprintf(b, "### %s｜%s\n\n", severityLabel(f.Severity), singleLine(f.ID))
-		fmt.Fprintln(b, "**位置**")
-		fmt.Fprintln(b)
-		location := singleLine(f.File)
-		if f.Line > 0 {
-			location += ":" + strconv.Itoa(f.Line)
-		}
-		fmt.Fprintf(b, "`%s`\n\n", location)
-		writeBoldSection(b, "问题", f.Problem)
-		writeBoldSection(b, "证据", f.Evidence)
-		writeBoldSection(b, "影响", f.Impact)
-		writeBoldSection(b, "修复建议", f.Recommendation)
-		fmt.Fprintln(b, "**是否需要补充测试**")
-		fmt.Fprintln(b)
-		if f.NeedsTest {
-			fmt.Fprintln(b, "是")
-		} else {
-			fmt.Fprintln(b, "否")
-		}
-		fmt.Fprintln(b)
-		fmt.Fprintln(b, "**置信度**")
-		fmt.Fprintln(b)
-		fmt.Fprintf(b, "%d%%\n\n", int(f.Confidence*100+0.5))
-		fmt.Fprintln(b, "---")
-		fmt.Fprintln(b)
+	return sorted
+}
+
+func primaryFindingID(findings []Finding) string {
+	sorted := sortedFindings(findings)
+	if len(sorted) == 0 {
+		return ""
 	}
+	return strings.TrimSpace(sorted[0].ID)
 }
 
 func writeSummary(b *strings.Builder, req ReviewRequest) {
@@ -381,6 +638,7 @@ func writeSummary(b *strings.Builder, req ReviewRequest) {
 	default:
 		fmt.Fprintln(b, "### ⚠️ 需要人工处理")
 	}
+	writeTargetedDisclaimer(b, req)
 }
 
 func writePartial(b *strings.Builder, req ReviewRequest) {
@@ -390,7 +648,12 @@ func writePartial(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "### 未解析项")
 	fmt.Fprintln(b)
-	writeCodeList(b, unresolvedItems(req.Coverage), "无")
+	items := append([]string(nil), req.Coverage.Unresolved...)
+	for _, e := range req.Coverage.RuntimeErrors {
+		items = append(items, "运行时契约校验错误: "+e)
+	}
+	sort.Strings(items)
+	writeCodeList(b, items, "无")
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "### 尚未评审文件")
 	fmt.Fprintln(b)
@@ -401,6 +664,69 @@ func writePartial(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintln(b, "### 评审结论")
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "⚠️ 需要人工处理")
+	writeTargetedDisclaimer(b, req)
+}
+
+func writeNextStep(b *strings.Builder, req ReviewRequest) {
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, "## ➡️ 下一步")
+	fmt.Fprintln(b)
+	switch req.Result {
+	case ResultPassed:
+		fmt.Fprintln(b, "下一步：无需处理阻断问题。")
+	case ResultFailed:
+		if id := primaryFindingID(req.Findings); id != "" {
+			fmt.Fprintf(b, "下一步：优先处理阻断问题；可使用 `harness fix finding:%s`。\n", singleLine(id))
+		} else {
+			fmt.Fprintln(b, "下一步：优先处理阻断问题。")
+		}
+	default:
+		fmt.Fprintln(b, manualNextAction(req.Coverage))
+	}
+}
+
+func manualNextAction(coverage ReviewCoverage) string {
+	unresolved := append([]string(nil), coverage.Unresolved...)
+	missing := append([]string(nil), coverage.MissingReviewedFiles...)
+	runtimeErrors := append([]string(nil), coverage.RuntimeErrors...)
+	sort.Strings(unresolved)
+	sort.Strings(missing)
+	sort.Strings(runtimeErrors)
+
+	if len(runtimeErrors) == 0 && len(unresolved) == 1 && len(missing) == 1 {
+		return fmt.Sprintf("请先处理未解析项 `%s`，并补充评审文件 `%s`。", singleLine(unresolved[0]), singleLine(missing[0]))
+	}
+	var lines []string
+	if len(runtimeErrors) > 0 {
+		lines = append(lines, "请先处理以下运行时契约校验错误：")
+		for _, item := range runtimeErrors {
+			lines = append(lines, fmt.Sprintf("- `%s`", singleLine(item)))
+		}
+	}
+	if len(unresolved) > 0 {
+		lines = append(lines, "请先处理以下未解析项：")
+		for _, item := range unresolved {
+			lines = append(lines, fmt.Sprintf("- `%s`", singleLine(item)))
+		}
+	}
+	if len(missing) > 0 {
+		lines = append(lines, "请补充以下评审文件：")
+		for _, item := range missing {
+			lines = append(lines, fmt.Sprintf("- `%s`", singleLine(item)))
+		}
+	}
+	if len(lines) == 0 {
+		return "请根据上方人工处理项完成补充后重新评审。"
+	}
+	return strings.Join(lines, "\n")
+}
+
+func writeTargetedDisclaimer(b *strings.Builder, req ReviewRequest) {
+	if reviewMode(req) != "TARGETED" {
+		return
+	}
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, "> 本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。")
 }
 
 func resultLabel(result Result) string {
@@ -415,15 +741,20 @@ func resultLabel(result Result) string {
 }
 
 func severityLabel(severity string) string {
+	emoji, name := severityDisplayParts(severity)
+	return emoji + " " + name
+}
+
+func severityDisplayParts(severity string) (string, string) {
 	switch strings.ToUpper(severity) {
 	case "CRITICAL":
-		return "🔴 严重"
+		return "🔴", "严重"
 	case "HIGH":
-		return "🟠 高"
+		return "🟠", "高"
 	case "MEDIUM":
-		return "🟡 中"
+		return "🟡", "中"
 	default:
-		return "🟢 低"
+		return "🟢", "低"
 	}
 }
 
@@ -454,7 +785,7 @@ func unresolvedItems(coverage ReviewCoverage) []string {
 		items = append(items, "尚未评审文件: "+f)
 	}
 	for _, e := range coverage.RuntimeErrors {
-		items = append(items, "Runtime Contract 校验错误: "+e)
+		items = append(items, "运行时契约校验错误: "+e)
 	}
 	sort.Strings(items)
 	return items
@@ -567,6 +898,12 @@ func writeCodeList(b *strings.Builder, values []string, empty string) {
 
 func writeBoldSection(b *strings.Builder, title, content string) {
 	fmt.Fprintf(b, "**%s**\n\n", title)
+	fmt.Fprintln(b, strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n")))
+	fmt.Fprintln(b)
+}
+
+func writeIconSection(b *strings.Builder, icon, title, content string) {
+	fmt.Fprintf(b, "%s **%s**\n\n", icon, title)
 	fmt.Fprintln(b, strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n")))
 	fmt.Fprintln(b)
 }

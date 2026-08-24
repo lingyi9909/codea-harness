@@ -15,12 +15,14 @@ func TestReviewCodeSkillContractMatches132FindingRules(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"version: 3",
+		"version: 4",
 		"PRODUCTION_CODE",
 		"TEST_VALIDITY",
 		"category",
 		"problem",
 		"测试代码默认不得产生普通 Finding",
+		"不得因为以下内容产生 Finding",
+		"不得把 Test Validity Gate 扩展成普通测试代码质量 Review",
 		"problem / evidence / impact / recommendation",
 	} {
 		if !strings.Contains(text, want) {
@@ -30,7 +32,7 @@ func TestReviewCodeSkillContractMatches132FindingRules(t *testing.T) {
 }
 
 func TestCallChainEntryPointAlreadyFirstIsNotDuplicated(t *testing.T) {
-	req := sampleRequest()
+	req := withStandardRoleEvidence(sampleRequest())
 	req.Coverage.CallChains = []CallChain{{
 		EntryPoint: "OrderController.approve",
 		Chain: []string{
@@ -45,13 +47,13 @@ func TestCallChainEntryPointAlreadyFirstIsNotDuplicated(t *testing.T) {
 	if strings.Count(md, "`OrderController.approve`") != 1 {
 		t.Fatalf("entryPoint duplicated in markdown:\n%s", md)
 	}
-	if !strings.Contains(md, "`OrderController.approve`\n↓\n`OrderService.approve`") {
+	if !strings.Contains(md, "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务服务｜`OrderService.approve`") {
 		t.Fatalf("normalized call chain missing:\n%s", md)
 	}
 }
 
 func TestCallChainEntryPointMissingFromChainIsPrepended(t *testing.T) {
-	req := sampleRequest()
+	req := withStandardRoleEvidence(sampleRequest())
 	req.Coverage.CallChains = []CallChain{{
 		EntryPoint: "OrderController.approve",
 		Chain: []string{
@@ -63,20 +65,20 @@ func TestCallChainEntryPointMissingFromChainIsPrepended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "`OrderController.approve`\n↓\n`OrderService.approve`\n↓\n`OrderServiceImpl.approve`"
+	want := "🌐 接口入口｜`OrderController.approve`\n↓\n⚙️ 业务服务｜`OrderService.approve`\n↓\n🧠 业务实现｜`OrderServiceImpl.approve`"
 	if !strings.Contains(md, want) {
 		t.Fatalf("entryPoint was not prepended:\n%s", md)
 	}
 }
 
 func TestCallChainEmptyChainStillRendersEntryPoint(t *testing.T) {
-	req := sampleRequest()
+	req := withStandardRoleEvidence(sampleRequest())
 	req.Coverage.CallChains = []CallChain{{EntryPoint: "OrderController.approve"}}
 	md, err := Render(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(md, "### 调用链 1\n\n`OrderController.approve`") {
+	if !strings.Contains(md, "### 调用链 1\n\n🌐 接口入口｜`OrderController.approve`") {
 		t.Fatalf("entryPoint-only call chain missing:\n%s", md)
 	}
 }

@@ -83,3 +83,79 @@ func TestMachineCoverageRejectsUnresolvedSymbols(t *testing.T) {
 		t.Fatal("unresolved symbol must block complete review")
 	}
 }
+
+func TestEvaluateRequiredScopeAllowsUnrelatedChangedFileOutsideTarget(t *testing.T) {
+	r := coverage.EvaluateRequired(
+		[]string{"src/main/java/OrderController.java", "src/main/java/OrderService.java"},
+		[]string{"src/main/java/OrderController.java", "src/main/java/OrderService.java"},
+		nil,
+	)
+	if r.Status != "COMPLETE" || len(r.MissingChangedFiles) != 0 {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestEvaluateRequiredScopeRejectsMissingScopedFile(t *testing.T) {
+	r := coverage.EvaluateRequired(
+		[]string{"src/main/java/OrderController.java", "src/main/java/OrderService.java"},
+		[]string{"src/main/java/OrderController.java"},
+		nil,
+	)
+	if r.Status != "PARTIAL" || len(r.MissingChangedFiles) != 1 || r.MissingChangedFiles[0] != "src/main/java/OrderService.java" {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestFullCoverageRejectsUnreadChangedMapperXml(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/java/OrderMapper.java","role":"Mapper"},{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/java/OrderMapper.java","role":"Mapper"}],"unresolvedSymbols":[]}}`)
+	r, err := coverage.VerifyAnalysisJSON(b)
+	if err == nil {
+		t.Fatal("changed Mapper.xml must not be silently skipped")
+	}
+	if r.Status != "PARTIAL" || len(r.MissingChangedFiles) != 1 || r.MissingChangedFiles[0] != "src/main/resources/mapper/OrderMapper.xml" {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestFullCoverageRejectsUnreadChangedYaml(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/application.yml","role":"YamlConfig"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[],"unresolvedSymbols":[]}}`)
+	r, err := coverage.VerifyAnalysisJSON(b)
+	if err == nil {
+		t.Fatal("changed yml must not be silently skipped")
+	}
+	if r.Status != "PARTIAL" || len(r.MissingChangedFiles) != 1 || r.MissingChangedFiles[0] != "src/main/resources/application.yml" {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestFullCoverageAcceptsReviewedMapperAndYaml(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"},{"path":"src/main/resources/application.yml","role":"YamlConfig"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"},{"path":"src/main/resources/application.yml","role":"YamlConfig"}],"unresolvedSymbols":[]}}`)
+	r, err := coverage.VerifyAnalysisJSON(b)
+	if err != nil {
+		t.Fatalf("reviewed resources should satisfy FULL coverage: %v", err)
+	}
+	if r.Status != "COMPLETE" {
+		t.Fatalf("result=%+v", r)
+	}
+}
+
+func TestFullCoverageRejectsReviewedResourceRoleMismatch(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"MapperXml"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"YamlConfig"}],"unresolvedSymbols":[]}}`)
+	if _, err := coverage.VerifyAnalysisJSON(b); err == nil || !strings.Contains(err.Error(), "reviewed file role") {
+		t.Fatalf("reviewed resource role mismatch must be rejected, err=%v", err)
+	}
+}
+
+func TestFullCoverageRejectsMapperXmlPathWithOtherRole(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"Other"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/mapper/OrderMapper.xml","role":"Other"}],"unresolvedSymbols":[]}}`)
+	if _, err := coverage.VerifyAnalysisJSON(b); err == nil || !strings.Contains(err.Error(), "must use role MapperXml") {
+		t.Fatalf("*Mapper.xml must require MapperXml role, err=%v", err)
+	}
+}
+
+func TestFullCoverageRejectsYamlPathWithOtherRole(t *testing.T) {
+	b := []byte(`{"changedFiles":[{"path":"src/main/resources/application.yml","role":"Other"}],"reviewCoverage":{"status":"COMPLETE","reviewedFiles":[{"path":"src/main/resources/application.yml","role":"Other"}],"unresolvedSymbols":[]}}`)
+	if _, err := coverage.VerifyAnalysisJSON(b); err == nil || !strings.Contains(err.Error(), "must use role YamlConfig") {
+		t.Fatalf("src/main/resources/**/*.yml must require YamlConfig role, err=%v", err)
+	}
+}
