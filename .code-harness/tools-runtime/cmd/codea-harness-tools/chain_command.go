@@ -253,16 +253,15 @@ func runChainPersist(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load chain persistence candidate: %w", err)
 	}
-	validationCandidate := candidate
+	candidate.Status = chain.StatusAccepted
 	analysis, _, err := loadVerifiedChainAnalysis(req.ChangeAnalysisPath)
 	if err != nil {
 		return err
 	}
-	validation := chain.Validate(".", validationCandidate, chain.EvidenceSnapshot(analysis))
+	validation := chain.Validate(".", candidate, chain.EvidenceSnapshot(analysis))
 	if validation.Status != chain.ValidationValid {
 		return writeJSONAndStatus(map[string]any{"status": "VALIDATION_FAILED", "validation": validation}, false)
 	}
-	candidate.Status = chain.StatusAccepted
 	if err := chain.SaveAccepted(".", candidate, req.ExpectedExistingHash); err != nil {
 		return err
 	}
