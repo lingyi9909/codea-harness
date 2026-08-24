@@ -235,6 +235,28 @@ Task 2 发现结果只写：
 
 即 `runs/<runId>/analysis/discovered-chains/`。所有结果保持 `status: DISCOVERED`；不得写 `.code-harness/chains/**`，不得提前执行 Task 3 的 validate/accept/refresh。
 
+## Review Chain Context（1.5 Task 4）
+
+Review 使用 Chain 时仍必须**先完成 ChangeAnalysis**；Chain 解析不建立第二套 Java/resource 事实源。
+
+固定顺序：
+
+1. 按本 Skill 原流程建立完整 Change Set、ChangeAnalysis、symbolLocations/resourceRelations/callChains。
+2. FULL 先通过原 FULL machine coverage；TARGETED 先生成并通过 Runtime verified ReviewScopeSelection + scoped coverage。
+3. 将已经验证的 Review Scope 连同同 run `changeAnalysisPath` 写入 controlled request。
+4. 由 Orchestrator 调用：
+
+```text
+codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+```
+
+5. Runtime 才能决定复用 `ACCEPTED + VALID`、缺失时 lazy discover `DISCOVERED + TEMPORARY`，或返回 STALE/partial 决策状态。
+
+**不得因为存在 Chain 而减少 changedFiles**；FULL 的 Change Set 与 required coverage 完全不变。
+**不得因为存在 Chain 而减少 scopedFiles**；TARGETED 的 scopedFiles 仍只能由 verified ChangeAnalysis + ReviewScopeSelection 决定。
+
+Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 symbol/path/role/resource relation，不得用 `.code-harness/chains/*.yaml` 替代 Code Navigation evidence。
+
 ## 禁止行为
 
 - 不得跳过 Change Set 计算。
