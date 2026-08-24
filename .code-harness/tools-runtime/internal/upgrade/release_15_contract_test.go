@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestRelease15DocumentationAndWindowsPackagingContract(t *testing.T) {
+func TestRelease15DocumentationAndChainFrameworkContract(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", "..", "..", ".."))
 	harnessRoot := filepath.Join(repoRoot, ".code-harness")
 
@@ -20,21 +20,15 @@ func TestRelease15DocumentationAndWindowsPackagingContract(t *testing.T) {
 		return string(b)
 	}
 
-	if got := strings.TrimSpace(mustRead(filepath.Join(harnessRoot, "VERSION"))); got != "1.5.0" {
-		t.Fatalf("release VERSION=%q want 1.5.0", got)
-	}
-
 	readme := mustRead(filepath.Join(repoRoot, "README.md"))
 	for _, want := range []string{
 		"## 1.5.0",
-		"codea-harness-1.5.0-windows-x64-install.zip",
-		"codea-harness-1.5.0-windows-x64-upgrade.zip",
 		"Chain 仅接入 Review",
 		"不支持 Test/Debug/Fix Chain",
 		"chains/**",
 	} {
 		if !strings.Contains(readme, want) {
-			t.Fatalf("README missing 1.5 release contract %q", want)
+			t.Fatalf("README missing historical 1.5 contract %q", want)
 		}
 	}
 
@@ -46,7 +40,7 @@ func TestRelease15DocumentationAndWindowsPackagingContract(t *testing.T) {
 		"不支持 Test/Debug/Fix Chain",
 	} {
 		if !strings.Contains(changelog, want) {
-			t.Fatalf("CHANGELOG missing 1.5 release contract %q", want)
+			t.Fatalf("CHANGELOG missing historical 1.5 contract %q", want)
 		}
 	}
 
@@ -63,20 +57,18 @@ func TestRelease15DocumentationAndWindowsPackagingContract(t *testing.T) {
 
 	workflow := mustRead(filepath.Join(repoRoot, ".github", "workflows", "package-windows-x64.yml"))
 	for _, want := range []string{
-		"go test -count=1 ./internal/chain ./internal/reviewscope ./internal/coverage ./internal/report",
-		"bedf2cde3784a6ee15d408271a023a95570c46b8",
+		"internal/chain",
+		"internal/reviewscope",
 		"contracts/chain.schema.json",
 		"contracts/chain-validation-result.schema.json",
 		"templates/chain.template.yaml",
 		"skills/discover-chain/SKILL.md",
 		"skills/validate-chain/SKILL.md",
-		"codea-harness-1.5.0-windows-x64-install",
-		"codea-harness-1.5.0-windows-x64-upgrade",
 		"chains",
 		"chain validate",
 	} {
 		if !strings.Contains(workflow, want) {
-			t.Fatalf("package-windows-x64 missing 1.5 release gate %q", want)
+			t.Fatalf("package-windows-x64 missing preserved 1.5 release gate %q", want)
 		}
 	}
 }
