@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.1 - 2026-08-24
+
+- **Chain Discover Bootstrap Fix**：`harness chain discover [target]` 变为自包含流程，直接从 current Change Set 自动 `analyze-change → Schema validate → Runtime machine coverage verify → chain discover`；无需先执行 harness review，也不要求历史 Chain 或既有 Review Run。
+- **Freshness-safe reuse**：仅当当前 run 的 verified ChangeAnalysis 与当前 source revision / Change Set 完全一致时才复用；不存在、无法证明一致或已过期时自动重新 analyze-change。
+- **Fresh production stack**：当前 Change Set 新增 Controller / Service / ServiceImpl / Mapper / Mapper.xml 可直接发现；committed / staged / unstaged / untracked 全部继续属于 Change Set，新 production Controller Method 可直接成为 Candidate EntryPoint。
+- **Machine-fact failure output**：真实 discovery 为 PARTIAL 时直接展示 unresolved symbol 与机器 reason（如 `IMPLEMENTATION_NOT_FOUND`），不再输出“可能需要额外 Code Navigation”等模糊说明。
+- **1.5.0 → 1.5.1 Release Gate**：无新增 harness config migration；Windows x64 正式升级继续 byte-for-byte 保持 `harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**`，并发布 1.5.1 install / upgrade 双 ZIP。
+
 ## 1.5.0 - 2026-08-24
 
 - **Chain Management**：新增一链一 YAML 的业务 Chain Project State、lazy discovery、exact V1/V2 canonicalization、`list/show/discover/refresh/validate`、STALE 检测以及用户明确确认后的安全持久化；`chains/**` 永远不是 Framework Managed。

@@ -44,8 +44,6 @@ func TestUpgradePreservesChainsByteForByteAndReportsProjectState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Even a malformed package that contains a business Chain instance must not
-	// replace user-owned Project State during the managed-tree transaction.
 	write(t, source, "chains/order-approve.yaml", "package-must-not-overwrite\n")
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
@@ -67,7 +65,7 @@ func TestUpgradePreservesChainsByteForByteAndReportsProjectState(t *testing.T) {
 	}
 }
 
-func TestUpgrade140To150InstallsChainFrameworkAndPreservesAllProjectStateBytes(t *testing.T) {
+func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectStateBytes(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, ".code-harness")
 	source := filepath.Join(root, ".code-harness-upgrade")
@@ -76,9 +74,7 @@ func TestUpgrade140To150InstallsChainFrameworkAndPreservesAllProjectStateBytes(t
 		t.Fatalf("copy release source: %v", err)
 	}
 
-	// Unit upgrade uses harmless stand-ins; the Windows release gate separately
-	// proves the real release binaries and their hashes.
-	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-1.5")
+	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-1.5.1")
 	write(t, source, "bin/ast-grep.exe", "release-ast-grep")
 	write(t, source, "chains/package-business.yaml", "must-never-install\n")
 
@@ -120,8 +116,8 @@ func TestUpgrade140To150InstallsChainFrameworkAndPreservesAllProjectStateBytes(t
 	}
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
-	if result.Status != StatusUpgraded || result.FromVersion != "1.4.0" || result.ToVersion != "1.5.0" {
-		t.Fatalf("expected accepted 1.4 -> 1.5 upgrade, result=%+v", result)
+	if result.Status != StatusUpgraded || result.FromVersion != "1.4.0" || result.ToVersion != "1.5.1" {
+		t.Fatalf("expected accepted 1.4 -> current 1.5.1 upgrade, result=%+v", result)
 	}
 
 	for rel, wantHash := range before {
@@ -169,6 +165,6 @@ func TestUpgrade140To150InstallsChainFrameworkAndPreservesAllProjectStateBytes(t
 		t.Fatal(err)
 	}
 	if len(matches) != 0 {
-		t.Fatalf("stage/backup leaked after 1.5 upgrade: %v", matches)
+		t.Fatalf("stage/backup leaked after current 1.5.x upgrade: %v", matches)
 	}
 }
