@@ -1,7 +1,7 @@
 ---
 name: discover-chain
 description: 基于 Runtime 已验证的 ChangeAnalysis 进行 change/target bounded 的业务 Chain 发现；只产生 Run State DISCOVERED YAML，不修改项目长期 Chain。
-version: 1
+version: 2
 agent: reviewer
 tools:
   - read_code
@@ -103,13 +103,13 @@ Runtime 只能把发现结果写到：
 .code-harness/runs/<runId>/analysis/discovered-chains/<id>.yaml
 ```
 
-所有 Task 2 产物保持：
+所有发现产物保持：
 
 ```text
 status: DISCOVERED
 ```
 
-**不得写入 `.code-harness/chains/**`**。从 `runs/**` 接受为 Project State 属于后续 Chain Management 流程，不在本 Skill 内完成。
+**不得直接写入 `.code-harness/chains/**`**。如果用户明确要求保存/沉淀发现结果，必须交给 `validate-chain` Chain Management 流程：先 Runtime validate，再经过用户确认后的 controlled persist。
 
 结果语义：
 
@@ -127,4 +127,4 @@ PARTIAL  -> 存在内部 unresolved、ambiguous exact path、入口无法确定�
 - 不得扫描与 target/current Change Set 无关的所有 Controller。
 - 不得把 unresolved candidate 伪装成 confirmed Chain。
 - 不得修改生产代码、测试代码或 `.code-harness/chains/**`。
-- 不得执行 Chain validate/accept/refresh；这些属于后续 Task。
+- 不得在 discovery 阶段执行 Project State 覆盖；validate/refresh/persist 必须交给 Chain Management，并遵守用户确认与 expected-hash 门禁。
