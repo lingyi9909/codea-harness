@@ -2,6 +2,16 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
+## 1.5.0
+
+1. **Chain Management**：新增一链一 YAML 的业务 Chain Project State，以及 `harness chain list/show/discover/refresh/validate`、lazy discovery、exact canonicalization、STALE 检测和用户确认后的安全持久化。
+2. **Review Consumes Verified Chains**：FULL/TARGETED Review 优先复用经当前代码事实重新验证的 ACCEPTED Chain；缺失时 lazy discover 当前 Run 的临时 Chain；STALE Chain 必须由用户明确选择临时使用、刷新或停止。
+3. **Review provenance**：`review.md` 增加业务链、Chain ID、来源与状态；临时 Chain 明确提示尚未沉淀。Chain 不改变 1.4 的 Change Set、ReviewScopeSelection、Coverage 或 Finding Gate。
+4. **1.4.0 → 1.5.0 Windows Upgrade Gate**：安装完整 Chain Framework；`harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**` 保持原内容，其中 `chains/**` 必须 byte-for-byte 保持。
+5. **Release boundary**：**Chain 仅接入 Review；不支持 Test/Debug/Fix Chain。** Test、Debug、Fix、Verify 继续保持既有 1.4 语义。
+
+1.5.0 继续只发布 Windows x64；不包含 Maven Doctor、Linux/macOS、Gradle、JDT LS、JaCoCo、PIT 或 SARIF。
+
 ## 1.4.0
 
 1. **Targeted Review**：支持 `harness review <Class>`、`harness review <Class.method>` 和 `harness review list`。完整 Change Set 与本次定向 Scope 分离，Scope/Coverage 必须经过 Runtime 机器验证；定向结论不能冒充整个 Change Set 已完整评审。
@@ -49,7 +59,7 @@ Release ZIP = 可安装/可升级产品
 使用：
 
 ```text
-codea-harness-1.4.0-windows-x64-install.zip
+codea-harness-1.5.0-windows-x64-install.zip
 ```
 
 解压后顶层直接得到：
@@ -60,6 +70,9 @@ codea-harness-1.4.0-windows-x64-install.zip
 ├── RELEASE-MANIFEST.json
 ├── bin/codea-harness-tools.exe
 ├── bin/ast-grep.exe
+├── contracts/chain.schema.json
+├── contracts/chain-validation-result.schema.json
+├── templates/chain.template.yaml
 └── ...
 ```
 
@@ -69,19 +82,24 @@ codea-harness-1.4.0-windows-x64-install.zip
 读取 .code-harness/bootstrap.md，执行 harness init
 ```
 
-初始化生成本机 Project State：
+初始化或后续使用生成的本机 Project State 包括：
 
 ```text
 .code-harness/harness.yaml
 .code-harness/project.md
+.code-harness/database.yaml
+.code-harness/runs/**
+.code-harness/chains/**
 ```
+
+正式 install/upgrade ZIP 不包含任何上述 Project State 实例，不会预置业务 `chains/*.yaml`。
 
 ## 版本升级
 
 使用：
 
 ```text
-codea-harness-1.4.0-windows-x64-upgrade.zip
+codea-harness-1.5.0-windows-x64-upgrade.zip
 ```
 
 解压后顶层直接得到 `.code-harness-upgrade/`。升级入口固定为：
@@ -112,7 +130,23 @@ Package Preflight 通过后，调用**目标版本升级包 Runtime**：
 
 registered migration 属于目标版本 Runtime，因此不能依赖旧安装 Runtime 预知未来版本 migration。升级事务仍由 Controlled Runtime 完成，并继续保持 staged replace、rollback、Windows executable replacement 和 Project State 保护。
 
-1.3.2 → 1.4.0 时，`harness.yaml` 的 registered migration 只做：
+### 1.4.0 → 1.5.0
+
+1.5.0 不新增 `harness.yaml` migration。升级只替换 Framework Managed 内容并安装 Chain Framework，因此以下 Project State 在升级前后保持 **byte-for-byte**：
+
+```text
+harness.yaml
+project.md
+database.yaml
+runs/**
+chains/**
+```
+
+`chains/**` 永远是 Project State，不属于 Framework Managed；即使异常升级 source 中出现业务 Chain，也不得覆盖项目已有 Chain，`removedFiles` 也不得出现 `chains/**`。
+
+### 1.3.2 → 1.4.0 历史 migration
+
+`harness.yaml` 的 registered migration 只做：
 
 ```yaml
 version: 2
@@ -141,7 +175,7 @@ runs/**               # 保持原内容
 
 ```json
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "platform": "windows",
   "arch": "x64",
   "runtime": "codea-harness-tools.exe",
@@ -150,6 +184,20 @@ runs/**               # 保持原内容
   "astGrepSha256": "..."
 }
 ```
+
+## Chain Management
+
+1.5 用户意图固定为：
+
+```text
+harness chain list
+harness chain show <id|target>
+harness chain discover [target]
+harness chain refresh <id>
+harness chain validate [id]
+```
+
+不新增 `chain accept/merge/split/edit/ignore` 用户命令。开发者可直接编辑 `.code-harness/chains/*.yaml`，修改后通过 `harness chain validate <id>` 重新验证代码事实。
 
 ## Review
 
@@ -171,6 +219,8 @@ harness review OrderService.approve
 ```
 
 `review list` 只列本次 Change Set 已确认调用链，不生成 Finding。`Class` / `Class.method` 进入 TARGETED Review；Service/下游 target 若关联 2+ 条业务链，必须由用户选择，禁止默认 ALL。
+
+1.5 在上述机器 Scope Gate 之后增加 Review Chain Context：有效 ACCEPTED Chain 优先复用；缺失时当前 Run lazy discover；STALE 必须用户决策。Chain 只补充业务上下文，不改变 FULL/TARGETED Coverage 或 Finding Scope。
 
 TARGETED 报告始终保留：
 
@@ -246,6 +296,8 @@ Change Set 文件数
 🔹 代码节点   ← 无可靠 role evidence / Other / 其他角色
 ```
 
+1.5 当存在一个明确 Chain context 时，首屏额外展示业务链、Chain ID、来源和状态；临时 Chain 明确提示尚未沉淀。
+
 Finding 展示固定为：
 
 ```text
@@ -303,6 +355,8 @@ path traversal / binary / unsafe patch
 
 批准 Patch A 后把 request 改成自洽 Patch B 仍会因为 sealed approval identity 不一致而拒绝。direct host write、`write_test`、`apply_approved_patch` 等不能作为正式完成路径。
 
+1.5 **不支持 Test/Debug/Fix Chain**；Chain 不改变上述 Test/Fix 写入或 Debug/Verify 语义。
+
 ## Frontend API Documentation
 
 支持：
@@ -357,10 +411,10 @@ Agent 不得传 raw ast-grep rule/pattern/regex/arbitrary query。
 
 ```text
 cd .code-harness/tools-runtime
-go test -count=1 ./internal/reviewscope ./internal/coverage ./internal/report
+go test -count=1 ./internal/chain ./internal/reviewscope ./internal/coverage ./internal/report
 go test -count=1 ./internal/apply ./internal/schema ./internal/upgrade
 go test -count=1 ./...
 go vet ./...
 ```
 
-Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 1.4 Targeted/Resource/Report/Apply/Upgrade suites、全量 Go test/vet、真实 ast-grep Navigation smoke、正式 install/upgrade ZIP layout、Manifest、**真实 1.3.2 baseline → 1.4.0** live upgrade、registered config migration、Project State preservation、stale framework removal、Runtime replacement、source/stage/backup cleanup 和 artifact upload。
+Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 1.5 Chain/Review/Apply/Upgrade suites、全量 Go test/vet、真实 ast-grep Navigation smoke、正式 install/upgrade ZIP layout、Manifest、**真实 accepted 1.4.0 baseline → 1.5.0** live upgrade、`harness.yaml/project.md/database.yaml/runs/**/chains/**` preservation、stale framework removal、Runtime replacement、installed `chain validate` capability probe、source/stage/backup cleanup 和 artifact upload。

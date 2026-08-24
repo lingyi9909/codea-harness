@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0 - 2026-08-24
+
+- **Chain Management**：新增一链一 YAML 的业务 Chain Project State、lazy discovery、exact V1/V2 canonicalization、`list/show/discover/refresh/validate`、STALE 检测以及用户明确确认后的安全持久化；`chains/**` 永远不是 Framework Managed。
+- **Review Consumes Verified Chains**：FULL/TARGETED Review 优先复用当前代码事实仍然 VALID 的 ACCEPTED Chain；缺失时只在当前 Run lazy discover 临时 Chain；STALE Chain 必须由用户明确选择临时使用、刷新或停止，绝不静默复用。
+- **Review provenance**：`review.md` 增加业务链名称、Chain ID、来源与状态；临时 Chain 明确提示尚未沉淀。Chain 只补充业务上下文，不改变既有 Change Set、Review Scope、Coverage 或 Finding Gate。
+- **1.4.0 → 1.5.0 Upgrade Gate**：正式 Windows x64 升级验证 `harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**` Project State 保持；其中 `chains/**` byte-for-byte 保持，stale Framework 正常删除，新 Chain Framework 正常安装。
+- **Release boundary**：1.5.0 的 Chain 仅接入 Review；**不支持 Test/Debug/Fix Chain**，也不新增 generic Chain rule engine、merge/split/edit/ignore 命令。
+
 ## 1.4.0 - 2026-08-22
 
 - **Targeted Review**：新增 `harness review <Class>` / `<Class.method>` 与 `harness review list`；定向 Scope 由 Runtime 基于已验证调用链和 exact path evidence 机器校验，不能把定向结论冒充整个 Change Set 已完成评审。
