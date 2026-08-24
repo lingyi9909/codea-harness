@@ -410,7 +410,7 @@ func sameRunChainAnalysisArtifact(path, runID, kind string) bool {
 		return false
 	}
 	parts := strings.Split(filepath.ToSlash(filepath.Clean(path)), "/")
-	return len(parts) == 7 && parts[0] == ".code-harness" && parts[1] == "runs" && parts[2] == runID && parts[3] == "analysis" && parts[4] == kind && strings.EqualFold(filepath.Ext(parts[6]), ".yaml")
+	return len(parts) == 6 && parts[0] == ".code-harness" && parts[1] == "runs" && parts[2] == runID && parts[3] == "analysis" && parts[4] == kind && strings.EqualFold(filepath.Ext(parts[5]), ".yaml")
 }
 
 func validChainArtifactID(value string) bool {
