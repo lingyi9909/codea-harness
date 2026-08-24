@@ -109,7 +109,7 @@ Runtime 只能把发现结果写到：
 status: DISCOVERED
 ```
 
-**不得直接写入 `.code-harness/chains/**`**。如果用户明确要求保存/沉淀发现结果，必须交给 `validate-chain` Chain Management 流程：先 Runtime validate，再经过用户确认后的 controlled persist。
+**不得写入 `.code-harness/chains/**`**。如果用户明确要求保存/沉淀发现结果，必须交给 `validate-chain` Chain Management 流程：先 Runtime validate，再经过用户确认后的 controlled persist。
 
 结果语义：
 
