@@ -105,6 +105,61 @@ candidate code-fact validation == VALID
 
 **“继续/可以/好/ok”不能在没有明确保存/更新对象与 refresh diff 上下文时自动触发 Project State 写入。** refresh 的确认只授权该次 Chain candidate，不构成 Test/Fix Approval，也不得复用为其他写操作审批。
 
+## Review Consumes Verified Chains（1.5 Task 4）
+
+Task 4 只把已验证 Chain 作为 Review 的业务上下文，不改变 1.4 的 Change Set、ReviewScopeSelection、Coverage 或 Finding 边界：
+
+```text
+Change Set = 变化事实边界
+Chain = 业务上下文边界
+```
+
+### FULL / TARGETED 固定流程
+
+1. 先按原 1.4 流程完成 `analyze-change`，生成同一完整 Change Set 与 ChangeAnalysis。
+2. FULL 必须先满足原 FULL machine coverage；TARGETED 必须先得到 Runtime verified `ReviewScopeSelection` 与 COMPLETE scoped coverage。Chain 不能替代这些 Gate。
+3. Orchestrator 生成同 run 的 `.code-harness/runs/<runId>/requests/chain-review-context.json`，只携带 `runId / changeAnalysisPath / reviewScope / allowTemporaryForStale`。
+4. 调用 Controlled Runtime：
+
+```text
+codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+```
+
+5. Runtime 只接受同 run 路径，并重新验证 ChangeAnalysis Schema、ReviewScope Schema、selectedCallChains/scopedFiles 与对应 coverage，然后解析 Chain context。
+6. 命中项目 `ACCEPTED` Chain 时必须重新 validate；只有 `ACCEPTED + VALID` 才可直接复用。
+7. 当前 Review 所需入口没有可用 Accepted Chain 时，Runtime 才基于同一份 verified ChangeAnalysis lazy discover，并只写 `runs/<runId>/analysis/discovered-chains/**`；返回 `DISCOVERED + TEMPORARY`，不得写 Project State。
+
+### STALE 决策门禁
+
+Runtime 返回 `STALE_REQUIRES_DECISION` 时，Orchestrator 必须展示且只允许用户明确选择：
+
+- **使用本次临时发现的 Chain 继续评审**：同一请求显式设置 `allowTemporaryForStale=true` 后重新调用 `chain review-context`；只使用 Run State，不刷新 Project State。
+- **刷新项目 Chain**：进入 Task 3 的 `chain refresh` diff-first 流程，仍需用户明确确认后才能 persist；刷新本身不自动代表继续 Review。
+- **停止本次评审**：STOP。
+
+不得默认第一项，不得把 STALE Chain 静默当 VALID 使用，也不得因为 Review 需要上下文而自动 refresh/overwrite `.code-harness/chains/**`。
+
+`PARTIAL` / unresolved Chain context 进入需要人工处理，不得调用 `review-code`。
+
+### Coverage 与报告保持原语义
+
+- FULL 即使复用多个 Accepted Chain，required coverage 仍是完整 Change Set；不得因为 Chain 已覆盖部分调用链而把缺失 changed file 判为 COMPLETE。
+- TARGETED required coverage 仍是 Runtime verified `scopedFiles`；不得因为 Chain 节点更多/更少改变 Scope。
+- `Finding.file` 仍受原 FULL/TARGETED Gate 约束。
+- 当本次正式报告只有一个明确 Chain context 时，transport 增加 `chainContext={id,name,source,status}`；`source/status` 只允许 `ACCEPTED+VALID` 或 `DISCOVERED+TEMPORARY`。
+- 临时 Chain 的 `review.md` 必须显示“本次临时发现”与未沉淀提示；TARGETED 免责声明保持不变。
+
+### Review 后沉淀建议
+
+如果本次 Review 使用 `DISCOVERED + TEMPORARY` Chain，评审结束后可以提示：
+
+```text
+本次识别到新的业务链“<name>”。
+是否沉淀到项目 `.code-harness/chains/`？
+```
+
+**不得自动保存 DISCOVERED Chain**。只有用户明确确认保存具体 candidate 后，才复用 Task 3 的 validate + controlled `chain persist` 流程；Review 成功本身不构成 Project State 写入授权。
+
 ## Review Change Set（review/test/api-doc changed 共用）
 
 ```text
