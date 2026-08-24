@@ -30,6 +30,21 @@ func Test151ChainDiscoverBootstrapContractIsSelfContained(t *testing.T) {
 	}
 
 	orchestrator := texts[paths[0]]
+	if !strings.Contains(orchestrator, "| `harness chain discover [target]` | Reviewer → discover-chain |") {
+		t.Fatal("orchestrator must continue routing direct chain discover to Reviewer → discover-chain")
+	}
+	reviewer := texts[paths[1]]
+	if !strings.Contains(reviewer, "analyze-change → discover-chain → Controlled Runtime") {
+		t.Fatal("Reviewer must keep coordinating analyze-change → discover-chain → Controlled Runtime")
+	}
+	analyzeChange := texts[paths[2]]
+	for _, want := range []string{"committed", "staged", "unstaged", "untracked", "生产 Controller Method"} {
+		if !strings.Contains(analyzeChange, want) {
+			t.Fatalf("analyze-change must preserve Change Set/new entrypoint semantics %q", want)
+		}
+	}
+
+	discoverSkill := texts[paths[3]]
 	for _, want := range []string{
 		"Chain Discover Bootstrap（1.5.1）",
 		"harness chain discover [target] 是自包含流程",
@@ -42,9 +57,16 @@ func Test151ChainDiscoverBootstrapContractIsSelfContained(t *testing.T) {
 		"不得要求用户先执行 harness review",
 		"source revision / Change Set",
 		"不存在或已过期时自动重新 analyze-change",
+		"COMMITTED / STAGED / UNSTAGED / UNTRACKED",
+		"新增 production Controller Method",
+		"PARTIAL",
+		"未解析",
+		"原因",
+		"IMPLEMENTATION_NOT_FOUND",
+		"reviewCoverage.unresolvedSymbols",
 	} {
-		if !strings.Contains(orchestrator, want) {
-			t.Fatalf("orchestrator missing 1.5.1 bootstrap contract %q", want)
+		if !strings.Contains(discoverSkill, want) {
+			t.Fatalf("discover-chain missing 1.5.1 bootstrap contract %q", want)
 		}
 	}
 
@@ -58,19 +80,6 @@ func Test151ChainDiscoverBootstrapContractIsSelfContained(t *testing.T) {
 			if strings.Contains(text, forbidden) {
 				t.Fatalf("%s contains forbidden discover guidance %q", path, forbidden)
 			}
-		}
-	}
-
-	discoverSkill := texts[paths[3]]
-	for _, want := range []string{
-		"PARTIAL",
-		"未解析",
-		"原因",
-		"IMPLEMENTATION_NOT_FOUND",
-		"reviewCoverage.unresolvedSymbols",
-	} {
-		if !strings.Contains(discoverSkill, want) {
-			t.Fatalf("discover-chain missing machine-fact PARTIAL output contract %q", want)
 		}
 	}
 }
