@@ -1,0 +1,175 @@
+name: task4-doc-patch
+
+on:
+  push:
+    branches: [task4-review-chain-consumption]
+    paths:
+      - '.github/workflows/task4-doc-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task4-review-chain-consumption
+      - name: Patch Task 4 orchestration contracts
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def insert_before(path, anchor, marker, block):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if marker in text:
+                  return
+              if anchor not in text:
+                  raise SystemExit(f"anchor not found in {path}: {anchor}")
+              p.write_text(text.replace(anchor, block.rstrip() + "\n\n" + anchor, 1), encoding="utf-8")
+
+          insert_before(
+              ".code-harness/agents/orchestrator.md",
+              "## Review Change Set（review/test/api-doc changed 共用）",
+              "## Review Consumes Verified Chains（1.5 Task 4）",
+              r'''## Review Consumes Verified Chains（1.5 Task 4）
+
+Task 4 只把已验证 Chain 作为 Review 的业务上下文，不改变 1.4 的 Change Set、ReviewScopeSelection、Coverage 或 Finding 边界：
+
+```text
+Change Set = 变化事实边界
+Chain = 业务上下文边界
+```
+
+### FULL / TARGETED 固定流程
+
+1. 先按原 1.4 流程完成 `analyze-change`，生成同一完整 Change Set 与 ChangeAnalysis。
+2. FULL 必须先满足原 FULL machine coverage；TARGETED 必须先得到 Runtime verified `ReviewScopeSelection` 与 COMPLETE scoped coverage。Chain 不能替代这些 Gate。
+3. Orchestrator 生成同 run 的 `.code-harness/runs/<runId>/requests/chain-review-context.json`，只携带 `runId / changeAnalysisPath / reviewScope / allowTemporaryForStale`。
+4. 调用 Controlled Runtime：
+
+```text
+codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+```
+
+5. Runtime 只接受同 run 路径，并重新验证 ChangeAnalysis Schema、ReviewScope Schema、selectedCallChains/scopedFiles 与对应 coverage，然后解析 Chain context。
+6. 命中项目 `ACCEPTED` Chain 时必须重新 validate；只有 `ACCEPTED + VALID` 才可直接复用。
+7. 当前 Review 所需入口没有可用 Accepted Chain 时，Runtime 才基于同一份 verified ChangeAnalysis lazy discover，并只写 `runs/<runId>/analysis/discovered-chains/**`；返回 `DISCOVERED + TEMPORARY`，不得写 Project State。
+
+### STALE 决策门禁
+
+Runtime 返回 `STALE_REQUIRES_DECISION` 时，Orchestrator 必须展示且只允许用户明确选择：
+
+- **使用本次临时发现的 Chain 继续评审**：同一请求显式设置 `allowTemporaryForStale=true` 后重新调用 `chain review-context`；只使用 Run State，不刷新 Project State。
+- **刷新项目 Chain**：进入 Task 3 的 `chain refresh` diff-first 流程，仍需用户明确确认后才能 persist；刷新本身不自动代表继续 Review。
+- **停止本次评审**：STOP。
+
+不得默认第一项，不得把 STALE Chain 静默当 VALID 使用，也不得因为 Review 需要上下文而自动 refresh/overwrite `.code-harness/chains/**`。
+
+`PARTIAL` / unresolved Chain context 进入需要人工处理，不得调用 `review-code`。
+
+### Coverage 与报告保持原语义
+
+- FULL 即使复用多个 Accepted Chain，required coverage 仍是完整 Change Set；不得因为 Chain 已覆盖部分调用链而把缺失 changed file 判为 COMPLETE。
+- TARGETED required coverage 仍是 Runtime verified `scopedFiles`；不得因为 Chain 节点更多/更少改变 Scope。
+- `Finding.file` 仍受原 FULL/TARGETED Gate 约束。
+- 当本次正式报告只有一个明确 Chain context 时，transport 增加 `chainContext={id,name,source,status}`；`source/status` 只允许 `ACCEPTED+VALID` 或 `DISCOVERED+TEMPORARY`。
+- 临时 Chain 的 `review.md` 必须显示“本次临时发现”与未沉淀提示；TARGETED 免责声明保持不变。
+
+### Review 后沉淀建议
+
+如果本次 Review 使用 `DISCOVERED + TEMPORARY` Chain，评审结束后可以提示：
+
+```text
+本次识别到新的业务链“<name>”。
+是否沉淀到项目 `.code-harness/chains/`？
+```
+
+**不得自动保存 DISCOVERED Chain**。只有用户明确确认保存具体 candidate 后，才复用 Task 3 的 validate + controlled `chain persist` 流程；Review 成功本身不构成 Project State 写入授权。'''
+          )
+
+          insert_before(
+              ".code-harness/agents/reviewer.md",
+              "## PARTIAL",
+              "## Review Chain Context（1.5 Task 4）",
+              r'''## Review Chain Context（1.5 Task 4）
+
+Reviewer 在 1.4 原有 Scope Gate 之后消费 Orchestrator/Controlled Runtime 返回的 Review Chain Context；Reviewer 不自行把 Project State YAML 当作已验证事实。
+
+允许进入 Finding Review 的 Chain context 只有：
+
+```text
+ACCEPTED + VALID
+DISCOVERED + TEMPORARY
+```
+
+- `ACCEPTED + VALID`：来自 `.code-harness/chains/**`，并已针对当前 ChangeAnalysis 重新验证。
+- `DISCOVERED + TEMPORARY`：当前 run 基于 verified ChangeAnalysis lazy discover 的临时 Chain，只用于本次 Review。
+- **STALE Chain 不得静默复用**；必须由 Orchestrator 先完成用户决策门禁。
+
+硬边界：
+
+- **Chain 不能替代 Change Set**。FULL 仍读取/覆盖完整 required Change Set。
+- **Chain 不能替代 Runtime verified ReviewScopeSelection**。TARGETED 仍只按 verified selectedCallChains/scopedFiles 执行。
+- Chain 可以帮助理解跨层业务语义，但不能把 Chain 外历史代码自动扩成 Finding Scope，也不能把 Chain 内未变化代码包装为本次 Finding。
+- `notes` 是用户业务说明，不能覆盖 symbol/path/call/resource 等机器事实。
+- Reviewer 不得直接保存/刷新 Chain；临时 Chain 评审结束后只能向 Orchestrator返回“可提示沉淀”的信息。
+
+Review Report transport 在存在一个明确 Chain context 时只拷贝 Runtime 返回的 `id/name/source/status`，不得自行改写 `ACCEPTED/DISCOVERED` 来源或 `VALID/TEMPORARY` 状态。'''
+          )
+
+          insert_before(
+              ".code-harness/skills/analyze-change/SKILL.md",
+              "## 禁止行为",
+              "## Review Chain Context（1.5 Task 4）",
+              r'''## Review Chain Context（1.5 Task 4）
+
+Review 使用 Chain 时仍必须**先完成 ChangeAnalysis**；Chain 解析不建立第二套 Java/resource 事实源。
+
+固定顺序：
+
+1. 按本 Skill 原流程建立完整 Change Set、ChangeAnalysis、symbolLocations/resourceRelations/callChains。
+2. FULL 先通过原 FULL machine coverage；TARGETED 先生成并通过 Runtime verified ReviewScopeSelection + scoped coverage。
+3. 将已经验证的 Review Scope 连同同 run `changeAnalysisPath` 写入 controlled request。
+4. 由 Orchestrator 调用：
+
+```text
+codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+```
+
+5. Runtime 才能决定复用 `ACCEPTED + VALID`、缺失时 lazy discover `DISCOVERED + TEMPORARY`，或返回 STALE/partial 决策状态。
+
+**不得因为存在 Chain 而减少 changedFiles**；FULL 的 Change Set 与 required coverage 完全不变。
+**不得因为存在 Chain 而减少 scopedFiles**；TARGETED 的 scopedFiles 仍只能由 verified ChangeAnalysis + ReviewScopeSelection 决定。
+
+Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 symbol/path/role/resource relation，不得用 `.code-harness/chains/*.yaml` 替代 Code Navigation evidence。'''
+          )
+
+          insert_before(
+              ".code-harness/skills/review-code/SKILL.md",
+              "## Finding 规则",
+              "## Review Chain Context（1.5 Task 4）",
+              r'''## Review Chain Context（1.5 Task 4）
+
+`review-code` 可以消费已由 Controlled Runtime 解析完成的 `chainContext`，但 **chainContext 只提供业务上下文**，不改变本 Skill 的任何前置 Gate。
+
+- `ACCEPTED + VALID` 可以作为当前 Review 的已验证长期业务上下文。
+- `DISCOVERED + TEMPORARY` 只能作为本次 run 临时上下文；**临时 DISCOVERED Chain 不授权 Project State 写入**。
+- STALE/INVALID/PARTIAL Chain context 不允许进入 Finding Review。
+- **Finding.file 仍由原 FULL/TARGETED Scope Gate 决定**；不能因为某文件存在于 Chain 就绕过 verified scopedFiles/完整 Change Set 规则。
+- Chain 的 `notes` 不得覆盖实际代码证据；Finding 的 problem/evidence/impact/recommendation 仍必须来自本次变更与已读取源码。
+- 使用临时 Chain 不等于接受/保存该 Chain；沉淀必须回到 Orchestrator 的用户明确确认 + Task 3 Runtime persist 流程。
+
+Report transport 的 `chainContext` 只能复制 Runtime 已验证的 `id/name/source/status`，Renderer 只负责展示 provenance，不参与 Chain 判断。'''
+          )
+      - name: Commit patched contracts
+        shell: bash
+        run: |
+          git config user.name "codea-task4-bot"
+          git config user.email "codea-task4-bot@users.noreply.github.com"
+          git add .code-harness/agents/orchestrator.md .code-harness/agents/reviewer.md .code-harness/skills/analyze-change/SKILL.md .code-harness/skills/review-code/SKILL.md
+          git diff --cached --check
+          git commit -m "docs: wire verified chains into review flow"
+          git push origin HEAD:task4-review-chain-consumption
