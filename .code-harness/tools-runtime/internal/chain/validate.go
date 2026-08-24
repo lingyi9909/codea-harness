@@ -95,7 +95,7 @@ func Validate(root string, c Chain, evidence EvidenceProvider) ValidationResult 
 	}
 	sort.Strings(factErrors)
 	result.Errors = factErrors
-	if c.Status == StatusAccepted || c.Status == StatusStale {
+	if (c.Status == StatusAccepted || c.Status == StatusStale) && projectChainExists(root, c.ID) {
 		result.Status = ValidationStale
 	} else {
 		result.Status = ValidationInvalid
@@ -221,6 +221,15 @@ func safeProjectRelativePath(path string) bool {
 	}
 	clean := filepath.Clean(filepath.FromSlash(path))
 	return clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator))
+}
+
+func projectChainExists(root, id string) bool {
+	path, err := ChainPath(root, id)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
 }
 
 func validateProjectIdentity(root, id string) []string {
