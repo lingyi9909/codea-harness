@@ -247,6 +247,17 @@ FULL Review 中 changed Mapper/YML 不能静默跳过；未读取会使 Coverage
 .code-harness/runs/<runId>/review.md
 ```
 
+1.4/1.5 继续保留统一中文**首屏**与明确**下一步**。调用链角色展示只消费 Runtime 已验证的 role evidence，固定映射保持：
+
+```text
+🌐 接口入口   ← verified role=Controller
+⚙️ 业务服务   ← verified role=Service
+🧠 业务实现   ← verified role=Service + source=FIND_IMPLEMENTATIONS
+🗄 数据访问   ← verified role=Repository/Mapper
+📄 Mapper XML ← verified resource role=MapperXml
+🔹 代码节点   ← 无可靠 role evidence / Other / 其他角色
+```
+
 存在明确 Chain context 时首屏额外显示：
 
 ```text
