@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   task3-gate:
@@ -36,3 +37,41 @@ jobs:
         run: |
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  official-package-gate:
+    needs: task3-gate
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: 6a611e6827ff8e3019f5ea7a347217af9164a4a6
+    steps:
+      - name: Dispatch exact develop package-windows-x64
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq '.object.sha')"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            echo "develop moved: expected=$EXPECTED_SHA actual=$actual_sha"
+            exit 1
+          fi
+          gh workflow run package-windows-x64.yml --repo "$GITHUB_REPOSITORY" --ref develop
+
+          run_id=""
+          for _ in $(seq 1 40); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow package-windows-x64.yml --event workflow_dispatch --branch develop --limit 10 --json databaseId,headSha --jq '.[] | select(.headSha == env.EXPECTED_SHA) | .databaseId' | head -n1)"
+            if [ -n "$run_id" ]; then
+              break
+            fi
+            sleep 3
+          done
+          if [ -z "$run_id" ]; then
+            echo "exact-head package workflow run not found"
+            exit 1
+          fi
+          echo "official package run id=$run_id"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+          head_sha="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json headSha --jq '.headSha')"
+          conclusion="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')"
+          echo "headSha=$head_sha conclusion=$conclusion"
+          test "$head_sha" = "$EXPECTED_SHA"
+          test "$conclusion" = "success"
