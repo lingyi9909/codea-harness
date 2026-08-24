@@ -37,7 +37,7 @@ type chainPersistRequest struct {
 
 func runChain(args []string) error {
 	if len(args) == 0 {
-		return errors.New("chain requires list, show, discover, refresh, validate, or persist")
+		return errors.New("chain requires list, show, discover, review-context, refresh, validate, or persist")
 	}
 	switch args[0] {
 	case "list":
@@ -46,6 +46,8 @@ func runChain(args []string) error {
 		return runChainShow(args[1:])
 	case "discover":
 		return runChainDiscover(args[1:])
+	case "review-context":
+		return runChainReviewContext(args[1:])
 	case "refresh":
 		return runChainRefresh(args[1:])
 	case "validate":
@@ -251,15 +253,16 @@ func runChainPersist(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load chain persistence candidate: %w", err)
 	}
-	candidate.Status = chain.StatusAccepted
+	validationCandidate := candidate
 	analysis, _, err := loadVerifiedChainAnalysis(req.ChangeAnalysisPath)
 	if err != nil {
 		return err
 	}
-	validation := chain.Validate(".", candidate, chain.EvidenceSnapshot(analysis))
+	validation := chain.Validate(".", validationCandidate, chain.EvidenceSnapshot(analysis))
 	if validation.Status != chain.ValidationValid {
 		return writeJSONAndStatus(map[string]any{"status": "VALIDATION_FAILED", "validation": validation}, false)
 	}
+	candidate.Status = chain.StatusAccepted
 	if err := chain.SaveAccepted(".", candidate, req.ExpectedExistingHash); err != nil {
 		return err
 	}
