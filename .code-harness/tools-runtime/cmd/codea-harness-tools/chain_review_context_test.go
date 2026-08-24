@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -34,7 +35,6 @@ func installReviewScopeSchema(t *testing.T) {
 	writeFile(t, filepath.Join(".code-harness", "contracts", "review-scope.schema.json"), string(data))
 }
 
-// Kept behind a small helper so this test does not duplicate runtime.Caller setup logic elsewhere.
 func runtimeCallerForTest() (uintptr, string, int, bool) {
 	return runtime.Caller(0)
 }
