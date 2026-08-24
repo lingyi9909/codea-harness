@@ -232,7 +232,15 @@ func TestListAndRenderChineseAreStable(t *testing.T) {
 	stale.ID = "refund-apply"
 	stale.Name = "退款申请"
 	stale.Status = StatusStale
-	if err := SaveAccepted(root, stale, ""); err != nil {
+	staleBytes, err := MarshalYAML(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stalePath, err := ChainPath(root, stale.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stalePath, staleBytes, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	items, err := List(root)
