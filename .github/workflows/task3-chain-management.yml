@@ -1,0 +1,31 @@
+name: task3-chain-management
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.code-harness/tools-runtime/**'
+      - '.code-harness/skills/**'
+      - '.code-harness/agents/**'
+      - '.github/workflows/task3-chain-management.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  task3-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+      - name: Task 3 targeted gate
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./internal/chain ./cmd/codea-harness-tools
+      - name: Full Go test
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./...
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        run: go vet ./...
