@@ -82,15 +82,18 @@ func TestUpgrade140To150InstallsChainFrameworkAndPreservesAllProjectStateBytes(t
 	write(t, source, "bin/ast-grep.exe", "release-ast-grep")
 	write(t, source, "chains/package-business.yaml", "must-never-install\n")
 
-	template, err := os.ReadFile(filepath.Join(harnessRoot, "harness.template.yaml"))
+	accepted140Config, changed, err := migrateConfigV1ToV2ResourceScopes([]byte(validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n")))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("accepted 1.4 fixture must be migrated to harness config version 2")
 	}
 	write(t, target, "VERSION", "1.4.0\n")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(target, "harness.yaml"), template, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(target, "harness.yaml"), accepted140Config, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	write(t, target, "AGENTS.md", "accepted-1.4-framework\n")
@@ -98,7 +101,7 @@ func TestUpgrade140To150InstallsChainFrameworkAndPreservesAllProjectStateBytes(t
 	write(t, target, "bin/codea-harness-tools.exe", "accepted-1.4-runtime")
 
 	state := map[string][]byte{
-		"harness.yaml":                    template,
+		"harness.yaml":                    accepted140Config,
 		"project.md":                      []byte("# user project\r\nkeep exactly\r\n"),
 		"database.yaml":                   []byte("version: 1\r\npassword: user-secret\r\n"),
 		"runs/run-140/evidence/result.txt": []byte("accepted-run-evidence\r\n"),
