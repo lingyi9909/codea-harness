@@ -29,6 +29,7 @@ type ReviewRequest struct {
 	Result         Result         `json:"result"`
 	Mode           string         `json:"mode,omitempty"`
 	Target         *ReviewTarget  `json:"target,omitempty"`
+	ChainContext   *ChainContext  `json:"chainContext,omitempty"`
 	Scope          ReviewScope    `json:"reviewScope"`
 	Coverage       ReviewCoverage `json:"reviewCoverage"`
 	Findings       []Finding      `json:"findings"`
@@ -37,6 +38,13 @@ type ReviewRequest struct {
 type ReviewTarget struct {
 	Symbol string `json:"symbol"`
 	Kind   string `json:"kind"`
+}
+
+type ChainContext struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Source string `json:"source"` // ACCEPTED | DISCOVERED
+	Status string `json:"status"` // VALID | TEMPORARY
 }
 
 type ReviewScope struct {
@@ -120,6 +128,9 @@ func Validate(req ReviewRequest) error {
 	default:
 		return fmt.Errorf("invalid review result %q", req.Result)
 	}
+	if err := validateChainContext(req.ChainContext); err != nil {
+		return err
+	}
 	mode := reviewMode(req)
 	switch mode {
 	case "FULL":
@@ -150,13 +161,13 @@ func Validate(req ReviewRequest) error {
 	if req.Coverage.Status == "PARTIAL" && req.Result != ResultManualActionRequired {
 		return errors.New("PARTIAL coverage requires MANUAL_ACTION_REQUIRED result")
 	}
-	for i, chain := range req.Coverage.CallChains {
-		if strings.TrimSpace(chain.EntryPoint) == "" {
+	for i, callChain := range req.Coverage.CallChains {
+		if strings.TrimSpace(callChain.EntryPoint) == "" {
 			return fmt.Errorf("call chain %d requires entryPoint", i)
 		}
-		for j, symbol := range chain.Chain {
+		for j, symbol := range callChain.Chain {
 			if strings.TrimSpace(symbol) == "" {
-				return fmt.Errorf("call chain %q has empty symbol at %d", chain.EntryPoint, j)
+				return fmt.Errorf("call chain %q has empty symbol at %d", callChain.EntryPoint, j)
 			}
 		}
 	}
@@ -195,6 +206,28 @@ func Validate(req ReviewRequest) error {
 		if f.Confidence < 0 || f.Confidence > 1 {
 			return fmt.Errorf("finding %q has invalid confidence", f.ID)
 		}
+	}
+	return nil
+}
+
+func validateChainContext(context *ChainContext) error {
+	if context == nil {
+		return nil
+	}
+	if strings.TrimSpace(context.ID) == "" || strings.TrimSpace(context.Name) == "" {
+		return errors.New("review chainContext requires id and name")
+	}
+	switch context.Source {
+	case "ACCEPTED":
+		if context.Status != "VALID" {
+			return errors.New("ACCEPTED review chainContext requires VALID status")
+		}
+	case "DISCOVERED":
+		if context.Status != "TEMPORARY" {
+			return errors.New("DISCOVERED review chainContext requires TEMPORARY status")
+		}
+	default:
+		return fmt.Errorf("invalid review chainContext source %q", context.Source)
 	}
 	return nil
 }
@@ -312,6 +345,12 @@ func writeHeader(b *strings.Builder, req ReviewRequest) {
 	} else {
 		fmt.Fprintln(b, "| 评审模式 | 📦 完整评审 |")
 	}
+	if req.ChainContext != nil {
+		fmt.Fprintf(b, "| 业务链 | %s |\n", singleLine(req.ChainContext.Name))
+		fmt.Fprintf(b, "| Chain ID | `%s` |\n", singleLine(req.ChainContext.ID))
+		fmt.Fprintf(b, "| Chain 来源 | %s |\n", chainSourceLabel(req.ChainContext.Source))
+		fmt.Fprintf(b, "| Chain 状态 | %s |\n", chainStatusLabel(req.ChainContext.Status))
+	}
 	fmt.Fprintf(b, "| Harness 版本 | %s |\n", singleLine(req.HarnessVersion))
 	fmt.Fprintf(b, "| 评审基线 | %s |\n", singleLine(req.BaseRef))
 	fmt.Fprintf(b, "| 当前提交 | %s |\n", singleLine(req.Head))
@@ -321,6 +360,24 @@ func writeHeader(b *strings.Builder, req ReviewRequest) {
 	fmt.Fprintf(b, "| 问题数量 | %d |\n", len(req.Findings))
 	fmt.Fprintf(b, "| 下一步 | %s |\n", firstScreenNextAction(req))
 	fmt.Fprintln(b)
+	if req.ChainContext != nil && req.ChainContext.Source == "DISCOVERED" {
+		fmt.Fprintln(b, "⚠️ 本次评审使用临时发现的业务链，尚未沉淀到项目 Chain。")
+		fmt.Fprintln(b)
+	}
+}
+
+func chainSourceLabel(source string) string {
+	if source == "ACCEPTED" {
+		return "项目已确认"
+	}
+	return "本次临时发现"
+}
+
+func chainStatusLabel(status string) string {
+	if status == "VALID" {
+		return "已确认"
+	}
+	return "临时"
 }
 
 func firstScreenNextAction(req ReviewRequest) string {
@@ -399,9 +456,9 @@ func writeCallChains(b *strings.Builder, coverage ReviewCoverage) {
 		return
 	}
 	labels := callChainRoleLabels(coverage)
-	for i, chain := range coverage.CallChains {
+	for i, callChain := range coverage.CallChains {
 		fmt.Fprintf(b, "### 调用链 %d\n\n", i+1)
-		nodes := normalizeCallChain(chain)
+		nodes := normalizeCallChain(callChain)
 		for j, symbol := range nodes {
 			label := labels[strings.TrimSpace(symbol)]
 			if label == "" {
@@ -418,13 +475,13 @@ func writeCallChains(b *strings.Builder, coverage ReviewCoverage) {
 	fmt.Fprintln(b)
 }
 
-func normalizeCallChain(chain CallChain) []string {
-	entry := strings.TrimSpace(chain.EntryPoint)
-	nodes := make([]string, 0, len(chain.Chain)+1)
+func normalizeCallChain(callChain CallChain) []string {
+	entry := strings.TrimSpace(callChain.EntryPoint)
+	nodes := make([]string, 0, len(callChain.Chain)+1)
 	if entry != "" {
 		nodes = append(nodes, entry)
 	}
-	for i, symbol := range chain.Chain {
+	for i, symbol := range callChain.Chain {
 		symbol = strings.TrimSpace(symbol)
 		if i == 0 && symbol == entry {
 			continue

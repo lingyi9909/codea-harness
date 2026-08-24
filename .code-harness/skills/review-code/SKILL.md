@@ -143,6 +143,19 @@ category = TEST_VALIDITY
 
 不得把 Test Validity Gate 扩展成普通测试代码质量 Review。
 
+## Review Chain Context（1.5 Task 4）
+
+`review-code` 可以消费已由 Controlled Runtime 解析完成的 `chainContext`，但 **chainContext 只提供业务上下文**，不改变本 Skill 的任何前置 Gate。
+
+- `ACCEPTED + VALID` 可以作为当前 Review 的已验证长期业务上下文。
+- `DISCOVERED + TEMPORARY` 只能作为本次 run 临时上下文；**临时 DISCOVERED Chain 不授权 Project State 写入**。
+- STALE/INVALID/PARTIAL Chain context 不允许进入 Finding Review。
+- **Finding.file 仍由原 FULL/TARGETED Scope Gate 决定**；不能因为某文件存在于 Chain 就绕过 verified scopedFiles/完整 Change Set 规则。
+- Chain 的 `notes` 不得覆盖实际代码证据；Finding 的 problem/evidence/impact/recommendation 仍必须来自本次变更与已读取源码。
+- 使用临时 Chain 不等于接受/保存该 Chain；沉淀必须回到 Orchestrator 的用户明确确认 + Task 3 Runtime persist 流程。
+
+Report transport 的 `chainContext` 只能复制 Runtime 已验证的 `id/name/source/status`，Renderer 只负责展示 provenance，不参与 Chain 判断。
+
 ## Finding 规则
 
 每条 Finding 必须引用实际证据，并完整记录：

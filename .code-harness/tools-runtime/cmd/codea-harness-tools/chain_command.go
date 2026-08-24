@@ -37,7 +37,7 @@ type chainPersistRequest struct {
 
 func runChain(args []string) error {
 	if len(args) == 0 {
-		return errors.New("chain requires list, show, discover, refresh, validate, or persist")
+		return errors.New("chain requires list, show, discover, review-context, refresh, validate, or persist")
 	}
 	switch args[0] {
 	case "list":
@@ -46,6 +46,8 @@ func runChain(args []string) error {
 		return runChainShow(args[1:])
 	case "discover":
 		return runChainDiscover(args[1:])
+	case "review-context":
+		return runChainReviewContext(args[1:])
 	case "refresh":
 		return runChainRefresh(args[1:])
 	case "validate":
