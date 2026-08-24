@@ -87,6 +87,16 @@ func ResolveChainContexts(root string, selection Selection, changeAnalysisJSON [
 		if len(relevantEntries) == 0 {
 			continue
 		}
+		if persisted.Status == chain.StatusStale {
+			for _, entry := range relevantEntries {
+				staleEntries[entry] = true
+			}
+			if !staleSeen[persisted.ID] {
+				result.Stale = append(result.Stale, StaleChain{ID: persisted.ID, Name: persisted.Name})
+				staleSeen[persisted.ID] = true
+			}
+			continue
+		}
 		validation := chain.Validate(root, persisted, chain.EvidenceSnapshot(evidence))
 		switch validation.Status {
 		case chain.ValidationValid:
