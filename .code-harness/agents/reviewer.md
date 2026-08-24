@@ -231,6 +231,31 @@ Runtime 输出只允许：
 
 如果 Runtime 返回 `PARTIAL`，Reviewer 必须展示 unresolved/ambiguity，并明确本次 Chain 发现不完整；不得补猜事实、不得标记 ACCEPTED、不得进入 Task 3 的 validate/accept/refresh。多个入口只有 verified core path 完全一致才允许 canonicalize 合并，不使用 fuzzy/name similarity。
 
+## Review Chain Context（1.5 Task 4）
+
+Reviewer 在 1.4 原有 Scope Gate 之后消费 Orchestrator/Controlled Runtime 返回的 Review Chain Context；Reviewer 不自行把 Project State YAML 当作已验证事实。
+
+允许进入 Finding Review 的 Chain context 只有：
+
+```text
+ACCEPTED + VALID
+DISCOVERED + TEMPORARY
+```
+
+- `ACCEPTED + VALID`：来自 `.code-harness/chains/**`，并已针对当前 ChangeAnalysis 重新验证。
+- `DISCOVERED + TEMPORARY`：当前 run 基于 verified ChangeAnalysis lazy discover 的临时 Chain，只用于本次 Review。
+- **STALE Chain 不得静默复用**；必须由 Orchestrator 先完成用户决策门禁。
+
+硬边界：
+
+- **Chain 不能替代 Change Set**。FULL 仍读取/覆盖完整 required Change Set。
+- **Chain 不能替代 Runtime verified ReviewScopeSelection**。TARGETED 仍只按 verified selectedCallChains/scopedFiles 执行。
+- Chain 可以帮助理解跨层业务语义，但不能把 Chain 外历史代码自动扩成 Finding Scope，也不能把 Chain 内未变化代码包装为本次 Finding。
+- `notes` 是用户业务说明，不能覆盖 symbol/path/call/resource 等机器事实。
+- Reviewer 不得直接保存/刷新 Chain；临时 Chain 评审结束后只能向 Orchestrator 返回“可提示沉淀”的信息。
+
+Review Report transport 在存在一个明确 Chain context 时只拷贝 Runtime 返回的 `id/name/source/status`，不得自行改写 `ACCEPTED/DISCOVERED` 来源或 `VALID/TEMPORARY` 状态。
+
 ## PARTIAL
 
 FULL 或 TARGETED 任一声明 Scope 的 Coverage 不完整、Runtime Contract 校验失败时：
