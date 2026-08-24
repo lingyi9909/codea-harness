@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、Runtime Apply Safety Gate、修复轮次和统一摘要。
-version: 6
+version: 7
 ---
 
 # Orchestrator
@@ -16,6 +16,11 @@ version: 6
 | `harness review <Class>` | Reviewer（TARGETED CLASS） | 否 |
 | `harness review <Class.method>` | Reviewer（TARGETED METHOD） | 否 |
 | `harness api-doc <target>` | API Doc Agent → discover-api → generate-api-doc | 否 |
+| `harness chain list` | Orchestrator → validate-chain | 否 |
+| `harness chain show <id\|target>` | Orchestrator → validate-chain | 否 |
+| `harness chain discover [target]` | Reviewer → discover-chain | 否 |
+| `harness chain refresh <id>` | Orchestrator → discover-chain → validate-chain | 否 |
+| `harness chain validate [id]` | Orchestrator → validate-chain | 否 |
 | `harness upgrade` | upgrade-harness | 否 |
 | `harness test` | Reviewer → Integration Test Agent → Runtime Debugger → Fix Agent(需要时) | 是 |
 | `harness debug-service` | Runtime Debugger | 是 |
@@ -35,6 +40,70 @@ harness review <Class.method>` → TARGETED METHOD
 ```
 
 测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。历史 Existing Test 不自动修改。对 GENERATED_BY_PLAN 测试仍保留最多 2 轮 repair 计数，但 Task 4 后每个实际发生变化的 repair patch 都必须生成新的 patch identity 与新 planId，并在审批前重新 Runtime seal 后再获得精确批准，旧批准不得授权不同 bytes。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
+
+## Chain Management（1.5 Task 3）
+
+Task 3 只负责 Chain 的 list/show/discover/validate/refresh 与用户确认后的 Project State 持久化，不把 Chain 接入 Review/Test/Debug/Fix/Verify。
+
+用户意图固定为：
+
+```text
+harness chain list
+harness chain show <id|target>
+harness chain discover [target]
+harness chain refresh <id>
+harness chain validate [id]
+```
+
+不得新增 `chain accept/merge/split/edit/ignore` 用户命令；保存/更新 Chain 是上述流程中的用户确认动作，不是新的用户 CLI。
+
+### list / show
+
+- 只读取 `.code-harness/chains/*.yaml`；不得修改 Project State。
+- `show` 只允许 exact id / exact Controller / exact Controller.method 命中；多条命中必须报告歧义，不得 fuzzy 选取。
+- 用户侧状态与内容固定中文；节点角色只使用已验证/已保存 role，不得根据类名后缀补角色。
+
+### validate
+
+1. Orchestrator 针对 Chain/target 建立当前 source 的 ChangeAnalysis。
+2. ChangeAnalysis 必须先通过 `change-analysis.schema.json` 与 Runtime machine coverage 校验。
+3. 调用 Controlled Runtime `chain validate` 验证 exact EntryPoint、node、call order、resource relation、boundary、id/filename/project uniqueness。
+4. `notes` 不参与代码事实判断。
+5. machine `VALID / STALE / INVALID` 只保留在内部结构化结果；用户摘要固定翻译为“Chain 验证通过 / Chain 已过期，需要刷新 / Chain 无效，需要修正”。
+6. validate 不得静默修改 `.code-harness/chains/**`。
+
+### refresh：diff-first + 用户确认
+
+固定流程：
+
+```text
+现有 Project State Chain
+→ 当前 source 的 verified ChangeAnalysis
+→ Lazy Discover 当前 candidate
+→ Controlled Runtime refresh
+→ .code-harness/runs/<runId>/analysis/refresh-candidates/<id>.yaml
+→ 展示 deterministic added/removed facts + existingHash
+→ 等待用户明确确认保存/更新
+```
+
+在用户确认前：
+
+- 不得调用内部 `chain persist`；
+- 不得覆盖 `.code-harness/chains/**`；
+- 不得把 refresh candidate 宣称为已保存 Chain。
+
+用户明确确认保存/更新后，Orchestrator 才能生成同 run 的 `chain-persist.json` 并调用内部 Controlled Runtime `chain persist`。Runtime 必须按顺序执行：
+
+```text
+candidate code-fact validation == VALID
+→ existing Chain 时 expectedExistingHash 精确匹配
+→ status=ACCEPTED
+→ atomic replace .code-harness/chains/<id>.yaml
+```
+
+首次保存不存在 existing Chain 时 expected hash 为空；已有同 id Chain 没有 expected hash、hash 已变化、validation 非 VALID、duplicate id 或 path/contract 不安全时一律 0 Project State writes。
+
+**“继续/可以/好/ok”不能在没有明确保存/更新对象与 refresh diff 上下文时自动触发 Project State 写入。** refresh 的确认只授权该次 Chain candidate，不构成 Test/Fix Approval，也不得复用为其他写操作审批。
 
 ## Review Change Set（review/test/api-doc changed 共用）
 
