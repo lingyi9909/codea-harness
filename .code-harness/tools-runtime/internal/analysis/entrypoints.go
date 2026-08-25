@@ -295,37 +295,19 @@ func (s navigationEntrypointScanner153) Base(ctx context.Context, snapshot chang
 
 func (s navigationEntrypointScanner153) scanAtRoot(ctx context.Context, scanRoot, scope string) ([]ControllerEndpoint, error) {
 	n := nav.Navigator{RepoRoot: scanRoot, AstGrepPath: s.astGrepPath, Runner: rootedRunner153{dir: scanRoot}}
-	controllerByName := map[string]nav.AnnotationMatch{}
-	for _, annotation := range []string{"RestController", "Controller"} {
-		result, err := n.FindByAnnotation(ctx, annotation, scope)
-		if err != nil { return nil, err }
-		for _, match := range result.Matches {
-			if match.Kind == "CLASS" && filepath.ToSlash(match.Path) == filepath.ToSlash(scope) {
-				controllerByName[match.Symbol] = match
-			}
-		}
-	}
-	if len(controllerByName) == 0 { return nil, nil }
-
-	methodByKey := map[string]nav.AnnotationMatch{}
-	for _, annotation := range []string{"RequestMapping", "GetMapping", "PostMapping", "PutMapping", "PatchMapping", "DeleteMapping"} {
-		result, err := n.FindByAnnotation(ctx, annotation, scope)
-		if err != nil { return nil, err }
-		for _, match := range result.Matches {
-			if match.Kind != "METHOD" || filepath.ToSlash(match.Path) != filepath.ToSlash(scope) { continue }
-			owner := owner153(match.Symbol)
-			if _, ok := controllerByName[owner]; !ok { continue }
-			methodByKey[match.Symbol] = match
-		}
-	}
-	out := make([]ControllerEndpoint, 0, len(methodByKey))
-	for symbol, method := range methodByKey {
-		owner := owner153(symbol)
-		controller := controllerByName[owner]
+	matches, err := n.FindControllerEndpoints(ctx, scope)
+	if err != nil { return nil, err }
+	out := make([]ControllerEndpoint, 0, len(matches))
+	for _, match := range matches {
+		if filepath.ToSlash(match.Path) != filepath.ToSlash(scope) { continue }
 		out = append(out, ControllerEndpoint{
-			Controller: owner, Symbol: symbol, Path: filepath.ToSlash(scope),
-			ControllerStartLine: controller.LineStart, ControllerEndLine: controller.LineEnd,
-			StartLine: method.LineStart, EndLine: method.LineEnd,
+			Controller: match.Controller,
+			Symbol: match.Symbol,
+			Path: filepath.ToSlash(match.Path),
+			ControllerStartLine: match.ControllerStartLine,
+			ControllerEndLine: match.ControllerEndLine,
+			StartLine: match.StartLine,
+			EndLine: match.EndLine,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { if out[i].Symbol != out[j].Symbol { return out[i].Symbol < out[j].Symbol }; return out[i].StartLine < out[j].StartLine })
