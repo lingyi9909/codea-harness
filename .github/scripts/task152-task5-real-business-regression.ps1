@@ -106,19 +106,19 @@ public abstract class AbstractTemplate {
 
     Write-Utf8NoBom (Join-Path $currentJava 'XxxService.java') @'
 package com.company.order;
-public interface XxxService {
+interface XxxService {
     void submit();
 }
 '@
     Write-Utf8NoBom (Join-Path $currentJava 'XxxMapper.java') @'
 package com.company.order;
-public interface XxxMapper {
+interface XxxMapper {
     void updateStatus();
 }
 '@
     Write-Utf8NoBom (Join-Path $currentJava 'XxxController.java') @'
 package com.company.order;
-public class XxxController {
+class XxxController {
     private XxxService service;
     public void health() {}
 }
@@ -196,7 +196,7 @@ workspaceDependencies:
     # Real mixed working tree required by Task 5.
     Write-Utf8NoBom (Join-Path $currentJava 'XxxController.java') @'
 package com.company.order;
-public class XxxController {
+class XxxController {
     private XxxService service;
     @PostMapping
     public void submit() { service.submit(); }
@@ -283,8 +283,8 @@ $service = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxServ
 $impl = Invoke-RuntimeJson $current @('nav','find-implementations','--symbol','XxxService','--scope','src/main/java')
 $mapper = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxMapper','--scope','src/main/java')
 $serviceRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService','--scope','src/main/java')
-$submitRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','submit','--scope','src/main/java')
-$mapperRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','updateStatus','--scope','src/main/java')
+$submitRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService.submit','--scope','src/main/java')
+$mapperRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxMapper.updateStatus','--scope','src/main/java')
 
 Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.java' 'Controller find-symbol'
 Assert-OneMatchPath $service 'src/main/java/com/company/order/XxxService.java' 'Service find-symbol'
