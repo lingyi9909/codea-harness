@@ -1,12 +1,11 @@
 package nav
 
 import (
-	"fmt"
-	"io/fs"
+	"context"
+	"errors"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
+	"time"
 
 	"codea-harness-tools/internal/workspace"
 )
@@ -17,12 +16,12 @@ const (
 )
 
 const (
-	CodeWorkspaceNotConfigured     = "WORKSPACE_DEPENDENCY_NOT_CONFIGURED"
-	CodeSuperclassNotFound         = "SUPERCLASS_NOT_FOUND"
-	CodeInheritedMethodNotFound    = "INHERITED_METHOD_NOT_FOUND"
-	CodeAmbiguousInheritedMethod   = "AMBIGUOUS_INHERITED_METHOD"
-	CodeTemplateOverrideNotFound   = "TEMPLATE_OVERRIDE_NOT_FOUND"
-	CodeAmbiguousTemplateDispatch  = "AMBIGUOUS_TEMPLATE_DISPATCH"
+	CodeWorkspaceNotConfigured    = "WORKSPACE_DEPENDENCY_NOT_CONFIGURED"
+	CodeSuperclassNotFound        = "SUPERCLASS_NOT_FOUND"
+	CodeInheritedMethodNotFound   = "INHERITED_METHOD_NOT_FOUND"
+	CodeAmbiguousInheritedMethod  = "AMBIGUOUS_INHERITED_METHOD"
+	CodeTemplateOverrideNotFound  = "TEMPLATE_OVERRIDE_NOT_FOUND"
+	CodeAmbiguousTemplateDispatch = "AMBIGUOUS_TEMPLATE_DISPATCH"
 )
 
 type WorkspaceNavigationFact struct {
@@ -49,131 +48,125 @@ type WorkspaceNavigationResult struct {
 type WorkspaceInheritanceResolver struct {
 	CurrentRoot string
 	Dependency  workspace.VerificationResult
+	AstGrepPath string
+	Runner      Runner
 }
-
-type javaMethod struct {
-	Name     string
-	Body     string
-	Abstract bool
-}
-
-type javaClass struct {
-	Name    string
-	Super   string
-	Path    string
-	Methods []javaMethod
-}
-
-var classDeclarationRE = regexp.MustCompile(`(?m)\b(?:public\s+)?(?:final\s+|abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([A-Za-z_$][A-Za-z0-9_$.]*))?`)
-var methodDeclarationRE = regexp.MustCompile(`(?m)(?:^|\n)\s*(?:@[A-Za-z_$][A-Za-z0-9_$.]*(?:\([^\n]*\))?\s*)*(?:(?:public|protected|private)\s+)?(?:(?:abstract|static|final|synchronized|native)\s+)*(?:[A-Za-z_$][A-Za-z0-9_$.<>?,\[\]]*\s+)+([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^;{}]*\)\s*(\{|;)`)
 
 func (r WorkspaceInheritanceResolver) ResolveInheritedCall(fromSymbol, method string) WorkspaceNavigationResult {
 	if rejected := r.rejectUnverified(method, fromSymbol); rejected != nil {
 		return *rejected
 	}
-	owner, fromMethod, ok := splitQualifiedMethod(fromSymbol)
+	owner, _, ok := splitQualifiedMethod(fromSymbol)
 	if !ok {
 		return partial(CodeInheritedMethodNotFound, fromSymbol, fromSymbol)
 	}
-	currentClasses, err := findClasses(r.CurrentRoot, owner)
-	if err != nil || len(currentClasses) != 1 || strings.TrimSpace(currentClasses[0].Super) == "" {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	current := r.navigator(r.CurrentRoot)
+	super, err := current.WorkspaceSuperclass(ctx, owner)
+	if err != nil {
+		if errors.Is(err, ErrAmbiguousSymbol) {
+			return partial(CodeAmbiguousInheritedMethod, owner+"."+method, fromSymbol)
+		}
 		return partial(CodeSuperclassNotFound, owner, fromSymbol)
 	}
-	fromMethods := methodsNamed(currentClasses[0], fromMethod)
-	if len(fromMethods) != 1 || !methodCalls(fromMethods[0], method) {
+	calls, err := current.WorkspaceMethodCalls(ctx, fromSymbol, method)
+	if err != nil || !calls {
 		return partial(CodeInheritedMethodNotFound, owner+"."+method, fromSymbol)
 	}
 
-	superName := simpleJavaName(currentClasses[0].Super)
-	superClasses, err := findClasses(r.Dependency.ConfirmedRoot, superName)
-	if err != nil || len(superClasses) == 0 {
-		return partial(CodeSuperclassNotFound, superName, fromSymbol)
+	superName := normalizeWorkspaceType(super.Super)
+	if superName == "" {
+		return partial(CodeSuperclassNotFound, owner, fromSymbol)
 	}
-	if len(superClasses) > 1 {
-		return partial(CodeAmbiguousInheritedMethod, superName+"."+method, fromSymbol)
-	}
-	matches := methodsNamed(superClasses[0], method)
-	if len(matches) == 0 {
+	dependency := r.navigator(r.Dependency.ConfirmedRoot)
+	target, err := dependency.WorkspaceMethod(ctx, superName, method)
+	if err != nil {
+		if errors.Is(err, ErrAmbiguousSymbol) {
+			return partial(CodeAmbiguousInheritedMethod, superName+"."+method, fromSymbol)
+		}
 		return partial(CodeInheritedMethodNotFound, superName+"."+method, fromSymbol)
 	}
-	if len(matches) > 1 {
-		return partial(CodeAmbiguousInheritedMethod, superName+"."+method, fromSymbol)
-	}
-	return completeFact(r.Dependency.DependencyID, superName+"."+method, superClasses[0].Path, fromSymbol)
+	return completeFact(r.Dependency.DependencyID, superName+"."+method, target.Path, fromSymbol)
 }
 
 func (r WorkspaceInheritanceResolver) ResolveSuperclassCall(fromSymbol, method string) WorkspaceNavigationResult {
 	if rejected := r.rejectUnverified(method, fromSymbol); rejected != nil {
 		return *rejected
 	}
-	owner, fromMethod, ok := splitQualifiedMethod(fromSymbol)
+	owner, _, ok := splitQualifiedMethod(fromSymbol)
 	if !ok {
 		return partial(CodeInheritedMethodNotFound, fromSymbol, fromSymbol)
 	}
-	classes, err := findClasses(r.Dependency.ConfirmedRoot, owner)
-	if err != nil || len(classes) == 0 {
-		return partial(CodeSuperclassNotFound, owner, fromSymbol)
-	}
-	if len(classes) > 1 {
-		return partial(CodeAmbiguousInheritedMethod, owner+"."+method, fromSymbol)
-	}
-	fromMethods := methodsNamed(classes[0], fromMethod)
-	if len(fromMethods) != 1 || !methodCalls(fromMethods[0], method) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dependency := r.navigator(r.Dependency.ConfirmedRoot)
+	calls, err := dependency.WorkspaceMethodCalls(ctx, fromSymbol, method)
+	if err != nil || !calls {
 		return partial(CodeInheritedMethodNotFound, owner+"."+method, fromSymbol)
 	}
-	matches := methodsNamed(classes[0], method)
-	if len(matches) == 0 {
+	target, err := dependency.WorkspaceMethod(ctx, owner, method)
+	if err != nil {
+		if errors.Is(err, ErrAmbiguousSymbol) {
+			return partial(CodeAmbiguousInheritedMethod, owner+"."+method, fromSymbol)
+		}
 		return partial(CodeInheritedMethodNotFound, owner+"."+method, fromSymbol)
 	}
-	if len(matches) > 1 {
-		return partial(CodeAmbiguousInheritedMethod, owner+"."+method, fromSymbol)
-	}
-	return completeFact(r.Dependency.DependencyID, owner+"."+method, classes[0].Path, fromSymbol)
+	return completeFact(r.Dependency.DependencyID, owner+"."+method, target.Path, fromSymbol)
 }
 
 func (r WorkspaceInheritanceResolver) ResolveTemplateDispatch(fromSymbol, hook, concreteClass string) WorkspaceNavigationResult {
 	if rejected := r.rejectUnverified(hook, fromSymbol); rejected != nil {
 		return *rejected
 	}
-	owner, fromMethod, ok := splitQualifiedMethod(fromSymbol)
+	owner, _, ok := splitQualifiedMethod(fromSymbol)
 	if !ok {
 		return partial(CodeTemplateOverrideNotFound, hook, fromSymbol)
 	}
-	classes, err := findClasses(r.Dependency.ConfirmedRoot, owner)
-	if err != nil || len(classes) == 0 {
-		return partial(CodeSuperclassNotFound, owner, fromSymbol)
-	}
-	if len(classes) > 1 {
-		return partial(CodeAmbiguousTemplateDispatch, owner+"."+hook, fromSymbol)
-	}
-	fromMethods := methodsNamed(classes[0], fromMethod)
-	if len(fromMethods) != 1 || !methodCalls(fromMethods[0], hook) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dependency := r.navigator(r.Dependency.ConfirmedRoot)
+	calls, err := dependency.WorkspaceMethodCalls(ctx, fromSymbol, hook)
+	if err != nil || !calls {
 		return partial(CodeTemplateOverrideNotFound, owner+"."+hook, fromSymbol)
 	}
-	hookDeclarations := methodsNamed(classes[0], hook)
-	if len(hookDeclarations) == 0 {
+	if _, err := dependency.WorkspaceMethod(ctx, owner, hook); err != nil {
+		if errors.Is(err, ErrAmbiguousSymbol) {
+			return partial(CodeAmbiguousTemplateDispatch, owner+"."+hook, fromSymbol)
+		}
 		return partial(CodeTemplateOverrideNotFound, owner+"."+hook, fromSymbol)
-	}
-	if len(hookDeclarations) > 1 {
-		return partial(CodeAmbiguousTemplateDispatch, owner+"."+hook, fromSymbol)
 	}
 
-	candidates, err := findDirectSubclassesWithMethod(r.CurrentRoot, owner, hook, concreteClass)
-	if err != nil || len(candidates) == 0 {
+	current := r.navigator(r.CurrentRoot)
+	candidates, err := current.WorkspaceDirectSubclassesWithMethod(ctx, owner, hook, concreteClass)
+	if err != nil {
+		if errors.Is(err, ErrAmbiguousSymbol) {
+			return partial(CodeAmbiguousTemplateDispatch, owner+"."+hook, fromSymbol)
+		}
+		return partial(CodeTemplateOverrideNotFound, owner+"."+hook, fromSymbol)
+	}
+	if len(candidates) == 0 {
 		return partial(CodeTemplateOverrideNotFound, owner+"."+hook, fromSymbol)
 	}
 	if len(candidates) > 1 {
 		return partial(CodeAmbiguousTemplateDispatch, owner+"."+hook, fromSymbol)
 	}
-	fact := WorkspaceNavigationFact{
-		Workspace: "current",
-		Symbol: candidates[0].Name+"."+hook,
-		Path: candidates[0].Path,
-		Role: "Service",
-		Source: "WORKSPACE_INHERITANCE",
-		From: fromSymbol,
+	method, err := current.WorkspaceMethod(ctx, candidates[0].Name, hook)
+	if err != nil {
+		if errors.Is(err, ErrAmbiguousSymbol) {
+			return partial(CodeAmbiguousTemplateDispatch, owner+"."+hook, fromSymbol)
+		}
+		return partial(CodeTemplateOverrideNotFound, owner+"."+hook, fromSymbol)
 	}
-	return WorkspaceNavigationResult{Status: NavigationComplete, Fact: &fact}
+	return completeFact("current", candidates[0].Name+"."+hook, method.Path, fromSymbol)
+}
+
+func (r WorkspaceInheritanceResolver) navigator(root string) Navigator {
+	astPath := strings.TrimSpace(r.AstGrepPath)
+	if astPath == "" {
+		astPath = "ast-grep"
+	}
+	return Navigator{RepoRoot: root, AstGrepPath: astPath, Runner: r.Runner}
 }
 
 func (r WorkspaceInheritanceResolver) rejectUnverified(symbol, from string) *WorkspaceNavigationResult {
@@ -212,171 +205,6 @@ func (r WorkspaceInheritanceResolver) rejectUnverified(symbol, from string) *Wor
 	return nil
 }
 
-func findDirectSubclassesWithMethod(root, superName, method, concrete string) ([]javaClass, error) {
-	classes, err := allJavaClasses(root)
-	if err != nil {
-		return nil, err
-	}
-	var matches []javaClass
-	for _, class := range classes {
-		if simpleJavaName(class.Super) != simpleJavaName(superName) {
-			continue
-		}
-		if concrete != "" && class.Name != concrete {
-			continue
-		}
-		if len(methodsNamed(class, method)) != 1 {
-			continue
-		}
-		matches = append(matches, class)
-	}
-	return matches, nil
-}
-
-func findClasses(root, name string) ([]javaClass, error) {
-	classes, err := allJavaClasses(root)
-	if err != nil {
-		return nil, err
-	}
-	var matches []javaClass
-	for _, class := range classes {
-		if class.Name == simpleJavaName(name) {
-			matches = append(matches, class)
-		}
-	}
-	return matches, nil
-}
-
-func allJavaClasses(root string) ([]javaClass, error) {
-	sourceRoot := filepath.Join(root, "src", "main", "java")
-	var classes []javaClass
-	err := filepath.WalkDir(sourceRoot, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			if entry.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".java") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		parsed := parseJavaClasses(string(data))
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		for i := range parsed {
-			parsed[i].Path = filepath.ToSlash(rel)
-			classes = append(classes, parsed[i])
-		}
-		return nil
-	})
-	if os.IsNotExist(err) {
-		return []javaClass{}, nil
-	}
-	return classes, err
-}
-
-func parseJavaClasses(source string) []javaClass {
-	classMatches := classDeclarationRE.FindAllStringSubmatchIndex(source, -1)
-	classes := make([]javaClass, 0, len(classMatches))
-	for _, match := range classMatches {
-		if len(match) < 6 {
-			continue
-		}
-		name := source[match[2]:match[3]]
-		super := ""
-		if match[4] >= 0 && match[5] >= 0 {
-			super = source[match[4]:match[5]]
-		}
-		classes = append(classes, javaClass{Name: name, Super: super, Methods: parseJavaMethods(source)})
-	}
-	return classes
-}
-
-func parseJavaMethods(source string) []javaMethod {
-	matches := methodDeclarationRE.FindAllStringSubmatchIndex(source, -1)
-	methods := make([]javaMethod, 0, len(matches))
-	for _, match := range matches {
-		if len(match) < 6 || match[2] < 0 || match[3] < 0 || match[4] < 0 || match[5] < 0 {
-			continue
-		}
-		name := source[match[2]:match[3]]
-		terminator := source[match[4]:match[5]]
-		method := javaMethod{Name: name, Abstract: terminator == ";"}
-		if terminator == "{" {
-			open := match[5] - 1
-			close := matchingBrace(source, open)
-			if close > open {
-				method.Body = source[open+1 : close]
-			}
-		}
-		methods = append(methods, method)
-	}
-	return methods
-}
-
-func matchingBrace(source string, open int) int {
-	depth := 0
-	inString := byte(0)
-	escaped := false
-	for i := open; i < len(source); i++ {
-		c := source[i]
-		if inString != 0 {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if c == '\\' {
-				escaped = true
-				continue
-			}
-			if c == inString {
-				inString = 0
-			}
-			continue
-		}
-		if c == '"' || c == '\'' {
-			inString = c
-			continue
-		}
-		if c == '{' {
-			depth++
-		} else if c == '}' {
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
-func methodsNamed(class javaClass, name string) []javaMethod {
-	var matches []javaMethod
-	for _, method := range class.Methods {
-		if method.Name == name {
-			matches = append(matches, method)
-		}
-	}
-	return matches
-}
-
-func methodCalls(method javaMethod, called string) bool {
-	if strings.TrimSpace(method.Body) == "" {
-		return false
-	}
-	pattern := regexp.MustCompile(`(?:\bsuper\s*\.\s*)?\b` + regexp.QuoteMeta(called) + `\s*\(`)
-	return pattern.FindStringIndex(method.Body) != nil
-}
-
 func splitQualifiedMethod(symbol string) (string, string, bool) {
 	idx := strings.LastIndex(strings.TrimSpace(symbol), ".")
 	if idx <= 0 || idx == len(symbol)-1 {
@@ -385,22 +213,14 @@ func splitQualifiedMethod(symbol string) (string, string, bool) {
 	return symbol[:idx], symbol[idx+1:], true
 }
 
-func simpleJavaName(name string) string {
-	name = strings.TrimSpace(name)
-	if idx := strings.LastIndex(name, "."); idx >= 0 {
-		return name[idx+1:]
-	}
-	return name
-}
-
 func completeFact(workspaceID, symbol, path, from string) WorkspaceNavigationResult {
 	fact := WorkspaceNavigationFact{
 		Workspace: workspaceID,
-		Symbol: symbol,
-		Path: filepath.ToSlash(path),
-		Role: "Service",
-		Source: "WORKSPACE_INHERITANCE",
-		From: from,
+		Symbol:    symbol,
+		Path:      strings.ReplaceAll(path, "\\", "/"),
+		Role:      "Service",
+		Source:    "WORKSPACE_INHERITANCE",
+		From:      from,
 	}
 	return WorkspaceNavigationResult{Status: NavigationComplete, Fact: &fact}
 }
@@ -408,8 +228,10 @@ func completeFact(workspaceID, symbol, path, from string) WorkspaceNavigationRes
 func partial(code, symbol, from string) WorkspaceNavigationResult {
 	return WorkspaceNavigationResult{
 		Status: NavigationPartial,
-		Limitation: &WorkspaceNavigationLimitation{Code: code, Symbol: symbol, From: from},
+		Limitation: &WorkspaceNavigationLimitation{
+			Code:   code,
+			Symbol: symbol,
+			From:   from,
+		},
 	}
 }
-
-var _ = fmt.Sprintf
