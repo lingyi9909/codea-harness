@@ -388,7 +388,7 @@ $discovered = @(Get-ChildItem $discoveredDir -Filter '*.yaml')
 if ($discovered.Count -ne 1) { throw "expected exactly one DISCOVERED Chain, got $($discovered.Count)" }
 $chainText = Get-Content $discovered[0].FullName -Raw
 foreach ($expected in @('status: DISCOVERED','XxxController.submit','XxxService.submit','XxxServiceImpl.submit','workspace: company-framework','AbstractTemplate.execute','XxxServiceImpl.doExecute','XxxMapper.updateStatus','XxxMapper.xml')) {
-    if ($chainText -notmatch [regex]::Escape($expected)) { throw "DISCOVERED Chain missing $expected: $chainText" }
+    if ($chainText -notmatch [regex]::Escape($expected)) { throw "DISCOVERED Chain missing ${expected}: $chainText" }
 }
 Write-Host 'exactly one DISCOVERED Chain PASS'
 
