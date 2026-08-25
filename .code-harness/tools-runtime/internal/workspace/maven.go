@@ -205,6 +205,7 @@ func directDependencyVersion(model effectivePOM, groupID, artifactID string) (st
 					version = managed.Version
 					break
 				}
+			}
 		}
 		resolved, ok := resolveValue(version, model.Properties)
 		if !ok || strings.TrimSpace(resolved) == "" {
