@@ -33,7 +33,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|workspace|nav|db|chain|report|seal-apply|apply>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|workspace|nav|db|chain|analysis|report|seal-apply|apply>")
 	}
 	switch args[0] {
 	case "upgrade":
@@ -48,6 +48,8 @@ func run(args []string) error {
 		return runDB(args[1:])
 	case "chain":
 		return runChain(args[1:])
+	case "analysis":
+		return runAnalysis(args[1:])
 	case "report":
 		return runReport(args[1:])
 	case "seal-apply":
@@ -89,7 +91,7 @@ func runUpgrade(args []string) error {
 
 func runValidate(args []string) error {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
-	schemaPath := fs.String("schema", "", "schema under .code-harness/contracts")
+	schemaPath := fs.String("schema", "", "schema under .code-harness")
 	input := fs.String("input", "", "input under .code-harness")
 	format := fs.String("format", "auto", "auto|yaml|json")
 	changeAnalysisPath := fs.String("change-analysis", "", "validated ChangeAnalysis input under .code-harness")
