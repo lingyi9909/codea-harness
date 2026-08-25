@@ -173,7 +173,7 @@ runs:
   directory: .code-harness/runs
 '@
     if ($Scenario -ne 'NOT_CONFIGURED') {
-        $harness += @'
+        $harness += "`n" + @'
 workspaceDependencies:
   - id: company-framework
     root: ../company-framework
