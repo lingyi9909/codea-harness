@@ -144,10 +144,14 @@ func TestHarnessConfigSchemaKeepsVersion2AndAllowsOptionalWorkspaceDependencies(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := schema.ValidateYAML(schemaBytes, templateBytes); err != nil {
-		t.Fatalf("existing 1.5.1 config template must remain valid: %v", err)
+	// harness.template.yaml is intentionally non-executable until Project Adapter
+	// resolves required values such as review.baseRef. Materialize the smallest
+	// valid existing version-2 config before checking backward compatibility.
+	validExisting := []byte(strings.Replace(string(templateBytes), `baseRef: ""`, `baseRef: origin/main`, 1))
+	if err := schema.ValidateYAML(schemaBytes, validExisting); err != nil {
+		t.Fatalf("existing valid 1.5.1 version-2 config must remain valid: %v", err)
 	}
-	withWorkspace := append(append([]byte(nil), templateBytes...), []byte(`
+	withWorkspace := append(append([]byte(nil), validExisting...), []byte(`
 workspaceDependencies:
   - id: company-framework
     root: ../company-framework
