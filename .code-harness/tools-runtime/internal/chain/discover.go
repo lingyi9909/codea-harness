@@ -36,11 +36,12 @@ type CallChainEvidence struct {
 }
 
 type SymbolLocationEvidence struct {
-	Symbol string `json:"symbol"`
-	Path   string `json:"path"`
-	Role   string `json:"role"`
-	Source string `json:"source"`
-	From   string `json:"from,omitempty"`
+	Workspace string `json:"workspace,omitempty"`
+	Symbol    string `json:"symbol"`
+	Path      string `json:"path"`
+	Role      string `json:"role"`
+	Source    string `json:"source"`
+	From      string `json:"from,omitempty"`
 }
 
 type ResourceRelationEvidence struct {
@@ -156,7 +157,7 @@ func resolveEntry(symbol, affectedController string, locations []SymbolLocationE
 	}
 	var matches []SymbolLocationEvidence
 	for _, location := range locations {
-		if location.Symbol != symbol || location.Role != "Controller" || !isProductionControllerPath(location.Path) {
+		if locationWorkspace(location) != CurrentWorkspace || location.Symbol != symbol || location.Role != "Controller" || !isProductionControllerPath(location.Path) {
 			continue
 		}
 		matches = append(matches, location)
@@ -168,7 +169,7 @@ func resolveEntry(symbol, affectedController string, locations []SymbolLocationE
 	if len(matches) > 1 {
 		return EntryPoint{}, false, "AMBIGUOUS_ENTRYPOINT: " + symbol
 	}
-	return EntryPoint{Symbol: symbol, Path: normalizeRepoPath(matches[0].Path)}, true, ""
+	return EntryPoint{Workspace: CurrentWorkspace, Symbol: symbol, Path: normalizeRepoPath(matches[0].Path)}, true, ""
 }
 
 func buildDiscoveredChain(entry EntryPoint, branch CallChainEvidence, analysis ChangeAnalysisEvidence) (Chain, []string) {
@@ -184,7 +185,7 @@ func buildDiscoveredChain(entry EntryPoint, branch CallChainEvidence, analysis C
 		Resources:   []Resource{},
 		Boundaries:  []Boundary{},
 	}
-	coreSymbols := map[string]bool{}
+	currentCoreSymbols := map[string]bool{}
 	var unresolved []string
 	for _, symbol := range branch.Chain[1:] {
 		location, ok, reason := resolveInternalNode(symbol, analysis.SymbolLocations)
@@ -192,15 +193,18 @@ func buildDiscoveredChain(entry EntryPoint, branch CallChainEvidence, analysis C
 			unresolved = append(unresolved, reason)
 			continue
 		}
-		candidate.Nodes = append(candidate.Nodes, Node{Symbol: symbol, Path: normalizeRepoPath(location.Path), Role: nodeRole(location.Role)})
-		coreSymbols[symbol] = true
+		workspace := locationWorkspace(location)
+		candidate.Nodes = append(candidate.Nodes, Node{Workspace: workspace, Symbol: symbol, Path: normalizeRepoPath(location.Path), Role: nodeRole(location.Role)})
+		if workspace == CurrentWorkspace {
+			currentCoreSymbols[symbol] = true
+		}
 	}
 	if len(unresolved) != 0 {
 		return Chain{}, unresolved
 	}
 
 	for _, relation := range analysis.ResourceRelations {
-		if !resourceRelationTouchesCore(relation, coreSymbols) {
+		if !resourceRelationTouchesCore(relation, currentCoreSymbols) {
 			continue
 		}
 		role := resourceRole(relation.Role)
@@ -213,7 +217,7 @@ func buildDiscoveredChain(entry EntryPoint, branch CallChainEvidence, analysis C
 
 	for _, external := range analysis.ExternalDependencies {
 		for _, location := range analysis.SymbolLocations {
-			if location.Symbol == external && coreSymbols[location.From] && isProductionJavaPath(location.Path) {
+			if locationWorkspace(location) == CurrentWorkspace && location.Symbol == external && currentCoreSymbols[location.From] && isProductionJavaPath(location.Path) {
 				candidate.Boundaries = append(candidate.Boundaries, Boundary{Symbol: external, Path: normalizeRepoPath(location.Path), Role: "EXTERNAL"})
 			}
 		}
@@ -394,6 +398,10 @@ func normalizeRepoPath(path string) string {
 	return strings.ReplaceAll(filepath.ToSlash(filepath.Clean(path)), "\\", "/")
 }
 
+func locationWorkspace(location SymbolLocationEvidence) string {
+	return effectiveWorkspace(strings.TrimSpace(location.Workspace))
+}
+
 func discoveredID(c Chain) string {
 	sum := sha256.Sum256([]byte(coreSignature(c)))
 	return fmt.Sprintf("%x", sum[:])
@@ -430,7 +438,8 @@ func uniqueLocations(in []SymbolLocationEvidence) []SymbolLocationEvidence {
 	seen := map[string]bool{}
 	var out []SymbolLocationEvidence
 	for _, location := range in {
-		key := location.Symbol + "\x00" + normalizeRepoPath(location.Path) + "\x00" + location.Role + "\x00" + location.Source
+		location.Workspace = locationWorkspace(location)
+		key := location.Workspace + "\x00" + location.Symbol + "\x00" + normalizeRepoPath(location.Path) + "\x00" + location.Role + "\x00" + location.Source
 		if seen[key] {
 			continue
 		}
@@ -439,10 +448,13 @@ func uniqueLocations(in []SymbolLocationEvidence) []SymbolLocationEvidence {
 		out = append(out, location)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Path == out[j].Path {
-			return out[i].Source < out[j].Source
+		if out[i].Workspace == out[j].Workspace {
+			if out[i].Path == out[j].Path {
+				return out[i].Source < out[j].Source
+			}
+			return out[i].Path < out[j].Path
 		}
-		return out[i].Path < out[j].Path
+		return out[i].Workspace < out[j].Workspace
 	})
 	return out
 }
