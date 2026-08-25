@@ -280,7 +280,8 @@ Write-Host 'STAGED + UNSTAGED + UNTRACKED PASS'
 # Current-project facts must come from real Controlled Runtime navigation.
 $controller = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxController','--scope','src/main/java')
 $service = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxService','--scope','src/main/java')
-$impl = Invoke-RuntimeJson $current @('nav','find-implementations','--symbol','XxxService','--scope','src/main/java')
+$implementationSearch = Invoke-RuntimeJson $current @('nav','find-implementations','--symbol','XxxService','--scope','src/main/java')
+$impl = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxServiceImpl','--scope','src/main/java')
 $mapper = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxMapper','--scope','src/main/java')
 $serviceRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService','--scope','src/main/java')
 $submitRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService.submit','--scope','src/main/java')
@@ -288,7 +289,8 @@ $mapperRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','
 
 Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.java' 'Controller find-symbol'
 Assert-OneMatchPath $service 'src/main/java/com/company/order/XxxService.java' 'Service find-symbol'
-Assert-OneMatchPath $impl 'src/main/java/com/company/order/XxxServiceImpl.java' 'Service find-implementations'
+if ($implementationSearch.symbol -ne 'XxxService' -or $implementationSearch.scope -ne 'src/main/java') { throw "find-implementations runtime evidence mismatch: $($implementationSearch | ConvertTo-Json -Depth 8 -Compress)" }
+Assert-OneMatchPath $impl 'src/main/java/com/company/order/XxxServiceImpl.java' 'ServiceImpl find-symbol'
 Assert-OneMatchPath $mapper 'src/main/java/com/company/order/XxxMapper.java' 'Mapper find-symbol'
 Assert-HasMatchPath $serviceRefs 'src/main/java/com/company/order/XxxController.java' 'Controller -> Service find-references'
 Assert-HasMatchPath $submitRefs 'src/main/java/com/company/order/XxxController.java' 'Controller submit call find-references'
@@ -337,7 +339,7 @@ $reviewedFiles = @(
 $symbolLocations = @(
     [ordered]@{ workspace='current'; symbol='XxxController.submit'; path=$controller.matches[0].path; role='Controller'; source='FIND_SYMBOL' },
     [ordered]@{ workspace='current'; symbol='XxxService.submit'; path=$service.matches[0].path; role='Service'; source='FIND_SYMBOL'; from='XxxController.submit' },
-    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$impl.matches[0].path; role='Service'; source='FIND_IMPLEMENTATIONS'; from='XxxService.submit' },
+    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$impl.matches[0].path; role='Service'; source='FIND_SYMBOL'; from='XxxService.submit' },
     $inherited.fact,
     $dispatch.fact,
     [ordered]@{ workspace='current'; symbol='XxxMapper.updateStatus'; path=$mapper.matches[0].path; role='Mapper'; source='FIND_SYMBOL'; from='XxxServiceImpl.doExecute' }
