@@ -1,5 +1,7 @@
 package chain
 
+import "gopkg.in/yaml.v3"
+
 type Status string
 
 const (
@@ -8,15 +10,48 @@ const (
 	StatusStale      Status = "STALE"
 )
 
+const CurrentWorkspace = "current"
+
+func effectiveWorkspace(value string) string {
+	if value == "" {
+		return CurrentWorkspace
+	}
+	return value
+}
+
 type EntryPoint struct {
-	Symbol string `json:"symbol" yaml:"symbol"`
-	Path   string `json:"path" yaml:"path"`
+	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	Symbol    string `json:"symbol" yaml:"symbol"`
+	Path      string `json:"path" yaml:"path"`
+}
+
+func (e *EntryPoint) UnmarshalYAML(value *yaml.Node) error {
+	type plain EntryPoint
+	var decoded plain
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*e = EntryPoint(decoded)
+	e.Workspace = effectiveWorkspace(e.Workspace)
+	return nil
 }
 
 type Node struct {
-	Symbol string `json:"symbol" yaml:"symbol"`
-	Path   string `json:"path" yaml:"path"`
-	Role   string `json:"role" yaml:"role"`
+	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	Symbol    string `json:"symbol" yaml:"symbol"`
+	Path      string `json:"path" yaml:"path"`
+	Role      string `json:"role" yaml:"role"`
+}
+
+func (n *Node) UnmarshalYAML(value *yaml.Node) error {
+	type plain Node
+	var decoded plain
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*n = Node(decoded)
+	n.Workspace = effectiveWorkspace(n.Workspace)
+	return nil
 }
 
 type Resource struct {
