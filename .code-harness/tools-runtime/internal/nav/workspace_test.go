@@ -64,6 +64,19 @@ func TestWorkspaceTemplateMethodDispatchesBackToConcreteOverride(t *testing.T) {
 	assertWorkspaceFact(t, result, "current", "XxxServiceImpl.doExecute", "src/main/java/com/company/order/XxxServiceImpl.java", "AbstractTemplate.execute")
 }
 
+func TestWorkspaceTemplateMethodDispatchesBackToConcreteOverrideWithInterface(t *testing.T) {
+	current, dependency := workspaceInheritanceFixture(t)
+	writeJava(t, current, "src/main/java/com/company/order/XxxServiceImpl.java", `package com.company.order;
+import com.company.framework.AbstractTemplate;
+public class XxxServiceImpl extends AbstractTemplate implements XxxService {
+    public void submit() { execute(); }
+    @Override protected void doExecute() { mapper.updateStatus(); }
+}`)
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
+	result := resolver.ResolveTemplateDispatch("AbstractTemplate.execute", "doExecute", "XxxServiceImpl")
+	assertWorkspaceFact(t, result, "current", "XxxServiceImpl.doExecute", "src/main/java/com/company/order/XxxServiceImpl.java", "AbstractTemplate.execute")
+}
+
 func TestWorkspaceTemplateMethodAmbiguousDispatchIsPartial(t *testing.T) {
 	current, dependency := workspaceInheritanceFixture(t)
 	writeJava(t, current, "src/main/java/com/company/order/AnotherServiceImpl.java", `package com.company.order;
