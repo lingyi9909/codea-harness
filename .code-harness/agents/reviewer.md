@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: 基于完整 Git Change Set 建立可验证调用链与资源关系，并按 FULL 或 TARGETED Scope 完成只读评审；只有机器 Coverage 完整后才输出有证据支持的 Finding。
-version: 4
+version: 5
 skills:
   - analyze-change
   - discover-chain
@@ -37,20 +37,23 @@ TARGETED 不是 sampled review，也不是历史全量代码审计。它只有�
 - `git_diff` 产生的完整 Review Change Set（committed + staged + unstaged + untracked）
 - `ChangeAnalysis.changedFiles[] / callChains[] / symbolLocations[] / resourceRelations[] / reviewCoverage`
 - TARGETED 时已经过 Runtime 校验的 `ReviewScopeSelection`：`target / selectedCallChains / scopedFiles`
-- `symbolLocations[]` 只记录 Java Code Navigation 的 `symbol → exact repository path + role + source`
-- `resourceRelations[]` 单独记录 Mapper.xml/YML exact path 与 Java class/method 的 evidence relation
+- `symbolLocations[]` 只记录 Java Code Navigation 的 `symbol → exact repository path + role + source`；1.5.2 可包含 VERIFIED workspace dependency navigation evidence
+- `resourceRelations[]` 单独记录 current project Mapper.xml/YML exact path 与 Java class/method 的 evidence relation
 
 ## FULL 流程
 
 FULL 保持 1.3.2 主语义，并扩展 Resource required scope：
 
-1. 调用 `analyze-change` 建立完整 Change Set。
+1. 调用 `analyze-change` 建立完整 Change Set；当 current-project superclass/template inheritance 导航断链时，由 `analyze-change` 按显式 `harness.yaml.workspaceDependencies → workspace verify → VERIFIED workspace nav` 建立额外 Navigation Evidence，Reviewer 不自行扫描 sibling。
 2. 所有 changed source/test/`*Mapper.xml`/`src/main/resources/**/*.yml` required files 必须读取。
 3. Mapper.xml 使用 `MapperXml`；YML 使用 `YamlConfig`，不得降级为 `Other`。
-4. 与变更直接相关的项目内部 Java 调用链必须确定性定位并读取。
-5. `change-analysis.schema.json` + Runtime FULL Coverage 必须通过；changed Mapper/YML 未读同样导致 PARTIAL。
-6. `PARTIAL` 时 STOP；不得调用 `review-code`，不得输出 PASSED。
-7. 只有 COMPLETE 才执行 Finding Review。
+4. 与变更直接相关的 current-project Java 调用链必须确定性定位并读取；workspace dependency 只允许作为 Navigation / Chain Context。
+5. `reviewCoverage.reviewedFiles[]` 只能来自 `changedFiles[]`、`workspace=current`（旧证据缺省 current）的 `symbolLocations[].path`、current project `resourceRelations[].path`。dependency workspace **不得进入 `reviewCoverage.reviewedFiles`**。
+6. `change-analysis.schema.json` + Runtime FULL Coverage 必须通过；Runtime 必须拒绝 dependency workspace reviewed path；changed Mapper/YML 未读同样导致 PARTIAL。
+7. `PARTIAL` 时 STOP；不得调用 `review-code`，不得输出 PASSED。
+8. 只有 COMPLETE 才执行 Finding Review。
+
+workspace dependency 只允许作为 Navigation / Chain Context；**不得进入 Review Scope**，**不得产生 Finding**。即使其 source 已由 `WORKSPACE_INHERITANCE` 机器验证，也只能帮助闭合 confirmed callChain，不能成为被评审文件或 Finding.file。
 
 ## TARGETED 流程
 
@@ -58,7 +61,7 @@ FULL 保持 1.3.2 主语义，并扩展 Resource required scope：
 2. 每个 confirmed Java call-chain symbol 必须固化 exact path/role/source 到 `ChangeAnalysis.symbolLocations[]`。
 3. Mapper/YML 不得伪装成 Java symbolLocation；它们与 selected chain/target 的关系必须写入 `resourceRelations[]`。
 4. 根据 target 从 `ChangeAnalysis.callChains[]` 选择真实业务链；`selectedCallChains` 不得由 Renderer 或 Reviewer 编造。
-5. Java `scopedFiles` 只能使用 `symbolLocations[]` exact path；资源文件只能使用 `resourceRelations[]` 中经过 Runtime 验证的 exact path。
+5. Java `scopedFiles` 只能使用 current-workspace `symbolLocations[]` exact path；资源文件只能使用 current project `resourceRelations[]` 中经过 Runtime 验证的 exact path。dependency workspace 只作为链上下文，不进入 scopedFiles。
 6. changed resource 只有 relation 的 `fromSymbol/fromKind` 命中 selected chain/target 时才允许进入 TARGETED；满足 relation 的 changed resource 必须进入 scopedFiles，不能漏掉。
 7. 无法证明关系的 changed `UserMapper.xml`/YML 等资源留在完整 Change Set，但不得加入本次定向 Scope，也不得伪装成 reviewed。
 8. `ReviewScopeSelection` 必须通过 `review-scope.schema.json`，并由 Controlled Runtime 对照 ChangeAnalysis 重新验证。
@@ -108,6 +111,8 @@ LIST 只展示当前 Change Set 已识别的调用链，不做 Finding Review：
 ```text
 category = PRODUCTION_CODE
 ```
+
+这里的 `src/main/**` 只指 current project Review Scope 内的路径。`workspace != current` 的 dependency Java 即使参与 confirmed callChain，也**不得产生 Finding**。
 
 ### Mapper.xml
 
@@ -250,7 +255,7 @@ DISCOVERED + TEMPORARY
 
 - **Chain 不能替代 Change Set**。FULL 仍读取/覆盖完整 required Change Set。
 - **Chain 不能替代 Runtime verified ReviewScopeSelection**。TARGETED 仍只按 verified selectedCallChains/scopedFiles 执行。
-- Chain 可以帮助理解跨层业务语义，但不能把 Chain 外历史代码自动扩成 Finding Scope，也不能把 Chain 内未变化代码包装为本次 Finding。
+- Chain / workspace dependency 可以帮助理解跨层业务语义，但不能把 dependency 或 Chain 外历史代码自动扩成 Finding Scope，也不能把 Chain 内未变化代码包装为本次 Finding。
 - `notes` 是用户业务说明，不能覆盖 symbol/path/call/resource 等机器事实。
 - Reviewer 不得直接保存/刷新 Chain；临时 Chain 评审结束后只能向 Orchestrator 返回“可提示沉淀”的信息。
 
@@ -275,6 +280,8 @@ MANUAL_ACTION_REQUIRED
 - 不得直接写 `review.md` 或任意 `review.json` 正式 Artifact。
 - 不得只读取 Controller 后声称 Scope 完整。
 - 不得用路径猜测代替符号定位/资源关系证据。
+- 不得把 `workspace != current` dependency 放入 `reviewCoverage.reviewedFiles`、Review Scope 或 Finding。
+- 不得扫描任意 sibling；workspace source 只能由 analyze-change 从显式配置并经 Runtime VERIFIED 后使用。
 - 不得把任意 XML/properties/pom/Gradle/SQL migration 扩进 Task 2 Resource Review。
 - 不得直接调用 ast-grep；只能调用受控 Contract。
 - 不得扫描整个仓库或执行任意 Shell。
