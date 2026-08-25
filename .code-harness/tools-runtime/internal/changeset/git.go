@@ -41,11 +41,11 @@ func Compute(repoRoot, baseRef string, includeWorkingTree bool) (Snapshot, error
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	mergeBase, err := git153(ctx, repoRoot, "merge-base", baseRef, "HEAD")
+	mergeBase, err := runGit153(ctx, repoRoot, "merge-base", baseRef, "HEAD")
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_BASE_REF_NOT_FOUND: %s: %w", baseRef, err)
 	}
-	head, err := git153(ctx, repoRoot, "rev-parse", "HEAD")
+	head, err := runGit153(ctx, repoRoot, "rev-parse", "HEAD")
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_HEAD_UNAVAILABLE: %w", err)
 	}
@@ -68,7 +68,7 @@ func Compute(repoRoot, baseRef string, includeWorkingTree bool) (Snapshot, error
 		if err := collectDiff153(ctx, repoRoot, files, SourceUnstaged, unstagedArgs...); err != nil {
 			return Snapshot{}, fmt.Errorf("CHANGE_SET_UNSTAGED_DIFF_FAILED: %w", err)
 		}
-		untracked, err := git153(ctx, repoRoot, "ls-files", "--others", "--exclude-standard")
+		untracked, err := runGit153(ctx, repoRoot, "ls-files", "--others", "--exclude-standard")
 		if err != nil {
 			return Snapshot{}, fmt.Errorf("CHANGE_SET_UNTRACKED_LIST_FAILED: %w", err)
 		}
@@ -110,7 +110,7 @@ func Compute(repoRoot, baseRef string, includeWorkingTree bool) (Snapshot, error
 	return snap, nil
 }
 
-func git153(ctx context.Context, repoRoot string, args ...string) (string, error) {
+func runGit153(ctx context.Context, repoRoot string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = repoRoot
 	out, err := cmd.CombinedOutput()
@@ -121,7 +121,7 @@ func git153(ctx context.Context, repoRoot string, args ...string) (string, error
 }
 
 func collectDiff153(ctx context.Context, repoRoot string, files map[string]*File, source Source, args ...string) error {
-	out, err := git153(ctx, repoRoot, args...)
+	out, err := runGit153(ctx, repoRoot, args...)
 	if err != nil {
 		return err
 	}
