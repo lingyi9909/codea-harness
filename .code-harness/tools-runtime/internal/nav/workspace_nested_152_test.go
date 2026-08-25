@@ -1,10 +1,6 @@
 package nav
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 func Test152NestedClassMethodMustNotBelongToOuterWorkspaceClass(t *testing.T) {
 	current, dependency := workspaceInheritanceFixture(t)
@@ -18,9 +14,8 @@ public class XxxServiceImpl extends AbstractTemplate {
     }
     @Override protected void doExecute() { mapper.updateStatus(); }
 }`)
-	_ = os.Remove(filepath.Join(current, "src/main/java/com/company/order/Multi.java"))
 
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	result := resolver.ResolveInheritedCall("XxxServiceImpl.submit", "execute")
 	if result.Status != NavigationPartial || result.Limitation == nil || result.Limitation.Code != CodeInheritedMethodNotFound {
 		t.Fatalf("nested Helper.submit must not be owned by XxxServiceImpl: %#v", result)
