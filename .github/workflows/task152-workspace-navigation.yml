@@ -72,4 +72,6 @@ jobs:
 
       - name: Task 5 real dual-project business regression
         shell: pwsh
-        run: ./.github/scripts/task152-task5-real-business-regression.ps1
+        run: |
+          Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
+          ./.github/scripts/task152-task5-real-business-regression.ps1
