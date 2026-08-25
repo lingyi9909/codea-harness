@@ -19,6 +19,10 @@ codea-harness-tools.exe nav find-implementations --symbol <symbol> --scope <repo
 codea-harness-tools.exe nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
 codea-harness-tools.exe nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
+codea-harness-tools.exe workspace verify --id <id>
+codea-harness-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-harness-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-harness-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
 codea-harness-tools.exe db ping --run-id <id>
 codea-harness-tools.exe db list-tables --schema <schema> --run-id <id>
 codea-harness-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
@@ -112,7 +116,47 @@ arbitrary query language
 
 定位项目源码中 method symbol 的直接调用位置，返回 `callerSymbol / path / line`。V1.3 仅保证现有 ast-grep 可确定识别的静态源码范围，不承诺运行时多态、反射、复杂泛型语义或 Spring Proxy 解析。
 
-六个导航 Contract 的 scope 都必须是仓库内相对路径；第一版只支持 Java。目录逃逸必须拒绝。不得无界扫描整个仓库，调用方应从与 Change Set / API target 直接相关的 module/source scope 开始。所有导航都只能通过 Controlled Runtime 的固定 ast-grep pattern 执行，Agent/Skill 不得直接调用 ast-grep 或传入 rule/pattern/regex/query language。
+六个 current-project 导航 Contract 的 scope 都必须是仓库内相对路径；第一版只支持 Java。目录逃逸必须拒绝。不得无界扫描整个仓库，调用方应从与 Change Set / API target 直接相关的 module/source scope 开始。所有导航都只能通过 Controlled Runtime 的固定 ast-grep pattern 执行，Agent/Skill 不得直接调用 ast-grep 或传入 rule/pattern/regex/query language。
+
+### `workspace_verify(id) -> WorkspaceVerificationResult`
+
+映射到固定命令：
+
+```text
+codea-harness-tools workspace verify --id <id>
+```
+
+`id` 必须来自显式 `harness.yaml.workspaceDependencies`。Runtime 只验证配置中的 direct Maven sibling workspace dependency；不得扫描任意 sibling。只有机器结果 `VERIFIED` 才允许后续 workspace navigation；`VERSION_UNRESOLVED / COORDINATE_MISMATCH / VERSION_MISMATCH / SOURCE_NOT_FOUND` 均不得读取 dependency 源码作为 confirmed evidence。
+
+### `workspace_inherited(workspace, from, method) -> WorkspaceNavigationResult`
+
+映射到：
+
+```text
+codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+```
+
+只允许已通过 `workspace_verify` 的 `VERIFIED` workspace。用于 current-project symbol 因继承方法断链时解析 dependency superclass method；返回的 workspace/symbol/path/role/source/from 只能原样作为 `WORKSPACE_INHERITANCE` evidence。
+
+### `workspace_superclass_call(workspace, from, method) -> WorkspaceNavigationResult`
+
+映射到：
+
+```text
+codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+```
+
+只允许在 VERIFIED dependency source 内继续解析 superclass/template method 的确定性内部调用。PARTIAL/ambiguity 必须停止 confirmed chain，不得猜测。
+
+### `workspace_template_dispatch(workspace, from, hook, concrete?) -> WorkspaceNavigationResult`
+
+映射到：
+
+```text
+codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+```
+
+只允许 VERIFIED dependency template dispatch。唯一 concrete override 可返回 `workspace=current` 并继续 current-project confirmed callChain；多 override 必须 `PARTIAL / AMBIGUOUS_TEMPLATE_DISPATCH`。Workspace dependency 始终只属于 Navigation / Chain Context，不得进入 Change Set、Review Scope、Finding Scope 或 Write Scope。
 
 ### `read_test_report(runId) -> TestReportBundle`
 仅读取配置 `reportDir` 下本次 Maven 运行产物。
