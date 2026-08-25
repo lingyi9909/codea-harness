@@ -269,9 +269,11 @@ if ($validatedConfig.status -ne 'VALID') { throw 'harness config was not valid' 
 $staged = @(git -C $current diff --cached --name-only -- | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $unstaged = @(git -C $current diff --name-only -- | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $untracked = @(git -C $current ls-files --others --exclude-standard -- | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$implPath = 'src/main/java/com/company/order/XxxServiceImpl.java'
 if ($staged -notcontains 'src/main/java/com/company/order/XxxController.java') { throw "STAGED change missing Controller: $($staged -join ',')" }
-if ($unstaged -notcontains 'src/main/java/com/company/order/XxxServiceImpl.java') { throw "UNSTAGED change missing ServiceImpl: $($unstaged -join ',')" }
+if ($unstaged -notcontains $implPath) { throw "UNSTAGED change missing ServiceImpl: $($unstaged -join ',')" }
 if ($untracked -notcontains 'src/main/resources/mapper/XxxMapper.xml') { throw "UNTRACKED change missing Mapper.xml: $($untracked -join ',')" }
+if (-not (Test-Path (Join-Path $current $implPath))) { throw "UNSTAGED ServiceImpl source missing: $implPath" }
 foreach ($p in @($staged + $unstaged + $untracked)) {
     if ($p -like '../*' -or $p -match 'company-framework') { throw "dependency leaked into current Change Set: $p" }
 }
@@ -281,7 +283,6 @@ Write-Host 'STAGED + UNSTAGED + UNTRACKED PASS'
 $controller = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxController','--scope','src/main/java')
 $service = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxService','--scope','src/main/java')
 $implementationSearch = Invoke-RuntimeJson $current @('nav','find-implementations','--symbol','XxxService','--scope','src/main/java')
-$impl = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxServiceImpl','--scope','src/main/java')
 $mapper = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxMapper','--scope','src/main/java')
 $serviceRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService','--scope','src/main/java')
 $submitRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService.submit','--scope','src/main/java')
@@ -290,15 +291,14 @@ $mapperRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','
 Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.java' 'Controller find-symbol'
 Assert-OneMatchPath $service 'src/main/java/com/company/order/XxxService.java' 'Service find-symbol'
 if ($implementationSearch.symbol -ne 'XxxService' -or $implementationSearch.scope -ne 'src/main/java') { throw "find-implementations runtime evidence mismatch: $($implementationSearch | ConvertTo-Json -Depth 8 -Compress)" }
-Assert-OneMatchPath $impl 'src/main/java/com/company/order/XxxServiceImpl.java' 'ServiceImpl find-symbol'
 Assert-OneMatchPath $mapper 'src/main/java/com/company/order/XxxMapper.java' 'Mapper find-symbol'
 Assert-HasMatchPath $serviceRefs 'src/main/java/com/company/order/XxxController.java' 'Controller -> Service find-references'
 Assert-HasMatchPath $submitRefs 'src/main/java/com/company/order/XxxController.java' 'Controller submit call find-references'
-Assert-HasMatchPath $mapperRefs 'src/main/java/com/company/order/XxxServiceImpl.java' 'override -> Mapper find-references'
+Assert-HasMatchPath $mapperRefs $implPath 'override -> Mapper find-references'
 
 $serviceSource = Get-Content (Join-Path $current 'src/main/java/com/company/order/XxxService.java') -Raw
 $controllerSource = Get-Content (Join-Path $current 'src/main/java/com/company/order/XxxController.java') -Raw
-$implSource = Get-Content (Join-Path $current 'src/main/java/com/company/order/XxxServiceImpl.java') -Raw
+$implSource = Get-Content (Join-Path $current $implPath) -Raw
 if ($serviceSource -notmatch 'void\s+submit\s*\(') { throw 'XxxService.submit source evidence missing' }
 if ($controllerSource -notmatch 'service\.submit\s*\(') { throw 'Controller -> XxxService.submit source evidence missing' }
 if ($implSource -notmatch 'implements\s+XxxService' -or $implSource -notmatch 'execute\s*\(') { throw 'XxxServiceImpl submit/inheritance source evidence missing' }
@@ -328,18 +328,18 @@ Write-Host 'Mapper -> Mapper.xml source evidence PASS'
 
 $changedFiles = @(
     [ordered]@{ path='src/main/java/com/company/order/XxxController.java'; role='Controller'; sources=@('STAGED') },
-    [ordered]@{ path='src/main/java/com/company/order/XxxServiceImpl.java'; role='Service'; sources=@('UNSTAGED') },
+    [ordered]@{ path=$implPath; role='Service'; sources=@('UNSTAGED') },
     [ordered]@{ path=$mapperXmlPath; role='MapperXml'; sources=@('UNTRACKED') }
 )
 $reviewedFiles = @(
     [ordered]@{ path='src/main/java/com/company/order/XxxController.java'; role='Controller'; reason='CHANGED' },
-    [ordered]@{ path='src/main/java/com/company/order/XxxServiceImpl.java'; role='Service'; reason='CHANGED' },
+    [ordered]@{ path=$implPath; role='Service'; reason='CHANGED' },
     [ordered]@{ path=$mapperXmlPath; role='MapperXml'; reason='CHANGED' }
 )
 $symbolLocations = @(
     [ordered]@{ workspace='current'; symbol='XxxController.submit'; path=$controller.matches[0].path; role='Controller'; source='FIND_SYMBOL' },
     [ordered]@{ workspace='current'; symbol='XxxService.submit'; path=$service.matches[0].path; role='Service'; source='FIND_SYMBOL'; from='XxxController.submit' },
-    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$impl.matches[0].path; role='Service'; source='FIND_SYMBOL'; from='XxxService.submit' },
+    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$implPath; role='Service'; source='CURRENT_CHANGE_SET_SOURCE'; from='XxxService.submit' },
     $inherited.fact,
     $dispatch.fact,
     [ordered]@{ workspace='current'; symbol='XxxMapper.updateStatus'; path=$mapper.matches[0].path; role='Mapper'; source='FIND_SYMBOL'; from='XxxServiceImpl.doExecute' }
