@@ -69,8 +69,8 @@ func (n Navigator) FindControllerEndpoints(ctx context.Context, scope string) ([
 		if !hasAnyAnnotation153(method.Text, mappingAnnotations153) {
 			continue
 		}
-		methodName := methodName(method.Text)
-		if methodName == "" {
+		name := methodName(method.Text)
+		if name == "" {
 			continue
 		}
 		controller, ok := smallestContaining(controllers, method)
@@ -81,16 +81,15 @@ func (n Navigator) FindControllerEndpoints(ctx context.Context, scope string) ([
 		if controllerName == "" {
 			continue
 		}
-		key := method.Path + "\x00" + controllerName + "." + methodName + "\x00" + strings.Join([]string{
-			string(rune(method.StartLine)), string(rune(method.EndLine)),
-		}, ":")
+		symbol := controllerName + "." + name
+		key := method.Path + "\x00" + symbol
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
 		out = append(out, ControllerEndpointMatch{
 			Controller:          controllerName,
-			Symbol:              controllerName + "." + methodName,
+			Symbol:              symbol,
 			Path:                method.Path,
 			ControllerStartLine: controller.StartLine,
 			ControllerEndLine:   controller.EndLine,
