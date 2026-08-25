@@ -91,7 +91,7 @@ func runUpgrade(args []string) error {
 
 func runValidate(args []string) error {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
-	schemaPath := fs.String("schema", "", "schema under .code-harness")
+	schemaPath := fs.String("schema", "", "schema under .code-harness/contracts")
 	input := fs.String("input", "", "input under .code-harness")
 	format := fs.String("format", "auto", "auto|yaml|json")
 	changeAnalysisPath := fs.String("change-analysis", "", "validated ChangeAnalysis input under .code-harness")
