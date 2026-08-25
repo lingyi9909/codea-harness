@@ -9,7 +9,7 @@
     "version": {
       "type": "integer",
       "minimum": 1,
-      "description": "配置版本号。1.4 模板使用 version=2；version=1 保持旧配置兼容。"
+      "description": "配置版本号。1.4 模板使用 version=2；version=1 保持旧配置兼容。1.5.2 新增可选 workspaceDependencies，不升级 config version。"
     },
     "project": {
       "type": "object",
@@ -19,6 +19,37 @@
         "type": { "enum": ["maven"], "description": "项目构建类型" },
         "root": { "type": "string", "description": "项目根目录，通常为 ." },
         "module": { "type": "string", "description": "目标模块名，单模块项目为空字符串" }
+      }
+    },
+    "workspaceDependencies": {
+      "type": "array",
+      "description": "1.5.2 可选的显式本地 Maven sibling source allowlist。仅作为 READ_ONLY Navigation Scope；文件系统 sibling/symlink 语义由 Controlled Runtime 再校验。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "root", "maven", "mode"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "稳定、唯一的 workspace identity"
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1,
+            "description": "显式 dependency source root；1.5.2 Runtime 只接受当前项目的直接 sibling directory"
+          },
+          "maven": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["groupId", "artifactId"],
+            "properties": {
+              "groupId": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.-]+$" },
+              "artifactId": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.-]+$" }
+            }
+          },
+          "mode": { "const": "READ_ONLY" }
+        }
       }
     },
     "review": {

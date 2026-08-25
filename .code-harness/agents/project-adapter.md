@@ -21,6 +21,20 @@ scope.configIncludes = src/main/resources/**/*.yml
 
 已有 `version: 1` 配置由 Schema 保持兼容；Project Adapter 不在普通 init 流程中执行历史配置升级，正式 1.3.2→1.4 migration 由 Upgrade Task 负责。
 
+## Workspace Dependency（1.5.2）
+
+`workspaceDependencies` 是可选的**显式**本地依赖源码配置。它只用于后续 Workspace Dependency Navigation，且 1.5.2 只允许当前项目的 direct sibling Maven source、`mode: READ_ONLY`。
+
+硬规则：
+
+- **不得自动扫描** sibling directory、`../**` 或其他工作区目录来猜依赖源码；
+- 只有用户显式提供 `id`、`root`、Maven `groupId/artifactId` 后，Project Adapter 才允许把该项写入 `workspaceDependencies`；
+- 写入前必须通过 Controlled Runtime 的 Workspace Dependency 配置校验；
+- Workspace Dependency 只属于 Navigation Scope，不得进入当前项目 Change Set、Review Scope、Finding、Test/Fix/Apply Write Scope；
+- 不配置 `workspaceDependencies` 时保持 1.5.1 原行为；
+- 本字段可选，不升级 `harness.yaml` config version，新配置仍为 `version: 2`；
+- 本阶段只建立配置 allowlist，不读取 sibling `pom.xml`、Java 源码，也不进行 Maven identity 判断；Maven source verification 是后续独立 Gate。
+
 ## 输入
 
 - 目标项目根目录（Orchestrator 传入）
@@ -36,7 +50,7 @@ scope.configIncludes = src/main/resources/**/*.yml
 
 ### 首次初始化
 
-1. **扫描项目结构**：使用 `list_project_tree` 获取目标项目的目录概览。
+1. **扫描项目结构**：使用 `list_project_tree` 获取目标项目的目录概览。此扫描严格限于当前项目；不得为了 `workspaceDependencies` 自动扫描任何 sibling。
 2. **检查宿主能力**：确认当前宿主平台支持哪些工具能力（文件读取、Maven 执行、进程控制）。输出宿主能力清单供当前会话参考。**宿主能力不持久化到 `harness.yaml`**——每次执行 `harness test`、`harness debug-service` 等意图时，Orchestrator 会重新检查。如果关键能力缺失（如无法执行 Maven），`harness test` 和 `harness debug-service` 将不可用。
 3. **识别构建方式**：先判断操作系统，再选择 Maven Wrapper：
    - Windows → 优先 `mvnw.cmd`
@@ -71,6 +85,7 @@ scope.configIncludes = src/main/resources/**/*.yml
      - `write.allowedPaths` / `write.deniedPaths`：标准路径
      - `review.includeWorkingTree: true`
    - Resource Review 默认值只包含上述 Mapper XML / YML，**不得**自动加入 properties、pom.xml、Gradle、SQL migration 或其他 XML。
+   - `workspaceDependencies` **没有 convention-default**，不得依据目录名称自动生成；只有用户显式配置时才可写入。
    - **必须人工确认的字段**（未确认时 status 保持 NEEDS_CONFIRMATION）：
      - `review.baseRef`（无法从本地 refs 确定时）
      - 测试 Profile（`spring.profiles.active`）
@@ -83,7 +98,7 @@ scope.configIncludes = src/main/resources/**/*.yml
 11. **设置初始化状态**：
     - 所有字段已确认 → `initialization.status: READY`，`unresolved: []`
     - 存在未确认字段 → `initialization.status: NEEDS_CONFIRMATION`，`unresolved` 列出未确认项
-12. **校验配置**：使用 `.code-harness/contracts/harness-config.schema.json` 校验生成的 `harness.yaml`。新 init 的 `version: 2` 缺少 `mapperIncludes/configIncludes` 必须校验失败。
+12. **校验配置**：使用 `.code-harness/contracts/harness-config.schema.json` 校验生成的 `harness.yaml`。新 init 的 `version: 2` 缺少 `mapperIncludes/configIncludes` 必须校验失败。存在 `workspaceDependencies` 时还必须通过 Controlled Runtime 的 sibling/root/symlink 语义校验。
 13. **输出初始化摘要**：列出已识别项、未确定项和宿主能力。
 
 ### 重新确认（用户回答未确定项后）
@@ -133,3 +148,4 @@ scope.configIncludes = src/main/resources/**/*.yml
 - 不得虚构不能从代码中确认的信息
 - 不得在未经用户明确同意的情况下修改目标项目根目录的 `AGENTS.md`
 - 不得执行测试或启动服务
+- 不得自动扫描或读取 sibling dependency 源码来推断 `workspaceDependencies`
