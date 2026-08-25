@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.2 - 2026-08-25
+
+- **Workspace Dependency Chain Navigation**：支持显式配置的 direct sibling Maven source dependency；只有 Maven identity 机器验证为 `VERIFIED` 后才进入跨 workspace 代码导航，workspace dependency 始终只是 **Navigation Scope**，不是 Change Set、Review Scope 或 Write Scope。
+- **Maven version safety**：本地解析 current/sibling POM、local parent property 与 dependencyManagement；coordinate/version 无法精确确认时返回稳定 machine code，`VERSION_MISMATCH`、`VERSION_UNRESOLVED` 等状态绝不回退到猜测或公网/JAR 解析。
+- **Inheritance / template dispatch**：调用链可以从 current project 进入 dependency superclass/template method，再确定性返回 current concrete override；存在两个真实 override 且无法唯一确认时返回 `AMBIGUOUS_TEMPLATE_DISPATCH`，不选择任意分支。
+- **Review Isolation**：workspace dependency evidence 可以作为业务 Chain Context，但 FULL/TARGETED coverage、`scopedFiles`、`Finding.file` 和 Fix/Test write path 均保持 current repository only；dependency 不产生 Finding，也不能被写入。
+- **1.5.1 → 1.5.2 Release Gate**：无 harness config migration；正式 Windows x64 升级 byte-for-byte 保持既有 `harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**`，且不会向既有 `harness.yaml` 自动注入 `workspaceDependencies`；发布 1.5.2 install / upgrade 双 ZIP。
+
 ## 1.5.1 - 2026-08-24
 
 - **Chain Discover Bootstrap Fix**：`harness chain discover [target]` 变为自包含流程，直接从 current Change Set 自动 `analyze-change → Schema validate → Runtime machine coverage verify → chain discover`；无需先执行 harness review，也不要求历史 Chain 或既有 Review Run。
