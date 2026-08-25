@@ -174,21 +174,25 @@ func Validate(req ReviewRequest) error {
 	if err := validateRoleEvidence(req.Coverage); err != nil {
 		return err
 	}
-	var targetedFiles map[string]struct{}
+	findingFiles := make(map[string]struct{})
 	if mode == "TARGETED" {
-		targetedFiles = make(map[string]struct{}, len(req.Scope.ScopedFiles))
 		for _, file := range req.Scope.ScopedFiles {
-			targetedFiles[normalizeReportPath(file)] = struct{}{}
+			findingFiles[normalizeReportPath(file)] = struct{}{}
+		}
+	} else {
+		for _, file := range req.Coverage.ReviewedFiles {
+			findingFiles[normalizeReportPath(file)] = struct{}{}
 		}
 	}
 	for i, f := range req.Findings {
 		if strings.TrimSpace(f.ID) == "" || strings.TrimSpace(f.File) == "" || strings.TrimSpace(f.Problem) == "" || strings.TrimSpace(f.Evidence) == "" || strings.TrimSpace(f.Impact) == "" || strings.TrimSpace(f.Recommendation) == "" {
 			return fmt.Errorf("finding %d has missing required fields", i)
 		}
-		if mode == "TARGETED" {
-			if _, ok := targetedFiles[normalizeReportPath(f.File)]; !ok {
+		if _, ok := findingFiles[normalizeReportPath(f.File)]; !ok {
+			if mode == "TARGETED" {
 				return fmt.Errorf("finding %q file %q is outside verified scopedFiles", f.ID, f.File)
 			}
+			return fmt.Errorf("finding %q file %q is outside verified reviewedFiles", f.ID, f.File)
 		}
 		switch f.Category {
 		case "PRODUCTION_CODE", "TEST_VALIDITY":
