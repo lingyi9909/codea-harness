@@ -67,6 +67,36 @@ func Test153EntrypointInventoryClassLevelChangeRequiresAllControllerEndpoints(t 
 	assert153EntrypointSymbols(t, got, []string{"CController.cancel", "CController.update"})
 }
 
+func Test153EntrypointInventoryPureDeletionInsideExistingEndpointUsesOldSide(t *testing.T) {
+	path := "src/main/java/acme/CController.java"
+	snap := changeset.Snapshot{BaseRef: "develop", Head: "abc", SHA256: strings.Repeat("f", 64), Files: []changeset.File{{Path: path, Status: "M", Sources: []changeset.Source{changeset.SourceUnstaged}, Hunks: []changeset.Hunk{{OldStart: 13, OldLines: 1, NewStart: 13, NewLines: 0}}}}}
+	scanner := fake153EntrypointScanner{
+		current: map[string][]ControllerEndpoint{path: {{Controller: "CController", Symbol: "CController.update", Path: path, ControllerStartLine: 2, ControllerEndLine: 40, StartLine: 10, EndLine: 15}}},
+		base: map[string][]ControllerEndpoint{path: {{Controller: "CController", Symbol: "CController.update", Path: path, ControllerStartLine: 2, ControllerEndLine: 41, StartLine: 10, EndLine: 16}}},
+	}
+	got, err := buildEntrypointInventoryWithScanner(context.Background(), "r153", snap, Intent{Mode: "FULL"}, scanner)
+	if err != nil { t.Fatal(err) }
+	assert153EntrypointSymbols(t, got, []string{"CController.update"})
+	if got.ExpectedEntrypoints[0].Disposition != "" { t.Fatalf("existing endpoint must not be REMOVED: %+v", got.ExpectedEntrypoints[0]) }
+}
+
+func Test153EntrypointInventoryPureClassLevelDeletionRequiresAllCurrentEndpoints(t *testing.T) {
+	path := "src/main/java/acme/CController.java"
+	snap := changeset.Snapshot{BaseRef: "develop", Head: "abc", SHA256: strings.Repeat("9", 64), Files: []changeset.File{{Path: path, Status: "M", Sources: []changeset.Source{changeset.SourceUnstaged}, Hunks: []changeset.Hunk{{OldStart: 5, OldLines: 1, NewStart: 5, NewLines: 0}}}}}
+	current := []ControllerEndpoint{
+		{Controller: "CController", Symbol: "CController.update", Path: path, ControllerStartLine: 2, ControllerEndLine: 44, StartLine: 10, EndLine: 16},
+		{Controller: "CController", Symbol: "CController.cancel", Path: path, ControllerStartLine: 2, ControllerEndLine: 44, StartLine: 25, EndLine: 31},
+	}
+	base := []ControllerEndpoint{
+		{Controller: "CController", Symbol: "CController.update", Path: path, ControllerStartLine: 2, ControllerEndLine: 45, StartLine: 10, EndLine: 16},
+		{Controller: "CController", Symbol: "CController.cancel", Path: path, ControllerStartLine: 2, ControllerEndLine: 45, StartLine: 25, EndLine: 31},
+	}
+	scanner := fake153EntrypointScanner{current: map[string][]ControllerEndpoint{path: current}, base: map[string][]ControllerEndpoint{path: base}}
+	got, err := buildEntrypointInventoryWithScanner(context.Background(), "r153", snap, Intent{Mode: "FULL"}, scanner)
+	if err != nil { t.Fatal(err) }
+	assert153EntrypointSymbols(t, got, []string{"CController.cancel", "CController.update"})
+}
+
 func Test153EntrypointInventoryRepresentsDeletedEndpointAsRemoved(t *testing.T) {
 	path := "src/main/java/acme/CController.java"
 	snap := changeset.Snapshot{BaseRef: "develop", Head: "abc", SHA256: strings.Repeat("c", 64), Files: []changeset.File{{Path: path, Status: "M", Sources: []changeset.Source{changeset.SourceUnstaged}, Hunks: []changeset.Hunk{{OldStart: 20, OldLines: 6, NewStart: 20, NewLines: 0}}}}}
