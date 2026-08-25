@@ -8,6 +8,7 @@ on:
       - '.code-harness/**'
       - '.github/scripts/task152-workspace-smoke.ps1'
       - '.github/scripts/task152-task5-real-business-regression.ps1'
+      - '.github/scripts/task153-task1-real-entrypoint-inventory.ps1'
       - '.github/workflows/task152-workspace-navigation.yml'
 
 permissions:
@@ -65,6 +66,10 @@ jobs:
           $env:GOARCH = 'amd64'
           go build -trimpath -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Task 1 real three-controller entrypoint inventory regression
+        shell: pwsh
+        run: ./.github/scripts/task153-task1-real-entrypoint-inventory.ps1
 
       - name: Formal Runtime config to Maven VERIFIED to workspace navigation
         shell: pwsh
