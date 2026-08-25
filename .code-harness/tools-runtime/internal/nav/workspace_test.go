@@ -8,6 +8,41 @@ import (
 	"codea-harness-tools/internal/workspace"
 )
 
+func TestWorkspaceDoesNotTreatQualifiedHelperCallAsInheritedCall(t *testing.T) {
+	current, dependency := workspaceInheritanceFixture(t)
+	writeJava(t, current, "src/main/java/com/company/order/XxxServiceImpl.java", `package com.company.order;
+import com.company.framework.AbstractTemplate;
+public class XxxServiceImpl extends AbstractTemplate {
+    private Helper helper;
+    public void submit() { helper.execute(); }
+    @Override protected void doExecute() { mapper.updateStatus(); }
+}`)
+	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
+	result := resolver.ResolveInheritedCall("XxxServiceImpl.submit", "execute")
+	if result.Status != NavigationPartial || result.Limitation == nil || result.Limitation.Code != CodeInheritedMethodNotFound {
+		t.Fatalf("qualified helper.execute must not confirm inherited execute: %#v", result)
+	}
+}
+
+func TestWorkspaceMethodOwnershipIsExactWithMultipleClassesInOneFile(t *testing.T) {
+	current, dependency := workspaceInheritanceFixture(t)
+	writeJava(t, current, "src/main/java/com/company/order/Multi.java", `package com.company.order;
+import com.company.framework.AbstractTemplate;
+class OtherServiceImpl extends AbstractTemplate {
+    public void submit() { execute(); }
+    @Override protected void doExecute() { }
+}
+class XxxServiceImpl extends AbstractTemplate {
+    @Override protected void doExecute() { }
+}`)
+	_ = os.Remove(filepath.Join(current, "src/main/java/com/company/order/XxxServiceImpl.java"))
+	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
+	result := resolver.ResolveInheritedCall("XxxServiceImpl.submit", "execute")
+	if result.Status != NavigationPartial || result.Limitation == nil || result.Limitation.Code != CodeInheritedMethodNotFound {
+		t.Fatalf("method from sibling class in same file must not contaminate XxxServiceImpl ownership: %#v", result)
+	}
+}
+
 func TestWorkspaceResolveInheritedMethodFromCurrentSubclass(t *testing.T) {
 	current, dependency := workspaceInheritanceFixture(t)
 	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
