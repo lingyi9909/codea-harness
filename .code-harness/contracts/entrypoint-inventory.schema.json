@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EntrypointInventory",
+  "description": "Controlled Runtime 对当前真实 Change Set 独立生成的 changed production Controller entrypoint obligation inventory。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "status", "expectedEntryPoints", "changeSetSha256"],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "status": { "const": "COMPLETE" },
+    "expectedEntryPoints": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/expectedEntrypoint" }
+    },
+    "changeSetSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "$defs": {
+    "expectedEntrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "path"],
+      "properties": {
+        "symbol": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "disposition": { "enum": ["CONFIRMED", "PARTIAL", "REMOVED"] },
+        "limitation": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
