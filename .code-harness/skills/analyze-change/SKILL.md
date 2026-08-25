@@ -1,7 +1,7 @@
 ---
 name: analyze-change
 description: 计算完整 Review Change Set，并按 FULL/TARGETED 意图通过受控 Code Navigation 与资源关系证据建立可机器验证的 Review Scope。
-version: 4
+version: 5
 agent: reviewer
 tools:
   - git_diff
@@ -9,6 +9,10 @@ tools:
   - find_symbol
   - find_references
   - find_implementations
+  - workspace_verify
+  - workspace_inherited
+  - workspace_superclass_call
+  - workspace_template_dispatch
   - validate_contract
 output_schema: .code-harness/contracts/change-analysis.schema.json
 ---
@@ -47,7 +51,7 @@ TARGETED 不是 sampled review。只有它声明的全部 scopedFiles 与 select
 5. 每次确定性 Code Navigation 都必须把 Java `symbol → exact repository path + role + source` 固化到 `ChangeAnalysis.symbolLocations[]`；由另一个已确认 symbol 导航得到时可记录 `from`。
 6. Mapper.xml/YML 与 Java target/call-chain 的关系必须单独固化到 `ChangeAnalysis.resourceRelations[]`；不得把资源伪装成 Java symbolLocation。
 7. Java scopedFiles 必须使用 `symbolLocations[]` exact path；资源 scopedFiles 必须使用 `resourceRelations[]` exact path + relation evidence。
-8. 符号定位只能使用 `find_symbol` / `find_references` / `find_implementations`；不得靠 basename/简单类名猜路径。
+8. current project 符号定位优先使用 `find_symbol` / `find_references` / `find_implementations`；只有在 superclass/template inheritance 导致 current-project 导航断链时，才允许进入下述 VERIFIED workspace fallback。不得靠 basename/简单类名猜路径。
 9. Agent 声明 COMPLETE 不是事实，必须经过 Runtime machine gate。
 10. **不允许 sampled review** 进入 COMPLETE/PASSED。
 
@@ -88,6 +92,48 @@ src/main/resources/**/*.yml        -> YamlConfig
 13. `path` 必须是 Navigation 返回并实际读取/确认的 repository-relative exact path；同一个 symbol 得到两个不同 exact path/role 时必须视为 ambiguity。
 14. confirmed chain 写入 `callChains[]`；candidate/unresolved 只进入 unresolved/limitation。
 15. `affectedControllers[]` 仍必须提供真实 `impactType/sourceSymbols` 证据。
+
+### Workspace inheritance fallback（1.5.2 Task 4）
+
+当且仅当 current-project Code Navigation 已沿当前代码确认到 superclass / inherited method / template method 边界，且 `find_symbol` / `find_references` / `find_implementations` 无法继续确定性闭合调用链时，允许进入 workspace fallback：
+
+1. 只读取显式 `harness.yaml.workspaceDependencies`；未配置即停止为机器 limitation，**不得扫描任意 sibling**，不得遍历 `../**` 猜依赖源码。
+2. 对显式候选 dependency 先执行受控 `workspace verify <id>`（tool=`workspace_verify`）。只有 `VERIFIED` 才允许 workspace navigation；VERSION_UNRESOLVED / COORDINATE_MISMATCH / VERSION_MISMATCH / SOURCE_NOT_FOUND 均不得读取该 workspace 源码作为 confirmed evidence。
+3. VERIFIED 后只允许调用 Controlled Runtime 的三类确定性导航（对应 tools=`workspace_inherited` / `workspace_superclass_call` / `workspace_template_dispatch`）：
+
+```text
+codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+```
+
+4. Runtime 返回 COMPLETE fact 时只做事实拷贝，不补猜、不改写；写入 `ChangeAnalysis.symbolLocations[]`：
+
+```text
+workspace
+symbol
+exact path
+role
+source=WORKSPACE_INHERITANCE
+from
+```
+
+例如：
+
+```json
+{
+  "workspace":"company-framework",
+  "symbol":"AbstractTemplate.execute",
+  "path":"src/main/java/com/company/framework/AbstractTemplate.java",
+  "role":"Service",
+  "source":"WORKSPACE_INHERITANCE",
+  "from":"XxxServiceImpl.submit"
+}
+```
+
+5. workspace fact 只用于 Navigation / Chain Context；若 template dispatch 唯一回到 current-project override，则继续使用 Runtime 返回的 `workspace=current` fact，并**继续 confirmed callChain**，直到现有 Repository/Mapper/外部停止边界。
+6. 任一 workspace nav 返回 PARTIAL / ambiguity 时，按其机器 code 写入 limitation/unresolved；不得把候选包装成 confirmed callChain。
+7. workspace dependency 绝不进入 `changedFiles[]`、`resourceRelations[]`、Review Scope 或 Write Scope；其路径始终是 dependency workspace 内的 exact relative path，不使用 `../company-framework/...` 伪装 current path。
 
 ## C. Resource Relation Evidence
 
@@ -132,21 +178,23 @@ src/main/resources/**/*.yml        -> YamlConfig
 ## D. FULL Review
 
 21. 对所有匹配 source/test/mapper/config scope 的 changed file 读取完整内容。
-22. 对 FULL 所有相关内部 call-chain 文件读取完整内容，非 changed Java 文件记 `reason: CALL_CHAIN`。
+22. 对 FULL 所有相关内部 call-chain 文件读取完整内容，非 changed Java 文件记 `reason: CALL_CHAIN`；这里的“内部”只指 current workspace。
 23. changed Mapper.xml/YML 读取后进入 `reviewCoverage.reviewedFiles[]`，role 分别为 `MapperXml` / `YamlConfig`，reason=`CHANGED`。
-24. `reviewCoverage.status=COMPLETE` 仅当：
+24. `reviewCoverage.reviewedFiles[]` 的合法来源固定为：`changedFiles[]`、`workspace=current`（或旧证据缺省 current）的 `symbolLocations[].path`、current project `resourceRelations[].path`。`workspace != current` 的 dependency source 即使已用于 Navigation/Chain Context，也不得进入 reviewedFiles。
+25. `reviewCoverage.status=COMPLETE` 仅当：
     - 全 changed Java/test/Mapper.xml/YML required files 已读；
-    - 全部相关项目内部 chain symbols 已解析/读取；
+    - 全部相关 current-project 内部 chain symbols 已解析/读取；
+    - dependency workspace 仅作为 Navigation / Chain Context，不作为 Review 文件；
     - 外部边界已明确列为 `externalDependencies`；
     - `unresolvedSymbols` 为空。
-25. 组装 ChangeAnalysis 后用 `change-analysis.schema.json` + Runtime FULL Coverage 验证；不得跳过 `coverage.VerifyAnalysisJSON`。
+26. 组装 ChangeAnalysis 后用 `change-analysis.schema.json` + Runtime FULL Coverage 验证；不得跳过 `coverage.VerifyAnalysisJSON`。Runtime 必须拒绝 dependency workspace path 混入 `reviewCoverage.reviewedFiles[]`。
 
 ## E. TARGETED Review
 
 TARGETED 的选择数据继续使用独立 `.code-harness/contracts/review-scope.schema.json`；Task 2 只扩展该 Scope 的 Resource Evidence，不改变 Task 1 的 ReviewScopeSelection Contract。
 
-26. 从 confirmed `ChangeAnalysis.callChains[]` 解析 target，并用 `symbolLocations[].role` 判断 target 属于 Controller 还是 Service/其他下游角色；不得靠命名后缀猜角色。
-27. 多链语义保持 Task 1：
+27. 从 confirmed `ChangeAnalysis.callChains[]` 解析 target，并用 `symbolLocations[].role` 判断 target 属于 Controller 还是 Service/其他下游角色；不得靠命名后缀猜角色。
+28. 多链语义保持 Task 1：
 
 ```text
 Controller CLASS  → 自动包含该 Controller 当前 Change Set 中全部相关 confirmed chains
@@ -154,9 +202,9 @@ Controller METHOD → 自动包含该 method 当前 Change Set 中全部相关 c
 Service/其他下游 target → 1 条链自动继续；2+ 条上游业务链才要求用户选择
 ```
 
-28. `selectedCallChains` 必须是 confirmed chains 的真实子集。
-29. Java `scopedFiles` 从 `symbolLocations[]` exact path 推导；selected internal symbol 的 exact path 全部必须包含。
-30. 对资源文件，Runtime 只接受以下同时成立的 relation：
+29. `selectedCallChains` 必须是 confirmed chains 的真实子集。
+30. Java `scopedFiles` 从 `symbolLocations[]` exact path 推导；selected internal symbol 的 exact path 全部必须包含。
+31. 对资源文件，Runtime 只接受以下同时成立的 relation：
 
 ```text
 resource file ∈ changedFiles
@@ -165,16 +213,16 @@ resourceRelations.fromSymbol 命中 selectedCallChains（METHOD exact match；CL
 role/source 合法：MapperXml/MAPPER_STATEMENT 或 YamlConfig/CONFIG_REFERENCE
 ```
 
-31. 满足上述条件的 changed Mapper.xml/YML 必须加入 TARGETED scopedFiles；遗漏时 Runtime 拒绝。与 selected chain 无关的 changed resource 必须留在完整 Change Set，但不得加入本次 scopedFiles。
-32. **无法证明关联时不得加入 TARGETED scopedFiles**；不得为了“多看一点”把 UserMapper.xml 或无关 YML 塞进定向 Scope。
-33. 读取所有 verified scopedFiles；任一缺失都必须 PARTIAL。
-34. Controlled Runtime `reviewscope.Verify` 必须重新验证：selected chain、Controller 防漏链、Java exact path、resource relation exact path、required resources、scoped coverage。
-35. TARGETED 不允许使用 FULL Coverage 去要求 unrelated changed files 被读取；但也不得仅凭 Agent 自报 COMPLETE 放行。
+32. 满足上述条件的 changed Mapper.xml/YML 必须加入 TARGETED scopedFiles；遗漏时 Runtime 拒绝。与 selected chain 无关的 changed resource 必须留在完整 Change Set，但不得加入本次 scopedFiles。
+33. **无法证明关联时不得加入 TARGETED scopedFiles**；不得为了“多看一点”把 UserMapper.xml 或无关 YML 塞进定向 Scope。
+34. 读取所有 verified scopedFiles；任一缺失都必须 PARTIAL。
+35. Controlled Runtime `reviewscope.Verify` 必须重新验证：selected chain、Controller 防漏链、Java exact path、resource relation exact path、required resources、scoped coverage。
+36. TARGETED 不允许使用 FULL Coverage 去要求 unrelated changed files 被读取；但也不得仅凭 Agent 自报 COMPLETE 放行。
 
 ## F. `harness review list`
 
-36. LIST 只建立 Change Set + confirmed/candidate/unresolved chain 信息。
-37. 不调用 `review-code`，不产生 Finding，不把 candidate/unresolved 伪装为 confirmed。
+37. LIST 只建立 Change Set + confirmed/candidate/unresolved chain 信息。
+38. 不调用 `review-code`，不产生 Finding，不把 candidate/unresolved 伪装为 confirmed。
 
 ## 停止边界
 
@@ -261,9 +309,11 @@ Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 s
 
 - 不得跳过 Change Set 计算。
 - FULL 不得跳过 changed Java/test/Mapper.xml/YML required files。
+- FULL 不得把 `workspace != current` 的 dependency source 写入 `reviewCoverage.reviewedFiles[]`。
 - TARGETED 不得把 scope 外 changed files 标为 reviewed。
 - 不得通过类名/文件名猜实现路径或 scopedFiles。
 - 不得用同 basename 的其他模块文件替代 exact path。
+- 不得扫描任意 sibling；workspace source 只能来自显式 `harness.yaml.workspaceDependencies` + Runtime `VERIFIED`。
 - 不得把 properties、pom.xml、Gradle、SQL migration 或任意 XML 加入 Task 2 Resource Review。
 - 不得直接调用 `ast-grep.exe`。
 - 不得跳过 Runtime machine gate 并相信 Agent COMPLETE。
