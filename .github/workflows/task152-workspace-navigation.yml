@@ -211,13 +211,14 @@ jobs:
             $falsePositive = & $runtime nav workspace-inherited --workspace company-framework --from XxxServiceImpl.submit --method execute 2>&1
             if ($LASTEXITCODE -eq 0 -or (($falsePositive -join "`n") -notmatch 'INHERITED_METHOD_NOT_FOUND')) { throw "helper.execute false-confirmed or wrong limitation: $($falsePositive -join ' ')" }
 
-            @'
-            package com.company.order;
-            import com.company.framework.AbstractTemplate;
-            public class AnotherServiceImpl extends AbstractTemplate {
-                @Override protected void doExecute() { }
-            }
-            '@ | Set-Content (Join-Path $currentJava 'AnotherServiceImpl.java')
+            $another = @(
+              'package com.company.order;',
+              'import com.company.framework.AbstractTemplate;',
+              'public class AnotherServiceImpl extends AbstractTemplate {',
+              '    @Override protected void doExecute() { }',
+              '}'
+            )
+            Set-Content -Path (Join-Path $currentJava 'AnotherServiceImpl.java') -Value $another
             $ambiguous = & $runtime nav workspace-template-dispatch --workspace company-framework --from AbstractTemplate.execute --hook doExecute 2>&1
             if ($LASTEXITCODE -eq 0 -or (($ambiguous -join "`n") -notmatch 'AMBIGUOUS_TEMPLATE_DISPATCH')) { throw "ambiguous template dispatch was not rejected: $($ambiguous -join ' ')" }
           }
