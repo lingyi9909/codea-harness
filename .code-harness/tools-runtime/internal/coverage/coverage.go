@@ -44,9 +44,20 @@ type analysisFile struct {
 	Role string `json:"role"`
 }
 
+type navigationLocation struct {
+	Workspace string `json:"workspace"`
+	Path      string `json:"path"`
+}
+
+type resourceRelation struct {
+	Path string `json:"path"`
+}
+
 type analysis struct {
-	ChangedFiles []analysisFile `json:"changedFiles"`
-	ReviewCoverage struct {
+	ChangedFiles      []analysisFile       `json:"changedFiles"`
+	SymbolLocations   []navigationLocation `json:"symbolLocations"`
+	ResourceRelations []resourceRelation   `json:"resourceRelations"`
+	ReviewCoverage    struct {
 		Status            string         `json:"status"`
 		ReviewedFiles     []analysisFile `json:"reviewedFiles"`
 		UnresolvedSymbols []struct {
@@ -62,6 +73,9 @@ func VerifyAnalysisJSON(data []byte) (Result, error) {
 	}
 	if err := validateResourceRoles(a.ChangedFiles, a.ReviewCoverage.ReviewedFiles); err != nil {
 		return Result{}, err
+	}
+	if err := validateReviewedFileSources(a); err != nil {
+		return Result{Status: "PARTIAL"}, err
 	}
 	changed := make([]string, 0, len(a.ChangedFiles))
 	for _, f := range a.ChangedFiles {
@@ -83,6 +97,45 @@ func VerifyAnalysisJSON(data []byte) (Result, error) {
 		return r, fmt.Errorf("review coverage incomplete: missingChangedFiles=%v unresolvedSymbols=%v", r.MissingChangedFiles, r.UnresolvedSymbols)
 	}
 	return r, nil
+}
+
+// validateReviewedFileSources is the FULL-review isolation gate. A dependency workspace
+// may contribute navigation/call-chain evidence, but it is never a Review Scope source.
+// Legal reviewedFiles origins are exactly: current changedFiles, current-workspace
+// symbolLocations, and current-project resourceRelations.
+func validateReviewedFileSources(a analysis) error {
+	allowed := make(map[string]bool, len(a.ChangedFiles)+len(a.SymbolLocations)+len(a.ResourceRelations))
+	dependencyWorkspace := make(map[string]string)
+
+	for _, file := range a.ChangedFiles {
+		allowed[normalizePath(file.Path)] = true
+	}
+	for _, location := range a.SymbolLocations {
+		p := normalizePath(location.Path)
+		workspace := strings.TrimSpace(location.Workspace)
+		if workspace == "" || workspace == "current" {
+			allowed[p] = true
+			continue
+		}
+		if _, alreadyCurrent := allowed[p]; !alreadyCurrent {
+			dependencyWorkspace[p] = workspace
+		}
+	}
+	for _, relation := range a.ResourceRelations {
+		allowed[normalizePath(relation.Path)] = true
+	}
+
+	for _, reviewed := range a.ReviewCoverage.ReviewedFiles {
+		p := normalizePath(reviewed.Path)
+		if allowed[p] {
+			continue
+		}
+		if workspace := dependencyWorkspace[p]; workspace != "" {
+			return fmt.Errorf("reviewed file %q belongs to dependency workspace %q and is outside current project FULL review scope", p, workspace)
+		}
+		return fmt.Errorf("reviewed file %q is not justified by current changedFiles, current-workspace symbolLocations, or current-project resourceRelations", p)
+	}
+	return nil
 }
 
 func validateResourceRoles(changed, reviewed []analysisFile) error {

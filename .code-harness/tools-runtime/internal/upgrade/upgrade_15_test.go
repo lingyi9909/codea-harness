@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,8 +74,16 @@ func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectState
 	if err := copyTree(harnessRoot, source, nil); err != nil {
 		t.Fatalf("copy release source: %v", err)
 	}
+	versionBytes, err := os.ReadFile(filepath.Join(source, "VERSION"))
+	if err != nil {
+		t.Fatalf("read current release VERSION: %v", err)
+	}
+	currentVersion := strings.TrimSpace(string(versionBytes))
+	if currentVersion == "" {
+		t.Fatal("current release VERSION must not be empty")
+	}
 
-	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-1.5.1")
+	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-current-1.5.x")
 	write(t, source, "bin/ast-grep.exe", "release-ast-grep")
 	write(t, source, "chains/package-business.yaml", "must-never-install\n")
 
@@ -116,8 +125,8 @@ func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectState
 	}
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
-	if result.Status != StatusUpgraded || result.FromVersion != "1.4.0" || result.ToVersion != "1.5.1" {
-		t.Fatalf("expected accepted 1.4 -> current 1.5.1 upgrade, result=%+v", result)
+	if result.Status != StatusUpgraded || result.FromVersion != "1.4.0" || result.ToVersion != currentVersion {
+		t.Fatalf("expected accepted 1.4 -> current %s upgrade, result=%+v", currentVersion, result)
 	}
 
 	for rel, wantHash := range before {

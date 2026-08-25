@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const currentWorkspace = "current"
+
 type Target struct {
 	Symbol string `json:"symbol"`
 	Kind   string `json:"kind"`
@@ -35,11 +37,12 @@ type CoverageResult struct {
 }
 
 type SymbolLocation struct {
-	Symbol string `json:"symbol"`
-	Path   string `json:"path"`
-	Role   string `json:"role"`
-	Source string `json:"source"`
-	From   string `json:"from,omitempty"`
+	Workspace string `json:"workspace,omitempty"`
+	Symbol    string `json:"symbol"`
+	Path      string `json:"path"`
+	Role      string `json:"role"`
+	Source    string `json:"source"`
+	From      string `json:"from,omitempty"`
 }
 
 type ResourceRelation struct {
@@ -316,13 +319,14 @@ func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, er
 			return navigationEvidence{}, fmt.Errorf("navigation symbol %q: %w", symbol, err)
 		}
 		loc := raw
+		loc.Workspace = effectiveWorkspace(raw.Workspace)
 		loc.Symbol = symbol
 		loc.Path = p
 		loc.Role = strings.TrimSpace(loc.Role)
 		loc.From = strings.TrimSpace(loc.From)
 		if previous, exists := e.bySymbol[symbol]; exists {
-			if previous.Path != loc.Path || previous.Role != loc.Role {
-				return navigationEvidence{}, fmt.Errorf("ambiguous Code Navigation path for symbol %q: %q vs %q", symbol, previous.Path, loc.Path)
+			if previous.Workspace != loc.Workspace || previous.Path != loc.Path || previous.Role != loc.Role {
+				return navigationEvidence{}, fmt.Errorf("ambiguous Code Navigation path for symbol %q: %s/%q vs %s/%q", symbol, previous.Workspace, previous.Path, loc.Workspace, loc.Path)
 			}
 			continue
 		}
@@ -334,7 +338,7 @@ func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, er
 		if parent == "" {
 			continue
 		}
-		if parentLoc, ok := e.bySymbol[parent]; ok && parentLoc.Path == loc.Path {
+		if parentLoc, ok := e.bySymbol[parent]; ok && parentLoc.Workspace == loc.Workspace && parentLoc.Path == loc.Path {
 			e.methodSymbols[symbol] = struct{}{}
 		}
 	}
@@ -343,7 +347,7 @@ func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, er
 
 func navigationPath(value string, evidence navigationEvidence) bool {
 	for _, loc := range evidence.locations {
-		if loc.Path == value {
+		if loc.Workspace == currentWorkspace && loc.Path == value {
 			return true
 		}
 	}
@@ -353,8 +357,8 @@ func navigationPath(value string, evidence navigationEvidence) bool {
 func resolveTargetRole(target Target, evidence navigationEvidence) (string, error) {
 	if target.Kind == "METHOD" {
 		loc, ok := evidence.bySymbol[strings.TrimSpace(target.Symbol)]
-		if !ok {
-			return "", fmt.Errorf("target %q has no exact Code Navigation path evidence", target.Symbol)
+		if !ok || loc.Workspace != currentWorkspace {
+			return "", fmt.Errorf("target %q has no exact current-workspace Code Navigation path evidence", target.Symbol)
 		}
 		return loc.Role, nil
 	}
@@ -363,6 +367,9 @@ func resolveTargetRole(target Target, evidence navigationEvidence) (string, erro
 	roles := map[string]struct{}{}
 	paths := map[string]struct{}{}
 	for _, loc := range evidence.locations {
+		if loc.Workspace != currentWorkspace {
+			continue
+		}
 		if className(loc.Symbol, "METHOD") != targetClass && className(loc.Symbol, "CLASS") != targetClass {
 			continue
 		}
@@ -370,7 +377,7 @@ func resolveTargetRole(target Target, evidence navigationEvidence) (string, erro
 		paths[loc.Path] = struct{}{}
 	}
 	if len(roles) == 0 {
-		return "", fmt.Errorf("target %q has no exact Code Navigation path evidence", target.Symbol)
+		return "", fmt.Errorf("target %q has no exact current-workspace Code Navigation path evidence", target.Symbol)
 	}
 	if len(roles) != 1 || len(paths) != 1 {
 		return "", fmt.Errorf("target %q has ambiguous Code Navigation role/path evidence", target.Symbol)
@@ -391,11 +398,17 @@ func exactScopePaths(target Target, chains []CallChain, evidence navigationEvide
 		if !ok {
 			return nil, nil, fmt.Errorf("selected internal symbol %q has no exact Code Navigation path evidence", node)
 		}
+		if loc.Workspace != currentWorkspace {
+			continue
+		}
 		allowed[loc.Path] = struct{}{}
 		required[loc.Path] = struct{}{}
 		selectedNavigationPaths[loc.Path] = struct{}{}
 	}
 	for _, loc := range evidence.locations {
+		if loc.Workspace != currentWorkspace {
+			continue
+		}
 		_, symbolSelected := nodes[loc.Symbol]
 		_, fromSelected := nodes[loc.From]
 		targetClassRelated := target.Kind == "CLASS" && className(loc.Symbol, "METHOD") == className(target.Symbol, "CLASS")
@@ -497,6 +510,9 @@ func resolveResourceRelationEvidence(relation ResourceRelation, evidence navigat
 	loc, ok := evidence.bySymbol[relation.FromSymbol]
 	if !ok {
 		return SymbolLocation{}, fmt.Errorf("resource relation fromSymbol %q has no exact Code Navigation path evidence", relation.FromSymbol)
+	}
+	if loc.Workspace != currentWorkspace {
+		return SymbolLocation{}, fmt.Errorf("resource relation fromSymbol %q belongs to dependency workspace %q", relation.FromSymbol, loc.Workspace)
 	}
 	if relation.FromKind == "CLASS" {
 		if _, method := evidence.methodSymbols[relation.FromSymbol]; method {
@@ -689,6 +705,14 @@ func className(symbol, kind string) string {
 		return parts[len(parts)-2]
 	}
 	return parts[len(parts)-1]
+}
+
+func effectiveWorkspace(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return currentWorkspace
+	}
+	return value
 }
 
 func normalizeScopedPath(value string) (string, error) {

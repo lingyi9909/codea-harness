@@ -42,11 +42,16 @@ func Canonicalize(chains []Chain) []Chain {
 }
 
 func coreSignature(c Chain) string {
+	nodes := make([]Node, len(c.Nodes))
+	for i, node := range c.Nodes {
+		node.Workspace = effectiveWorkspace(node.Workspace)
+		nodes[i] = node
+	}
 	facts := struct {
 		Nodes      []Node     `json:"nodes"`
 		Resources  []Resource `json:"resources"`
 		Boundaries []Boundary `json:"boundaries"`
-	}{Nodes: c.Nodes, Resources: c.Resources, Boundaries: c.Boundaries}
+	}{Nodes: nodes, Resources: c.Resources, Boundaries: c.Boundaries}
 	b, _ := json.Marshal(facts)
 	return string(b)
 }
@@ -55,7 +60,8 @@ func mergeEntryPoints(left, right []EntryPoint) []EntryPoint {
 	seen := map[string]bool{}
 	out := make([]EntryPoint, 0, len(left)+len(right))
 	for _, entry := range append(append([]EntryPoint(nil), left...), right...) {
-		key := entry.Symbol + "\x00" + entry.Path
+		entry.Workspace = effectiveWorkspace(entry.Workspace)
+		key := entry.Workspace + "\x00" + entry.Symbol + "\x00" + entry.Path
 		if seen[key] {
 			continue
 		}
@@ -63,10 +69,13 @@ func mergeEntryPoints(left, right []EntryPoint) []EntryPoint {
 		out = append(out, entry)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Symbol == out[j].Symbol {
-			return out[i].Path < out[j].Path
+		if out[i].Workspace == out[j].Workspace {
+			if out[i].Symbol == out[j].Symbol {
+				return out[i].Path < out[j].Path
+			}
+			return out[i].Symbol < out[j].Symbol
 		}
-		return out[i].Symbol < out[j].Symbol
+		return out[i].Workspace < out[j].Workspace
 	})
 	return out
 }

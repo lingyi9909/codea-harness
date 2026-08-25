@@ -1,0 +1,77 @@
+name: task152-workspace-navigation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.code-harness/**'
+      - '.github/scripts/task152-workspace-smoke.ps1'
+      - '.github/scripts/task152-task5-real-business-regression.ps1'
+      - '.github/workflows/task152-workspace-navigation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  workspace-navigation-gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+
+      - name: Task 1-3 Runtime unit gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/workspace ./cmd/codea-harness-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Vendor pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-152.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-152'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: A-E real ast-grep workspace inheritance regressions
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/nav -run 'TestWorkspace|Test152Nested'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Windows x64 Controlled Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:GOOS = 'windows'
+          $env:GOARCH = 'amd64'
+          go build -trimpath -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Formal Runtime config to Maven VERIFIED to workspace navigation
+        shell: pwsh
+        run: ./.github/scripts/task152-workspace-smoke.ps1
+
+      - name: Task 5 real dual-project business regression
+        shell: pwsh
+        run: |
+          Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
+          ./.github/scripts/task152-task5-real-business-regression.ps1

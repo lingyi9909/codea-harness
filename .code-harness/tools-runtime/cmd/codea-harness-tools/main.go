@@ -33,13 +33,15 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|nav|db|chain|report|seal-apply|apply>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|workspace|nav|db|chain|report|seal-apply|apply>")
 	}
 	switch args[0] {
 	case "upgrade":
 		return runUpgrade(args[1:])
 	case "validate":
 		return runValidate(args[1:])
+	case "workspace":
+		return runWorkspace(args[1:])
 	case "nav":
 		return runNav(args[1:])
 	case "db":
@@ -120,6 +122,11 @@ func runValidate(args []string) error {
 	case "yaml", "yml":
 		if err := schema.ValidateYAML(sb, ib); err != nil {
 			return err
+		}
+		if filepath.Base(*schemaPath) == "harness-config.schema.json" {
+			if err := validateWorkspaceHarnessConfig(ib); err != nil {
+				return err
+			}
 		}
 		fmt.Println(`{"status":"VALID","format":"yaml"}`)
 	case "json":
@@ -210,9 +217,12 @@ func safeHarnessPath(p, requiredChild string) bool {
 
 func runNav(args []string) error {
 	if len(args) == 0 {
-		return errors.New("nav requires find-symbol, find-references, find-implementations, get-symbol-info, find-by-annotation, or find-callers")
+		return errors.New("nav requires find-symbol, find-references, find-implementations, get-symbol-info, find-by-annotation, find-callers, or workspace navigation")
 	}
 	action := args[0]
+	if strings.HasPrefix(action, "workspace-") {
+		return runWorkspaceNav(args)
+	}
 	fs := flag.NewFlagSet("nav", flag.ContinueOnError)
 	symbol := fs.String("symbol", "", "Java symbol")
 	annotation := fs.String("annotation", "", "Java annotation name")

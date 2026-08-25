@@ -50,6 +50,10 @@ codea-harness-tools nav find-implementations --symbol <symbol> --scope <repo-rel
 codea-harness-tools nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
 codea-harness-tools nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
 codea-harness-tools nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
+codea-harness-tools workspace verify --id <id>
+codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
 codea-harness-tools chain list
 codea-harness-tools chain show --target <id|Controller|Controller.method>
 codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/<file>.json
@@ -59,6 +63,8 @@ codea-harness-tools chain persist --input .code-harness/runs/<runId>/requests/<f
 codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
 ```
+
+Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/template inheritance 确定性断链时使用；候选只来自显式 `harness.yaml.workspaceDependencies`。必须先 `workspace verify --id <id>`，且只有 `VERIFIED` 才允许三个 `workspace-*` nav 子命令。不得扫描任意 sibling，不得把 dependency workspace 扩成 Change Set、Review Scope 或 Write Scope。
 
 `chain persist` 是内部 Controlled Runtime 写入动作，只能在 `validate-chain` / Orchestrator 已满足用户确认、candidate validation 与 expected-hash 门禁后调用；它不是独立用户意图。
 

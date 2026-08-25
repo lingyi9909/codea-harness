@@ -5,6 +5,16 @@ project:
   root: .
   module: ""
 
+# 1.5.2 可选 READ_ONLY Workspace Dependency Navigation allowlist。
+# 不得自动扫描 sibling / ../**；只有显式配置的 direct sibling Maven source 才允许后续验证。
+# workspaceDependencies:
+#   - id: company-framework
+#     root: ../company-framework
+#     maven:
+#       groupId: com.company
+#       artifactId: company-framework
+#     mode: READ_ONLY
+
 review:
   baseRef: ""
   includeWorkingTree: true

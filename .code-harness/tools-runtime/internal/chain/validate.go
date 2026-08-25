@@ -58,7 +58,7 @@ func Validate(root string, c Chain, evidence EvidenceProvider) ValidationResult 
 	}
 	for _, node := range c.Nodes {
 		if !verifiedNode(node, analysis) {
-			factErrors = append(factErrors, "NODE_NOT_VERIFIED: "+node.Symbol+" @ "+normalizeRepoPath(node.Path))
+			factErrors = append(factErrors, "NODE_NOT_VERIFIED: "+effectiveWorkspace(node.Workspace)+"/"+node.Symbol+" @ "+normalizeRepoPath(node.Path))
 		}
 	}
 	for _, entry := range c.EntryPoints {
@@ -67,9 +67,11 @@ func Validate(root string, c Chain, evidence EvidenceProvider) ValidationResult 
 		}
 	}
 
-	core := map[string]bool{}
+	currentCore := map[string]bool{}
 	for _, node := range c.Nodes {
-		core[node.Symbol] = true
+		if effectiveWorkspace(node.Workspace) == CurrentWorkspace {
+			currentCore[node.Symbol] = true
+		}
 	}
 	for _, resource := range c.Resources {
 		if !safeProjectRelativePath(resource.Path) {
@@ -80,12 +82,12 @@ func Validate(root string, c Chain, evidence EvidenceProvider) ValidationResult 
 			factErrors = append(factErrors, "RESOURCE_MISSING: "+normalizeRepoPath(resource.Path))
 			continue
 		}
-		if !verifiedResource(resource, core, analysis.ResourceRelations) {
+		if !verifiedResource(resource, currentCore, analysis.ResourceRelations) {
 			factErrors = append(factErrors, "RESOURCE_RELATION_NOT_VERIFIED: "+normalizeRepoPath(resource.Path))
 		}
 	}
 	for _, boundary := range c.Boundaries {
-		if !verifiedBoundary(boundary, core, analysis) {
+		if !verifiedBoundary(boundary, currentCore, analysis) {
 			factErrors = append(factErrors, "BOUNDARY_NOT_VERIFIED: "+boundary.Symbol+" @ "+normalizeRepoPath(boundary.Path))
 		}
 	}
@@ -104,6 +106,9 @@ func Validate(root string, c Chain, evidence EvidenceProvider) ValidationResult 
 }
 
 func verifiedEntryPoint(entry EntryPoint, analysis ChangeAnalysisEvidence) bool {
+	if effectiveWorkspace(entry.Workspace) != CurrentWorkspace {
+		return false
+	}
 	symbol := strings.TrimSpace(entry.Symbol)
 	path := normalizeRepoPath(entry.Path)
 	if parentSymbol(symbol) == "" || !isProductionControllerPath(path) {
@@ -126,7 +131,7 @@ func verifiedEntryPoint(entry EntryPoint, analysis ChangeAnalysisEvidence) bool 
 	}
 	matches := 0
 	for _, location := range analysis.SymbolLocations {
-		if strings.TrimSpace(location.Symbol) == symbol && location.Role == "Controller" && normalizeRepoPath(location.Path) == path && isProductionControllerPath(location.Path) {
+		if locationWorkspace(location) == CurrentWorkspace && strings.TrimSpace(location.Symbol) == symbol && location.Role == "Controller" && normalizeRepoPath(location.Path) == path && isProductionControllerPath(location.Path) {
 			matches++
 		}
 	}
@@ -135,8 +140,9 @@ func verifiedEntryPoint(entry EntryPoint, analysis ChangeAnalysisEvidence) bool 
 
 func verifiedNode(node Node, analysis ChangeAnalysisEvidence) bool {
 	matches := 0
+	workspace := effectiveWorkspace(node.Workspace)
 	for _, location := range analysis.SymbolLocations {
-		if strings.TrimSpace(location.Symbol) != strings.TrimSpace(node.Symbol) || normalizeRepoPath(location.Path) != normalizeRepoPath(node.Path) || !isProductionJavaPath(location.Path) {
+		if locationWorkspace(location) != workspace || strings.TrimSpace(location.Symbol) != strings.TrimSpace(node.Symbol) || normalizeRepoPath(location.Path) != normalizeRepoPath(node.Path) || !isProductionJavaPath(location.Path) {
 			continue
 		}
 		if nodeRole(location.Role) != node.Role {
@@ -191,7 +197,7 @@ func verifiedBoundary(boundary Boundary, core map[string]bool, analysis ChangeAn
 		return false
 	}
 	for _, location := range analysis.SymbolLocations {
-		if strings.TrimSpace(location.Symbol) != strings.TrimSpace(boundary.Symbol) || normalizeRepoPath(location.Path) != normalizeRepoPath(boundary.Path) || !isProductionJavaPath(location.Path) {
+		if locationWorkspace(location) != CurrentWorkspace || strings.TrimSpace(location.Symbol) != strings.TrimSpace(boundary.Symbol) || normalizeRepoPath(location.Path) != normalizeRepoPath(boundary.Path) || !isProductionJavaPath(location.Path) {
 			continue
 		}
 		if strings.TrimSpace(location.From) != "" && !core[strings.TrimSpace(location.From)] {
