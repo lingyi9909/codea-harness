@@ -77,14 +77,14 @@ func (p *pomProperties) UnmarshalXML(d *xml.Decoder, start xml.StartElement) err
 }
 
 type rawPOM struct {
-	XMLName              xml.Name        `xml:"project"`
-	Parent               pomParent       `xml:"parent"`
-	GroupID              string          `xml:"groupId"`
-	ArtifactID           string          `xml:"artifactId"`
-	Version              string          `xml:"version"`
-	Properties           pomProperties   `xml:"properties"`
-	Dependencies         []pomDependency `xml:"dependencies>dependency"`
-	ManagedDependencies  []pomDependency `xml:"dependencyManagement>dependencies>dependency"`
+	XMLName             xml.Name        `xml:"project"`
+	Parent              pomParent       `xml:"parent"`
+	GroupID             string          `xml:"groupId"`
+	ArtifactID          string          `xml:"artifactId"`
+	Version             string          `xml:"version"`
+	Properties          pomProperties   `xml:"properties"`
+	Dependencies        []pomDependency `xml:"dependencies>dependency"`
+	ManagedDependencies []pomDependency `xml:"dependencyManagement>dependencies>dependency"`
 }
 
 type effectivePOM struct {
@@ -107,8 +107,13 @@ func VerifyDirectMavenDependencies(repoRoot string, deps []Dependency) []Verific
 			ArtifactID:    dep.Maven.ArtifactID,
 		}
 		if currentErr != nil {
-			result.Status = StatusCoordinateMismatch
-			result.Code = CodeCoordinateMismatch
+			if errors.Is(currentErr, errLocalParentIdentity) {
+				result.Status = StatusVersionUnresolved
+				result.Code = CodeVersionUnresolved
+			} else {
+				result.Status = StatusCoordinateMismatch
+				result.Code = CodeCoordinateMismatch
+			}
 			results = append(results, result)
 			continue
 		}
@@ -145,8 +150,13 @@ func VerifyDirectMavenDependencies(repoRoot string, deps []Dependency) []Verific
 		}
 		source, err := loadEffectivePOM(sourcePomPath, map[string]bool{})
 		if err != nil {
-			result.Status = StatusSourceNotFound
-			result.Code = CodeSourceNotFound
+			if errors.Is(err, errLocalParentIdentity) {
+				result.Status = StatusVersionUnresolved
+				result.Code = CodeVersionUnresolved
+			} else {
+				result.Status = StatusSourceNotFound
+				result.Code = CodeSourceNotFound
+			}
 			results = append(results, result)
 			continue
 		}
@@ -195,7 +205,6 @@ func directDependencyVersion(model effectivePOM, groupID, artifactID string) (st
 					version = managed.Version
 					break
 				}
-			}
 		}
 		resolved, ok := resolveValue(version, model.Properties)
 		if !ok || strings.TrimSpace(resolved) == "" {
@@ -232,14 +241,19 @@ func loadEffectivePOM(path string, visiting map[string]bool) (effectivePOM, erro
 	if hasParent(raw.Parent) {
 		parentPath := localParentPath(filepath.Dir(abs), raw.Parent.RelativePath)
 		if parentPath != "" {
-			if parent, err := loadEffectivePOM(parentPath, visiting); err == nil {
-				model.GroupID = parent.GroupID
-				model.Version = parent.Version
-				for k, v := range parent.Properties {
-					model.Properties[k] = v
-				}
-				model.ManagedDependencies = append(model.ManagedDependencies, parent.ManagedDependencies...)
+			parent, err := loadEffectivePOM(parentPath, visiting)
+			if err != nil {
+				return effectivePOM{}, fmt.Errorf("%w: cannot load %s: %v", errLocalParentIdentity, parentPath, err)
 			}
+			if err := verifyDeclaredLocalParent(parent, raw.Parent, raw.Properties); err != nil {
+				return effectivePOM{}, err
+			}
+			model.GroupID = parent.GroupID
+			model.Version = parent.Version
+			for k, v := range parent.Properties {
+				model.Properties[k] = v
+			}
+			model.ManagedDependencies = append(model.ManagedDependencies, parent.ManagedDependencies...)
 		}
 	}
 	if strings.TrimSpace(raw.GroupID) != "" {
@@ -350,5 +364,3 @@ func resolveValue(value string, props map[string]string) (string, bool) {
 	}
 	return "", false
 }
-
-var _ = errors.Is
