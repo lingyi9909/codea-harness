@@ -26,6 +26,10 @@ func sampleRequest() ReviewRequest {
 				"src/main/java/OrderService.java",
 				"src/main/java/OrderServiceImpl.java",
 				"src/main/java/OrderRepository.java",
+				"src/main/java/A.java",
+				"src/main/java/B.java",
+				"src/main/java/M.java",
+				"src/main/java/Z.java",
 				"src/test/java/OrderServiceTest.java",
 			},
 			CallChains: []CallChain{
