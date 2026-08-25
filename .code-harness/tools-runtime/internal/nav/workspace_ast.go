@@ -209,6 +209,10 @@ func workspaceSubclassPatterns(superName string) []string {
 		"public class $C extends " + superName + " { $$$BODY }",
 		"final class $C extends " + superName + " { $$$BODY }",
 		"public final class $C extends " + superName + " { $$$BODY }",
+		"class $C extends " + superName + " implements $$$IFACES { $$$BODY }",
+		"public class $C extends " + superName + " implements $$$IFACES { $$$BODY }",
+		"final class $C extends " + superName + " implements $$$IFACES { $$$BODY }",
+		"public final class $C extends " + superName + " implements $$$IFACES { $$$BODY }",
 	}
 	return withAnnotationVariants(bases)
 }
