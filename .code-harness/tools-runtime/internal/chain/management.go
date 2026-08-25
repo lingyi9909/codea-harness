@@ -197,10 +197,10 @@ func Refresh(root string, existing Chain, discovered Chain) RefreshResult {
 func chainFactSet(c Chain) map[string]bool {
 	out := map[string]bool{}
 	for _, entry := range c.EntryPoints {
-		out["entry:"+entry.Symbol+"@"+normalizeRepoPath(entry.Path)] = true
+		out["entry:"+effectiveWorkspace(entry.Workspace)+":"+entry.Symbol+"@"+normalizeRepoPath(entry.Path)] = true
 	}
 	for _, node := range c.Nodes {
-		out["node:"+node.Role+":"+node.Symbol+"@"+normalizeRepoPath(node.Path)] = true
+		out["node:"+effectiveWorkspace(node.Workspace)+":"+node.Role+":"+node.Symbol+"@"+normalizeRepoPath(node.Path)] = true
 	}
 	for _, resource := range c.Resources {
 		out["resource:"+resource.Role+":"+resource.Symbol+"@"+normalizeRepoPath(resource.Path)] = true
