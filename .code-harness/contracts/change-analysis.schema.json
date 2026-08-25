@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ChangeAnalysis",
-  "description": "当前完整 Review Change Set 的变更分析事实。FULL 直接以全部 changedFiles 做机器 Coverage；TARGETED 仍保留完整 Change Set，但通过独立 review-scope.schema.json 声明并验证 selectedCallChains/scopedFiles。",
+  "description": "当前完整 Review Change Set 的变更分析事实。FULL 直接以全部 changedFiles 做机器 Coverage；TARGETED 仍保留完整 Change Set，但通过独立 review-scope.schema.json 声明并验证 selectedCallChains/scopedFiles。workspace dependency 只允许作为 Navigation/Chain evidence，不属于 Change Set/Review/Write Scope。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -30,13 +30,13 @@
     },
     "changedFiles": {
       "type": "array",
-      "description": "完整 Change Set 变更文件列表。TARGETED 也不得从这里删除 scope 外 changed file。MapperXml/YamlConfig 一旦进入 FULL changedFiles 即进入机器 Coverage required set。",
+      "description": "完整 current project Change Set 变更文件列表。workspace dependency 永远不得进入 changedFiles。TARGETED 也不得从这里删除 scope 外 changed file。MapperXml/YamlConfig 一旦进入 FULL changedFiles 即进入机器 Coverage required set。",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["path", "role", "sources"],
         "properties": {
-          "path": { "type": "string", "minLength": 1, "description": "文件路径" },
+          "path": { "type": "string", "minLength": 1, "description": "current project repository-relative 文件路径" },
           "role": { "$ref": "#/$defs/fileRole" },
           "hunkSummary": { "type": "string", "description": "变更摘要" },
           "sources": {
@@ -70,7 +70,7 @@
     },
     "callChains": {
       "type": "array",
-      "description": "与本次 Change Set 直接相关、已经确定性识别的 confirmed 项目内部调用链。1.4 TARGETED 的 selectedCallChains 必须是这里的真实子集；candidate/unresolved 不得包装到本数组。",
+      "description": "与本次 Change Set 直接相关、已经确定性识别的 confirmed 调用链。链可经过 VERIFIED workspace dependency；workspace identity 由 symbolLocations 的机器证据承载。1.4 TARGETED 的 selectedCallChains 必须是这里的真实子集；candidate/unresolved 不得包装到本数组。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -84,12 +84,19 @@
     "symbolLocations": {
       "type": "array",
       "uniqueItems": true,
-      "description": "Code Navigation 已确定性解析的 Java symbol → exact repository-relative path 证据。TARGETED Runtime 只允许使用这里的精确 Java 路径建立代码 scopedFiles；MapperXml/YamlConfig 必须通过 resourceRelations 表达。",
+      "description": "Code Navigation 已确定性解析的 symbol → workspace-relative exact path 证据。workspace 缺省解释为 current（兼容 1.5.1）；非 current workspace 只允许参与 Navigation/Call Chain/Chain Validation，不得扩大 Review/Write Scope。",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["symbol", "path", "role", "source"],
         "properties": {
+          "workspace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "description": "workspace identity；省略时等价 current"
+          },
           "symbol": { "type": "string", "minLength": 1 },
           "path": {
             "type": "string",
@@ -97,7 +104,7 @@
             "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
           },
           "role": { "$ref": "#/$defs/navigationRole" },
-          "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS"] },
+          "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS", "WORKSPACE_INHERITANCE"] },
           "from": { "type": "string", "minLength": 1, "description": "可选：该定位由哪个已确认 symbol 导航得到，用于证明 target/call-chain 与额外上下文文件的直接关系。" }
         }
       }
@@ -105,7 +112,7 @@
     "resourceRelations": {
       "type": "array",
       "uniqueItems": true,
-      "description": "Mapper.xml/YML 与已确认 Java symbol 的证据关系。只用于 1.4 Resource Review；TARGETED Runtime 仅把 changed 且 relation 命中 selected target/call-chain 的资源纳入 scopedFiles。",
+      "description": "current project Mapper.xml/YML 与已确认 Java symbol 的证据关系。只用于 1.4 Resource Review；workspace dependency resource 不属于本数组。TARGETED Runtime 仅把 changed 且 relation 命中 selected target/call-chain 的资源纳入 scopedFiles。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -158,7 +165,7 @@
     "reviewCoverage": {
       "type": "object",
       "additionalProperties": false,
-      "description": "已读取文件与未解析符号的证据集合。FULL 的 status 继续由全部 changedFiles 机器复算；TARGETED 的最终 COMPLETE 由独立 ReviewScopeSelection + scoped coverage Runtime gate 判定。",
+      "description": "current project 已读取文件与未解析符号的证据集合。workspace dependency 可作为导航上下文，但不得作为 reviewedFiles/Changed File。FULL 的 status 继续由全部 changedFiles 机器复算；TARGETED 的最终 COMPLETE 由独立 ReviewScopeSelection + scoped coverage Runtime gate 判定。",
       "required": ["status", "reviewedFiles", "unresolvedSymbols"],
       "properties": {
         "status": { "enum": ["COMPLETE", "PARTIAL"] },
