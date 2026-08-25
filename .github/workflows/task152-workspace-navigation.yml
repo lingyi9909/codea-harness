@@ -7,6 +7,7 @@ on:
     paths:
       - '.code-harness/**'
       - '.github/scripts/task152-workspace-smoke.ps1'
+      - '.github/scripts/task152-task5-real-business-regression.ps1'
       - '.github/workflows/task152-workspace-navigation.yml'
 
 permissions:
@@ -68,3 +69,7 @@ jobs:
       - name: Formal Runtime config to Maven VERIFIED to workspace navigation
         shell: pwsh
         run: ./.github/scripts/task152-workspace-smoke.ps1
+
+      - name: Task 5 real dual-project business regression
+        shell: pwsh
+        run: ./.github/scripts/task152-task5-real-business-regression.ps1
