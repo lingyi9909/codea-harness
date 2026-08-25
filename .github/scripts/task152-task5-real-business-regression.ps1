@@ -272,9 +272,8 @@ foreach ($p in @($staged + $unstaged + $untracked)) {
 }
 Write-Host 'STAGED + UNSTAGED + UNTRACKED PASS'
 
-# The required Runtime navigation commands are executed for evidence. Current find-references/find-implementations
-# may return matches:null for compound Java declarations/member calls, so relationship confirmation below uses
-# the just-read fixture source rather than inventing Runtime matches.
+# The required Runtime navigation commands are executed for evidence. Current find-references may return
+# matches:null for member-call shapes; relationship confirmation below therefore also checks the just-read source.
 $controller = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxController','--scope','src/main/java')
 $service = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxService','--scope','src/main/java')
 $implementationSearch = Invoke-RuntimeJson $current @('nav','find-implementations','--symbol','XxxService','--scope','src/main/java')
@@ -287,6 +286,7 @@ Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.j
 Assert-OneMatchPath $service 'src/main/java/com/company/order/XxxService.java' 'Service find-symbol'
 Assert-OneMatchPath $mapper 'src/main/java/com/company/order/XxxMapper.java' 'Mapper find-symbol'
 if ($implementationSearch.symbol -ne 'XxxService' -or $implementationSearch.scope -ne 'src/main/java') { throw "find-implementations runtime evidence mismatch: $($implementationSearch | ConvertTo-Json -Depth 8 -Compress)" }
+Assert-OneMatchPath $implementationSearch $implPath 'XxxService implementation find-implementations'
 if ($serviceRefs.symbol -ne 'XxxService' -or $serviceRefs.scope -ne 'src/main/java') { throw "XxxService find-references runtime evidence mismatch: $($serviceRefs | ConvertTo-Json -Depth 8 -Compress)" }
 if ($submitRefs.symbol -ne 'XxxService.submit' -or $submitRefs.scope -ne 'src/main/java') { throw "XxxService.submit find-references runtime evidence mismatch: $($submitRefs | ConvertTo-Json -Depth 8 -Compress)" }
 if ($mapperRefs.symbol -ne 'XxxMapper.updateStatus' -or $mapperRefs.scope -ne 'src/main/java') { throw "XxxMapper.updateStatus find-references runtime evidence mismatch: $($mapperRefs | ConvertTo-Json -Depth 8 -Compress)" }
@@ -337,7 +337,7 @@ $reviewedFiles = @(
 $symbolLocations = @(
     [ordered]@{ workspace='current'; symbol='XxxController.submit'; path=$controller.matches[0].path; role='Controller'; source='FIND_SYMBOL' },
     [ordered]@{ workspace='current'; symbol='XxxService.submit'; path=$service.matches[0].path; role='Service'; source='FIND_SYMBOL'; from='XxxController.submit' },
-    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$implPath; role='Service'; source='CURRENT_CHANGE_SET_SOURCE'; from='XxxService.submit' },
+    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$implementationSearch.matches[0].path; role='Service'; source='FIND_IMPLEMENTATIONS'; from='XxxService.submit' },
     $inherited.fact,
     $dispatch.fact,
     [ordered]@{ workspace='current'; symbol='XxxMapper.updateStatus'; path=$mapper.matches[0].path; role='Mapper'; source='FIND_SYMBOL'; from='XxxServiceImpl.doExecute' }
