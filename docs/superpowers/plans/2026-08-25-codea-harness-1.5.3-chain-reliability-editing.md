@@ -42,6 +42,7 @@ New focused runtime packages:
   git_test.go           committed/staged/unstaged/untracked regressions
 
 .code-harness/tools-runtime/internal/analysis/
+  model.go              canonical ChangeAnalysis + Intent types shared by certification/consumers
   entrypoints.go        changed production Controller endpoint inventory
   certify.go            proposal → Certified ChangeAnalysis gate
   evidence.go           symbol/path/role/resource evidence validation
@@ -103,7 +104,7 @@ Release/acceptance:
 .github/workflows/task153-chain-reliability.yml   (new)
 .github/workflows/package-windows-x64.yml         (extend)
 .code-harness/tools-runtime/cmd/codea-harness-tools/task153_*_test.go
-scripts/task153-real-review-chain-regression.ps1  (place with existing 1.5.x acceptance scripts; use repository's current script directory if named differently)
+.github/scripts/task153-real-review-chain-regression.ps1
 .code-harness/VERSION
 CHANGELOG.md
 ```
@@ -119,6 +120,7 @@ Do not restructure unrelated 1.5.2 packages while implementing these files.
 - Create: `.code-harness/tools-runtime/internal/changeset/model.go`
 - Create: `.code-harness/tools-runtime/internal/changeset/git.go`
 - Create: `.code-harness/tools-runtime/internal/changeset/git_test.go`
+- Create: `.code-harness/tools-runtime/internal/analysis/model.go`
 - Create: `.code-harness/tools-runtime/internal/analysis/entrypoints.go`
 - Create: `.code-harness/tools-runtime/internal/analysis/entrypoints_test.go`
 - Create: `.code-harness/tools-runtime/cmd/codea-harness-tools/analysis_command.go`
@@ -167,6 +169,69 @@ func Compute(repoRoot, baseRef string, includeWorkingTree bool) (Snapshot, error
 ```go
 package analysis
 
+type Intent struct {
+    Mode   string `json:"mode"`   // FULL | LIST | TARGETED | CHAIN_MAINTENANCE
+    Target string `json:"target,omitempty"`
+}
+
+type ChangedFile struct {
+    Path string `json:"path"`
+    Role string `json:"role"`
+}
+
+type AffectedController struct {
+    Controller    string   `json:"controller"`
+    Endpoints     []string `json:"endpoints"`
+    ImpactType    string   `json:"impactType"`
+    SourceSymbols []string `json:"sourceSymbols"`
+}
+
+type CallChain struct {
+    EntryPoint string   `json:"entryPoint"`
+    Chain      []string `json:"chain"`
+}
+
+type SymbolLocation struct {
+    Workspace string `json:"workspace,omitempty"`
+    Symbol    string `json:"symbol"`
+    Path      string `json:"path"`
+    Role      string `json:"role"`
+    Source    string `json:"source"`
+    From      string `json:"from,omitempty"`
+}
+
+type ResourceRelation struct {
+    Path       string `json:"path"`
+    Role       string `json:"role"`
+    Resource   string `json:"resource"`
+    FromSymbol string `json:"fromSymbol"`
+    FromKind   string `json:"fromKind"`
+    Source     string `json:"source"`
+    Evidence   string `json:"evidence"`
+}
+
+type UnresolvedSymbol struct {
+    Symbol string `json:"symbol"`
+    From   string `json:"from"`
+    Reason string `json:"reason"`
+}
+
+type ReviewCoverage struct {
+    Status            string             `json:"status"`
+    ReviewedFiles     []ChangedFile      `json:"reviewedFiles"`
+    UnresolvedSymbols []UnresolvedSymbol `json:"unresolvedSymbols"`
+}
+
+type ChangeAnalysis struct {
+    ChangedFiles         []ChangedFile         `json:"changedFiles"`
+    AffectedControllers  []AffectedController  `json:"affectedControllers"`
+    CallChains           []CallChain           `json:"callChains"`
+    SymbolLocations      []SymbolLocation      `json:"symbolLocations"`
+    ResourceRelations    []ResourceRelation    `json:"resourceRelations"`
+    ExternalDependencies []string              `json:"externalDependencies"`
+    ReviewCoverage       ReviewCoverage        `json:"reviewCoverage"`
+}
+
 type EntrypointDisposition string
 const (
     DispositionConfirmed EntrypointDisposition = "CONFIRMED"
@@ -192,16 +257,7 @@ func BuildEntrypointInventory(repoRoot, runID string, snapshot changeset.Snapsho
 func VerifyEntrypointDispositions(inventory EntrypointInventory, proposal ChangeAnalysis) error
 ```
 
-`Intent` for this task is exact and small:
-
-```go
-type Intent struct {
-    Mode   string `json:"mode"`   // FULL | LIST | TARGETED
-    Target string `json:"target,omitempty"`
-}
-```
-
-- Later Tasks consume the exact `Snapshot.SHA256` and `EntrypointInventory` types; do not rename them after Task 1 acceptance.
+- Later Tasks consume the exact `Snapshot.SHA256`, `analysis.ChangeAnalysis`, and `EntrypointInventory` types; do not rename them after Task 1 acceptance.
 
 - [ ] **Step 1: Write failing Change Set tests for all four Git sources**
 
@@ -692,7 +748,7 @@ Request body is only:
 ```json
 {
   "runId":"r153",
-  "planId":"chain-write-3e4d..."
+  "planId":"chain-write-3e4d5f"
 }
 ```
 
@@ -893,7 +949,7 @@ If exactly one valid option:
 }
 ```
 
-Orchestrator must not ask “which Controller/Chain?” and must immediately invoke Runtime selection verification with `C1` + current `optionsHash`.
+Orchestrator must not ask “which Controller/Chain?” and must immediately invoke Runtime selection verification with `C1` + current `optionsHash`. Plain `harness review` therefore proceeds directly as single-Chain TARGETED Review when there is exactly one valid Chain.
 
 This is the normative amendment and must have both unit and command-level regression coverage.
 
@@ -987,13 +1043,13 @@ git commit -m "feat: add certified review chain selection"
 package chain
 
 type EditOperation struct {
-    Type   string `json:"type"` // REPLACE_NODE | ADD_NODE | REMOVE_NODE | REORDER_NODE | RENAME_CHAIN | UPDATE_NOTES
-    From   string `json:"from,omitempty"`
-    To     string `json:"to,omitempty"`
-    Symbol string `json:"symbol,omitempty"`
-    After  string `json:"after,omitempty"`
-    Name   string `json:"name,omitempty"`
-    Notes  string `json:"notes,omitempty"`
+    Type   string   `json:"type"` // REPLACE_NODE | ADD_NODE | REMOVE_NODE | REORDER_NODE | RENAME_CHAIN | UPDATE_NOTES
+    From   string   `json:"from,omitempty"`
+    To     string   `json:"to,omitempty"`
+    Symbol string   `json:"symbol,omitempty"`
+    After  string   `json:"after,omitempty"`
+    Name   string   `json:"name,omitempty"`
+    Notes  string   `json:"notes,omitempty"`
     Order  []string `json:"order,omitempty"`
 }
 
@@ -1071,7 +1127,7 @@ Runtime must:
 
 ```text
 Load existing exact project Chain
-→ LoadCertified target-specific analysis
+→ LoadCertified target-specific CHAIN_MAINTENANCE analysis
 → apply operations in memory
 → preserve Chain version/id/entryPoints
 → verify resulting code facts against Certified ChangeAnalysis
@@ -1090,7 +1146,7 @@ Skill tools may read/show Chain and create request proposal, but must never edit
 user natural language
 → resolve exact Chain id
 → build semantic operations only
-→ target-specific analyze-change draft
+→ target-specific analyze-change draft (intent=CHAIN_MAINTENANCE)
 → Runtime analysis certify
 → Runtime chain edit
 → show deterministic candidate diff
@@ -1165,7 +1221,7 @@ git commit -m "feat: add verified natural language chain editing"
 - Create: `.code-harness/tools-runtime/cmd/codea-harness-tools/task153_artifact_authority_test.go`
 - Create: `.code-harness/tools-runtime/cmd/codea-harness-tools/task153_review_selection_test.go`
 - Create: `.code-harness/tools-runtime/cmd/codea-harness-tools/task153_chain_edit_test.go`
-- Create: `scripts/task153-real-review-chain-regression.ps1` or the repository's existing 1.5.x acceptance-script directory equivalent
+- Create: `.github/scripts/task153-real-review-chain-regression.ps1`
 - Modify: `.github/workflows/package-windows-x64.yml`
 - Modify: `.code-harness/tools-runtime/internal/upgrade/upgrade_15_test.go`
 - Modify: `.code-harness/VERSION`
@@ -1275,7 +1331,7 @@ After pinned ast-grep/runtime build and existing 1.5.2 Task 5/6 regressions, run
 Task 1.5.3 real review/chain reliability regression
 ```
 
-The PowerShell script must finish with:
+The PowerShell script `.github/scripts/task153-real-review-chain-regression.ps1` must finish with:
 
 ```text
 TASK153_REAL_REVIEW_CHAIN_RELIABILITY PASS
@@ -1368,8 +1424,8 @@ All must be `completed/success`. A pending, skipped required step, or red future
 
 ```powershell
 git add .github/workflows `
+        .github/scripts/task153-real-review-chain-regression.ps1 `
         .code-harness/tools-runtime/cmd/codea-harness-tools/task153_* `
-        scripts/task153-real-review-chain-regression.ps1 `
         .code-harness/tools-runtime/internal/upgrade/upgrade_15_test.go `
         .code-harness/VERSION `
         CHANGELOG.md
@@ -1422,5 +1478,6 @@ G14 Real Windows + pinned ast-grep + exact-head release workflows are green
 
 - Spec coverage: Tasks 1–6 cover every normative section of the design plus the single-option amendment.
 - No placeholder implementation steps: every new interface, command, error class, test fixture, and CI gate is named above.
-- Type consistency: `changeset.Snapshot.SHA256`, `analysis.EntrypointInventory`, `analysis.Certificate`, `analysis.LoadCertified`, `chain.CandidateCertificate`, `chain.WritePlan`, and `reviewselection.Options.OptionsHash` are the shared identities used by downstream Tasks.
+- Type consistency: `changeset.Snapshot.SHA256`, `analysis.ChangeAnalysis`, `analysis.EntrypointInventory`, `analysis.Certificate`, `analysis.LoadCertified`, `chain.CandidateCertificate`, `chain.WritePlan`, and `reviewselection.Options.OptionsHash` are the shared identities used by downstream Tasks.
+- Repository path consistency: real acceptance scripts live under `.github/scripts/**`, matching the existing 1.5.2 layout.
 - Scope guard: no Test/Debug/Fix/Verify Chain integration, project-wide graph, fuzzy matching, JDT, network source resolution, or Chain YAML migration is introduced.
