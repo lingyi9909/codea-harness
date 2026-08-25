@@ -53,7 +53,7 @@ jobs:
         shell: pwsh
         run: |
           $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
-          go test -count=1 ./internal/nav -run 'TestWorkspace'
+          go test -count=1 ./internal/nav -run 'TestWorkspace|Test152Nested'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build Windows x64 Controlled Runtime
