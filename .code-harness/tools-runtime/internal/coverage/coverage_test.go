@@ -56,6 +56,9 @@ func TestReviewGoldenUsesNavigationAndRealReadsBeforeCoverage(t *testing.T) {
 	}
 	doc := map[string]any{
 		"changedFiles": []any{map[string]any{"path": "src/main/java/OrderService.java"}},
+		"symbolLocations": []any{
+			map[string]any{"workspace": "current", "path": impl.Matches[0].Path},
+		},
 		"reviewCoverage": map[string]any{
 			"status":            "COMPLETE",
 			"reviewedFiles":     []any{map[string]any{"path": reviewed[0]}, map[string]any{"path": reviewed[1]}},
