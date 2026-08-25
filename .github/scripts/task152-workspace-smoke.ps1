@@ -50,9 +50,9 @@ public abstract class AbstractTemplate {
 
 @'
 package com.company.order;
-@RestController
-public class XxxController {
+class XxxController {
     private XxxServiceImpl service;
+    @PostMapping
     public void submit() { service.submit(); }
 }
 '@ | Set-Content (Join-Path $currentJava 'XxxController.java')
@@ -60,8 +60,7 @@ public class XxxController {
 @'
 package com.company.order;
 import com.company.framework.AbstractTemplate;
-@Service
-public class XxxServiceImpl extends AbstractTemplate {
+class XxxServiceImpl extends AbstractTemplate {
     private XxxMapper mapper;
     public void submit() { execute(); }
     @Override protected void doExecute() { mapper.updateStatus(); }
@@ -70,8 +69,7 @@ public class XxxServiceImpl extends AbstractTemplate {
 
 @'
 package com.company.order;
-@Mapper
-public interface XxxMapper {
+interface XxxMapper {
     void updateStatus();
 }
 '@ | Set-Content (Join-Path $currentJava 'XxxMapper.java')
@@ -196,10 +194,10 @@ if ($changedPaths.Count -ne 3) { throw "expected exactly 3 current-project chang
 
 # Current-project exact paths come from real Controlled Runtime Code Navigation.
 $controllerNav = Invoke-RuntimeJson @('nav','find-symbol','--symbol','XxxController','--scope','src/main/java')
-$serviceNav = Invoke-RuntimeJson @('nav','find-symbol','--symbol','XxxServiceImpl','--scope','src/main/java')
+$serviceNav = Invoke-RuntimeJson @('nav','find-implementations','--symbol','AbstractTemplate','--scope','src/main/java')
 $mapperNav = Invoke-RuntimeJson @('nav','find-symbol','--symbol','XxxMapper','--scope','src/main/java')
 if ($controllerNav.matches.Count -ne 1 -or $serviceNav.matches.Count -ne 1 -or $mapperNav.matches.Count -ne 1) {
-    throw 'current-project Code Navigation did not resolve unique exact paths'
+    throw "current-project Code Navigation did not resolve unique exact paths: controller=$($controllerNav | ConvertTo-Json -Depth 6 -Compress) service=$($serviceNav | ConvertTo-Json -Depth 6 -Compress) mapper=$($mapperNav | ConvertTo-Json -Depth 6 -Compress)"
 }
 
 # The current-project inherited execute() edge is intentionally not closed by normal nav.
@@ -230,7 +228,7 @@ foreach ($path in ($changedPaths | Sort-Object)) {
 
 $symbolLocations = @(
     [ordered]@{ workspace='current'; symbol='XxxController.submit'; path=$controllerNav.matches[0].path; role='Controller'; source='FIND_SYMBOL' },
-    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$serviceNav.matches[0].path; role='Service'; source='FIND_SYMBOL'; from='XxxController.submit' },
+    [ordered]@{ workspace='current'; symbol='XxxServiceImpl.submit'; path=$serviceNav.matches[0].path; role='Service'; source='FIND_IMPLEMENTATIONS'; from='XxxController.submit' },
     $inherited.fact,
     $superCall.fact,
     $dispatch.fact,
