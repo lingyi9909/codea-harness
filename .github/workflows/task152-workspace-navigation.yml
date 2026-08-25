@@ -24,11 +24,11 @@ jobs:
         with:
           go-version: '1.23.x'
 
-      - name: Task 1-3 Runtime unit gate
+      - name: Task 1 exact + existing Runtime unit gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/workspace ./cmd/codea-harness-tools
+          go test -count=1 ./internal/changeset ./internal/analysis ./internal/workspace ./cmd/codea-harness-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
