@@ -39,20 +39,20 @@ function Invoke-RuntimeFailure([string]$Current, [string[]]$Arguments, [string]$
 }
 
 function Assert-OneMatchPath($Result, [string]$ExpectedPath, [string]$Label) {
-    $matches = @($Result.matches)
-    if ($matches.Count -ne 1) {
-        throw "$Label expected exactly one runtime match; got $($matches.Count): $($Result | ConvertTo-Json -Depth 8 -Compress)"
+    $navMatches = @($Result.matches)
+    if ($navMatches.Count -ne 1) {
+        throw "$Label expected exactly one runtime match; got $($navMatches.Count): $($Result | ConvertTo-Json -Depth 8 -Compress)"
     }
-    $actual = [string]($matches[0].path)
+    $actual = [string]($navMatches[0].path)
     if ($actual -ne $ExpectedPath) {
-        throw "$Label path mismatch: got=$actual want=$ExpectedPath"
+        throw "$Label path mismatch: got=$actual want=$ExpectedPath; runtime=$($Result | ConvertTo-Json -Depth 8 -Compress)"
     }
 }
 
 function Assert-HasMatchPath($Result, [string]$ExpectedPath, [string]$Label) {
     $paths = @($Result.matches | ForEach-Object { [string]($_.path) })
     if ($paths -notcontains $ExpectedPath) {
-        throw "$Label missing source path $ExpectedPath; got=$($paths -join ',')"
+        throw "$Label missing source path $ExpectedPath; got=$($paths -join ','); runtime=$($Result | ConvertTo-Json -Depth 8 -Compress)"
     }
 }
 
