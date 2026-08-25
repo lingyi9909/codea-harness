@@ -43,14 +43,14 @@ function Assert-OneMatchPath($Result, [string]$ExpectedPath, [string]$Label) {
     if ($matches.Count -ne 1) {
         throw "$Label expected exactly one runtime match; got $($matches.Count): $($Result | ConvertTo-Json -Depth 8 -Compress)"
     }
-    $actual = [string]$matches[0].path
+    $actual = [string]($matches[0].path)
     if ($actual -ne $ExpectedPath) {
         throw "$Label path mismatch: got=$actual want=$ExpectedPath"
     }
 }
 
 function Assert-HasMatchPath($Result, [string]$ExpectedPath, [string]$Label) {
-    $paths = @($Result.matches | ForEach-Object { [string]$_.path })
+    $paths = @($Result.matches | ForEach-Object { [string]($_.path) })
     if ($paths -notcontains $ExpectedPath) {
         throw "$Label missing source path $ExpectedPath; got=$($paths -join ',')"
     }
@@ -375,7 +375,7 @@ if ($coverageResult.status -ne 'VALID' -or $coverageResult.reviewCoverage.status
     throw "Schema/FULL Coverage verification failed: $($coverageResult | ConvertTo-Json -Depth 10 -Compress)"
 }
 foreach ($reviewed in @($coverageResult.reviewCoverage.reviewedFiles)) {
-    if ([string]$reviewed.path -match 'company-framework|\.\./') { throw "dependency leaked into FULL Coverage: $($reviewed.path)" }
+    if ([string]($reviewed.path) -match 'company-framework|\.\./') { throw "dependency leaked into FULL Coverage: $($reviewed.path)" }
 }
 Write-Host 'Coverage COMPLETE PASS'
 
