@@ -109,24 +109,51 @@ func collectModifiedEntrypoints153(out map[string]ExpectedEntrypoint, changed ch
 	currentBySymbol := map[string]ControllerEndpoint{}
 	for _, ep := range current { currentBySymbol[ep.Symbol] = ep }
 
+	// New-side evidence covers additions/replacements inside endpoints that exist now.
 	for _, ep := range current {
 		if anyNewHunkIntersects153(changed.Hunks, ep.StartLine, ep.EndLine) {
 			addExpected153(out, ep, "")
 		}
 	}
+
+	// Old-side evidence is equally authoritative for pure deletions. If the symbol
+	// still exists, the current endpoint remains the obligation; only a vanished
+	// symbol is represented as REMOVED.
+	for _, old := range base {
+		if !anyOldHunkIntersects153(changed.Hunks, old.StartLine, old.EndLine) { continue }
+		if now, stillPresent := currentBySymbol[old.Symbol]; stillPresent {
+			addExpected153(out, now, "")
+		} else {
+			addExpected153(out, old, DispositionRemoved)
+		}
+	}
+
+	// Class-level changes must be evaluated on both snapshots. A class-level
+	// hunk is one that intersects the controller declaration/body but no endpoint
+	// on that same side; either side makes all current endpoints obligations.
 	for _, controller := range uniqueControllers153(current) {
-		for _, h := range changed.Hunks {
-			if h.NewLines <= 0 || !lineRangeIntersects153(h.NewStart, h.NewLines, controller.ControllerStartLine, controller.ControllerEndLine) { continue }
-			if hunkIntersectsAnyCurrentEndpoint153(h, current, controller.Controller) { continue }
+		classLevelChanged := newControllerClassLevelChanged153(changed.Hunks, controller, current)
+		if !classLevelChanged {
+			for _, oldController := range uniqueControllers153(base) {
+				if oldController.Controller != controller.Controller || filepath.ToSlash(oldController.Path) != filepath.ToSlash(controller.Path) { continue }
+				if oldControllerClassLevelChanged153(changed.Hunks, oldController, base) {
+					classLevelChanged = true
+					break
+				}
+			}
+		}
+		if classLevelChanged {
 			for _, ep := range current {
 				if ep.Controller == controller.Controller { addExpected153(out, ep, "") }
 			}
 		}
 	}
 
+	// Preserve the prior removed-endpoint behavior for a missing symbol when an
+	// old-side class-level change makes the old controller itself an obligation.
 	for _, old := range base {
 		if _, stillPresent := currentBySymbol[old.Symbol]; stillPresent { continue }
-		if anyOldHunkIntersects153(changed.Hunks, old.StartLine, old.EndLine) || oldControllerClassLevelChanged153(changed.Hunks, old, base) {
+		if oldControllerClassLevelChanged153(changed.Hunks, old, base) {
 			addExpected153(out, old, DispositionRemoved)
 		}
 	}
@@ -140,6 +167,14 @@ func uniqueControllers153(in []ControllerEndpoint) []ControllerEndpoint {
 		if !seen[key] { seen[key] = true; out = append(out, ep) }
 	}
 	return out
+}
+
+func newControllerClassLevelChanged153(hunks []changeset.Hunk, controller ControllerEndpoint, current []ControllerEndpoint) bool {
+	for _, h := range hunks {
+		if h.NewLines <= 0 || !lineRangeIntersects153(h.NewStart, h.NewLines, controller.ControllerStartLine, controller.ControllerEndLine) { continue }
+		if !hunkIntersectsAnyCurrentEndpoint153(h, current, controller.Controller) { return true }
+	}
+	return false
 }
 
 func hunkIntersectsAnyCurrentEndpoint153(h changeset.Hunk, endpoints []ControllerEndpoint, controller string) bool {
