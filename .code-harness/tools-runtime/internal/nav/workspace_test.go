@@ -17,7 +17,7 @@ public class XxxServiceImpl extends AbstractTemplate {
     public void submit() { helper.execute(); }
     @Override protected void doExecute() { mapper.updateStatus(); }
 }`)
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	result := resolver.ResolveInheritedCall("XxxServiceImpl.submit", "execute")
 	if result.Status != NavigationPartial || result.Limitation == nil || result.Limitation.Code != CodeInheritedMethodNotFound {
 		t.Fatalf("qualified helper.execute must not confirm inherited execute: %#v", result)
@@ -36,7 +36,7 @@ class XxxServiceImpl extends AbstractTemplate {
     @Override protected void doExecute() { }
 }`)
 	_ = os.Remove(filepath.Join(current, "src/main/java/com/company/order/XxxServiceImpl.java"))
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	result := resolver.ResolveInheritedCall("XxxServiceImpl.submit", "execute")
 	if result.Status != NavigationPartial || result.Limitation == nil || result.Limitation.Code != CodeInheritedMethodNotFound {
 		t.Fatalf("method from sibling class in same file must not contaminate XxxServiceImpl ownership: %#v", result)
@@ -45,24 +45,21 @@ class XxxServiceImpl extends AbstractTemplate {
 
 func TestWorkspaceResolveInheritedMethodFromCurrentSubclass(t *testing.T) {
 	current, dependency := workspaceInheritanceFixture(t)
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
-
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	result := resolver.ResolveInheritedCall("XxxServiceImpl.submit", "execute")
 	assertWorkspaceFact(t, result, "company-framework", "AbstractTemplate.execute", "src/main/java/com/company/framework/AbstractTemplate.java", "XxxServiceImpl.submit")
 }
 
 func TestWorkspaceResolveSuperclassInternalMethod(t *testing.T) {
 	current, dependency := workspaceInheritanceFixture(t)
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
-
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	result := resolver.ResolveSuperclassCall("AbstractTemplate.execute", "validate")
 	assertWorkspaceFact(t, result, "company-framework", "AbstractTemplate.validate", "src/main/java/com/company/framework/AbstractTemplate.java", "AbstractTemplate.execute")
 }
 
 func TestWorkspaceTemplateMethodDispatchesBackToConcreteOverride(t *testing.T) {
 	current, dependency := workspaceInheritanceFixture(t)
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
-
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	result := resolver.ResolveTemplateDispatch("AbstractTemplate.execute", "doExecute", "XxxServiceImpl")
 	assertWorkspaceFact(t, result, "current", "XxxServiceImpl.doExecute", "src/main/java/com/company/order/XxxServiceImpl.java", "AbstractTemplate.execute")
 }
@@ -74,8 +71,7 @@ import com.company.framework.AbstractTemplate;
 public class AnotherServiceImpl extends AbstractTemplate {
     @Override protected void doExecute() { }
 }`)
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
-
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	result := resolver.ResolveTemplateDispatch("AbstractTemplate.execute", "doExecute", "")
 	if result.Status != NavigationPartial || result.Limitation == nil || result.Limitation.Code != "AMBIGUOUS_TEMPLATE_DISPATCH" {
 		t.Fatalf("expected ambiguous template dispatch PARTIAL, got %#v", result)
@@ -112,7 +108,7 @@ func TestWorkspaceNavigationRejectsUnverifiedSourcesBeforeReadingJava(t *testing
 
 func TestWorkspaceInheritedMethodMissingAndAmbiguousAreMachineFacts(t *testing.T) {
 	current, dependency := workspaceInheritanceFixture(t)
-	resolver := WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verifiedWorkspace(dependency)}
+	resolver := workspaceResolverForTest(t, current, verifiedWorkspace(dependency))
 	missing := resolver.ResolveInheritedCall("XxxServiceImpl.submit", "missingMethod")
 	if missing.Status != NavigationPartial || missing.Limitation == nil || missing.Limitation.Code != "INHERITED_METHOD_NOT_FOUND" {
 		t.Fatalf("expected inherited method missing, got %#v", missing)
@@ -129,6 +125,17 @@ public abstract class AbstractTemplate {
 	if ambiguous.Status != NavigationPartial || ambiguous.Limitation == nil || ambiguous.Limitation.Code != "AMBIGUOUS_INHERITED_METHOD" {
 		t.Fatalf("expected ambiguous inherited method, got %#v", ambiguous)
 	}
+}
+
+func workspaceResolverForTest(t *testing.T, current string, verification workspace.VerificationResult) WorkspaceInheritanceResolver {
+	t.Helper()
+	astPath := os.Getenv("CODEA_AST_GREP_TEST_PATH")
+	if astPath == "" {
+		t.Skip("real ast-grep path not configured; dedicated workspace navigation gate runs these regressions")
+	}
+	abs, err := filepath.Abs(astPath)
+	if err != nil { t.Fatal(err) }
+	return WorkspaceInheritanceResolver{CurrentRoot: current, Dependency: verification, AstGrepPath: abs}
 }
 
 func workspaceInheritanceFixture(t *testing.T) (string, string) {
