@@ -173,7 +173,7 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 		}
 		selection.ScopedFiles[i] = p
 		if _, ok := allowedPaths[p]; !ok {
-			return Selection{}, fmt.Errorf("scoped file %q is not an exact current-workspace Code Navigation path or evidence-related changed resource for the selected target/call chains", f)
+			return Selection{}, fmt.Errorf("scoped file %q is not an exact Code Navigation path or evidence-related changed resource for the selected target/call chains", f)
 		}
 		selectedPaths[p] = struct{}{}
 	}
@@ -326,7 +326,7 @@ func buildNavigationEvidence(locations []SymbolLocation) (navigationEvidence, er
 		loc.From = strings.TrimSpace(loc.From)
 		if previous, exists := e.bySymbol[symbol]; exists {
 			if previous.Workspace != loc.Workspace || previous.Path != loc.Path || previous.Role != loc.Role {
-				return navigationEvidence{}, fmt.Errorf("ambiguous Code Navigation evidence for symbol %q: %s/%q vs %s/%q", symbol, previous.Workspace, previous.Path, loc.Workspace, loc.Path)
+				return navigationEvidence{}, fmt.Errorf("ambiguous Code Navigation path for symbol %q: %s/%q vs %s/%q", symbol, previous.Workspace, previous.Path, loc.Workspace, loc.Path)
 			}
 			continue
 		}
@@ -614,7 +614,6 @@ func selectedNodes(chains []CallChain) map[string]struct{} {
 			if node != "" {
 				nodes[node] = struct{}{}
 			}
-		}
 	}
 	return nodes
 }
