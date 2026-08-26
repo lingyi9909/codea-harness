@@ -108,14 +108,11 @@ func Test153EvidenceRejectsConflictingSameSymbolFacts(t *testing.T) {
 	}
 }
 
-func Test153EvidenceRejectsDependencyWorkspaceInChangedOrReviewedFiles(t *testing.T) {
+func Test153EvidenceRejectsUnverifiedDependencyWorkspace(t *testing.T) {
 	a, inventory := validEvidence153()
-	dep := "src/main/java/com/company/framework/AbstractTemplate.java"
-	a.SymbolLocations = append(a.SymbolLocations, SymbolLocation{Workspace: "company-framework", Symbol: "AbstractTemplate.execute", Path: dep, Role: "Service", Source: "WORKSPACE_INHERITANCE"})
-	a.ChangedFiles = append(a.ChangedFiles, ChangedFile{Path: dep, Role: "Service"})
-	a.ReviewCoverage.ReviewedFiles = append(a.ReviewCoverage.ReviewedFiles, ChangedFile{Path: dep, Role: "Service"})
-	if err := validateEvidence153(a, inventory); err == nil || !strings.Contains(err.Error(), "WORKSPACE_DEPENDENCY_SCOPE_VIOLATION") {
-		t.Fatalf("dependency workspace cannot become changed/reviewed scope, got %v", err)
+	a.SymbolLocations = append(a.SymbolLocations, SymbolLocation{Workspace: "company-framework", Symbol: "AbstractTemplate.execute", Path: "src/main/java/com/company/framework/AbstractTemplate.java", Role: "Service", Source: "WORKSPACE_INHERITANCE"})
+	if err := validateEvidence153(a, inventory); err == nil || !strings.Contains(err.Error(), "WORKSPACE_DEPENDENCY_NOT_CONFIGURED") {
+		t.Fatalf("dependency workspace evidence must be Runtime VERIFIED, got %v", err)
 	}
 }
 
