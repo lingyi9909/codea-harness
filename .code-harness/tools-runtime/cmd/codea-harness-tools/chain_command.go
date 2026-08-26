@@ -15,6 +15,8 @@ import (
 	"codea-harness-tools/internal/chain"
 )
 
+var loadCertifiedAnalysis153 = analysisruntime.LoadCertified
+
 type chainDiscoverRequest struct {
 	RunID              string `json:"runId"`
 	Target             string `json:"target,omitempty"`
@@ -298,7 +300,6 @@ func findProjectChain(root, target string) (chain.Chain, error) {
 			if ep.Symbol == target || exactSymbolOwner(ep.Symbol) == target {
 				matched = true
 			}
-		}
 		if matched {
 			matches = append(matches, c)
 		}
@@ -322,7 +323,7 @@ func exactSymbolOwner(symbol string) string {
 }
 
 func loadVerifiedChainAnalysis(value string) (chain.ChangeAnalysisEvidence, string, error) {
-	certified, cert, err := analysisruntime.LoadCertified(".", value)
+	certified, cert, err := loadCertifiedAnalysis153(".", value)
 	if err != nil {
 		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("load certified ChangeAnalysis: %w", err)
 	}
