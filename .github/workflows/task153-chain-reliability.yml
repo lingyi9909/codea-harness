@@ -6,12 +6,16 @@ on:
     branches: [develop]
     paths:
       - '.code-harness/contracts/change-analysis-cert.schema.json'
+      - '.code-harness/contracts/chain-edit-request.schema.json'
       - '.code-harness/tools-runtime/internal/analysis/**'
       - '.code-harness/tools-runtime/internal/coverage/**'
       - '.code-harness/tools-runtime/internal/chain/**'
       - '.code-harness/tools-runtime/internal/reviewscope/**'
       - '.code-harness/tools-runtime/cmd/codea-harness-tools/**'
       - '.code-harness/skills/analyze-change/SKILL.md'
+      - '.code-harness/skills/edit-chain/SKILL.md'
+      - '.code-harness/skills/validate-chain/SKILL.md'
+      - '.code-harness/agents/orchestrator.md'
       - '.code-harness/agents/reviewer.md'
       - '.code-harness/AGENTS.md'
       - '.github/workflows/task153-chain-reliability.yml'
@@ -29,7 +33,11 @@ jobs:
         with:
           go-version: '1.23.x'
 
-      - name: Task 2 exact certified ChangeAnalysis gate
+      - name: Task 5 exact semantic Chain edit gate
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./internal/chain ./cmd/codea-harness-tools -run 'Test153.*Edit|Test153ChainEditAgentContract'
+
+      - name: Task 1-5 exact 1.5.3 regression gate
         working-directory: .code-harness/tools-runtime
         run: go test -count=1 ./internal/analysis ./internal/coverage ./internal/chain ./internal/reviewscope ./cmd/codea-harness-tools -run 'Test153|Test151|Test152'
 
