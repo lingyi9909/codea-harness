@@ -156,23 +156,6 @@ jobs:
           p.write_text(s, encoding='utf-8')
           PY
 
-      - name: Add Task 5 exact gate
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('.github/workflows/task153-chain-reliability.yml')
-          s = p.read_text(encoding='utf-8')
-          if "      - '.code-harness/contracts/chain-edit-request.schema.json'\n" not in s:
-              s = s.replace("      - '.code-harness/contracts/change-analysis-cert.schema.json'\n", "      - '.code-harness/contracts/change-analysis-cert.schema.json'\n      - '.code-harness/contracts/chain-edit-request.schema.json'\n", 1)
-          if "      - '.code-harness/skills/edit-chain/SKILL.md'\n" not in s:
-              s = s.replace("      - '.code-harness/skills/analyze-change/SKILL.md'\n", "      - '.code-harness/skills/analyze-change/SKILL.md'\n      - '.code-harness/skills/edit-chain/SKILL.md'\n      - '.code-harness/skills/validate-chain/SKILL.md'\n      - '.code-harness/agents/orchestrator.md'\n", 1)
-          old = "      - name: Task 2 exact certified ChangeAnalysis gate\n        working-directory: .code-harness/tools-runtime\n        run: go test -count=1 ./internal/analysis ./internal/coverage ./internal/chain ./internal/reviewscope ./cmd/codea-harness-tools -run 'Test153|Test151|Test152'\n"
-          new = "      - name: Task 5 exact semantic Chain edit gate\n        working-directory: .code-harness/tools-runtime\n        run: go test -count=1 ./internal/chain ./cmd/codea-harness-tools -run 'Test153.*Edit|Test153ChainEditAgentContract'\n\n      - name: Task 1-5 exact 1.5.3 regression gate\n        working-directory: .code-harness/tools-runtime\n        run: go test -count=1 ./internal/analysis ./internal/coverage ./internal/chain ./internal/reviewscope ./cmd/codea-harness-tools -run 'Test153|Test151|Test152'\n"
-          if old not in s: raise SystemExit('task153 old exact gate marker missing')
-          s = s.replace(old, new, 1)
-          p.write_text(s, encoding='utf-8')
-          PY
-
       - name: Task 5 exact semantic Chain edit gate
         working-directory: .code-harness/tools-runtime
         run: go test -count=1 ./internal/chain ./cmd/codea-harness-tools -run 'Test153.*Edit|Test153ChainEditAgentContract'
@@ -189,12 +172,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .code-harness/AGENTS.md .code-harness/agents/orchestrator.md .code-harness/skills/edit-chain/SKILL.md .code-harness/skills/validate-chain/SKILL.md .github/workflows/task153-chain-reliability.yml
+          git add .code-harness/AGENTS.md .code-harness/agents/orchestrator.md .code-harness/skills/edit-chain/SKILL.md .code-harness/skills/validate-chain/SKILL.md
           git commit -m "docs: finalize task5 semantic chain edit contract"
-          git push origin HEAD:docs/1.5.3-chain-reliability-editing-design
-
-      - name: Remove one-time workflow
-        run: |
-          git rm .github/workflows/task5-agent-contract-sync-once.yml
-          git commit -m "chore: remove task5 contract sync workflow"
           git push origin HEAD:docs/1.5.3-chain-reliability-editing-design
