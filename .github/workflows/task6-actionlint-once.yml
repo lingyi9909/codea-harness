@@ -20,3 +20,5 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - name: Validate package workflow
         run: actionlint -color .github/workflows/package-windows-x64.yml
+
+# one-shot Task 6 workflow syntax diagnostic
