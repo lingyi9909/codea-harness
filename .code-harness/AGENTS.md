@@ -16,6 +16,9 @@
 - 1.5.3 起 Agent/Orchestrator 产生的 ChangeAnalysis 只能先写 `.code-harness/runs/<runId>/requests/change-analysis-draft.json`；它只是 proposal，不是权威事实。
 - 权威 ChangeAnalysis 只能由 Controlled Runtime `analysis certify` 重新计算 Change Set、EntryPoint Inventory、Coverage 与 evidence invariants 后生成到同 run 的 `analysis/change-analysis.json`、`analysis/entrypoint-inventory.json`、`analysis/change-analysis.cert.json`。
 - Chain/Review 等消费者只能通过 Runtime Certified loader 消费上述权威产物；analysis/certificate/inventory 任一被篡改、Change Set 已变化或 certification 失败都必须 fail closed，进入 `MANUAL_ACTION_REQUIRED` / `PARTIAL`，不得由 Agent 直接修改 Runtime-owned artifact“修复”。
+- 1.5.3 Task 3 起，Generic Agent 的写权限边界是 `requests/**` proposal only；`analysis/**`、`review.md`、`.code-harness/chains/**` 都是 Runtime/Framework Managed artifact。仅把文件放进 Runtime-owned path 不产生 authority，必须有 Runtime provenance 并在消费时重新验证。
+- Chain candidate 保存必须经过不可变双阶段授权：Runtime-certified candidate → `chain seal-persist` 生成绑定 candidateHash / analysisHash / expectedExistingHash / previewSha256 的 planId → 用户明确确认当前 planId → `chain persist` 只凭 runId + planId 写入 Project State。candidate、analysis、write plan 或 existing Project State 任一变化都使旧授权失效，必须重新 seal 并重新确认。
+- 不声称同一 OS 用户下的 ACL 能提供密码学身份隔离；即使宿主支持路径 ACL，Runtime provenance/hash/certified-analysis revalidation 仍是强制边界。可配置时遵循 `ALLOW requests/**`、`DENY analysis/**|review.md|chains/**` 的 Agent 写权限策略。
 
 ## 初始化门禁
 
@@ -36,8 +39,8 @@
 - 测试代码修改前必须精确 `批准 <planId>`；REUSE_EXISTING 无需审批。
 - 生产代码修改前必须精确 `批准 <fixPlanId>`。
 - `harness api-doc` 的 target selection 仅决定只读文档范围，不构成任何写操作审批，也不得要求 `批准 <planId>`。
-- Chain refresh 只有在当前 diff/candidate 已展示后，用户明确确认保存/更新该条 Chain，才允许内部 `chain persist`；该确认只授权该 candidate，不等同 Test/Fix Approval。
-- 「好/继续/可以/yes/ok」不算测试/修复审批；计划变化后旧审批失效。对 Chain Project State 写入，也不得在缺少明确保存/更新对象与当前 refresh diff 上下文时把模糊肯定当作确认。
+- Chain refresh/discover/edit candidate 的首次“保存/更新”确认只允许 Runtime 执行 `chain seal-persist` 并展示 exact planId；只有用户随后明确确认该 planId，才允许内部 `chain persist`。任何新 candidate/plan bytes 都必须获得新的确认。
+- 「好/继续/可以/yes/ok」不算测试/修复审批；对 Chain Project State 写入，也不能把没有 exact 当前 planId 的模糊肯定解释为 persist 授权。
 - 自动测试修复最多 2 轮，且仅限本次 `GENERATED_BY_PLAN`；历史 Existing Test 不自动改。
 
 ## 受控 Tool Runtime
@@ -64,6 +67,7 @@ codea-harness-tools chain show --target <id|Controller|Controller.method>
 codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain validate --id <chainId> --change-analysis .code-harness/runs/<runId>/analysis/change-analysis.json
 codea-harness-tools chain refresh --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools chain seal-persist --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain persist --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
@@ -73,7 +77,9 @@ Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/
 
 `analysis certify` 是 ChangeAnalysis authority boundary：请求必须位于同 run 的 `requests/**`，Runtime 独立重算并验证后才发布 authoritative artifacts。Agent 不得直接创建/覆盖 `.code-harness/runs/<runId>/analysis/change-analysis.json`、`entrypoint-inventory.json` 或 `change-analysis.cert.json`。
 
-`chain persist` 是内部 Controlled Runtime 写入动作，只能在 `validate-chain` / Orchestrator 已满足用户确认、candidate validation 与 expected-hash 门禁后调用；它不是独立用户意图。
+`chain seal-persist` 只接受同 run 的 Runtime-certified candidate，重新加载 Certified ChangeAnalysis、验证 candidate provenance/bytes/code facts 与当前 existing Project State hash，并生成不可变 write plan；它本身不得修改 `.code-harness/chains/**`。
+
+`chain persist` 是内部 Controlled Runtime 写入动作，只接受同 run 的 exact `planId`。Runtime 必须重新验证 sealed plan、Certified ChangeAnalysis、candidate hash、preview hash 与 existing Project State hash 后才可原子写入；最终 persist request 不得重新携带 candidatePath/changeAnalysisPath/expectedExistingHash 改写已确认计划。
 
 禁止 `cmd /c`、`powershell -Command`、`bash -c`、shell 求值、管道、重定向或用户命令拼接。Code Navigation 由 Runtime 封装随包 `ast-grep.exe`；Agent/Skill 不得直接调用 ast-grep、raw rule、raw pattern、regex 或 arbitrary query language。
 
