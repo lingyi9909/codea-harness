@@ -23,8 +23,11 @@ func installContract(t *testing.T, name string) {
 }
 
 func targetedChangeAnalysis(reviewedService bool) string {
+	// Certified ChangeAnalysis must itself satisfy the complete Change Set coverage
+	// contract. TARGETED review then independently verifies its selected scopedFiles.
 	reviewed := `[
-      {"path":"src/main/java/OrderController.java","role":"Controller","reason":"CHANGED"}`
+      {"path":"src/main/java/OrderController.java","role":"Controller","reason":"CHANGED"},
+      {"path":"src/main/java/UnrelatedService.java","role":"Service","reason":"CHANGED"}`
 	if reviewedService {
 		reviewed += `,{"path":"src/main/java/OrderService.java","role":"Service","reason":"CALL_CHAIN"}`
 	}
@@ -43,7 +46,7 @@ func targetedChangeAnalysis(reviewedService bool) string {
   ],
   "externalDependencies":[],
   "riskAreas":[],
-  "reviewCoverage":{"status":"PARTIAL","reviewedFiles":` + reviewed + `,"unresolvedSymbols":[]}
+  "reviewCoverage":{"status":"COMPLETE","reviewedFiles":` + reviewed + `,"unresolvedSymbols":[]}
 }`
 }
 
@@ -66,7 +69,7 @@ func TestValidateReviewScopeUsesScopedCoverageNotFullChangedSet(t *testing.T) {
 	prepareCommittedCertifiedAnalysisFixture153(t, "run-001", analysis)
 
 	if err := run([]string{"validate", "--schema", ".code-harness/contracts/review-scope.schema.json", "--input", input, "--format", "json", "--change-analysis", analysis}); err != nil {
-		t.Fatalf("targeted scope should validate with Scoped Coverage COMPLETE even when full reviewCoverage is PARTIAL: %v", err)
+		t.Fatalf("targeted scope should validate when Certified ChangeAnalysis is complete and selected scoped coverage is complete despite unrelated changed files: %v", err)
 	}
 }
 
