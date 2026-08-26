@@ -110,7 +110,13 @@ func sealExistingAnalysisFixture153(t *testing.T, runID, analysisPath string) {
 
 func installCertifiedSchemas153(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"change-analysis.schema.json", "entrypoint-inventory.schema.json", "change-analysis-cert.schema.json"} {
+	for _, name := range []string{
+		"change-analysis.schema.json",
+		"entrypoint-inventory.schema.json",
+		"change-analysis-cert.schema.json",
+		"chain-candidate-cert.schema.json",
+		"chain-write-plan.schema.json",
+	} {
 		copyTask153CommandContract(t, ".", name)
 	}
 	writeFile(t, filepath.Join(".code-harness", "VERSION"), "1.5.2\n")
