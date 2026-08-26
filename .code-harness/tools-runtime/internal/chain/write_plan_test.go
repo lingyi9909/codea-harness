@@ -30,7 +30,9 @@ func Test153WritePlanRejectsMutatedCandidateBeforeAnalysisLookup(t *testing.T) {
 	installTask153WritePlanContracts(t, root)
 	candidatePath := ".code-harness/runs/r153/analysis/discovered-chains/order-approve.yaml"
 	candidate := task153AuthorityCandidate()
-	writeTask153AuthorityCandidate(t, root, candidatePath, candidate)
+	if err := persistDiscovered(root, "r153", []Chain{candidate}); err != nil {
+		t.Fatalf("persist Runtime candidate: %v", err)
+	}
 	if _, err := CertifyCandidate(root, candidate, candidatePath, "DISCOVERED", task153AnalysisCert()); err != nil {
 		t.Fatal(err)
 	}
