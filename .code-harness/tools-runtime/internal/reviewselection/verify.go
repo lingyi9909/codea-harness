@@ -1,8 +1,10 @@
 package reviewselection
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,10 +28,6 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 		return nil, fmt.Errorf("REVIEW_OPTIONS_STALE")
 	}
 	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
-	if mode == "LIST" {
-		if len(req.SelectionIDs) != 0 { return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: LIST must not contain selectionIds") }
-		return []ChainOption{}, nil
-	}
 	switch options.Decision {
 	case DecisionAutoFull:
 		if mode != "FULL" || len(req.SelectionIDs) != 0 {
@@ -50,6 +48,11 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 				return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: FULL must not contain selectionIds")
 			}
 			return []ChainOption{}, nil
+		case "LIST":
+			if len(req.SelectionIDs) != 0 {
+				return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: LIST must not contain selectionIds")
+			}
+			return []ChainOption{}, nil
 		case "TARGETED":
 			if len(req.SelectionIDs) == 0 {
 				return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: USER_SELECTION TARGETED requires selectionIds")
@@ -63,7 +66,9 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 	requested := map[string]bool{}
 	for _, id := range req.SelectionIDs {
 		id = strings.TrimSpace(id)
-		if id == "" || requested[id] { return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: duplicate/empty selectionId") }
+		if id == "" || requested[id] {
+			return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: duplicate/empty selectionId")
+		}
 		requested[id] = true
 	}
 	selected := make([]ChainOption, 0, len(requested))
@@ -75,7 +80,9 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 	}
 	if len(requested) != 0 {
 		var unknown []string
-		for id := range requested { unknown = append(unknown, id) }
+		for id := range requested {
+			unknown = append(unknown, id)
+		}
 		sort.Strings(unknown)
 		return nil, fmt.Errorf("REVIEW_SELECTION_UNKNOWN_CHAIN: %s", strings.Join(unknown, ","))
 	}
@@ -84,66 +91,137 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 
 func VerifyAndBuildScope(root string, req SelectionRequest) (reviewscope.Selection, error) {
 	root = filepath.Clean(root)
-	if strings.TrimSpace(req.RunID) == "" { return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: missing runId") }
+	if strings.TrimSpace(req.RunID) == "" {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: missing runId")
+	}
 	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-analysis.json"))
 	analysis, cert, err := analysisruntime.LoadCertified(root, analysisPath)
-	if err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err) }
-	if cert.RunID != req.RunID { return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE") }
+	if err != nil {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err)
+	}
+	if cert.RunID != req.RunID {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE")
+	}
 
 	optionsPath := filepath.Join(root, ".code-harness", "runs", req.RunID, "analysis", "review-options.json")
 	optionsBytes, err := os.ReadFile(optionsPath)
-	if err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err) }
-	var options Options
-	if err := json.Unmarshal(optionsBytes, &options); err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err) }
-	if options.RunID != cert.RunID || options.ChangeSetSHA256 != cert.ChangeSetSHA256 || options.EntrypointCompleteness != "COMPLETE" {
-		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE")
+	if err != nil {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err)
 	}
-	recomputed, err := finalizeOptions153(Options{RunID: options.RunID, ChangeSetSHA256: options.ChangeSetSHA256, EntrypointCompleteness: options.EntrypointCompleteness, Chains: options.Chains}, cert.AnalysisSHA256)
-	if err != nil || !reflect.DeepEqual(options, recomputed) {
+	var stored Options
+	if err := decodeStrictReviewArtifact153(optionsBytes, &stored); err != nil {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err)
+	}
+	if stored.RunID != cert.RunID || stored.ChangeSetSHA256 != cert.ChangeSetSHA256 || stored.EntrypointCompleteness != "COMPLETE" {
 		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE")
 	}
 
+	origin, err := loadOptionsOrigin153(root, req.RunID)
+	if err != nil {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err)
+	}
+	if origin.RunID != cert.RunID || origin.ChangeSetSHA256 != cert.ChangeSetSHA256 || origin.AnalysisSHA256 != cert.AnalysisSHA256 {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: origin identity changed")
+	}
+	normalizedIntent, err := normalizeReviewIntent153(origin.Intent)
+	if err != nil || !reflect.DeepEqual(origin.Intent, normalizedIntent) {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: origin intent changed")
+	}
+
+	// Stored review-options are only a Runtime artifact to consume, never the
+	// source of truth for their own completeness. Rebuild the complete option
+	// set from the original Runtime-owned intent plus the current certified
+	// analysis, entrypoint inventory, and current Chain facts, then compare the
+	// entire artifact exactly before interpreting the selection request.
+	authoritative, err := BuildOptionsForIntent(root, analysisPath, origin.Intent)
+	if err != nil {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: authoritative rebuild failed: %w", err)
+	}
+	if !reflect.DeepEqual(stored, authoritative) {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: stored options differ from authoritative Runtime rebuild")
+	}
+
+	selected, err := validateSelectionAgainstOptions153(authoritative, req)
+	if err != nil {
+		return reviewscope.Selection{}, err
+	}
 	analysisBytes, err := json.Marshal(analysis)
-	if err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err) }
-	var evidence chain.ChangeAnalysisEvidence
-	if err := json.Unmarshal(analysisBytes, &evidence); err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err) }
-	for _, option := range options.Chains {
-		candidate, err := loadOptionChain153(root, option, cert)
-		if err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err) }
-		validation := chain.Validate(root, candidate, chain.EvidenceSnapshot(evidence))
-		if validation.Status != chain.ValidationValid {
-			return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: chain %s is %s", option.ChainID, validation.Status)
-		}
-		if candidate.ID != option.ChainID || !reflect.DeepEqual(option.EntryPoints, optionEntryPoints153(candidate)) {
-			return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: chain identity changed")
-		}
+	if err != nil {
+		return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err)
 	}
-
-	selected, err := validateSelectionAgainstOptions153(options, req)
-	if err != nil { return reviewscope.Selection{}, err }
 	switch strings.ToUpper(strings.TrimSpace(req.Mode)) {
 	case "FULL":
 		scope, err := reviewscope.BuildFullSelection(analysisBytes)
-		if err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err) }
+		if err != nil {
+			return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err)
+		}
 		return scope, nil
 	case "LIST":
 		return reviewscope.Selection{Mode: "LIST", SelectedCallChains: []reviewscope.CallChain{}, ScopedFiles: []string{}}, nil
 	case "TARGETED":
 		callChains, err := selectedCallChains153(root, selected, analysis, cert)
-		if err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err) }
-		scope, err := reviewscope.BuildTargetedSelection(callChains, analysisBytes)
-		if err != nil { return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err) }
+		if err != nil {
+			return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err)
+		}
+		var scope reviewscope.Selection
+		if authoritative.Intent.Mode == "TARGETED" {
+			target := reviewscope.Target{Symbol: authoritative.Intent.Target, Kind: reviewTargetKind153(authoritative.Intent.Target)}
+			scope, err = reviewscope.BuildTargetedSelectionForTarget(callChains, analysisBytes, target)
+		} else {
+			scope, err = reviewscope.BuildTargetedSelection(callChains, analysisBytes)
+		}
+		if err != nil {
+			return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %w", err)
+		}
 		return scope, nil
 	default:
 		return reviewscope.Selection{}, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: unsupported mode")
 	}
 }
 
+func loadOptionsOrigin153(root, runID string) (OptionsOrigin, error) {
+	path := filepath.Join(root, ".code-harness", "runs", runID, "analysis", "review-options-origin.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return OptionsOrigin{}, fmt.Errorf("read review options origin: %w", err)
+	}
+	var origin OptionsOrigin
+	if err := decodeStrictReviewArtifact153(data, &origin); err != nil {
+		return OptionsOrigin{}, fmt.Errorf("decode review options origin: %w", err)
+	}
+	return origin, nil
+}
+
+func decodeStrictReviewArtifact153(data []byte, out any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("unexpected trailing JSON value")
+		}
+		return err
+	}
+	return nil
+}
+
+func reviewTargetKind153(target string) string {
+	if strings.Contains(strings.TrimSpace(target), ".") {
+		return "METHOD"
+	}
+	return "CLASS"
+}
+
 func loadOptionChain153(root string, option ChainOption, cert analysisruntime.Certificate) (chain.Chain, error) {
 	switch option.Source {
 	case "ACCEPTED":
 		path, err := chain.ChainPath(root, option.ChainID)
-		if err != nil { return chain.Chain{}, err }
+		if err != nil {
+			return chain.Chain{}, err
+		}
 		return chain.Load(path)
 	case "TEMPORARY":
 		candidatePath := filepath.ToSlash(filepath.Join(".code-harness", "runs", cert.RunID, "analysis", "discovered-chains", option.ChainID+".yaml"))
@@ -156,7 +234,9 @@ func loadOptionChain153(root string, option ChainOption, cert analysisruntime.Ce
 
 func optionEntryPoints153(candidate chain.Chain) []string {
 	values := make([]string, 0, len(candidate.EntryPoints))
-	for _, entry := range candidate.EntryPoints { values = append(values, strings.TrimSpace(entry.Symbol)) }
+	for _, entry := range candidate.EntryPoints {
+		values = append(values, strings.TrimSpace(entry.Symbol))
+	}
 	return uniqueSorted153(values)
 }
 
@@ -165,14 +245,20 @@ func selectedCallChains153(root string, selected []ChainOption, analysis analysi
 	out := make([]reviewscope.CallChain, 0)
 	for _, option := range selected {
 		candidate, err := loadOptionChain153(root, option, cert)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		nodes := make([]string, 0, len(candidate.Nodes))
-		for _, node := range candidate.Nodes { nodes = append(nodes, strings.TrimSpace(node.Symbol)) }
+		for _, node := range candidate.Nodes {
+			nodes = append(nodes, strings.TrimSpace(node.Symbol))
+		}
 		for _, entry := range candidate.EntryPoints {
 			sequence := append([]string{strings.TrimSpace(entry.Symbol)}, nodes...)
 			matched := false
 			for _, current := range analysis.CallChains {
-				if current.EntryPoint != entry.Symbol || !reflect.DeepEqual(current.Chain, sequence) { continue }
+				if current.EntryPoint != entry.Symbol || !reflect.DeepEqual(current.Chain, sequence) {
+					continue
+				}
 				keyBytes, _ := json.Marshal(current)
 				key := string(keyBytes)
 				if !seen[key] {
@@ -181,11 +267,15 @@ func selectedCallChains153(root string, selected []ChainOption, analysis analysi
 				}
 				matched = true
 			}
-			if !matched { return nil, fmt.Errorf("selected Chain %s has no exact certified callChain for %s", candidate.ID, entry.Symbol) }
+			if !matched {
+				return nil, fmt.Errorf("selected Chain %s has no exact certified callChain for %s", candidate.ID, entry.Symbol)
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		left, _ := json.Marshal(out[i]); right, _ := json.Marshal(out[j]); return string(left) < string(right)
+		left, _ := json.Marshal(out[i])
+		right, _ := json.Marshal(out[j])
+		return string(left) < string(right)
 	})
 	return out, nil
 }
