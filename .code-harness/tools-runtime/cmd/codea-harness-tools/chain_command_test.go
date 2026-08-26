@@ -62,6 +62,7 @@ func TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState(t *testing.T
 	runID := "run-task2"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
 	writeFile(t, analysisPath, validChainDiscoveryAnalysis())
+	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
 	requestPath := writeQueryRequest(t, runID, "chain-discover.json", `{"runId":"run-task2","target":"OrderController.approve","changeAnalysisPath":".code-harness/runs/run-task2/analysis/change-analysis.json"}`)
 
 	if err := run([]string{"chain", "discover", "--input", requestPath}); err != nil {
