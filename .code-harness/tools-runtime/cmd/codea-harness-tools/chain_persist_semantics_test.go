@@ -31,10 +31,11 @@ nodes:
     path: src/main/java/com/example/order/MissingService.java
     role: SERVICE
 `)
-	requestPath := writeQueryRequest(t, runID, "chain-persist.json", `{"runId":"run-persist-invalid","candidatePath":".code-harness/runs/run-persist-invalid/analysis/discovered-chains/order-approve.yaml","changeAnalysisPath":".code-harness/runs/run-persist-invalid/analysis/change-analysis.json"}`)
-	err := run([]string{"chain", "persist", "--input", requestPath})
-	if err == nil || !strings.Contains(err.Error(), "operation did not complete successfully") {
-		t.Fatalf("invalid discovered candidate must be rejected, err=%v", err)
+	certifyTask3Candidate(t, analysisPath, candidatePath, "DISCOVERED")
+	requestPath := writeQueryRequest(t, runID, "chain-seal-invalid.json", `{"runId":"run-persist-invalid","candidatePath":".code-harness/runs/run-persist-invalid/analysis/discovered-chains/order-approve.yaml"}`)
+	err := run([]string{"chain", "seal-persist", "--input", requestPath})
+	if err == nil || !strings.Contains(err.Error(), "CHAIN_CANDIDATE_VALIDATION_FAILED") {
+		t.Fatalf("invalid discovered candidate must be rejected before write-plan authority exists, err=%v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(".code-harness", "chains", "order-approve.yaml")); !os.IsNotExist(statErr) {
 		t.Fatalf("invalid candidate must produce zero Project State writes, stat err=%v", statErr)
