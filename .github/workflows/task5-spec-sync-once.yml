@@ -106,9 +106,9 @@ jobs:
           new = 'BaseRef: "HEAD", IncludeWorkingTree: true, Intent: analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: "fixture-maintenance"},'
           if old not in s: raise SystemExit('analysis certify intent fixture marker missing')
           s = s.replace(old, new, 1)
-          old = 'cert.RunID != "r153" || cert.ChangeSetSHA256 == "" || cert.AnalysisSHA256 == "" || cert.EntrypointInventorySHA256 == ""'
-          new = 'cert.RunID != "r153" || cert.ChangeSetSHA256 == "" || cert.AnalysisSHA256 == "" || cert.EntrypointInventorySHA256 == "" || cert.Intent == nil || cert.Intent.Mode != "CHAIN_MAINTENANCE" || cert.Intent.Target != "fixture-maintenance"'
-          if old not in s: raise SystemExit('analysis certify certificate assertion marker missing')
+          old = 'else if cert.Intent == nil || cert.Intent.Mode != "FULL" || cert.Intent.Target != "" {'
+          new = 'else if cert.Intent == nil || cert.Intent.Mode != "CHAIN_MAINTENANCE" || cert.Intent.Target != "fixture-maintenance" {'
+          if old not in s: raise SystemExit('analysis certify intent assertion marker missing')
           s = s.replace(old, new, 1)
           analysis_test.write_text(s, encoding='utf-8')
 
