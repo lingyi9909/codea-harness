@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewOptions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "changeSetSha256", "entrypointCompleteness", "decision", "chains", "optionsHash"],
+  "properties": {
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "changeSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "entrypointCompleteness": {"const": "COMPLETE"},
+    "decision": {"enum": ["AUTO_FULL", "AUTO_SINGLE", "USER_SELECTION"]},
+    "autoSelectionIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^C[1-9][0-9]*$"}
+    },
+    "chains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["selectionId", "chainId", "entryPoints", "source", "status"],
+        "properties": {
+          "selectionId": {"type": "string", "pattern": "^C[1-9][0-9]*$"},
+          "chainId": {"type": "string", "minLength": 1, "maxLength": 128},
+          "entryPoints": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "source": {"enum": ["ACCEPTED", "TEMPORARY"]},
+          "status": {"enum": ["VALID", "TEMPORARY"]}
+        }
+      }
+    },
+    "optionsHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision": {"const": "AUTO_SINGLE"}}, "required": ["decision"]},
+      "then": {"required": ["autoSelectionIds"], "properties": {"autoSelectionIds": {"minItems": 1, "maxItems": 1}, "chains": {"minItems": 1, "maxItems": 1}}}
+    },
+    {
+      "if": {"properties": {"decision": {"const": "AUTO_FULL"}}, "required": ["decision"]},
+      "then": {"properties": {"chains": {"maxItems": 0}, "autoSelectionIds": {"maxItems": 0}}}
+    },
+    {
+      "if": {"properties": {"decision": {"const": "USER_SELECTION"}}, "required": ["decision"]},
+      "then": {"properties": {"chains": {"minItems": 2}, "autoSelectionIds": {"maxItems": 0}}}
+    }
+  ]
+}
