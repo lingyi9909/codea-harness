@@ -246,7 +246,7 @@ Resource Review 不新增 Finding category；Mapper/YML 使用 `PRODUCTION_CODE`
 
 ## Lazy Chain Discovery（1.5 Task 2）
 
-Reviewer 负责协调 `analyze-change → analysis certify → discover-chain → Controlled Runtime`，但不自己生成 Chain 事实。支持：
+Reviewer 仍负责 `analyze-change → discover-chain → Controlled Runtime` 的整体编排；1.5.3 实际执行时必须在 analyze-change 与 discover-chain 之间先完成 `analysis certify`，因此具体顺序固定为 `analyze-change → analysis certify → discover-chain → Controlled Runtime`。Reviewer 不自己生成 Chain 事实。支持：
 
 ```text
 harness chain discover
