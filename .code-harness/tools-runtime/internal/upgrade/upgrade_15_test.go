@@ -193,14 +193,22 @@ func Test153Upgrade152To153PreservesAllProjectStateBytes(t *testing.T) {
 	write(t, source, "bin/ast-grep.exe", "release-ast-grep-0.42.1")
 	write(t, source, "chains/package-business.yaml", "must-never-install\n")
 
+	accepted152Config, changed, err := migrateConfigV1ToV2ResourceScopes([]byte(validConfig("review:\n  baseRef: origin/custom-release\n  includeWorkingTree: false\n")))
+	if err != nil {
+		t.Fatalf("build accepted 1.5.2 config fixture: %v", err)
+	}
+	if !changed {
+		t.Fatal("accepted 1.5.2 fixture must use harness config version 2")
+	}
+
 	write(t, target, "VERSION", "1.5.2\n")
 	write(t, target, "AGENTS.md", "accepted-1.5.2-framework\n")
 	write(t, target, "skills/stale-152/SKILL.md", "remove-me\n")
 	write(t, target, "bin/codea-harness-tools.exe", "accepted-1.5.2-runtime")
 	state := map[string][]byte{
-		"harness.yaml":                    []byte(validConfig("review:\n  baseRef: origin/custom-release\n  includeWorkingTree: false\n")),
-		"project.md":                      []byte("project-152\r\n"),
-		"database.yaml":                   []byte("version: 1\r\npassword: keep-secret\r\n"),
+		"harness.yaml":                              accepted152Config,
+		"project.md":                                []byte("project-152\r\n"),
+		"database.yaml":                             []byte("version: 1\r\npassword: keep-secret\r\n"),
 		"runs/run-152/requests/agent-proposal.json": []byte("{\"proposal\":\"must-remain-proposal\"}\r\n"),
 		"runs/run-152/evidence/result.bin":          []byte{1, 2, 3, 4, 5},
 		"chains/order-approve.yaml":                 []byte("# accepted user chain\r\nversion: 1\r\nid: order-approve\r\nstatus: ACCEPTED\r\n"),
