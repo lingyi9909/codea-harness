@@ -9,6 +9,7 @@ import (
 
 func Test153ChainLoaderRejectsUncertifiedAnalysis(t *testing.T) {
 	analysisPath := setupTask3CommandProject(t, false)
+	requireCertifiedChainAnalysis153(t)
 	_, _, err := loadVerifiedChainAnalysis(analysisPath)
 	if err == nil || !strings.Contains(err.Error(), "CERTIFICATE_READ_FAILED") {
 		t.Fatalf("Chain shared loader must require Certified ChangeAnalysis, got %v", err)
@@ -17,6 +18,7 @@ func Test153ChainLoaderRejectsUncertifiedAnalysis(t *testing.T) {
 
 func Test153ChainDiscoverRejectsUncertifiedAnalysis(t *testing.T) {
 	withTempProject(t)
+	requireCertifiedChainAnalysis153(t)
 	installChangeAnalysisSchema(t)
 	runID := "run-153-uncertified-discover"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
@@ -29,6 +31,7 @@ func Test153ChainDiscoverRejectsUncertifiedAnalysis(t *testing.T) {
 
 func Test153ChainRefreshRejectsUncertifiedAnalysis(t *testing.T) {
 	setupTask3CommandProject(t, true)
+	requireCertifiedChainAnalysis153(t)
 	discovered := strings.Replace(task3AcceptedYAML, "status: ACCEPTED", "status: DISCOVERED", 1)
 	discoveredPath := filepath.Join(".code-harness", "runs", "run-task3", "analysis", "discovered-chains", "new.yaml")
 	writeFile(t, discoveredPath, discovered)
@@ -44,6 +47,7 @@ func Test153ChainRefreshRejectsUncertifiedAnalysis(t *testing.T) {
 
 func Test153ChainReviewContextRejectsUncertifiedAnalysis(t *testing.T) {
 	setupTask4ReviewContextProject(t)
+	requireCertifiedChainAnalysis153(t)
 	request := `{
 	  "runId":"run-task4-review",
 	  "changeAnalysisPath":".code-harness/runs/run-task4-review/analysis/change-analysis.json",
