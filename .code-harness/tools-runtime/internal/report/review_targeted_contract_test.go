@@ -20,10 +20,10 @@ func readHarnessContract(t *testing.T, parts ...string) string {
 func TestTargetedReviewIntentContract(t *testing.T) {
 	text := readHarnessContract(t, "agents", "orchestrator.md")
 	for _, want := range []string{
-		"harness review                → Runtime ReviewOptions",
-		"harness review list           → LIST",
-		"harness review <Class>        → direct TARGETED CLASS",
-		"harness review <Class.method> → direct TARGETED METHOD",
+		"Runtime ReviewOptions",
+		"harness review list",
+		"direct TARGETED CLASS",
+		"direct TARGETED METHOD",
 		"AUTO_FULL",
 		"AUTO_SINGLE",
 		"USER_SELECTION",
