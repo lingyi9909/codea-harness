@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func Test153Task6ChainEditAndReleaseContract(t *testing.T) {
 	workflow := task153Task6Read(t, ".github/workflows/task153-chain-reliability.yml")
@@ -19,8 +22,8 @@ func Test153Task6ChainEditAndReleaseContract(t *testing.T) {
 		"UNVERIFIED_EDIT_REJECTED",
 		"TASK153_REAL_REVIEW_CHAIN_RELIABILITY PASS",
 	)
-	if version != "1.5.3\n" {
-		t.Fatalf("Task 6 release VERSION=%q want 1.5.3\\n", version)
+	if strings.TrimSpace(version) != "1.5.3" {
+		t.Fatalf("Task 6 release VERSION=%q want 1.5.3", version)
 	}
 	task153Task6RequireContains(t, changelog,
 		"## 1.5.3",
