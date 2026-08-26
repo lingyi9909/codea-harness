@@ -75,13 +75,21 @@ func CertifyCandidate(root string, c Chain, candidatePath, kind string, cert ana
 }
 
 func LoadRuntimeCandidate(root string, candidatePath string, cert analysisruntime.Certificate) (Chain, CandidateCertificate, error) {
+	candidate, candidateCert, err := loadRuntimeCandidateProvenance153(root, candidatePath)
+	if err != nil {
+		return Chain{}, CandidateCertificate{}, err
+	}
+	if cert.RunID != candidateCert.RunID || strings.TrimSpace(cert.AnalysisSHA256) == "" || candidateCert.AnalysisHash != cert.AnalysisSHA256 {
+		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_ANALYSIS_IDENTITY_MISMATCH")
+	}
+	return candidate, candidateCert, nil
+}
+
+func loadRuntimeCandidateProvenance153(root string, candidatePath string) (Chain, CandidateCertificate, error) {
 	root = filepath.Clean(root)
 	runID, normalizedPath, pathKind, chainID, err := parseRuntimeCandidatePath153(candidatePath)
 	if err != nil {
 		return Chain{}, CandidateCertificate{}, err
-	}
-	if cert.RunID != runID || strings.TrimSpace(cert.AnalysisSHA256) == "" {
-		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_ANALYSIS_IDENTITY_MISMATCH")
 	}
 	certBytes, err := os.ReadFile(candidateCertPath153(root, normalizedPath))
 	if err != nil {
@@ -103,7 +111,7 @@ func LoadRuntimeCandidate(root string, candidatePath string, cert analysisruntim
 	if !bytes.Equal(certBytes, canonical) {
 		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_BYTES_NOT_CANONICAL")
 	}
-	if candidateCert.RunID != runID || candidateCert.Kind != pathKind || candidateCert.ChainID != chainID || candidateCert.CandidatePath != normalizedPath || candidateCert.AnalysisHash != cert.AnalysisSHA256 {
+	if candidateCert.RunID != runID || candidateCert.Kind != pathKind || candidateCert.ChainID != chainID || candidateCert.CandidatePath != normalizedPath || strings.TrimSpace(candidateCert.AnalysisHash) == "" {
 		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_IDENTITY_MISMATCH")
 	}
 	candidateAbs := filepath.Join(root, filepath.FromSlash(normalizedPath))
