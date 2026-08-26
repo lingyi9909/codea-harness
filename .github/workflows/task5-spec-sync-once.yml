@@ -68,7 +68,7 @@ jobs:
           if old not in s: raise SystemExit('edit intent insertion marker missing')
           s = s.replace(old, new, 1)
           s = s.replace('"analysis", "edit-candidates", req.ChainID+".yaml"', '"analysis", "chain-edit-candidates", req.ChainID+".yaml"', 1)
-          helper = '''\nfunc chainMaintenanceIntentAuthorizes153(intent *analysisruntime.Intent, existing Chain) bool {\n\tif intent == nil || strings.ToUpper(strings.TrimSpace(intent.Mode)) != "CHAIN_MAINTENANCE" {\n\t\treturn false\n\t}\n\ttarget := strings.TrimSpace(intent.Target)\n\tif target == "" { return false }\n\tif target == existing.ID { return true }\n\tfor _, ep := range existing.EntryPoints {\n\t\tsymbol := strings.TrimSpace(ep.Symbol)\n\t\tif target == symbol { return true }\n\t\tif i := strings.LastIndex(symbol, "."); i > 0 && target == symbol[:i] { return true }\n\t}\n\tfor _, node := range existing.Nodes {\n\t\tif target == strings.TrimSpace(node.Symbol) { return true }\n\t}\n\treturn false\n}\n'''
+          helper = '''\nfunc chainMaintenanceIntentAuthorizes153(intent *analysisruntime.Intent, existing Chain) bool {\n\tif intent == nil || strings.ToUpper(strings.TrimSpace(intent.Mode)) != "CHAIN_MAINTENANCE" {\n\t\treturn false\n\t}\n\ttarget := strings.TrimSpace(intent.Target)\n\tif target == "" { return false }\n\tfor _, ep := range existing.EntryPoints {\n\t\tsymbol := strings.TrimSpace(ep.Symbol)\n\t\tif target == symbol { return true }\n\t\tif i := strings.LastIndex(symbol, "."); i > 0 && target == symbol[:i] { return true }\n\t}\n\treturn false\n}\n'''
           marker = '\nfunc applyEditOperations153('
           if marker not in s: raise SystemExit('edit helper insertion marker missing')
           s = s.replace(marker, helper + marker, 1)
@@ -82,8 +82,12 @@ jobs:
 
           test_path = Path('.code-harness/tools-runtime/cmd/codea-harness-tools/chain_edit_153_test.go')
           s = test_path.read_text(encoding='utf-8')
+          import_old = '\t"codea-harness-tools/internal/chain"\n)'
+          import_new = '\tanalysisruntime "codea-harness-tools/internal/analysis"\n\t"codea-harness-tools/internal/chain"\n)'
+          if import_old not in s: raise SystemExit('chain edit analysis import marker missing')
+          s = s.replace(import_old, import_new, 1)
           marker = '''func task153EditCandidatePath(runID, chainID string) string {\n\treturn filepath.Join(".code-harness", "runs", runID, "analysis", "chain-edit-candidates", chainID+".yaml")\n}\n'''
-          helper = marker + '''\nfunc stampTask153ChainMaintenanceIntent(t *testing.T, runID, target string) {\n\tt.Helper()\n\tcertPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.cert.json")\n\tdata, err := os.ReadFile(certPath)\n\tif err != nil { t.Fatal(err) }\n\tvar cert map[string]any\n\tif err := json.Unmarshal(data, &cert); err != nil { t.Fatal(err) }\n\tcert["intent"] = map[string]any{"mode": "CHAIN_MAINTENANCE", "target": target}\n\tcanonical, err := json.MarshalIndent(cert, "", "  ")\n\tif err != nil { t.Fatal(err) }\n\tcanonical = append(canonical, '\\n')\n\tif err := os.WriteFile(certPath, canonical, 0o644); err != nil { t.Fatal(err) }\n}\n\nfunc setupTask153MaintenanceChainForEdit(t *testing.T, runID string) (string, string) {\n\tt.Helper()\n\tprojectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)\n\tstampTask153ChainMaintenanceIntent(t, runID, chainID)\n\treturn projectPath, chainID\n}\n'''
+          helper = marker + '''\nfunc stampTask153ChainMaintenanceIntent(t *testing.T, runID, target string) {\n\tt.Helper()\n\tcertPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.cert.json")\n\tdata, err := os.ReadFile(certPath)\n\tif err != nil { t.Fatal(err) }\n\tvar cert analysisruntime.Certificate\n\tif err := json.Unmarshal(data, &cert); err != nil { t.Fatal(err) }\n\tcert.Intent = &analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: target}\n\tcanonical, err := json.MarshalIndent(cert, "", "  ")\n\tif err != nil { t.Fatal(err) }\n\tcanonical = append(canonical, '\\n')\n\tif err := os.WriteFile(certPath, canonical, 0o644); err != nil { t.Fatal(err) }\n}\n\nfunc setupTask153MaintenanceChainForEdit(t *testing.T, runID string) (string, string) {\n\tt.Helper()\n\tprojectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)\n\taccepted, err := chain.Load(projectPath)\n\tif err != nil { t.Fatal(err) }\n\tif len(accepted.EntryPoints) == 0 || strings.TrimSpace(accepted.EntryPoints[0].Symbol) == "" { t.Fatal("accepted Chain missing exact entrypoint") }\n\tstampTask153ChainMaintenanceIntent(t, runID, accepted.EntryPoints[0].Symbol)\n\treturn projectPath, chainID\n}\n'''
           if marker not in s: raise SystemExit('chain edit helper marker missing')
           s = s.replace(marker, helper, 1)
           for run_id in [
@@ -95,6 +99,18 @@ jobs:
               if old not in s: raise SystemExit(f'positive edit fixture marker missing: {run_id}')
               s = s.replace(old, new, 1)
           test_path.write_text(s, encoding='utf-8')
+
+          analysis_test = Path('.code-harness/tools-runtime/cmd/codea-harness-tools/analysis_certify_test.go')
+          s = analysis_test.read_text(encoding='utf-8')
+          old = 'BaseRef: "HEAD", IncludeWorkingTree: true, Intent: analysisruntime.Intent{Mode: "FULL"},'
+          new = 'BaseRef: "HEAD", IncludeWorkingTree: true, Intent: analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: "fixture-maintenance"},'
+          if old not in s: raise SystemExit('analysis certify intent fixture marker missing')
+          s = s.replace(old, new, 1)
+          old = 'cert.RunID != "r153" || cert.ChangeSetSHA256 == "" || cert.AnalysisSHA256 == "" || cert.EntrypointInventorySHA256 == ""'
+          new = 'cert.RunID != "r153" || cert.ChangeSetSHA256 == "" || cert.AnalysisSHA256 == "" || cert.EntrypointInventorySHA256 == "" || cert.Intent == nil || cert.Intent.Mode != "CHAIN_MAINTENANCE" || cert.Intent.Target != "fixture-maintenance"'
+          if old not in s: raise SystemExit('analysis certify certificate assertion marker missing')
+          s = s.replace(old, new, 1)
+          analysis_test.write_text(s, encoding='utf-8')
 
           contract_test = Path('.code-harness/tools-runtime/internal/chain/edit_agent_contract_153_test.go')
           s = contract_test.read_text(encoding='utf-8')
@@ -113,11 +129,10 @@ jobs:
               text = text.replace('/edit-candidates/', '/chain-edit-candidates/')
               p.write_text(text, encoding='utf-8')
 
-          # The edit skill must explicitly require the certified maintenance intent.
           p = Path('.code-harness/skills/edit-chain/SKILL.md')
           text = p.read_text(encoding='utf-8')
           needle = '代码事实必须来自 same-run Certified ChangeAnalysis；dependency workspace 只能用于 navigation，不能成为 current Project State 写 authority。'
-          repl = needle + '\n\n该 Certified ChangeAnalysis 必须由 `analysis certify` 以 `intent.mode=CHAIN_MAINTENANCE` 且 target 精确命中当前 Chain id / Controller / Controller.method / 当前 Chain node 后生成；普通 FULL/LIST/TARGETED certificate 不授权 Chain edit。'
+          repl = needle + '\n\n该 Certified ChangeAnalysis 必须由 `analysis certify` 以 `intent.mode=CHAIN_MAINTENANCE` 生成，并把 target 绑定到已解析 Chain 的 exact Controller / Controller.method EntryPoint；用户即使通过 Chain id 发起 edit，也应先解析 Chain，再用其 EntryPoint 做 maintenance analysis target。普通 FULL/LIST/TARGETED certificate 不授权 Chain edit。'
           if needle not in text: raise SystemExit('edit skill intent marker missing')
           text = text.replace(needle, repl, 1)
           p.write_text(text, encoding='utf-8')
