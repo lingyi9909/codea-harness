@@ -53,12 +53,29 @@ func Test153TamperRejectsStaleCurrentChangeSet(t *testing.T) {
 	}
 }
 
+func Test153CertifiedLoaderRejectsMissingRuntimeVersion(t *testing.T) {
+	root, analysisPath, runtime := writeCertifiedFixture153(t)
+	if err := os.Remove(filepath.Join(root, ".code-harness", "VERSION")); err != nil { t.Fatal(err) }
+	if _, _, err := loadCertifiedWithRuntime153(root, analysisPath, runtime); err == nil || !strings.Contains(err.Error(), "CERTIFIED_RUNTIME_VERSION_UNAVAILABLE") {
+		t.Fatalf("missing Runtime VERSION must fail closed, got %v", err)
+	}
+}
+
+func Test153CertifiedLoaderRejectsRuntimeVersionMismatch(t *testing.T) {
+	root, analysisPath, runtime := writeCertifiedFixture153(t)
+	if err := os.WriteFile(filepath.Join(root, ".code-harness", "VERSION"), []byte("9.9.9\n"), 0o644); err != nil { t.Fatal(err) }
+	if _, _, err := loadCertifiedWithRuntime153(root, analysisPath, runtime); err == nil || !strings.Contains(err.Error(), "CERTIFIED_RUNTIME_VERSION_MISMATCH") {
+		t.Fatalf("Runtime VERSION mismatch must fail closed, got %v", err)
+	}
+}
+
 func writeCertifiedFixture153(t *testing.T) (string, string, fakeCertificationRuntime153) {
 	t.Helper()
 	root := t.TempDir()
 	copyAnalysisContract153(t, root, "change-analysis.schema.json")
 	copyAnalysisContract153(t, root, "entrypoint-inventory.schema.json")
 	copyAnalysisContract153(t, root, "change-analysis-cert.schema.json")
+	if err := os.WriteFile(filepath.Join(root, ".code-harness", "VERSION"), []byte("1.5.2\n"), 0o644); err != nil { t.Fatal(err) }
 
 	doc := map[string]any{
 		"reviewScope": map[string]any{"currentBranch": "feature", "baseRef": "develop", "baseCommit": "base153", "mergeBase": "base153", "headCommit": "head153", "includeWorkingTree": true},
