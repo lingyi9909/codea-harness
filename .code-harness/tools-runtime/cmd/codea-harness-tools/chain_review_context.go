@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"codea-harness-tools/internal/chain"
 	"codea-harness-tools/internal/reviewscope"
 	"codea-harness-tools/internal/schema"
 )
@@ -85,6 +86,11 @@ func runChainReviewContext(args []string) error {
 	result, err := reviewscope.ResolveChainContexts(".", selection, analysisBytes, reviewscope.ChainResolveOptions{
 		RunID:                  req.RunID,
 		AllowTemporaryForStale: req.AllowTemporaryForStale,
+		CertifyDiscovered: func(candidate chain.Chain) error {
+			candidatePath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "discovered-chains", candidate.ID+".yaml"))
+			_, err := chain.CertifyCandidate(".", candidate, candidatePath, "DISCOVERED", cert)
+			return err
+		},
 	})
 	if err != nil {
 		return err
