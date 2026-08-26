@@ -1,0 +1,21 @@
+name: task6-red-once
+
+on:
+  push:
+    branches:
+      - docs/1.5.3-chain-reliability-editing-design
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+      - name: Task 6 release contract RED
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./cmd/codea-harness-tools -run 'Test153Task6'
