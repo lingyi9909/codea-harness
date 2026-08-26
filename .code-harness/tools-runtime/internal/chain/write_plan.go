@@ -36,13 +36,21 @@ func SealWritePlan(root string, runID, candidatePath, expectedExistingHash strin
 	if pathRunID != runID {
 		return WritePlan{}, fmt.Errorf("CHAIN_WRITE_PLAN_RUN_ID_MISMATCH")
 	}
+
+	// Provenance and exact candidate bytes are checked before consulting the
+	// surrounding analysis. A hand-created or mutated Runtime-path artifact is
+	// never allowed to hide behind a missing/stale analysis error.
+	candidate, candidateCert, err := loadRuntimeCandidateProvenance153(root, normalizedCandidatePath)
+	if err != nil { return WritePlan{}, err }
+
 	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json"))
 	certified, analysisCert, err := analysisruntime.LoadCertified(root, analysisPath)
 	if err != nil {
 		return WritePlan{}, fmt.Errorf("CHAIN_WRITE_PLAN_ANALYSIS_NOT_CERTIFIED: %w", err)
 	}
-	candidate, candidateCert, err := LoadRuntimeCandidate(root, normalizedCandidatePath, analysisCert)
-	if err != nil { return WritePlan{}, err }
+	if candidateCert.RunID != analysisCert.RunID || candidateCert.AnalysisHash != analysisCert.AnalysisSHA256 {
+		return WritePlan{}, fmt.Errorf("CHAIN_CANDIDATE_ANALYSIS_IDENTITY_MISMATCH")
+	}
 	evidence, err := analysisEvidence153(certified)
 	if err != nil { return WritePlan{}, err }
 	validation := Validate(root, candidate, EvidenceSnapshot(evidence))
