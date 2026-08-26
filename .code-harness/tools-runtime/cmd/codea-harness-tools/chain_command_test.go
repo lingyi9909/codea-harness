@@ -14,12 +14,14 @@ func installChangeAnalysisSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("locate test source")
 	}
-	source := filepath.Join(filepath.Dir(testFile), "..", "..", "..", "contracts", "change-analysis.schema.json")
-	data, err := os.ReadFile(source)
-	if err != nil {
-		t.Fatal(err)
+	contractsDir := filepath.Join(filepath.Dir(testFile), "..", "..", "..", "contracts")
+	for _, name := range []string{"change-analysis.schema.json", "chain-candidate-cert.schema.json", "chain-write-plan.schema.json"} {
+		data, err := os.ReadFile(filepath.Join(contractsDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(".code-harness", "contracts", name), string(data))
 	}
-	writeFile(t, filepath.Join(".code-harness", "contracts", "change-analysis.schema.json"), string(data))
 }
 
 func validChainDiscoveryAnalysis() string {
