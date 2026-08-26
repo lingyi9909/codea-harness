@@ -146,7 +146,7 @@ func applyEditOperations153(existing Chain, operations []EditOperation, evidence
 			if err != nil {
 				return Chain{}, fmt.Errorf("CHAIN_EDIT_FACT_NOT_VERIFIED: %w", err)
 			}
-			node, err := resolveCurrentEditNode153(to, evidence)
+			node, err := resolveVerifiedEditNode153(to, evidence)
 			if err != nil {
 				return Chain{}, err
 			}
@@ -163,7 +163,7 @@ func applyEditOperations153(existing Chain, operations []EditOperation, evidence
 			if err != nil {
 				return Chain{}, fmt.Errorf("CHAIN_EDIT_REQUEST_INVALID: operations[%d] ADD_NODE after must name one existing node", i)
 			}
-			node, err := resolveCurrentEditNode153(symbol, evidence)
+			node, err := resolveVerifiedEditNode153(symbol, evidence)
 			if err != nil {
 				return Chain{}, err
 			}
@@ -234,24 +234,25 @@ func verifyEditedChainFacts153(root string, candidate Chain, evidence ChangeAnal
 	return nil
 }
 
-func resolveCurrentEditNode153(symbol string, evidence ChangeAnalysisEvidence) (Node, error) {
+func resolveVerifiedEditNode153(symbol string, evidence ChangeAnalysisEvidence) (Node, error) {
 	symbol = strings.TrimSpace(symbol)
 	var matches []SymbolLocationEvidence
 	for _, location := range evidence.SymbolLocations {
-		if locationWorkspace(location) != CurrentWorkspace || strings.TrimSpace(location.Symbol) != symbol || !isProductionJavaPath(location.Path) {
+		if strings.TrimSpace(location.Symbol) != symbol || !isProductionJavaPath(location.Path) {
 			continue
 		}
 		matches = append(matches, location)
 	}
 	matches = uniqueLocations(matches)
 	if len(matches) != 1 {
-		return Node{}, fmt.Errorf("CHAIN_EDIT_FACT_NOT_VERIFIED: current-workspace symbol %s has %d exact verified locations", symbol, len(matches))
+		return Node{}, fmt.Errorf("CHAIN_EDIT_FACT_NOT_VERIFIED: symbol %s has %d exact verified locations across workspaces", symbol, len(matches))
 	}
+	match := matches[0]
 	return Node{
-		Workspace: CurrentWorkspace,
+		Workspace: locationWorkspace(match),
 		Symbol:    symbol,
-		Path:      normalizeRepoPath(matches[0].Path),
-		Role:      nodeRole(matches[0].Role),
+		Path:      normalizeRepoPath(match.Path),
+		Role:      nodeRole(match.Role),
 	}, nil
 }
 
