@@ -74,3 +74,23 @@ func Test153CandidateAuthorityRejectsMutatedRuntimeCandidate(t *testing.T) {
 		t.Fatalf("mutated Runtime candidate must fail hash binding, got %v", err)
 	}
 }
+
+func Test153CandidateAuthorityRejectsMutationBeforeRuntimeCertification(t *testing.T) {
+	root := t.TempDir()
+	installTask153ChainAuthorityContract(t, root, "chain-candidate-cert.schema.json")
+	candidatePath := ".code-harness/runs/r153/analysis/discovered-chains/order-approve.yaml"
+	runtimeCandidate := task153AuthorityCandidate()
+	writeTask153AuthorityCandidate(t, root, candidatePath, runtimeCandidate)
+
+	mutated := runtimeCandidate
+	mutated.Nodes = []Node{{Workspace: CurrentWorkspace, Symbol: "InjectedService.approve", Path: "src/main/java/com/example/order/InjectedService.java", Role: "SERVICE"}}
+	writeTask153AuthorityCandidate(t, root, candidatePath, mutated)
+
+	_, err := CertifyCandidate(root, runtimeCandidate, candidatePath, "DISCOVERED", task153AnalysisCert())
+	if err == nil || !strings.Contains(err.Error(), "CHAIN_CANDIDATE_RUNTIME_BYTES_MISMATCH") {
+		t.Fatalf("candidate changed after Runtime generation but before provenance certification must be rejected, got %v", err)
+	}
+	if _, statErr := os.Stat(candidateCertPath153(root, candidatePath)); !os.IsNotExist(statErr) {
+		t.Fatalf("rejected pre-certification mutation must not produce provenance certificate, stat=%v", statErr)
+	}
+}
