@@ -66,6 +66,10 @@ func BuildOptionsForIntent(root string, certifiedAnalysisPath string, intent ana
 	if err != nil {
 		return Options{}, fmt.Errorf("REVIEW_OPTIONS_ANALYSIS_NOT_CERTIFIED: %w", err)
 	}
+	intent, err = authoritativeReviewIntent153(root, cert, intent)
+	if err != nil {
+		return Options{}, err
+	}
 	inventoryPath := filepath.Join(root, ".code-harness", "runs", cert.RunID, "analysis", "entrypoint-inventory.json")
 	inventoryBytes, err := os.ReadFile(inventoryPath)
 	if err != nil {
@@ -167,12 +171,16 @@ func BuildOptionsOrigin(root string, certifiedAnalysisPath string, options Optio
 	if options.RunID != cert.RunID || options.ChangeSetSHA256 != cert.ChangeSetSHA256 {
 		return OptionsOrigin{}, fmt.Errorf("REVIEW_OPTIONS_IDENTITY_INVALID")
 	}
-	return OptionsOrigin{
+	origin := OptionsOrigin{
 		RunID:           cert.RunID,
 		ChangeSetSHA256: cert.ChangeSetSHA256,
 		AnalysisSHA256:  cert.AnalysisSHA256,
 		Intent:          intent,
-	}, nil
+	}
+	if err := sealReviewIntentAuthority153(root, origin); err != nil {
+		return OptionsOrigin{}, err
+	}
+	return origin, nil
 }
 
 func matchingCallChains153(target string, all []analysisruntime.CallChain) []reviewscope.CallChain {
