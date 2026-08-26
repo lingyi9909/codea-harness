@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"codea-harness-tools/internal/chain"
+	"gopkg.in/yaml.v3"
 )
 
 const task3AcceptedYAML = `version: 1
@@ -83,6 +84,14 @@ func certifyTask3Candidate(t *testing.T, analysisPath, candidatePath, kind strin
 	if err != nil { t.Fatal(err) }
 	candidate, err := chain.Load(candidatePath)
 	if err != nil { t.Fatal(err) }
+	var candidateBytes []byte
+	if strings.EqualFold(kind, "DISCOVERED") {
+		candidateBytes, err = yaml.Marshal(candidate)
+	} else {
+		candidateBytes, err = chain.MarshalYAML(candidate)
+	}
+	if err != nil { t.Fatal(err) }
+	if err := os.WriteFile(candidatePath, candidateBytes, 0o644); err != nil { t.Fatal(err) }
 	if _, err := chain.CertifyCandidate(".", candidate, filepath.ToSlash(candidatePath), kind, cert); err != nil {
 		t.Fatalf("certify Task 3 candidate: %v", err)
 	}
