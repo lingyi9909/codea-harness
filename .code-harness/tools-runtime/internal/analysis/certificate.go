@@ -115,6 +115,9 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 	if inventory.RunID != runID || inventory.ChangeSetSHA256 != cert.ChangeSetSHA256 {
 		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_IDENTITY_MISMATCH: inventory identity differs from certificate")
 	}
+	if !certificationIntentsEqual153(cert.Intent, inventory.Intent) {
+		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_INTENT_AUTHORITY_MISMATCH")
+	}
 
 	snapshot, err := runtime.Compute(root, cert.BaseRef, meta.ReviewScope.IncludeWorkingTree)
 	if err != nil {
@@ -148,6 +151,13 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFIED_RUNTIME_VERSION_MISMATCH: cert=%s current=%s", cert.RuntimeVersion, currentVersion)
 	}
 	return typed, cert, nil
+}
+
+func certificationIntentsEqual153(certIntent, inventoryIntent *Intent) bool {
+	if certIntent == nil || inventoryIntent == nil {
+		return certIntent == nil && inventoryIntent == nil
+	}
+	return certIntent.Mode == inventoryIntent.Mode && certIntent.Target == inventoryIntent.Target
 }
 
 func certifiedAnalysisPath153(value string) (string, string, bool) {
