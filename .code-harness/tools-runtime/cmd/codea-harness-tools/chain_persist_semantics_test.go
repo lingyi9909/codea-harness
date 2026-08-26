@@ -13,6 +13,7 @@ func TestChainPersistValidatesDiscoveredBeforePromotingAccepted(t *testing.T) {
 	runID := "run-persist-invalid"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
 	writeFile(t, analysisPath, validChainDiscoveryAnalysis())
+	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
 
 	candidatePath := filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains", "order-approve.yaml")
 	writeFile(t, candidatePath, `version: 1
