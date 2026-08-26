@@ -13,6 +13,9 @@
 - `harness api-doc` 是只读流程，最终 `api-doc.md` 只能由 Controlled Runtime deterministic renderer 生成。
 - 集成测试仍以 MockMvc + 真实 Controller/Service/Repository 为主；内部 Bean 默认不 Mock，外部依赖沿用项目测试替代方式。
 - 1.5 Chain Management 只管理 Business Chain 的发现、读取、验证、刷新和用户确认后的 Project State 持久化；Task 3 不把 Chain 接入 Review/Test/Debug/Fix/Verify。
+- 1.5.3 起 Agent/Orchestrator 产生的 ChangeAnalysis 只能先写 `.code-harness/runs/<runId>/requests/change-analysis-draft.json`；它只是 proposal，不是权威事实。
+- 权威 ChangeAnalysis 只能由 Controlled Runtime `analysis certify` 重新计算 Change Set、EntryPoint Inventory、Coverage 与 evidence invariants 后生成到同 run 的 `analysis/change-analysis.json`、`analysis/entrypoint-inventory.json`、`analysis/change-analysis.cert.json`。
+- Chain/Review 等消费者只能通过 Runtime Certified loader 消费上述权威产物；analysis/certificate/inventory 任一被篡改、Change Set 已变化或 certification 失败都必须 fail closed，进入 `MANUAL_ACTION_REQUIRED` / `PARTIAL`，不得由 Agent 直接修改 Runtime-owned artifact“修复”。
 
 ## 初始化门禁
 
@@ -54,6 +57,8 @@ codea-harness-tools workspace verify --id <id>
 codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
 codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-harness-tools analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain list
 codea-harness-tools chain show --target <id|Controller|Controller.method>
 codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/<file>.json
@@ -65,6 +70,8 @@ codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<
 ```
 
 Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/template inheritance 确定性断链时使用；候选只来自显式 `harness.yaml.workspaceDependencies`。必须先 `workspace verify --id <id>`，且只有 `VERIFIED` 才允许三个 `workspace-*` nav 子命令。不得扫描任意 sibling，不得把 dependency workspace 扩成 Change Set、Review Scope 或 Write Scope。
+
+`analysis certify` 是 ChangeAnalysis authority boundary：请求必须位于同 run 的 `requests/**`，Runtime 独立重算并验证后才发布 authoritative artifacts。Agent 不得直接创建/覆盖 `.code-harness/runs/<runId>/analysis/change-analysis.json`、`entrypoint-inventory.json` 或 `change-analysis.cert.json`。
 
 `chain persist` 是内部 Controlled Runtime 写入动作，只能在 `validate-chain` / Orchestrator 已满足用户确认、candidate validation 与 expected-hash 门禁后调用；它不是独立用户意图。
 
