@@ -37,8 +37,11 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 		}
 		return []ChainOption{}, nil
 	case DecisionAutoSingle:
-		if mode != "TARGETED" || len(req.SelectionIDs) != 1 || len(options.AutoSelectionIDs) != 1 || req.SelectionIDs[0] != options.AutoSelectionIDs[0] {
+		if mode != "TARGETED" || len(req.SelectionIDs) != 1 || len(options.AutoSelectionIDs) != 1 {
 			return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: AUTO_SINGLE requires exact Runtime autoSelectionId")
+		}
+		if req.SelectionIDs[0] != options.AutoSelectionIDs[0] {
+			return nil, fmt.Errorf("REVIEW_SELECTION_UNKNOWN_CHAIN: %s", strings.TrimSpace(req.SelectionIDs[0]))
 		}
 	case DecisionUser:
 		if mode != "TARGETED" || len(req.SelectionIDs) == 0 {
