@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -42,7 +43,8 @@ func useLegacyChainAnalysisLoader153(t *testing.T) {
 		if err := json.Unmarshal(data, &analysis); err != nil {
 			return analysisruntime.ChangeAnalysis{}, analysisruntime.Certificate{}, err
 		}
-		return analysis, analysisruntime.Certificate{RunID: runID}, nil
+		sum := sha256.Sum256(data)
+		return analysis, analysisruntime.Certificate{RunID: runID, AnalysisSHA256: fmt.Sprintf("%x", sum[:])}, nil
 	}
 	t.Cleanup(func() { loadCertifiedAnalysis153 = previous })
 }
