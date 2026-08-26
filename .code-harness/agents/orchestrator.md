@@ -30,14 +30,16 @@ version: 7
 | `harness verify fix:<fixPlanId>` | Runtime Debugger | 是 |
 | `harness verify service:<runId>` | Runtime Debugger | 是 |
 
-1.4 Review intent 规范：
+1.5.3 Review intent 规范（覆盖 1.4 的 plain review 默认 FULL 语义）：
 
 ```text
-harness review` → FULL
-harness review list` → LIST
-harness review <Class>` → TARGETED CLASS
-harness review <Class.method>` → TARGETED METHOD
+harness review      → Runtime ReviewOptions 决策（AUTO_FULL / AUTO_SINGLE / USER_SELECTION）
+harness review list → LIST
+harness review <Class>        → direct TARGETED CLASS；自动包含该 Controller 全部机器要求分支，不展示 Controller/Chain 选择
+harness review <Class.method> → direct TARGETED METHOD；自动包含该 method 全部机器要求分支，不展示 Controller/Chain 选择
 ```
+
+只有 plain `harness review` 和显式 Service/其他下游 target 的多上游场景使用 ReviewOptions 选择。显式 Controller/Controller.method 不进入 2+ Chain 菜单；最终 direct TARGETED scope 仍必须通过 Runtime `reviewscope.Verify` 的 Controller 防漏链校验。
 
 测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。历史 Existing Test 不自动修改。对 GENERATED_BY_PLAN 测试仍保留最多 2 轮 repair 计数，但 Task 4 后每个实际发生变化的 repair patch 都必须生成新的 patch identity 与新 planId，并在审批前重新 Runtime seal 后再获得精确批准，旧批准不得授权不同 bytes。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
 
@@ -344,26 +346,35 @@ TARGETED 报告必须保留固定免责声明：
 - TARGETED 正式报告中 `Finding.file` 必须属于 Runtime verified `scopedFiles`；Controlled Runtime Renderer 必须拒绝 scope 外 Finding。
 - OpenCode 最终摘要必须同时展示中文 Review 结果和 `review.md` 路径，不得泄漏 machine enum。
 
-## `harness review`
+## `harness review`（1.5.3 ReviewOptions）
 
-默认 `harness review` 始终是 FULL，保持 1.3.2 语义：
+plain `harness review` 不再预先固定为 FULL。它必须以同 run Certified ChangeAnalysis 和完整 EntrypointInventory 为事实基线，由 Controlled Runtime 决定本次 Review 模式：
 
 ```text
 1. 解析并校验 effectiveBaseRef
-2. Reviewer.analyze-change：完整 Change Set + 全 changedFiles + 确定性调用链
-3. Tool Runtime: validate_contract(ChangeAnalysis JSON)
-   - JSON Schema 校验
-   - 机器 Coverage 校验
-4. 输出 评审范围
-5. 输出 评审覆盖（含 validated callChains[]）
-6. 无变化 → 形成 Result=PASSED 的 structured Review result → Controlled Runtime 生成 review.md → 展示 report path → STOP
-7. Runtime 校验失败 / coverage!=COMPLETE → 形成 Result=MANUAL_ACTION_REQUIRED（包含 unresolved/missing/runtimeErrors）→ Controlled Runtime 生成 review.md → 展示 report path → STOP
-8. Reviewer.review-code
-9. findings 为空 → Result=PASSED；findings 非空 → Result=FAILED
-10. findings category 只允许 PRODUCTION_CODE / TEST_VALIDITY
-11. 形成 structured Review result → Controlled Runtime 生成 review.md
-12. 输出 问题清单 + 中文最终结果 + report path
+2. Reviewer.analyze-change 形成 proposal → Runtime analysis certify → Certified ChangeAnalysis
+3. EntrypointInventory 必须 COMPLETE；不完整 → MANUAL_ACTION_REQUIRED / STOP
+4. Runtime `review options` 生成并持久化 Runtime-owned review-options.json
+5. decision=AUTO_FULL（0 valid Chains）→ 不询问用户，立即 `review select`：mode=FULL、无 selectionIds、current optionsHash
+6. decision=AUTO_SINGLE（1 valid Chain）→ 不询问用户，立即 `review select`：mode=TARGETED、exact autoSelectionIds、current optionsHash
+7. decision=USER_SELECTION（2+ valid Chains）→ 此时才展示一级选择：
+   1) 全部评审
+   2) 按业务链评审
+   3) 仅查看调用链
+   - 选择“全部评审” → `review select` mode=FULL、无 Chain IDs
+   - 选择“按业务链评审” → 再展示 Runtime 生成的 C1..Cn，多选/编号 fallback；不得默认 ALL
+   - 选择“仅查看调用链” → `review select` mode=LIST；不授权 Finding Review
+   - 空选择/取消 → STOP
+8. Runtime `review select` 必须校验 current optionsHash、Runtime-bound selection IDs，并生成 FULL/TARGETED verified scope；stale/forged/invalid scope 全部 fail closed
+9. FULL 使用完整 Change Set machine coverage；TARGETED 使用 Runtime verified scopedFiles/selectedCallChains coverage
+10. Coverage 不完整或 Runtime validation 失败 → MANUAL_ACTION_REQUIRED review.md → STOP
+11. COMPLETE 后才允许 Reviewer.review-code；findings 为空 → PASSED，非空 → FAILED
+12. Controlled Runtime Renderer 生成唯一正式 `.code-harness/runs/<runId>/review.md`，最终摘要使用中文结果并展示 report path
 ```
+
+`AUTO_SINGLE` 是机器执行规则，不得出现“请选择唯一 Controller/Chain”的冗余提示。`USER_SELECTION` 只是说明存在 2+ valid Chain options；用户仍可明确选择 FULL 或 LIST，只有选择“按业务链评审”时才提交 TARGETED Runtime Chain IDs。
+
+显式 `harness review <Class>` / `<Class.method>` 不走上述 plain ReviewOptions 一级菜单，继续使用下文 direct TARGETED 流程，并由 Runtime 强制包含 Controller target 的全部 required confirmed branches。
 
 用户可见顺序固定为：
 

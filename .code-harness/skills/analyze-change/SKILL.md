@@ -193,6 +193,10 @@ from
 
 ## E. TARGETED Review
 
+### 1.5.3 Review Selection Authority Override
+
+本节旧的 1.4 target 解析规则继续定义“如何构造/验证 TARGETED scope”，但不再授权 Agent 自己决定 plain `harness review` 的模式。1.5.3 固定为：plain review 先 `analysis certify → completeness gate → review options`；0 Chain=AUTO_FULL、1 Chain=AUTO_SINGLE、2+ Chain=USER_SELECTION。只有 2+ 且用户选择“按业务链评审”时才展示 Runtime C1..Cn。显式 Controller/Controller.method 继续 direct TARGETED，自动包含全部 machine-required branches，不展示 Controller/Chain 选择；显式 Service/其他下游 target 仅在 2+ 上游 Chain 时选择。所有最终 TARGETED scope 仍必须通过 Runtime `reviewscope.Verify`，Agent 不得发明 selectionId/optionsHash 或绕过 Controller 防漏链。
+
 TARGETED 的选择数据继续使用独立 `.code-harness/contracts/review-scope.schema.json`；Task 2 只扩展该 Scope 的 Resource Evidence，不改变 Task 1 的 ReviewScopeSelection Contract。
 
 27. 从 confirmed `ChangeAnalysis.callChains[]` 解析 target，并用 `symbolLocations[].role` 判断 target 属于 Controller 还是 Service/其他下游角色；不得靠命名后缀猜角色。

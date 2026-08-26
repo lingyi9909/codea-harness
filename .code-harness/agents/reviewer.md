@@ -111,25 +111,28 @@ workspace dependency 只允许作为 Navigation / Chain Context；**不得进入
 本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。
 ```
 
-## 多调用链选择
+## Review Selection Authority（1.5.3 Task 4）
 
-规则固定如下：
+Reviewer 不拥有 Review mode/Chain option 的最终选择权。所有选择必须基于同 run Certified ChangeAnalysis，并服从 Controlled Runtime 生成的 `review-options.json` / `optionsHash` / `selectionId`：
 
 ```text
-Controller CLASS  → 自动包含该 Controller 在当前 Change Set 中全部 confirmed chains
-Controller METHOD → 自动包含该 method 当前 Change Set 中全部 confirmed chains
-Service/其他下游 target → 若命中 1 条链自动继续；若命中 2+ 条上游业务链才进入用户选择
+plain harness review:
+  0 valid Chains  → AUTO_FULL，直接 FULL，不询问
+  1 valid Chain   → AUTO_SINGLE，直接 TARGETED，不询问
+  2+ valid Chains → USER_SELECTION；先由用户选择“全部评审 / 按业务链评审 / 仅查看调用链”
 ```
 
-因此 `harness review OrderController` 不允许用户只挑该 Controller 的部分 method 链；`harness review OrderController.approve` 也不允许漏掉同一 method 的其他 confirmed 分支链。只有 Service 等下游 target 被多个业务入口引用时，才：
+当用户在 2+ 场景选择“按业务链评审”时，Reviewer 只能展示 Runtime 的 C1..Cn，并把用户选中的 exact selectionIds + current optionsHash 交回 Runtime；不得自己构造 ID、根据名称 fuzzy 匹配、默认 ALL 或在 optionsHash 变化后复用旧选择。用户选择“全部评审”时由 Runtime 生成 FULL scope；选择“仅查看调用链”时不得调用 `review-code`。
 
-- 优先宿主结构化多选；
-- 否则 numbered fallback：`1` / `1,3` / `ALL`；
-- 不得默认 ALL；
-- 空选择/取消 → STOP；
-- Review Scope Selection 不等于 Test/Fix Approval。
+显式 target 固定如下：
 
-最终选择仍必须经过 Runtime `reviewscope.Verify`；提示词层不得绕过机器防漏链与 resource relation 规则。
+```text
+Controller CLASS  → direct TARGETED；自动包含该 Controller 当前 Change Set 中全部 machine-required confirmed chains；不展示 Chain 菜单
+Controller METHOD → direct TARGETED；自动包含该 method 当前 Change Set 中全部 machine-required confirmed branches；不展示 Chain 菜单
+Service/其他下游 target → 1 条上游 Chain 自动继续；2+ 条上游 Chain 才进入 Runtime-bound 用户选择
+```
+
+Controller direct TARGETED 最终必须经过 Runtime `reviewscope.Verify`；任何漏掉 required Controller branch 的 scope 都必须拒绝。Review Scope Selection 仍不等于 Test/Fix Approval。
 
 ## `harness review list`
 
