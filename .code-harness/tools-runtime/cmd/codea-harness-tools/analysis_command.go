@@ -27,10 +27,12 @@ type analysisInventoryRequest153 struct {
 }
 
 func runAnalysis(args []string) error {
-	if len(args) == 0 { return errors.New("analysis requires inventory") }
+	if len(args) == 0 { return errors.New("analysis requires inventory or certify") }
 	switch args[0] {
 	case "inventory":
 		return runAnalysisInventory(args[1:])
+	case "certify":
+		return runAnalysisCertify(args[1:])
 	default:
 		return fmt.Errorf("unknown analysis action %q", args[0])
 	}
@@ -47,7 +49,7 @@ func runAnalysisInventory(args []string) error {
 	data, err := os.ReadFile(cleanInput)
 	if err != nil { return fmt.Errorf("read entrypoint inventory request: %w", err) }
 	var req analysisInventoryRequest153
-	if err := decodeStrictAnalysisRequest153(data, &req); err != nil { return err }
+	if err := decodeStrictAnalysisRequest153(data, &req, "entrypoint inventory request"); err != nil { return err }
 	if req.RunID != pathRunID {
 		return fmt.Errorf("RUN_ID_PATH_MISMATCH: body runId %q does not match request path runId %q", req.RunID, pathRunID)
 	}
@@ -78,6 +80,39 @@ func runAnalysisInventory(args []string) error {
 	}, true)
 }
 
+func runAnalysisCertify(args []string) error {
+	fs := flag.NewFlagSet("analysis certify", flag.ContinueOnError)
+	inputPath := fs.String("input", "", "certification request under .code-harness/runs/<runId>/requests/*.json")
+	if err := fs.Parse(args); err != nil { return err }
+	if fs.NArg() != 0 || strings.TrimSpace(*inputPath) == "" { return errors.New("analysis certify requires --input") }
+
+	pathRunID, cleanInput, err := validateAnalysisRequestPath153(*inputPath)
+	if err != nil { return err }
+	data, err := os.ReadFile(cleanInput)
+	if err != nil { return fmt.Errorf("read analysis certify request: %w", err) }
+	var req analysisruntime.CertifyRequest
+	if err := decodeStrictAnalysisRequest153(data, &req, "analysis certify request"); err != nil { return err }
+	if req.RunID != pathRunID {
+		return fmt.Errorf("RUN_ID_PATH_MISMATCH: body runId %q does not match request path runId %q", req.RunID, pathRunID)
+	}
+	if !analysisArtifactID153.MatchString(req.RunID) {
+		return errors.New("analysis certify request contains invalid runId")
+	}
+	cert, err := analysisruntime.Certify(".", req)
+	if err != nil { return err }
+	analysisPath := filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-analysis.json")
+	certPath := filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-analysis.cert.json")
+	return writeJSONAndStatus(map[string]any{
+		"status": "CERTIFIED",
+		"runId": req.RunID,
+		"artifactPath": filepath.ToSlash(analysisPath),
+		"certificatePath": filepath.ToSlash(certPath),
+		"analysisSha256": cert.AnalysisSHA256,
+		"changeSetSha256": cert.ChangeSetSHA256,
+		"entrypointInventorySha256": cert.EntrypointInventorySHA256,
+	}, true)
+}
+
 func validateAnalysisRequestPath153(input string) (string, string, error) {
 	if filepath.IsAbs(input) { return "", "", errors.New("analysis request path must be repository-relative") }
 	clean := filepath.Clean(input)
@@ -91,14 +126,14 @@ func validateAnalysisRequestPath153(input string) (string, string, error) {
 	return parts[2], clean, nil
 }
 
-func decodeStrictAnalysisRequest153(data []byte, out *analysisInventoryRequest153) error {
+func decodeStrictAnalysisRequest153(data []byte, out any, label string) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(out); err != nil { return fmt.Errorf("decode entrypoint inventory request: %w", err) }
+	if err := dec.Decode(out); err != nil { return fmt.Errorf("decode %s: %w", label, err) }
 	var extra any
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil { return errors.New("decode entrypoint inventory request: multiple JSON values are not allowed") }
-		return fmt.Errorf("decode entrypoint inventory request: %w", err)
+		if err == nil { return fmt.Errorf("decode %s: multiple JSON values are not allowed", label) }
+		return fmt.Errorf("decode %s: %w", label, err)
 	}
 	return nil
 }
