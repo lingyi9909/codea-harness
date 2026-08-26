@@ -11,9 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/chain"
-	"codea-harness-tools/internal/coverage"
-	"codea-harness-tools/internal/schema"
 )
 
 type chainDiscoverRequest struct {
@@ -90,7 +89,7 @@ func runChainShow(args []string) error {
 func runChainValidate(args []string) error {
 	fs := flag.NewFlagSet("chain validate", flag.ContinueOnError)
 	id := fs.String("id", "", "project chain id")
-	analysisPath := fs.String("change-analysis", "", "verified ChangeAnalysis under .code-harness/runs/<runId>/analysis/change-analysis.json")
+	analysisPath := fs.String("change-analysis", "", "certified ChangeAnalysis under .code-harness/runs/<runId>/analysis/change-analysis.json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -188,6 +187,10 @@ func runChainRefresh(args []string) error {
 	}
 	if !sameRunChainAnalysisArtifact(req.DiscoveredPath, req.RunID, "discovered-chains") {
 		return errors.New("chain refresh discoveredPath must be under the same run analysis/discovered-chains directory")
+	}
+	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-analysis.json"))
+	if _, _, err := loadVerifiedChainAnalysis(analysisPath); err != nil {
+		return fmt.Errorf("chain refresh requires certified ChangeAnalysis: %w", err)
 	}
 	existingPath, err := chain.ChainPath(".", req.ID)
 	if err != nil {
@@ -318,30 +321,20 @@ func exactSymbolOwner(symbol string) string {
 	return symbol[:idx]
 }
 
-func loadVerifiedChainAnalysis(path string) (chain.ChangeAnalysisEvidence, string, error) {
-	runID, ok := chainAnalysisRunID(path)
-	if !ok {
-		return chain.ChangeAnalysisEvidence{}, "", errors.New("ChangeAnalysis must be .code-harness/runs/<runId>/analysis/change-analysis.json")
-	}
-	analysisBytes, err := os.ReadFile(filepath.Clean(path))
+func loadVerifiedChainAnalysis(value string) (chain.ChangeAnalysisEvidence, string, error) {
+	certified, cert, err := analysisruntime.LoadCertified(".", value)
 	if err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("read chain ChangeAnalysis: %w", err)
+		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("load certified ChangeAnalysis: %w", err)
 	}
-	analysisSchema, err := os.ReadFile(filepath.Join(".code-harness", "contracts", "change-analysis.schema.json"))
+	analysisBytes, err := json.Marshal(certified)
 	if err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("read ChangeAnalysis schema: %w", err)
-	}
-	if err := schema.ValidateJSON(analysisSchema, analysisBytes); err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("validate chain ChangeAnalysis: %w", err)
-	}
-	if _, err := coverage.VerifyAnalysisJSON(analysisBytes); err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("verify chain ChangeAnalysis: %w", err)
+		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("encode certified ChangeAnalysis for chain: %w", err)
 	}
 	var evidence chain.ChangeAnalysisEvidence
 	if err := json.Unmarshal(analysisBytes, &evidence); err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("decode verified chain ChangeAnalysis: %w", err)
+		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("decode certified chain ChangeAnalysis: %w", err)
 	}
-	return evidence, runID, nil
+	return evidence, cert.RunID, nil
 }
 
 func decodeStrictChainRequest(data []byte, out any, label string) error {
@@ -391,27 +384,27 @@ func invalidChainDiscoveryRequestPath() error {
 	return errors.New("chain command input must be under .code-harness/runs/<runId>/requests/*.json")
 }
 
-func sameRunChangeAnalysisPath(path, runID string) bool {
-	actualRun, ok := chainAnalysisRunID(path)
+func sameRunChangeAnalysisPath(value, runID string) bool {
+	actualRun, ok := chainAnalysisRunID(value)
 	return ok && actualRun == runID
 }
 
-func chainAnalysisRunID(path string) (string, bool) {
-	if filepath.IsAbs(path) {
+func chainAnalysisRunID(value string) (string, bool) {
+	if filepath.IsAbs(value) {
 		return "", false
 	}
-	parts := strings.Split(filepath.ToSlash(filepath.Clean(path)), "/")
+	parts := strings.Split(filepath.ToSlash(filepath.Clean(value)), "/")
 	if len(parts) != 5 || parts[0] != ".code-harness" || parts[1] != "runs" || parts[3] != "analysis" || parts[4] != "change-analysis.json" || !validChainArtifactID(parts[2]) {
 		return "", false
 	}
 	return parts[2], true
 }
 
-func sameRunChainAnalysisArtifact(path, runID, kind string) bool {
-	if filepath.IsAbs(path) || !validChainArtifactID(runID) {
+func sameRunChainAnalysisArtifact(value, runID, kind string) bool {
+	if filepath.IsAbs(value) || !validChainArtifactID(runID) {
 		return false
 	}
-	parts := strings.Split(filepath.ToSlash(filepath.Clean(path)), "/")
+	parts := strings.Split(filepath.ToSlash(filepath.Clean(value)), "/")
 	return len(parts) == 6 && parts[0] == ".code-harness" && parts[1] == "runs" && parts[2] == runID && parts[3] == "analysis" && parts[4] == kind && strings.EqualFold(filepath.Ext(parts[5]), ".yaml")
 }
 
