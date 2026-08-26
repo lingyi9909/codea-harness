@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/reviewscope"
 	"codea-harness-tools/internal/schema"
 )
@@ -52,7 +51,7 @@ func runChainReviewContext(args []string) error {
 		return errors.New("chain review-context requires reviewScope")
 	}
 
-	certified, cert, err := analysisruntime.LoadCertified(".", req.ChangeAnalysisPath)
+	certified, cert, err := loadCertifiedAnalysis153(".", req.ChangeAnalysisPath)
 	if err != nil {
 		return fmt.Errorf("load certified review-context ChangeAnalysis: %w", err)
 	}
