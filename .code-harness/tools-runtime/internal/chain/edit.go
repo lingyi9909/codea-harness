@@ -76,6 +76,9 @@ func ApplyVerifiedEdit(root string, req EditRequest) (EditResult, error) {
 		}
 		return EditResult{}, fmt.Errorf("CHAIN_EDIT_LOAD_FAILED: %w", err)
 	}
+	if !chainMaintenanceIntentAuthorizes153(cert.Intent, existing) {
+		return EditResult{}, fmt.Errorf("CHAIN_EDIT_ANALYSIS_INTENT_MISMATCH")
+	}
 	candidate, err := applyEditOperations153(existing, req.Operations, evidence)
 	if err != nil {
 		return EditResult{}, err
@@ -88,7 +91,7 @@ func ApplyVerifiedEdit(root string, req EditRequest) (EditResult, error) {
 	}
 
 	added, removed, changed := editDiff153(existing, candidate)
-	candidatePath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "edit-candidates", req.ChainID+".yaml"))
+	candidatePath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "chain-edit-candidates", req.ChainID+".yaml"))
 	candidateBytes, err := MarshalYAML(candidate)
 	if err != nil {
 		return EditResult{}, fmt.Errorf("CHAIN_EDIT_CANDIDATE_ENCODE_FAILED: %w", err)
@@ -112,6 +115,20 @@ func ApplyVerifiedEdit(root string, req EditRequest) (EditResult, error) {
 		Removed:       removed,
 		Changed:       changed,
 	}, nil
+}
+
+func chainMaintenanceIntentAuthorizes153(intent *analysisruntime.Intent, existing Chain) bool {
+	if intent == nil || strings.ToUpper(strings.TrimSpace(intent.Mode)) != "CHAIN_MAINTENANCE" {
+		return false
+	}
+	target := strings.TrimSpace(intent.Target)
+	if target == "" { return false }
+	for _, ep := range existing.EntryPoints {
+		symbol := strings.TrimSpace(ep.Symbol)
+		if target == symbol { return true }
+		if i := strings.LastIndex(symbol, "."); i > 0 && target == symbol[:i] { return true }
+	}
+	return false
 }
 
 func applyEditOperations153(existing Chain, operations []EditOperation, evidence ChangeAnalysisEvidence) (Chain, error) {

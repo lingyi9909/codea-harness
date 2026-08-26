@@ -19,11 +19,51 @@
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
-    "runtimeVersion": { "type": "string", "minLength": 1 },
-    "analysisSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "changeSetSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "entrypointInventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "baseRef": { "type": "string", "minLength": 1 },
-    "head": { "type": "string", "minLength": 1 }
+    "runtimeVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "analysisSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "changeSetSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "entrypointInventorySha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "baseRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "head": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "FULL",
+            "LIST",
+            "TARGETED",
+            "CHAIN_MAINTENANCE"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
   }
 }

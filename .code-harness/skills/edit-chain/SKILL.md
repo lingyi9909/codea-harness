@@ -19,9 +19,11 @@ harness chain edit <id|Controller|Controller.method>
 
 ## Authority boundary
 
-Generic Agent / Orchestrator 只能写同 run 的 `requests/**` proposal。Agent 不得直接创建、覆盖或修改 `.code-harness/runs/<runId>/analysis/**`、`.code-harness/runs/<runId>/analysis/edit-candidates/**` 或 `.code-harness/chains/**`。
+Generic Agent / Orchestrator 只能写同 run 的 `requests/**` proposal。Agent 不得直接创建、覆盖或修改 `.code-harness/runs/<runId>/analysis/**`、`.code-harness/runs/<runId>/analysis/chain-edit-candidates/**` 或 `.code-harness/chains/**`。
 
 代码事实必须来自 same-run Certified ChangeAnalysis；dependency workspace 只能用于 navigation，不能成为 current Project State 写 authority。
+
+该 Certified ChangeAnalysis 必须由 `analysis certify` 以 `intent.mode=CHAIN_MAINTENANCE` 生成，并把 target 绑定到已解析 Chain 的 exact Controller / Controller.method EntryPoint；用户即使通过 Chain id 发起 edit，也应先解析 Chain，再用其 EntryPoint 做 maintenance analysis target。普通 FULL/LIST/TARGETED certificate 不授权 Chain edit。
 
 ## 允许的 operation
 
@@ -44,7 +46,7 @@ UPDATE_NOTES
 → requests/chain-edit.json
 → codea-harness-tools chain edit --input ...
 → Runtime 验证六类 operation + 最终完整 Chain
-→ analysis/edit-candidates/<id>.yaml + provenance(kind=EDIT)
+→ analysis/chain-edit-candidates/<id>.yaml + provenance(kind=EDIT)
 → 展示 deterministic diff
 → 用户首次保存意图
 → chain seal-persist

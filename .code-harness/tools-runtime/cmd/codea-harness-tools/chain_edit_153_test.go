@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/chain"
 )
 
@@ -25,6 +26,30 @@ func setupTask153AcceptedChainForEdit(t *testing.T, runID string) (string, strin
 
 func task153EditCandidatePath(runID, chainID string) string {
 	return filepath.Join(".code-harness", "runs", runID, "analysis", "chain-edit-candidates", chainID+".yaml")
+}
+
+func stampTask153ChainMaintenanceIntent(t *testing.T, runID, target string) {
+	t.Helper()
+	certPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.cert.json")
+	data, err := os.ReadFile(certPath)
+	if err != nil { t.Fatal(err) }
+	var cert analysisruntime.Certificate
+	if err := json.Unmarshal(data, &cert); err != nil { t.Fatal(err) }
+	cert.Intent = &analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: target}
+	canonical, err := json.MarshalIndent(cert, "", "  ")
+	if err != nil { t.Fatal(err) }
+	canonical = append(canonical, '\n')
+	if err := os.WriteFile(certPath, canonical, 0o644); err != nil { t.Fatal(err) }
+}
+
+func setupTask153MaintenanceChainForEdit(t *testing.T, runID string) (string, string) {
+	t.Helper()
+	projectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)
+	accepted, err := chain.Load(projectPath)
+	if err != nil { t.Fatal(err) }
+	if len(accepted.EntryPoints) == 0 || strings.TrimSpace(accepted.EntryPoints[0].Symbol) == "" { t.Fatal("accepted Chain missing exact entrypoint") }
+	stampTask153ChainMaintenanceIntent(t, runID, accepted.EntryPoints[0].Symbol)
+	return projectPath, chainID
 }
 
 func runTask153RenameEdit(t *testing.T, runID, chainID, name string) string {
@@ -84,7 +109,7 @@ func Test153EditCommandRequiresChainMaintenanceCertifiedIntent(t *testing.T) {
 
 func Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite(t *testing.T) {
 	runID := "run-153-edit-command"
-	projectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)
+	projectPath, chainID := setupTask153MaintenanceChainForEdit(t, runID)
 	before, err := os.ReadFile(projectPath)
 	if err != nil { t.Fatal(err) }
 
@@ -112,7 +137,7 @@ func Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite(t *test
 
 func Test153EditCandidatePersistsOnlyThroughWritePlan(t *testing.T) {
 	runID := "run-153-edit-persist"
-	projectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)
+	projectPath, chainID := setupTask153MaintenanceChainForEdit(t, runID)
 	candidatePath := runTask153RenameEdit(t, runID, chainID, "订单审批持久化名称")
 	planID := sealTask153NewCandidate(t, runID, candidatePath)
 	if err := persistTask153Plan(t, runID, planID); err != nil { t.Fatalf("persist edit plan: %v", err) }
@@ -125,7 +150,7 @@ func Test153EditCandidatePersistsOnlyThroughWritePlan(t *testing.T) {
 
 func Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites(t *testing.T) {
 	runID := "run-153-edit-seal-tamper"
-	projectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)
+	projectPath, chainID := setupTask153MaintenanceChainForEdit(t, runID)
 	before, err := os.ReadFile(projectPath)
 	if err != nil { t.Fatal(err) }
 	candidatePath := runTask153RenameEdit(t, runID, chainID, "订单审批待保存名称")
@@ -144,7 +169,7 @@ func Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites(t *tes
 
 func Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite(t *testing.T) {
 	runID := "run-153-edit-unverified"
-	projectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)
+	projectPath, chainID := setupTask153MaintenanceChainForEdit(t, runID)
 	before, err := os.ReadFile(projectPath)
 	if err != nil { t.Fatal(err) }
 	requestPath := writeQueryRequest(t, runID, "chain-edit-unverified.json", `{
@@ -165,7 +190,7 @@ func Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite(t *testing
 
 func Test153EditRequestSchemaRejectsEntryPointMutation(t *testing.T) {
 	runID := "run-153-edit-entrypoint-forbidden"
-	projectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)
+	projectPath, chainID := setupTask153MaintenanceChainForEdit(t, runID)
 	before, err := os.ReadFile(projectPath)
 	if err != nil { t.Fatal(err) }
 	requestPath := writeQueryRequest(t, runID, "chain-edit-entrypoint.json", `{

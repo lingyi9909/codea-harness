@@ -177,7 +177,7 @@ func parseRuntimeCandidatePath153(value string) (runID, normalizedPath, kind, ch
 		kind = "DISCOVERED"
 	case "refresh-candidates":
 		kind = "REFRESH"
-	case "edit-candidates":
+	case "chain-edit-candidates":
 		kind = "EDIT"
 	default:
 		return "", "", "", "", fmt.Errorf("CHAIN_CANDIDATE_PATH_INVALID: unsupported Runtime candidate directory")

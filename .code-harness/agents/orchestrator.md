@@ -808,7 +808,7 @@ User 必须没有：
 现有 ACCEPTED Chain
 → same-run Certified ChangeAnalysis
 → Controlled Runtime chain edit
-→ analysis/edit-candidates/<id>.yaml + provenance(kind=EDIT)
+→ analysis/chain-edit-candidates/<id>.yaml + provenance(kind=EDIT)
 → 展示 deterministic diff
 → 用户首次保存意图
 → chain seal-persist

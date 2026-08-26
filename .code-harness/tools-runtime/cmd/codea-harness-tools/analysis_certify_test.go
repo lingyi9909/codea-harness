@@ -51,7 +51,7 @@ func Test153AnalysisCertifyPublishesCertifiedBundle(t *testing.T) {
 
 	req := analysisruntime.CertifyRequest{
 		RunID: "r153", DraftPath: ".code-harness/runs/r153/requests/change-analysis-draft.json",
-		BaseRef: "HEAD", IncludeWorkingTree: true, Intent: analysisruntime.Intent{Mode: "FULL"},
+		BaseRef: "HEAD", IncludeWorkingTree: true, Intent: analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: "fixture-maintenance"},
 	}
 	reqBytes, err := json.Marshal(req)
 	if err != nil { t.Fatal(err) }
@@ -67,7 +67,7 @@ func Test153AnalysisCertifyPublishesCertifiedBundle(t *testing.T) {
 			t.Fatalf("published bundle must load as certified: %v", err)
 		} else if cert.RunID != "r153" || cert.ChangeSetSHA256 == "" || cert.AnalysisSHA256 == "" || cert.EntrypointInventorySHA256 == "" {
 			t.Fatalf("unexpected certificate: %+v", cert)
-		} else if cert.Intent == nil || cert.Intent.Mode != "FULL" || cert.Intent.Target != "" {
+		} else if cert.Intent == nil || cert.Intent.Mode != "CHAIN_MAINTENANCE" || cert.Intent.Target != "fixture-maintenance" {
 			t.Fatalf("certificate must bind certify intent, got %+v", cert.Intent)
 		}
 		if _, runID, err := loadVerifiedChainAnalysis(analysisPath); err != nil {

@@ -49,7 +49,7 @@ func Test153ChainEditAgentContract(t *testing.T) {
 	requireTask153Markers(t, orchestrator,
 		"harness chain edit <id|Controller|Controller.method>",
 		"edit-chain",
-		"analysis/edit-candidates/<id>.yaml",
+		"analysis/chain-edit-candidates/<id>.yaml",
 		"chain seal-persist",
 		"chain persist",
 	)

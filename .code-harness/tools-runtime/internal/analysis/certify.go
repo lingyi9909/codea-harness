@@ -157,6 +157,7 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 		EntrypointInventorySHA256: hashBytes153(inventoryBytes),
 		BaseRef: snapshot.BaseRef,
 		Head: snapshot.Head,
+		Intent: &Intent{Mode: strings.ToUpper(strings.TrimSpace(req.Intent.Mode)), Target: strings.TrimSpace(req.Intent.Target)},
 	}
 	certBytes, err := json.MarshalIndent(cert, "", "  ")
 	if err != nil {

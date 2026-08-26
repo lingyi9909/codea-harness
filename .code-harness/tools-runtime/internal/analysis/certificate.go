@@ -20,7 +20,8 @@ type Certificate struct {
 	ChangeSetSHA256           string `json:"changeSetSha256"`
 	EntrypointInventorySHA256 string `json:"entrypointInventorySha256"`
 	BaseRef                   string `json:"baseRef"`
-	Head                      string `json:"head"`
+	Head                      string  `json:"head"`
+	Intent                    *Intent `json:"intent,omitempty"`
 }
 
 func LoadCertified(root, analysisPath string) (ChangeAnalysis, Certificate, error) {

@@ -245,8 +245,8 @@ candidate / Certified Analysis / existing Project State 任一 byte/fact 在 sea
 `harness chain edit <id|Controller|Controller.method>` 路由到 `edit-chain`。Runtime 对六类 operation 做最终完整 Chain 事实验证，成功后只输出：
 
 ```text
-.code-harness/runs/<runId>/analysis/edit-candidates/<id>.yaml
-.code-harness/runs/<runId>/analysis/edit-candidates/<id>.cert.json  # kind=EDIT
+.code-harness/runs/<runId>/analysis/chain-edit-candidates/<id>.yaml
+.code-harness/runs/<runId>/analysis/chain-edit-candidates/<id>.cert.json  # kind=EDIT
 ```
 
 EDIT candidate 不是 Project State，不得直接写 `.code-harness/chains/**`。保存继续固定复用 `chain seal-persist → exact planId → 用户确认当前 planId → chain persist`；候选、分析或 existing Project State 变化后旧 plan 必须失效。
