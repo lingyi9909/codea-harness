@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.3 - 2026-08-26
+
+- **Controller EntryPoint Completeness**：Runtime 独立重算 Change Set，并对 changed production Controller 的 endpoint obligation 做机器清单；新增/修改 Controller 不允许因 Agent draft 遗漏而静默跳过，缺失项以 `ENTRYPOINT_COMPLETENESS_INCOMPLETE` fail closed。
+- **Certified ChangeAnalysis**：Agent 只提交 proposal；Runtime 绑定 Change Set、EntrypointInventory、证据与原始 intent 后发布 Certified ChangeAnalysis，tamper/stale artifact 不能继续驱动 Review、Chain 或 Chain Edit。
+- **Runtime-owned Chain authority**：discover/edit candidate 必须具备 Runtime provenance；持久化统一复用 immutable `seal-persist → planId → persist`，candidate/analysis/existing Chain 任一变化都会拒绝旧 plan。
+- **Review selection**：plain `harness review` 在 0 个有效 Chain 时 `AUTO_FULL`，exact 1 个时 `AUTO_SINGLE` 直接执行且不询问用户，2+ 时才进入 Runtime-bound `USER_SELECTION`；FULL/TARGETED/LIST 权限边界保持机器校验。
+- **Natural-language Chain Edit**：新增受控 Chain Edit，支持 verified node replace/add/remove/reorder、rename 和 notes；代码事实必须来自 Certified ChangeAnalysis，Workspace Dependency 仅保留真实 navigation identity，未验证关系拒绝成为 Chain 事实。
+- **No Chain YAML migration**：继续使用 Chain YAML version 1；升级不会迁移、重写或自动生成既有 `chains/**` Project State。
+- **1.5.2 isolation preserved**：Workspace Dependency 仍只扩展 Navigation/Chain Context，不扩展 Change Set、Review/Finding/Test/Fix/Apply Write Scope；1.5.2 Workspace/Review isolation 回归继续作为 release gate。
+- **1.5.2 → 1.5.3 Release Gate**：Windows x64 live upgrade byte-for-byte 保持 `harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**`，安装新增 1.5.3 contracts/skills/runtime，并发布 install / upgrade 双 ZIP。
+
 ## 1.5.2 - 2026-08-25
 
 - **Workspace Dependency Chain Navigation**：支持显式配置的 direct sibling Maven source dependency；只有 Maven identity 机器验证为 `VERIFIED` 后才进入跨 workspace 代码导航，workspace dependency 始终只是 **Navigation Scope**，不是 Change Set、Review Scope 或 Write Scope。
@@ -28,7 +39,7 @@
 
 - **Targeted Review**：新增 `harness review <Class>` / `<Class.method>` 与 `harness review list`；定向 Scope 由 Runtime 基于已验证调用链和 exact path evidence 机器校验，不能把定向结论冒充整个 Change Set 已完成评审。
 - **Mapper.xml / YML Review**：`*Mapper.xml` 与 `src/main/resources/**/*.yml` 纳入正式 Review Change Set、FULL Coverage 和 evidence-related TARGETED Scope，仅检查与本次变化相关的高价值 Mapper/配置风险。
-- **Human Report UX Standard**：`review.md` 统一中文首屏、机器 role evidence 驱动的调用链角色、标准 Finding 块和明确下一步；无可靠 role evidence 时降级为普通代码节点。
+- **Human Report UX Standard**：`review.md` 统一中文首屏、机器 role evidence 驱动的调用链角色、🔴🟠🟡🟢 严重级别与确定性排序，并将测试代码 Finding 限定为 `TEST_VALIDITY`，普通测试代码质量问题不再产生 Finding。
 - **Runtime Apply Safety**：Fix/Test 正式写入统一经过 Controlled Runtime；审批前 seal exact plan，审批后校验 diff/base hash/path/hard-deny，执行原子多文件 apply/rollback 并生成机器 evidence。
 - **1.3.2 → 1.4.0 Upgrade Gate**：registered migration 将旧 `harness.yaml version=1` 升为 v2，并在保留用户现有配置的同时补充 Mapper/YML scope；正式升级由目标版本 Runtime 执行，继续保护 `project.md`、`database.yaml`、`runs/**` 和非 migration 用户配置。
 
