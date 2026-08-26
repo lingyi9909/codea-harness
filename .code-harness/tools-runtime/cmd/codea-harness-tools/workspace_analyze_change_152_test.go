@@ -118,18 +118,20 @@ func Test152WindowsSmokeContainsRealAnalyzeChangeDiscoverBootstrap(t *testing.T)
 	for _, want := range []string{
 		"TASK4_WORKSPACE_ANALYZE_CHANGE_BOOTSTRAP",
 		"harness chain discover XxxController",
-		"precondition: no change-analysis.json",
+		"precondition: no authoritative change-analysis.json/certificate",
+		"change-analysis-draft.json",
+		"change-analysis.cert.json",
 		"workspace','verify','--id','company-framework",
 		"workspace-inherited",
 		"workspace-superclass-call",
 		"workspace-template-dispatch",
 		"WORKSPACE_INHERITANCE",
-		"change-analysis.json",
 		"validate','--schema','.code-harness/contracts/change-analysis.schema.json",
+		"analysis','certify','--input",
 		"chain','discover','--input",
 	} {
 		if !strings.Contains(script, want) {
-			t.Fatalf("formal Windows smoke missing real Task 4 bootstrap evidence %q", want)
+			t.Fatalf("formal Windows smoke missing real Task 4 certified bootstrap evidence %q", want)
 		}
 	}
 }
