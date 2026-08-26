@@ -60,6 +60,19 @@ func validateEvidence153(a ChangeAnalysis, inventory EntrypointInventory) error 
 	confirmed := map[string]bool{}
 	for _, c := range a.CallChains {
 		entry := strings.TrimSpace(c.EntryPoint)
+		if entry != "" {
+			confirmed[entry] = true
+			entryFact, ok := facts[entry]
+			if !ok || entryFact.workspace != "current" || entryFact.role != "Controller" {
+				return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s requires current Controller symbolLocation", entry)
+			}
+			if expected, exists := inventoryBySymbol[entry]; exists {
+				expectedPath, valid := safeEvidencePath153(expected.Path)
+				if !valid || entryFact.path != expectedPath {
+					return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s expected path %q got %q", entry, expected.Path, entryFact.path)
+				}
+			}
+		}
 		for _, node := range c.Chain {
 			node = strings.TrimSpace(node)
 			if node == "" {
@@ -67,20 +80,6 @@ func validateEvidence153(a ChangeAnalysis, inventory EntrypointInventory) error 
 			}
 			if _, ok := facts[node]; !ok {
 				return fmt.Errorf("CALL_CHAIN_EVIDENCE_MISSING: %s", node)
-			}
-		}
-		if entry == "" {
-			continue
-		}
-		confirmed[entry] = true
-		entryFact, ok := facts[entry]
-		if !ok || entryFact.workspace != "current" || entryFact.role != "Controller" {
-			return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s requires current Controller symbolLocation", entry)
-		}
-		if expected, exists := inventoryBySymbol[entry]; exists {
-			expectedPath, valid := safeEvidencePath153(expected.Path)
-			if !valid || entryFact.path != expectedPath {
-				return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s expected path %q got %q", entry, expected.Path, entryFact.path)
 			}
 		}
 	}
