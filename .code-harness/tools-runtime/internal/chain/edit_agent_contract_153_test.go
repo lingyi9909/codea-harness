@@ -1,6 +1,7 @@
 package chain
 
 // Task 5 contract assertions intentionally verify semantic authority, not Markdown formatting.
+// Final acceptance also locks the normative chain-edit-candidates artifact directory.
 
 import (
 	"os"
@@ -41,7 +42,7 @@ func Test153ChainEditAgentContract(t *testing.T) {
 	requireTask153Markers(t, skill,
 		"harness chain edit <id|Controller|Controller.method>",
 		"REPLACE_NODE", "ADD_NODE", "REMOVE_NODE", "REORDER_NODE", "RENAME_CHAIN", "UPDATE_NOTES",
-		"edit-candidates", "chain seal-persist", "chain persist", "planId",
+		"chain-edit-candidates", "CHAIN_MAINTENANCE", "chain seal-persist", "chain persist", "planId",
 		"requests/**", "不得直接", ".code-harness/chains",
 	)
 
@@ -61,7 +62,7 @@ func Test153ChainEditAgentContract(t *testing.T) {
 	requireTask153Markers(t, agents,
 		"harness chain edit",
 		"codea-harness-tools chain edit --input",
-		"edit-candidates",
+		"chain-edit-candidates",
 		"chain seal-persist",
 		"chain persist",
 	)
@@ -69,7 +70,7 @@ func Test153ChainEditAgentContract(t *testing.T) {
 	validateSkill := task153ReadContractFile(t, root, ".code-harness", "skills", "validate-chain", "SKILL.md")
 	requireTask153Markers(t, validateSkill,
 		"harness chain edit",
-		"edit-candidates",
+		"chain-edit-candidates",
 		"EDIT",
 		"chain seal-persist",
 		"chain persist",
