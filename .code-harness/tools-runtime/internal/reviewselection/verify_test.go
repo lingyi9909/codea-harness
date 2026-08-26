@@ -52,3 +52,22 @@ func Test153AutoSingleSelectionIsMachineExecutable(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if len(selected) != 1 || selected[0].SelectionID != "C1" { t.Fatalf("AUTO_SINGLE must execute C1 directly: %+v", selected) }
 }
+
+func Test153RuntimeDecisionCannotBeOverriddenBySelectionRequest(t *testing.T) {
+	autoFull, err := finalizeOptions153(Options{RunID: "r153", ChangeSetSHA256: strings.Repeat("b", 64), EntrypointCompleteness: "COMPLETE"}, strings.Repeat("a", 64))
+	if err != nil { t.Fatal(err) }
+	if _, err := validateSelectionAgainstOptions153(autoFull, SelectionRequest{RunID: "r153", Mode: "TARGETED", SelectionIDs: []string{"C1"}, OptionsHash: autoFull.OptionsHash}); err == nil || !strings.Contains(err.Error(), "REVIEW_SELECTION_SCOPE_INVALID") {
+		t.Fatalf("AUTO_FULL must not be overridden to TARGETED, got %v", err)
+	}
+
+	autoSingle, err := finalizeOptions153(Options{RunID: "r153", ChangeSetSHA256: strings.Repeat("b", 64), EntrypointCompleteness: "COMPLETE", Chains: []ChainOption{{ChainID: "order", EntryPoints: []string{"OrderController.create"}, Source: "ACCEPTED", Status: "VALID"}}}, strings.Repeat("a", 64))
+	if err != nil { t.Fatal(err) }
+	if _, err := validateSelectionAgainstOptions153(autoSingle, SelectionRequest{RunID: "r153", Mode: "FULL", OptionsHash: autoSingle.OptionsHash}); err == nil || !strings.Contains(err.Error(), "REVIEW_SELECTION_SCOPE_INVALID") {
+		t.Fatalf("AUTO_SINGLE must not be overridden to FULL, got %v", err)
+	}
+
+	user := task153SelectionOptions(t)
+	if _, err := validateSelectionAgainstOptions153(user, SelectionRequest{RunID: "r153", Mode: "FULL", OptionsHash: user.OptionsHash}); err == nil || !strings.Contains(err.Error(), "REVIEW_SELECTION_SCOPE_INVALID") {
+		t.Fatalf("USER_SELECTION must not be bypassed with FULL, got %v", err)
+	}
+}
