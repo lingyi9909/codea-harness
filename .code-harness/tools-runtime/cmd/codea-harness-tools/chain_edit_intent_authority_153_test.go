@@ -67,7 +67,7 @@ func rerunTask153DiscoveryAfterCertify(t *testing.T, runID string) {
 	}
 }
 
-func Test153EditRejectsCanonicalCertIntentEscalation(t *testing.T) {
+func Test153EditRejectsJointWorkspaceAuthorityEscalation(t *testing.T) {
 	runID := "run-153-edit-intent-escalation"
 	candidatePath, chainID := setupTask153AuthorityDiscovery(t, runID)
 	discovered, err := chain.Load(candidatePath)
@@ -90,39 +90,59 @@ func Test153EditRejectsCanonicalCertIntentEscalation(t *testing.T) {
 	before, err := os.ReadFile(projectPath)
 	if err != nil { t.Fatal(err) }
 
-	// Attack: rewrite only cert.Intent to a schema-valid/canonical maintenance
-	// intent. The Runtime must reject this privilege escalation independently of
-	// JSON schema and canonical-byte checks.
-	certPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.cert.json")
+	// The edit attempt itself must create zero write plans. Remove the discovery
+	// persist plan after it has already produced the accepted Project State Chain.
+	plansDir := filepath.Join(".code-harness", "runs", runID, "analysis", "chain-write-plans")
+	if err := os.RemoveAll(plansDir); err != nil { t.Fatal(err) }
+
+	// Attack: jointly rewrite every workspace-owned authority artifact so their
+	// internal hashes remain self-consistent and canonical.
+	intent := &analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: entrypoint}
+	analysisDir := filepath.Join(".code-harness", "runs", runID, "analysis")
+	inventoryPath := filepath.Join(analysisDir, "entrypoint-inventory.json")
+	inventoryBytes, err := os.ReadFile(inventoryPath)
+	if err != nil { t.Fatal(err) }
+	var inventory analysisruntime.EntrypointInventory
+	if err := json.Unmarshal(inventoryBytes, &inventory); err != nil { t.Fatal(err) }
+	inventory.Intent = intent
+	inventoryBytes, err = json.MarshalIndent(inventory, "", "  ")
+	if err != nil { t.Fatal(err) }
+	inventoryBytes = append(inventoryBytes, '\n')
+	if err := os.WriteFile(inventoryPath, inventoryBytes, 0o644); err != nil { t.Fatal(err) }
+
+	certPath := filepath.Join(analysisDir, "change-analysis.cert.json")
 	certBytes, err := os.ReadFile(certPath)
 	if err != nil { t.Fatal(err) }
 	var cert analysisruntime.Certificate
 	if err := json.Unmarshal(certBytes, &cert); err != nil { t.Fatal(err) }
-	cert.Intent = &analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: entrypoint}
-	canonical, err := json.MarshalIndent(cert, "", "  ")
+	cert.Intent = intent
+	cert.EntrypointInventorySHA256 = sha153Fixture(inventoryBytes)
+	certBytes, err = json.MarshalIndent(cert, "", "  ")
 	if err != nil { t.Fatal(err) }
-	canonical = append(canonical, '\n')
-	if err := os.WriteFile(certPath, canonical, 0o644); err != nil { t.Fatal(err) }
+	certBytes = append(certBytes, '\n')
+	if err := os.WriteFile(certPath, certBytes, 0o644); err != nil { t.Fatal(err) }
 
 	requestPath := writeQueryRequest(t, runID, "chain-edit-escalated.json", `{
   "runId":"`+runID+`",
   "chainId":"`+chainID+`",
   "changeAnalysisPath":".code-harness/runs/`+runID+`/analysis/change-analysis.json",
-  "operations":[{"type":"RENAME_CHAIN","name":"不应被提权后的证书授权"}]
+  "operations":[{"type":"RENAME_CHAIN","name":"不应被联合篡改后的证书授权"}]
 }`)
 	err = run([]string{"chain", "edit", "--input", requestPath})
 	if err == nil {
-		t.Fatal("schema-valid canonical cert.Intent escalation must fail closed")
-	}
-	if !strings.Contains(err.Error(), "CHAIN_EDIT_ANALYSIS_NOT_CERTIFIED") && !strings.Contains(err.Error(), "INTENT") {
-		t.Fatalf("unexpected escalation rejection: %v", err)
+		t.Fatal("joint canonical cert+inventory+hash escalation must fail closed")
 	}
 	if _, statErr := os.Stat(task153EditCandidatePath(runID, chainID)); !os.IsNotExist(statErr) {
-		t.Fatalf("intent escalation must produce 0 edit candidates, stat=%v", statErr)
+		t.Fatalf("joint authority escalation must produce 0 edit candidates, stat=%v", statErr)
+	}
+	if entries, readErr := os.ReadDir(plansDir); readErr == nil && len(entries) != 0 {
+		t.Fatalf("joint authority escalation must produce 0 chain write plans, got %d", len(entries))
+	} else if readErr != nil && !os.IsNotExist(readErr) {
+		t.Fatal(readErr)
 	}
 	after, err := os.ReadFile(projectPath)
 	if err != nil { t.Fatal(err) }
 	if string(after) != string(before) {
-		t.Fatal("intent escalation must produce 0 Project State writes")
+		t.Fatal("joint authority escalation must produce 0 Project State writes")
 	}
 }
