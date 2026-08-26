@@ -1,7 +1,7 @@
 ---
 name: validate-chain
 description: 管理项目 Business Chain：list/show/validate/refresh，并在用户明确确认后把经过 Runtime 验证且由不可变 write plan 绑定的 candidate 安全沉淀到 Project State。
-version: 2
+version: 3
 agent: orchestrator
 tools:
   - read_code
@@ -18,6 +18,7 @@ harness chain list
 harness chain show <id|target>
 harness chain discover [target]
 harness chain refresh <id>
+harness chain edit <id|Controller|Controller.method>
 harness chain validate [id]
 ```
 
@@ -237,3 +238,15 @@ candidate / Certified Analysis / existing Project State 任一 byte/fact 在 sea
 - 不得用旧 plan 覆盖用户/其他进程已经修改过的 Chain。
 - 不得新增规则引擎、chain-rules.yaml、全仓 Call Graph。
 - 不得把 Chain 接入 Task 4–6 的新功能；本 Task 只强化 Chain Artifact 与 Write Authority。
+
+
+## Semantic edit（1.5.3 Task 5）
+
+`harness chain edit <id|Controller|Controller.method>` 路由到 `edit-chain`。Runtime 对六类 operation 做最终完整 Chain 事实验证，成功后只输出：
+
+```text
+.code-harness/runs/<runId>/analysis/edit-candidates/<id>.yaml
+.code-harness/runs/<runId>/analysis/edit-candidates/<id>.cert.json  # kind=EDIT
+```
+
+EDIT candidate 不是 Project State，不得直接写 `.code-harness/chains/**`。保存继续固定复用 `chain seal-persist → exact planId → 用户确认当前 planId → chain persist`；候选、分析或 existing Project State 变化后旧 plan 必须失效。

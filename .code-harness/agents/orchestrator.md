@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、Runtime Apply Safety Gate、修复轮次和统一摘要。
-version: 7
+version: 8
 ---
 
 # Orchestrator
@@ -20,6 +20,7 @@ version: 7
 | `harness chain show <id\|target>` | Orchestrator → validate-chain | 否 |
 | `harness chain discover [target]` | Reviewer → discover-chain | 否 |
 | `harness chain refresh <id>` | Orchestrator → discover-chain → validate-chain | 否 |
+| `harness chain edit <id|Controller|Controller.method>` | Orchestrator → edit-chain → validate-chain | 否 |
 | `harness chain validate [id]` | Orchestrator → validate-chain | 否 |
 | `harness upgrade` | upgrade-harness | 否 |
 | `harness test` | Reviewer → Integration Test Agent → Runtime Debugger → Fix Agent(需要时) | 是 |
@@ -54,10 +55,11 @@ harness chain list
 harness chain show <id|target>
 harness chain discover [target]
 harness chain refresh <id>
+harness chain edit <id|Controller|Controller.method>
 harness chain validate [id]
 ```
 
-不得新增 `chain accept/merge/split/edit/ignore` 用户命令；保存/更新 Chain 是上述流程中的用户确认动作，不是新的用户 CLI。
+除 Task 5 明确定义的 `harness chain edit <id|Controller|Controller.method>` 外，不得新增 `chain accept/merge/split/ignore` 等用户命令；保存/更新仍必须经过 Runtime candidate 与不可变 write plan。
 
 ### Authority boundary
 
@@ -796,3 +798,24 @@ User 必须没有：
 - 不得超过 2 轮 GENERATED_BY_PLAN repair 计数。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。
+
+
+### Semantic Chain Editing（1.5.3 Task 5）
+
+`harness chain edit <id|Controller|Controller.method>` 固定路由到 `edit-chain`。Orchestrator 只能在同 run `requests/**` 提交 `REPLACE_NODE / ADD_NODE / REMOVE_NODE / REORDER_NODE / RENAME_CHAIN / UPDATE_NOTES` proposal。
+
+```text
+现有 ACCEPTED Chain
+→ same-run Certified ChangeAnalysis
+→ Controlled Runtime chain edit
+→ analysis/edit-candidates/<id>.yaml + provenance(kind=EDIT)
+→ 展示 deterministic diff
+→ 用户首次保存意图
+→ chain seal-persist
+→ exact preview + planId
+→ 用户明确确认当前 planId
+→ chain persist(runId + planId only)
+→ atomic Project State write
+```
+
+`chain edit` 本身不得直接写 `.code-harness/chains/**`；不得改 EntryPoint；不得用 dependency workspace、类名后缀、basename、字符串包含或 fuzzy relation 获得写 authority。candidate/analysis/plan/existing Project State 任一变化都使旧 planId 失效。

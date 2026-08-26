@@ -12,7 +12,8 @@
 - `reviewCoverage.status != COMPLETE` 时，review/test 均停止为 `MANUAL_ACTION_REQUIRED`。
 - `harness api-doc` 是只读流程，最终 `api-doc.md` 只能由 Controlled Runtime deterministic renderer 生成。
 - 集成测试仍以 MockMvc + 真实 Controller/Service/Repository 为主；内部 Bean 默认不 Mock，外部依赖沿用项目测试替代方式。
-- 1.5 Chain Management 只管理 Business Chain 的发现、读取、验证、刷新和用户确认后的 Project State 持久化；Task 3 不把 Chain 接入 Review/Test/Debug/Fix/Verify。
+- 1.5 Chain Management 管理 Business Chain 的发现、读取、验证、刷新和用户确认后的 Project State 持久化；Task 5 新增 `harness chain edit <id|Controller|Controller.method>` 语义编辑，但不得把 Chain 扩成 Review/Test/Debug/Fix/Verify 的写边界。
+- Task 5 的 edit 只允许六类 semantic operation；代码事实必须来自 same-run Certified ChangeAnalysis，Runtime 只输出 `analysis/edit-candidates/<id>.yaml` + provenance，edit 本身不得直接写 `.code-harness/chains/**`。
 - 1.5.3 起 Agent/Orchestrator 产生的 ChangeAnalysis 只能先写 `.code-harness/runs/<runId>/requests/change-analysis-draft.json`；它只是 proposal，不是权威事实。
 - 权威 ChangeAnalysis 只能由 Controlled Runtime `analysis certify` 重新计算 Change Set、EntryPoint Inventory、Coverage 与 evidence invariants 后生成到同 run 的 `analysis/change-analysis.json`、`analysis/entrypoint-inventory.json`、`analysis/change-analysis.cert.json`。
 - Chain/Review 等消费者只能通过 Runtime Certified loader 消费上述权威产物；analysis/certificate/inventory 任一被篡改、Change Set 已变化或 certification 失败都必须 fail closed，进入 `MANUAL_ACTION_REQUIRED` / `PARTIAL`，不得由 Agent 直接修改 Runtime-owned artifact“修复”。
@@ -22,7 +23,7 @@
 
 ## 初始化门禁
 
-`harness init`、`harness review`、`harness api-doc`、`harness chain list/show/discover/refresh/validate`、`harness upgrade` 不要求 READY。`harness test/debug-service/fix/verify` 必须 `initialization.status=READY`。
+`harness init`、`harness review`、`harness api-doc`、`harness chain list/show/discover/refresh/edit/validate`、`harness upgrade` 不要求 READY。`harness test/debug-service/fix/verify` 必须 `initialization.status=READY`。
 
 ## Agent 职责
 
@@ -67,6 +68,7 @@ codea-harness-tools chain show --target <id|Controller|Controller.method>
 codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain validate --id <chainId> --change-analysis .code-harness/runs/<runId>/analysis/change-analysis.json
 codea-harness-tools chain refresh --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools chain edit --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain seal-persist --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain persist --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<file>.json
@@ -97,3 +99,8 @@ Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/
 - 不得自动安装依赖、git fetch/pull、commit/push/PR。
 - 不得直接执行任意 Shell。
 - 不得为让测试通过而删除/禁用测试、弱化断言、吞异常或 Mock 内部 Bean。
+
+
+### Chain edit authority（1.5.3 Task 5）
+
+`harness chain edit` 只能生成 same-run `requests/**` proposal。Controlled Runtime `codea-harness-tools chain edit --input ...` 基于 Certified ChangeAnalysis 验证后，只能生成 `analysis/edit-candidates/<id>.yaml` + `kind=EDIT` provenance；不得直接修改 `.code-harness/chains/**`。EDIT candidate 的最终保存继续走 `chain seal-persist → exact planId confirmation → chain persist`。
