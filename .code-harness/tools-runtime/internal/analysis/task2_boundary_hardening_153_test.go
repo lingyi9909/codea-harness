@@ -26,6 +26,46 @@ func Test153CertRejectsConfirmedEntrypointMissingAffectedEndpoint(t *testing.T) 
 	}
 }
 
+func Test153CertRejectsABCChainsWhenAffectedControllersOnlyContainsA(t *testing.T) {
+	root := t.TempDir()
+	installAnalysisCertificationContracts153(t, root)
+	snapshot, inventory, draft := abcEntrypointConsistencyFixture153()
+	draft["affectedControllers"] = []map[string]any{
+		{"controller": "AController", "endpoints": []string{"AController.create"}, "impactType": "DIRECT_CHANGE", "sourceSymbols": []string{"AController.create"}},
+	}
+	writeCertificationDraft153(t, root, "r153", draft)
+
+	_, err := certifyWithRuntime153(root, CertifyRequest{
+		RunID: "r153", DraftPath: ".code-harness/runs/r153/requests/change-analysis-draft.json",
+		BaseRef: "develop", IncludeWorkingTree: true, Intent: Intent{Mode: "FULL"},
+	}, fakeCertificationRuntime153{snapshot: snapshot, inventory: inventory})
+	if err == nil || !strings.Contains(err.Error(), "ENTRYPOINT_ANALYSIS_INCONSISTENT") {
+		t.Fatalf("Inventory/callChains A/B/C with affectedControllers only A must fail closed, got %v", err)
+	}
+	assertNoAuthoritativeAnalysis153(t, root, "r153")
+}
+
+func Test153CertRejectsABCWhenBControllerEndpointMissingSubmit(t *testing.T) {
+	root := t.TempDir()
+	installAnalysisCertificationContracts153(t, root)
+	snapshot, inventory, draft := abcEntrypointConsistencyFixture153()
+	draft["affectedControllers"] = []map[string]any{
+		{"controller": "AController", "endpoints": []string{"AController.create"}, "impactType": "DIRECT_CHANGE", "sourceSymbols": []string{"AController.create"}},
+		{"controller": "BController", "endpoints": []string{"BController.other"}, "impactType": "DIRECT_CHANGE", "sourceSymbols": []string{"BController.submit"}},
+		{"controller": "CController", "endpoints": []string{"CController.update"}, "impactType": "DIRECT_CHANGE", "sourceSymbols": []string{"CController.update"}},
+	}
+	writeCertificationDraft153(t, root, "r153", draft)
+
+	_, err := certifyWithRuntime153(root, CertifyRequest{
+		RunID: "r153", DraftPath: ".code-harness/runs/r153/requests/change-analysis-draft.json",
+		BaseRef: "develop", IncludeWorkingTree: true, Intent: Intent{Mode: "FULL"},
+	}, fakeCertificationRuntime153{snapshot: snapshot, inventory: inventory})
+	if err == nil || !strings.Contains(err.Error(), "ENTRYPOINT_ANALYSIS_INCONSISTENT") || !strings.Contains(err.Error(), "BController.submit") {
+		t.Fatalf("BController without BController.submit endpoint must fail closed with exact entrypoint, got %v", err)
+	}
+	assertNoAuthoritativeAnalysis153(t, root, "r153")
+}
+
 func Test153CertRejectsEmptyHeadCommitWithoutAuthoritativeWrite(t *testing.T) {
 	root := t.TempDir()
 	installAnalysisCertificationContracts153(t, root)
@@ -99,6 +139,47 @@ func Test153WorkspaceIdentityAllowsSameRelativePathAcrossWorkspaces(t *testing.T
 	}, fakeCertificationRuntime153{snapshot: snapshot, inventory: inventory}); err != nil {
 		t.Fatalf("same relative path in current and VERIFIED dependency workspace must not be treated as dependency scope leakage: %v", err)
 	}
+}
+
+func abcEntrypointConsistencyFixture153() (changeset.Snapshot, EntrypointInventory, map[string]any) {
+	paths := []string{
+		"src/main/java/acme/AController.java",
+		"src/main/java/acme/BController.java",
+		"src/main/java/acme/CController.java",
+	}
+	snapshot := task153Snapshot([]changeset.File{
+		{Path: paths[0], Status: "A", Sources: []changeset.Source{changeset.SourceStaged}},
+		{Path: paths[1], Status: "A", Sources: []changeset.Source{changeset.SourceUntracked}},
+		{Path: paths[2], Status: "M", Sources: []changeset.Source{changeset.SourceUnstaged}},
+	})
+	inventory := EntrypointInventory{
+		RunID: "r153", Status: "COMPLETE", ChangeSetSHA256: snapshot.SHA256,
+		ExpectedEntrypoints: []ExpectedEntrypoint{
+			{Symbol: "AController.create", Path: paths[0]},
+			{Symbol: "BController.submit", Path: paths[1]},
+			{Symbol: "CController.update", Path: paths[2]},
+		},
+	}
+	draft := validCertificationDraft153(paths)
+	draft["callChains"] = []map[string]any{
+		{"entryPoint": "AController.create", "chain": []string{"AController.create", "AService.create"}},
+		{"entryPoint": "BController.submit", "chain": []string{"BController.submit", "BService.submit"}},
+		{"entryPoint": "CController.update", "chain": []string{"CController.update", "CService.update"}},
+	}
+	draft["symbolLocations"] = []map[string]any{
+		{"symbol": "AController.create", "path": paths[0], "role": "Controller", "source": "FIND_SYMBOL"},
+		{"symbol": "AService.create", "path": "src/main/java/acme/AService.java", "role": "Service", "source": "FIND_SYMBOL"},
+		{"symbol": "BController.submit", "path": paths[1], "role": "Controller", "source": "FIND_SYMBOL"},
+		{"symbol": "BService.submit", "path": "src/main/java/acme/BService.java", "role": "Service", "source": "FIND_SYMBOL"},
+		{"symbol": "CController.update", "path": paths[2], "role": "Controller", "source": "FIND_SYMBOL"},
+		{"symbol": "CService.update", "path": "src/main/java/acme/CService.java", "role": "Service", "source": "FIND_SYMBOL"},
+	}
+	draft["affectedControllers"] = []map[string]any{
+		{"controller": "AController", "endpoints": []string{"AController.create"}, "impactType": "DIRECT_CHANGE", "sourceSymbols": []string{"AController.create"}},
+		{"controller": "BController", "endpoints": []string{"BController.submit"}, "impactType": "DIRECT_CHANGE", "sourceSymbols": []string{"BController.submit"}},
+		{"controller": "CController", "endpoints": []string{"CController.update"}, "impactType": "DIRECT_CHANGE", "sourceSymbols": []string{"CController.update"}},
+	}
+	return snapshot, inventory, draft
 }
 
 type workspaceCertificationSetup153 struct {
