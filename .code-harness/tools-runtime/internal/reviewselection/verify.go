@@ -26,14 +26,26 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 		return nil, fmt.Errorf("REVIEW_OPTIONS_STALE")
 	}
 	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
-	switch mode {
-	case "FULL", "LIST":
-		if len(req.SelectionIDs) != 0 { return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: %s must not contain selectionIds", mode) }
+	if mode == "LIST" {
+		if len(req.SelectionIDs) != 0 { return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: LIST must not contain selectionIds") }
 		return []ChainOption{}, nil
-	case "TARGETED":
-		if len(req.SelectionIDs) == 0 { return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: TARGETED requires selectionIds") }
+	}
+	switch options.Decision {
+	case DecisionAutoFull:
+		if mode != "FULL" || len(req.SelectionIDs) != 0 {
+			return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: AUTO_FULL requires FULL with no selectionIds")
+		}
+		return []ChainOption{}, nil
+	case DecisionAutoSingle:
+		if mode != "TARGETED" || len(req.SelectionIDs) != 1 || len(options.AutoSelectionIDs) != 1 || req.SelectionIDs[0] != options.AutoSelectionIDs[0] {
+			return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: AUTO_SINGLE requires exact Runtime autoSelectionId")
+		}
+	case DecisionUser:
+		if mode != "TARGETED" || len(req.SelectionIDs) == 0 {
+			return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: USER_SELECTION requires TARGETED selectionIds")
+		}
 	default:
-		return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: unsupported mode %q", req.Mode)
+		return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: unknown Runtime decision %q", options.Decision)
 	}
 	requested := map[string]bool{}
 	for _, id := range req.SelectionIDs {
