@@ -71,6 +71,10 @@ func validateEvidence153(a ChangeAnalysis, inventory EntrypointInventory) error 
 				if !valid || entryFact.path != expectedPath {
 					return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s expected path %q got %q", entry, expected.Path, entryFact.path)
 				}
+				controller := entrypointController153(entry)
+				if controller == "" || !affectedControllerContainsEntrypoint153(a.AffectedControllers, controller, entry) {
+					return fmt.Errorf("ENTRYPOINT_ANALYSIS_INCONSISTENT: %s is confirmed by callChain but missing exact affectedControllers controller/endpoint", entry)
+				}
 			}
 		}
 		for _, node := range c.Chain {
@@ -117,6 +121,29 @@ func validateEvidence153(a ChangeAnalysis, inventory EntrypointInventory) error 
 		}
 	}
 	return nil
+}
+
+func entrypointController153(symbol string) string {
+	symbol = strings.TrimSpace(symbol)
+	i := strings.LastIndex(symbol, ".")
+	if i <= 0 {
+		return ""
+	}
+	return symbol[:i]
+}
+
+func affectedControllerContainsEntrypoint153(controllers []AffectedController, controller, endpoint string) bool {
+	for _, affected := range controllers {
+		if strings.TrimSpace(affected.Controller) != controller {
+			continue
+		}
+		for _, candidate := range affected.Endpoints {
+			if strings.TrimSpace(candidate) == endpoint {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func normalizeWorkspace153(workspace string) string {
