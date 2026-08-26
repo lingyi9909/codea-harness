@@ -20,6 +20,15 @@ func task153AuthorityCandidate() Chain {
 	}
 }
 
+func installTask153ChainAuthorityContract(t *testing.T, root, name string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", name))
+	if err != nil { t.Fatal(err) }
+	dst := filepath.Join(root, ".code-harness", "contracts", name)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(dst, data, 0o644); err != nil { t.Fatal(err) }
+}
+
 func writeTask153AuthorityCandidate(t *testing.T, root, candidatePath string, c Chain) {
 	t.Helper()
 	b, err := MarshalYAML(c)
@@ -35,6 +44,7 @@ func task153AnalysisCert() analysisruntime.Certificate {
 
 func Test153CandidateAuthorityRejectsFakeAgentCandidate(t *testing.T) {
 	root := t.TempDir()
+	installTask153ChainAuthorityContract(t, root, "chain-candidate-cert.schema.json")
 	candidatePath := ".code-harness/runs/r153/analysis/discovered-chains/order-approve.yaml"
 	writeTask153AuthorityCandidate(t, root, candidatePath, task153AuthorityCandidate())
 
@@ -46,6 +56,7 @@ func Test153CandidateAuthorityRejectsFakeAgentCandidate(t *testing.T) {
 
 func Test153CandidateAuthorityRejectsMutatedRuntimeCandidate(t *testing.T) {
 	root := t.TempDir()
+	installTask153ChainAuthorityContract(t, root, "chain-candidate-cert.schema.json")
 	candidatePath := ".code-harness/runs/r153/analysis/discovered-chains/order-approve.yaml"
 	candidate := task153AuthorityCandidate()
 	writeTask153AuthorityCandidate(t, root, candidatePath, candidate)
