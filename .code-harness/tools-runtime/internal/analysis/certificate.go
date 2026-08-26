@@ -128,7 +128,7 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 	if err := VerifyEntrypointDispositions(inventory, typed); err != nil {
 		return ChangeAnalysis{}, Certificate{}, err
 	}
-	if err := validateEvidence153(typed, inventory); err != nil {
+	if err := validateEvidenceAtRoot153(root, typed, inventory); err != nil {
 		return ChangeAnalysis{}, Certificate{}, err
 	}
 	if _, err := coverage.VerifyAnalysisJSON(analysisBytes); err != nil {
