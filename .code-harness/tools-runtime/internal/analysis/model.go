@@ -83,4 +83,5 @@ type EntrypointInventory struct {
 	Status              string               `json:"status"`
 	ExpectedEntrypoints []ExpectedEntrypoint `json:"expectedEntryPoints"`
 	ChangeSetSHA256     string               `json:"changeSetSha256"`
+	Intent              *Intent              `json:"intent,omitempty"`
 }
