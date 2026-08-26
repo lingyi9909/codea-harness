@@ -116,6 +116,7 @@ func installCertifiedSchemas153(t *testing.T) {
 		"change-analysis-cert.schema.json",
 		"chain-candidate-cert.schema.json",
 		"chain-write-plan.schema.json",
+		"chain-edit-request.schema.json",
 	} {
 		copyTask153CommandContract(t, ".", name)
 	}
