@@ -21,19 +21,23 @@ harness chain discover OrderController.approve
 
 空 target 表示只发现当前 Change Set 已影响的生产入口；Class / Class.method target 只缩小当前已验证 evidence 的消费范围，不允许据此扫描整个仓库。
 
-## Chain Discover Bootstrap
+## Chain Discover Bootstrap（1.5.1）
 
-`harness chain discover [target]` 是自包含流程。用户直接执行 discovery 时，不要求历史 Chain、既有 Review Run，也不得要求用户先执行 `harness review`。
+`harness chain discover [target] 是自包含流程`。用户直接执行 discovery 时，不要求历史 Chain、既有 Review Run，也不得要求用户先执行 `harness review`。
+
+1.5.3 在保留 1.5.1 bootstrap 语义的基础上，把原来的 Schema/coverage 前置校验收敛进 Runtime certification：`analyze-change` 提案完成后，由 Runtime 执行 `ChangeAnalysis Schema validate` 与 `Runtime machine coverage verify`，再产出 Certified ChangeAnalysis。source revision / Change Set 不存在或已过期时自动重新 analyze-change，不复用 stale authority。
 
 固定流程：
 
 ```text
 current Change Set
 → analyze-change draft
+→ ChangeAnalysis Schema validate
+→ Runtime machine coverage verify
 → Runtime analysis certify
 → Certified ChangeAnalysis
 → chain discover
-→ Runtime-owned DISCOVERED candidate + provenance certificate
+→ Runtime-owned DISCOVERED Chain candidate + provenance certificate
 ```
 
 规则：
@@ -44,6 +48,7 @@ current Change Set
 4. 只有 Certified ChangeAnalysis 才能进入 controlled `chain discover`。
 5. 历史 `.code-harness/chains/**` 的 ACCEPTED Chain 是 Project State，不是 discovery 前置条件。
 6. discovery 不调用 `review-code`、不生成 Finding、不生成 `review.md`，也不把 Chain 接入 Test/Debug/Fix/Verify。
+7. 任何 `PARTIAL` / 未解析结果都必须保留明确原因（例如 `IMPLEMENTATION_NOT_FOUND`）并落在 `reviewCoverage.unresolvedSymbols` 或对应 Runtime limitation 中，禁止猜测补齐。
 
 ### 新增生产代码必须可直接发现
 
