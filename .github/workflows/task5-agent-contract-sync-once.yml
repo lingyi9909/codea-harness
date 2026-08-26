@@ -1,0 +1,234 @@
+name: task5-agent-contract-sync-once
+
+on:
+  push:
+    branches:
+      - docs/1.5.3-chain-reliability-editing-design
+    paths:
+      - '.github/workflows/task5-agent-contract-sync-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-task5-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/1.5.3-chain-reliability-editing-design
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+
+      - name: Patch Task 5 Agent and Skill contracts
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_exact(path, old, new):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              if old not in s:
+                  raise SystemExit(f'marker not found in {path}: {old!r}')
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          skill = Path('.code-harness/skills/edit-chain/SKILL.md')
+          skill.parent.mkdir(parents=True, exist_ok=True)
+          skill.write_text('''---
+name: edit-chain
+description: 对已确认 Business Chain 执行受控语义编辑；Agent 只提交 operation proposal，代码事实由 same-run Certified ChangeAnalysis 证明，Runtime 生成 EDIT candidate，最终保存复用不可变 write plan。
+version: 1
+agent: orchestrator
+tools:
+  - read_code
+---
+
+# Semantic Chain Editing
+
+## 用户意图
+
+```text
+harness chain edit <id|Controller|Controller.method>
+```
+
+只允许 exact id / exact Controller / exact Controller.method 解析目标；多条命中必须报告歧义，不得 fuzzy 选择。EntryPoint identity 在 1.5.3 Task 5 不允许通过 edit 改写。
+
+## Authority boundary
+
+Generic Agent / Orchestrator **只能写**同 run 的：
+
+```text
+.code-harness/runs/<runId>/requests/**
+```
+
+Agent 不得直接创建、覆盖或修改：
+
+```text
+.code-harness/runs/<runId>/analysis/**
+.code-harness/runs/<runId>/analysis/edit-candidates/**
+.code-harness/chains/**
+```
+
+`.code-harness/chains/*.yaml` 是 Project State，不是 Agent 可直接编辑的文本文件。任何代码事实编辑都必须由 same-run Certified ChangeAnalysis 证明；dependency workspace 只能用于 navigation，不能成为 current Project State 的写 authority。
+
+## 允许的语义操作
+
+Task 5 只允许以下 operation：
+
+```text
+REPLACE_NODE
+ADD_NODE
+REMOVE_NODE
+REORDER_NODE
+RENAME_CHAIN
+UPDATE_NOTES
+```
+
+- `REPLACE_NODE / ADD_NODE / REMOVE_NODE / REORDER_NODE`：Runtime 必须验证最终完整 ordered core path 与 Certified ChangeAnalysis 的 confirmed callChains / symbolLocations / roles 一致；不能逐 operation 放行后拼出未验证关系。
+- `RENAME_CHAIN / UPDATE_NOTES`：只改变描述性元数据；不得改变 EntryPoint、代码 symbol/path/role 或调用事实。
+- 不支持 `ADD_ENTRYPOINT / REMOVE_ENTRYPOINT / REPLACE_ENTRYPOINT` 等 EntryPoint 编辑。
+
+## 固定流程
+
+```text
+现有 ACCEPTED Project State Chain
+→ 当前 source 的 same-run Certified ChangeAnalysis
+→ Agent 创建 requests/chain-edit.json proposal
+→ Controlled Runtime chain edit
+→ Runtime 验证六类 operation + 最终完整 Chain 代码事实
+→ .code-harness/runs/<runId>/analysis/edit-candidates/<id>.yaml
+→ 同目录 Runtime provenance certificate（kind=EDIT）
+→ 展示 deterministic edit diff
+→ 用户明确表示要保存该 candidate
+→ chain seal-persist
+→ 展示 exact preview + planId
+→ 用户明确确认当前 exact planId
+→ chain persist(runId + planId only)
+→ atomic 写入 .code-harness/chains/<id>.yaml
+```
+
+Controlled Runtime 调用：
+
+```text
+codea-harness-tools chain edit --input .code-harness/runs/<runId>/requests/chain-edit.json
+codea-harness-tools chain seal-persist --input .code-harness/runs/<runId>/requests/chain-seal-persist.json
+codea-harness-tools chain persist --input .code-harness/runs/<runId>/requests/chain-persist.json
+```
+
+`chain edit` 只生成 Runtime-certified EDIT candidate，**不得直接**修改 `.code-harness/chains/**`。首次“保存/更新”只授权 `chain seal-persist` 封存 exact candidate；最终 Project State write 仍要求用户明确确认当前 `planId` 后调用 `chain persist`。
+
+## Fail closed
+
+以下任一情况必须拒绝且产生 0 Project State writes：
+
+- request 不在 same-run `requests/**`；
+- raw / stale / tampered / uncertified ChangeAnalysis；
+- operation 类型不在六类 allowlist；
+- 新 node/reorder/replace 后的完整调用顺序没有 confirmed evidence；
+- symbol/path/role 不是 current workspace 的 exact certified fact；
+- EDIT candidate/provenance/analysis 在 seal 前后被篡改；
+- sealed plan 后 existing Project State 发生变化；
+- 最终确认不是当前 exact `planId`。
+
+不得使用 YAML `status=ACCEPTED`、类名后缀、basename、字符串包含、相似度或 dependency workspace 关系来补足代码事实。
+''', encoding='utf-8')
+
+          replace_exact(
+              '.code-harness/agents/orchestrator.md',
+              '| `harness chain refresh <id>` | Orchestrator → discover-chain → validate-chain | 否 |\n| `harness chain validate [id]` | Orchestrator → validate-chain | 否 |',
+              '| `harness chain refresh <id>` | Orchestrator → discover-chain → validate-chain | 否 |\n| `harness chain edit <id|Controller|Controller.method>` | Orchestrator → edit-chain → validate-chain | 否 |\n| `harness chain validate [id]` | Orchestrator → validate-chain | 否 |'
+          )
+          replace_exact(
+              '.code-harness/agents/orchestrator.md',
+              '## Chain Management（1.5.3 Task 3）\n\nTask 3 只负责 Chain 的 list/show/discover/validate/refresh 与用户明确确认后的 Project State 持久化，不把 Chain 接入 Review/Test/Debug/Fix/Verify。',
+              '## Chain Management（1.5.3 Task 3–5）\n\nTask 3 建立 Chain 的 list/show/discover/validate/refresh 与不可变 Project State 写入 authority；Task 5 在同一 authority 上新增 semantic edit，只生成 Runtime-certified EDIT candidate，并继续复用 seal-persist / exact planId confirmation / persist。Chain 不因此获得 Test/Debug/Fix/Verify 写权限。'
+          )
+          replace_exact(
+              '.code-harness/agents/orchestrator.md',
+              'harness chain refresh <id>\nharness chain validate [id]\n```\n\n不得新增 `chain accept/merge/split/edit/ignore` 用户命令；保存/更新 Chain 是上述流程中的用户确认动作，不是新的用户 CLI。',
+              'harness chain refresh <id>\nharness chain edit <id|Controller|Controller.method>\nharness chain validate [id]\n```\n\n除 Task 5 明确定义的 `harness chain edit <id|Controller|Controller.method>` 外，不得新增 `chain accept/merge/split/ignore` 等用户命令；保存/更新 Chain 仍是 candidate 的双阶段确认流程，不是绕过 Runtime authority 的直接 YAML 写入。'
+          )
+          replace_exact(
+              '.code-harness/agents/orchestrator.md',
+              '### refresh：diff-first + immutable write plan\n',
+              '''### edit：semantic operation + Runtime-certified EDIT candidate\n\n固定入口：\n\n```text\nharness chain edit <id|Controller|Controller.method>\n```\n\nOrchestrator 必须调用 `edit-chain`，并只把六种 allowlisted operation 写入同 run `requests/**` proposal：`REPLACE_NODE / ADD_NODE / REMOVE_NODE / REORDER_NODE / RENAME_CHAIN / UPDATE_NOTES`。Runtime `chain edit` 使用 same-run Certified ChangeAnalysis 验证最终完整 ordered Chain；不得修改 EntryPoint，不得用 dependency workspace、类名后缀或 fuzzy relation 产生写 authority。\n\n```text\n现有 ACCEPTED Chain\n→ same-run Certified ChangeAnalysis\n→ requests/chain-edit.json\n→ Controlled Runtime chain edit\n→ analysis/edit-candidates/<id>.yaml + Runtime cert(kind=EDIT)\n→ 展示 deterministic diff\n→ 用户首次保存意图\n→ chain seal-persist\n→ 展示 exact preview + planId\n→ 用户明确确认当前 planId\n→ chain persist(runId + planId only)\n→ atomic Project State write\n```\n\n`chain edit` 本身必须产生 0 `.code-harness/chains/**` writes；candidate/analysis/plan/existing Project State 任一变化都使旧 planId 失效。\n\n### refresh：diff-first + immutable write plan\n'''
+          )
+          replace_exact('.code-harness/agents/orchestrator.md', 'version: 7', 'version: 8')
+
+          replace_exact(
+              '.code-harness/AGENTS.md',
+              '- 1.5 Chain Management 只管理 Business Chain 的发现、读取、验证、刷新和用户确认后的 Project State 持久化；Task 3 不把 Chain 接入 Review/Test/Debug/Fix/Verify。',
+              '- 1.5 Chain Management 管理 Business Chain 的发现、读取、验证、刷新和用户确认后的 Project State 持久化；Task 5 新增 `harness chain edit <id|Controller|Controller.method>` 语义编辑，但不得把 Chain 扩成 Review/Test/Debug/Fix/Verify 的写边界。\n- Task 5 的 Chain edit 只允许 `REPLACE_NODE / ADD_NODE / REMOVE_NODE / REORDER_NODE / RENAME_CHAIN / UPDATE_NOTES`；代码事实必须来自 same-run Certified ChangeAnalysis，Runtime 只输出 `analysis/edit-candidates/<id>.yaml` + provenance，edit 本身不得直接写 `.code-harness/chains/**`。'
+          )
+          replace_exact(
+              '.code-harness/AGENTS.md',
+              '`harness init`、`harness review`、`harness api-doc`、`harness chain list/show/discover/refresh/validate`、`harness upgrade` 不要求 READY。',
+              '`harness init`、`harness review`、`harness api-doc`、`harness chain list/show/discover/refresh/edit/validate`、`harness upgrade` 不要求 READY。'
+          )
+          replace_exact(
+              '.code-harness/AGENTS.md',
+              'codea-harness-tools chain refresh --input .code-harness/runs/<runId>/requests/<file>.json\ncodea-harness-tools chain seal-persist',
+              'codea-harness-tools chain refresh --input .code-harness/runs/<runId>/requests/<file>.json\ncodea-harness-tools chain edit --input .code-harness/runs/<runId>/requests/<file>.json\ncodea-harness-tools chain seal-persist'
+          )
+          replace_exact(
+              '.code-harness/AGENTS.md',
+              '`chain seal-persist` 只接受同 run 的 Runtime-certified candidate，重新加载 Certified ChangeAnalysis、验证 candidate provenance/bytes/code facts 与当前 existing Project State hash，并生成不可变 write plan；它本身不得修改 `.code-harness/chains/**`。',
+              '`chain edit` 只接受同 run `requests/**` proposal 和 same-run Certified ChangeAnalysis，验证六类 semantic operation 与最终完整 Chain 后，只能生成 `analysis/edit-candidates/<id>.yaml` + `kind=EDIT` provenance；不得直接修改 `.code-harness/chains/**`。\n\n`chain seal-persist` 只接受同 run 的 Runtime-certified candidate（包括 `edit-candidates`），重新加载 Certified ChangeAnalysis、验证 candidate provenance/bytes/code facts 与当前 existing Project State hash，并生成不可变 write plan；它本身不得修改 `.code-harness/chains/**`。'
+          )
+
+          replace_exact('.code-harness/skills/validate-chain/SKILL.md', 'version: 2', 'version: 3')
+          replace_exact(
+              '.code-harness/skills/validate-chain/SKILL.md',
+              'harness chain refresh <id>\nharness chain validate [id]\n```',
+              'harness chain refresh <id>\nharness chain edit <id|Controller|Controller.method>\nharness chain validate [id]\n```'
+          )
+          replace_exact(
+              '.code-harness/skills/validate-chain/SKILL.md',
+              '## refresh：diff-first\n',
+              '''## edit：Task 5 semantic editing\n\n`harness chain edit <id|Controller|Controller.method>` 必须路由到 `edit-chain`。Agent 只能把六类 operation proposal 写入同 run `requests/**`：`REPLACE_NODE / ADD_NODE / REMOVE_NODE / REORDER_NODE / RENAME_CHAIN / UPDATE_NOTES`。\n\nRuntime 必须基于 same-run Certified ChangeAnalysis 验证最终完整 ordered Chain；成功后只生成：\n\n```text\n.code-harness/runs/<runId>/analysis/edit-candidates/<id>.yaml\n.code-harness/runs/<runId>/analysis/edit-candidates/<id>.cert.json   # kind=EDIT\n```\n\nEDIT candidate 不是 Project State。后续保存固定复用：\n\n```text\nedit-candidates/<id>.yaml\n→ chain seal-persist\n→ exact planId\n→ 用户明确确认当前 planId\n→ chain persist\n→ atomic .code-harness/chains/<id>.yaml write\n```\n\n不得直接编辑 `.code-harness/chains/**`，不得修改 EntryPoint，不得让未验证 node/order/dependency workspace relation 获得 Project State authority。\n\n## refresh：diff-first\n'''
+          )
+          replace_exact(
+              '.code-harness/skills/validate-chain/SKILL.md',
+              '- 不得把 Chain 接入 Task 4–6 的新功能；本 Task 只强化 Chain Artifact 与 Write Authority。',
+              '- 不得借 Task 5 edit 把 Chain 扩成 Test/Debug/Fix/Verify 的写 authority；Task 5 只强化 semantic Chain Artifact 与既有 Write Authority。'
+          )
+
+          wf = Path('.github/workflows/task153-chain-reliability.yml')
+          s = wf.read_text(encoding='utf-8')
+          s = s.replace("      - '.code-harness/contracts/change-analysis-cert.schema.json'\n", "      - '.code-harness/contracts/change-analysis-cert.schema.json'\n      - '.code-harness/contracts/chain-edit-request.schema.json'\n", 1)
+          s = s.replace("      - '.code-harness/skills/analyze-change/SKILL.md'\n", "      - '.code-harness/skills/analyze-change/SKILL.md'\n      - '.code-harness/skills/edit-chain/SKILL.md'\n      - '.code-harness/skills/validate-chain/SKILL.md'\n      - '.code-harness/agents/orchestrator.md'\n", 1)
+          marker = "      - name: Task 2 exact certified ChangeAnalysis gate\n        working-directory: .code-harness/tools-runtime\n        run: go test -count=1 ./internal/analysis ./internal/coverage ./internal/chain ./internal/reviewscope ./cmd/codea-harness-tools -run 'Test153|Test151|Test152'\n"
+          if marker not in s:
+              raise SystemExit('task153 exact step marker missing')
+          replacement = "      - name: Task 5 exact semantic Chain edit gate\n        working-directory: .code-harness/tools-runtime\n        run: go test -count=1 ./internal/chain ./cmd/codea-harness-tools -run 'Test153.*Edit|Test153ChainEditAgentContract'\n\n      - name: Task 1-5 exact 1.5.3 regression gate\n        working-directory: .code-harness/tools-runtime\n        run: go test -count=1 ./internal/analysis ./internal/coverage ./internal/chain ./internal/reviewscope ./cmd/codea-harness-tools -run 'Test153|Test151|Test152'\n"
+          s = s.replace(marker, replacement, 1)
+          wf.write_text(s, encoding='utf-8')
+
+      - name: Task 5 exact semantic Chain edit gate
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./internal/chain ./cmd/codea-harness-tools -run 'Test153.*Edit|Test153ChainEditAgentContract'
+
+      - name: Full Go test
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./...
+
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        run: go vet ./...
+
+      - name: Commit Task 5 contract GREEN
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .code-harness/AGENTS.md .code-harness/agents/orchestrator.md .code-harness/skills/edit-chain/SKILL.md .code-harness/skills/validate-chain/SKILL.md .github/workflows/task153-chain-reliability.yml
+          git commit -m "docs: finalize task5 semantic chain edit contract"
+          git push origin HEAD:docs/1.5.3-chain-reliability-editing-design
+
+      - name: Remove one-time workflow
+        run: |
+          git rm .github/workflows/task5-agent-contract-sync-once.yml
+          git commit -m "chore: remove task5 contract sync workflow"
+          git push origin HEAD:docs/1.5.3-chain-reliability-editing-design
