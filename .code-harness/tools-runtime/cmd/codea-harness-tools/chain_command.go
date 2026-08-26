@@ -42,7 +42,7 @@ type chainPersistRequest struct {
 
 func runChain(args []string) error {
 	if len(args) == 0 {
-		return errors.New("chain requires list, show, discover, review-context, refresh, validate, seal-persist, or persist")
+		return errors.New("chain requires list, show, discover, review-context, refresh, edit, validate, seal-persist, or persist")
 	}
 	switch args[0] {
 	case "list":
@@ -55,6 +55,8 @@ func runChain(args []string) error {
 		return runChainReviewContext(args[1:])
 	case "refresh":
 		return runChainRefresh(args[1:])
+	case "edit":
+		return runChainEdit(args[1:])
 	case "validate":
 		return runChainValidate(args[1:])
 	case "seal-persist":
