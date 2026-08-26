@@ -45,6 +45,32 @@ func Test153WritePlanRejectsMutatedCandidateBeforeAnalysisLookup(t *testing.T) {
 	}
 }
 
+func Test153WritePlanIDBindsCandidateAnalysisExistingAndPreviewHashes(t *testing.T) {
+	base := WritePlan{
+		RunID: "r153",
+		ChainID: "order-approve",
+		CandidatePath: ".code-harness/runs/r153/analysis/discovered-chains/order-approve.yaml",
+		CandidateHash: strings.Repeat("a", 64),
+		AnalysisHash: strings.Repeat("b", 64),
+		ExpectedExistingHash: strings.Repeat("c", 64),
+		PreviewSHA256: strings.Repeat("d", 64),
+	}
+	id := writePlanID153(base)
+	if id != writePlanID153(base) {
+		t.Fatal("identical sealed facts must produce deterministic planId")
+	}
+	variants := []WritePlan{base, base, base, base}
+	variants[0].CandidateHash = strings.Repeat("e", 64)
+	variants[1].AnalysisHash = strings.Repeat("e", 64)
+	variants[2].ExpectedExistingHash = strings.Repeat("e", 64)
+	variants[3].PreviewSHA256 = strings.Repeat("e", 64)
+	for i, variant := range variants {
+		if got := writePlanID153(variant); got == id {
+			t.Fatalf("planId must change when sealed fact %d changes", i)
+		}
+	}
+}
+
 func mustReadTask153(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)
