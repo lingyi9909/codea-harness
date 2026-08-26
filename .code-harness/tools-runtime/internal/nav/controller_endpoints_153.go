@@ -15,6 +15,7 @@ type ControllerEndpointMatch struct {
 	ControllerStartLine int
 	ControllerEndLine   int
 	StartLine           int
+	StartColumn         int
 	EndLine             int
 }
 
@@ -94,6 +95,7 @@ func (n Navigator) FindControllerEndpoints(ctx context.Context, scope string) ([
 			ControllerStartLine: controller.StartLine,
 			ControllerEndLine:   controller.EndLine,
 			StartLine:           method.StartLine,
+			StartColumn:         method.StartColumn,
 			EndLine:             method.EndLine,
 		})
 	}
