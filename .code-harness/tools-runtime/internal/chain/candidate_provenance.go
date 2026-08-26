@@ -11,6 +11,7 @@ import (
 
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/schema"
+	"gopkg.in/yaml.v3"
 )
 
 type CandidateCertificate struct {
@@ -43,6 +44,13 @@ func CertifyCandidate(root string, c Chain, candidatePath, kind string, cert ana
 	if err != nil {
 		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_READ_FAILED: %w", err)
 	}
+	expectedBytes, err := runtimeCandidateBytes153(c, pathKind)
+	if err != nil {
+		return CandidateCertificate{}, err
+	}
+	if !bytes.Equal(candidateBytes, expectedBytes) {
+		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_RUNTIME_BYTES_MISMATCH: %s", chainID)
+	}
 	loaded, err := Load(candidateAbs)
 	if err != nil {
 		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_INVALID: %w", err)
@@ -72,6 +80,25 @@ func CertifyCandidate(root string, c Chain, candidatePath, kind string, cert ana
 		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_WRITE_FAILED: %w", err)
 	}
 	return out, nil
+}
+
+func runtimeCandidateBytes153(c Chain, kind string) ([]byte, error) {
+	switch kind {
+	case "DISCOVERED":
+		data, err := yaml.Marshal(c)
+		if err != nil {
+			return nil, fmt.Errorf("CHAIN_CANDIDATE_RUNTIME_ENCODE_FAILED: %w", err)
+		}
+		return data, nil
+	case "REFRESH", "EDIT":
+		data, err := MarshalYAML(c)
+		if err != nil {
+			return nil, fmt.Errorf("CHAIN_CANDIDATE_RUNTIME_ENCODE_FAILED: %w", err)
+		}
+		return data, nil
+	default:
+		return nil, fmt.Errorf("CHAIN_CANDIDATE_KIND_MISMATCH: unsupported kind %s", kind)
+	}
 }
 
 func LoadRuntimeCandidate(root string, candidatePath string, cert analysisruntime.Certificate) (Chain, CandidateCertificate, error) {
