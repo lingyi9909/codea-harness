@@ -51,7 +51,8 @@ func Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite(t *test
 	if candidate.Name != "订单审批新名称" || candidate.Status != chain.StatusAccepted || candidate.ID != chainID {
 		t.Fatalf("unexpected edit candidate: %+v", candidate)
 	}
-	certBytes, err := os.ReadFile(candidatePath + ".cert.json")
+	certPath := strings.TrimSuffix(candidatePath, filepath.Ext(candidatePath)) + ".cert.json"
+	certBytes, err := os.ReadFile(certPath)
 	if err != nil { t.Fatalf("edit candidate certificate missing: %v", err) }
 	var cert map[string]any
 	if err := json.Unmarshal(certBytes, &cert); err != nil { t.Fatal(err) }
