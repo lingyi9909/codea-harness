@@ -3,11 +3,30 @@
   "title": "ReviewOptions",
   "type": "object",
   "additionalProperties": false,
-  "required": ["runId", "changeSetSha256", "entrypointCompleteness", "decision", "chains", "optionsHash"],
+  "required": ["runId", "changeSetSha256", "entrypointCompleteness", "intent", "decision", "chains", "optionsHash"],
   "properties": {
     "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
     "changeSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "entrypointCompleteness": {"const": "COMPLETE"},
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {"enum": ["FULL", "TARGETED"]},
+        "target": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"mode": {"const": "TARGETED"}}, "required": ["mode"]},
+          "then": {"required": ["target"]}
+        },
+        {
+          "if": {"properties": {"mode": {"const": "FULL"}}, "required": ["mode"]},
+          "then": {"not": {"required": ["target"]}}
+        }
+      ]
+    },
     "decision": {"enum": ["AUTO_FULL", "AUTO_SINGLE", "USER_SELECTION"]},
     "autoSelectionIds": {
       "type": "array",
