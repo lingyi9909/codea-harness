@@ -50,6 +50,7 @@ public abstract class AbstractTemplate {
 
 @'
 package com.company.order;
+@RestController
 class XxxController {
     private XxxServiceImpl service;
     @PostMapping
@@ -177,23 +178,30 @@ Invoke-ExpectedSuccess @('nav','workspace-superclass-call','--workspace','compan
 Invoke-ExpectedSuccess @('nav','workspace-template-dispatch','--workspace','company-framework','--from','AbstractTemplate.execute','--hook','doExecute','--concrete','XxxServiceImpl') 'XxxServiceImpl.doExecute'
 
 # TASK4_WORKSPACE_ANALYZE_CHANGE_BOOTSTRAP
-# Deterministic acceptance driver for the natural-language user intent; no ChangeAnalysis or workspace SymbolLocation is prewritten.
+# Deterministic acceptance driver for the natural-language user intent; no authoritative ChangeAnalysis is prewritten.
 $intent = 'harness chain discover XxxController'
 if ($intent -ne 'harness chain discover XxxController') { throw 'unexpected harness intent' }
 $runId = 'run-152-workspace-bootstrap'
+$draftRel = ".code-harness/runs/$runId/requests/change-analysis-draft.json"
+$certifyRequestRel = ".code-harness/runs/$runId/requests/analysis-certify.json"
 $analysisRel = ".code-harness/runs/$runId/analysis/change-analysis.json"
+$certRel = ".code-harness/runs/$runId/analysis/change-analysis.cert.json"
 $requestRel = ".code-harness/runs/$runId/requests/chain-discover.json"
+$draftAbs = Join-Path $current ($draftRel -replace '/', [IO.Path]::DirectorySeparatorChar)
+$certifyRequestAbs = Join-Path $current ($certifyRequestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
 $analysisAbs = Join-Path $current ($analysisRel -replace '/', [IO.Path]::DirectorySeparatorChar)
+$certAbs = Join-Path $current ($certRel -replace '/', [IO.Path]::DirectorySeparatorChar)
 $requestAbs = Join-Path $current ($requestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
-if (Test-Path $analysisAbs) { throw 'bootstrap analysis unexpectedly exists' }
-Write-Host 'precondition: no change-analysis.json'
+if (Test-Path $analysisAbs) { throw 'bootstrap authoritative analysis unexpectedly exists' }
+if (Test-Path $certAbs) { throw 'bootstrap certificate unexpectedly exists' }
+Write-Host 'precondition: no authoritative change-analysis.json/certificate'
 
 # Real current Change Set: the three business Java files are untracked relative to the committed baseline.
 $changedPaths = @(git -C $current ls-files --others --exclude-standard -- src/main/java | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($changedPaths.Count -ne 3) { throw "expected exactly 3 current-project changed Java files, got $($changedPaths -join ',')" }
 
 # Current-project exact paths come from real Controlled Runtime Code Navigation.
-$controllerNav = Invoke-RuntimeJson @('nav','find-symbol','--symbol','XxxController','--scope','src/main/java')
+$controllerNav = Invoke-RuntimeJson @('nav','find-symbol','--symbol','XxxController.submit','--scope','src/main/java')
 $serviceNav = Invoke-RuntimeJson @('nav','find-implementations','--symbol','AbstractTemplate','--scope','src/main/java')
 $mapperNav = Invoke-RuntimeJson @('nav','find-symbol','--symbol','XxxMapper','--scope','src/main/java')
 if ($controllerNav.matches.Count -ne 1 -or $serviceNav.matches.Count -ne 1 -or $mapperNav.matches.Count -ne 1) {
@@ -254,18 +262,34 @@ $analysis = [ordered]@{
     reviewCoverage = [ordered]@{ status='COMPLETE'; reviewedFiles=$reviewedFiles; unresolvedSymbols=@() }
 }
 
-New-Item -ItemType Directory -Force (Split-Path $analysisAbs),(Split-Path $requestAbs) | Out-Null
-$analysis | ConvertTo-Json -Depth 12 | Set-Content $analysisAbs
-if (-not (Test-Path $analysisAbs)) { throw 'analyze-change did not generate change-analysis.json' }
-$analysisText = Get-Content $analysisAbs -Raw
-if ($analysisText -notmatch 'company-framework' -or $analysisText -notmatch 'WORKSPACE_INHERITANCE') {
-    throw 'generated ChangeAnalysis missing runtime-produced workspace evidence'
+New-Item -ItemType Directory -Force (Split-Path $draftAbs),(Split-Path $analysisAbs) | Out-Null
+$analysis | ConvertTo-Json -Depth 12 | Set-Content $draftAbs
+if (-not (Test-Path $draftAbs)) { throw 'analyze-change did not generate proposal draft' }
+$draftText = Get-Content $draftAbs -Raw
+if ($draftText -notmatch 'company-framework' -or $draftText -notmatch 'WORKSPACE_INHERITANCE') {
+    throw 'generated ChangeAnalysis draft missing runtime-produced workspace evidence'
 }
 if (($analysis.reviewCoverage.reviewedFiles | Where-Object { $_.path -eq $inherited.fact.path }).Count -ne 0) {
     throw 'dependency workspace path leaked into reviewCoverage.reviewedFiles'
 }
 
-Invoke-ExpectedSuccess @('validate','--schema','.code-harness/contracts/change-analysis.schema.json','--input',$analysisRel,'--format','json') 'VALID'
+Invoke-ExpectedSuccess @('validate','--schema','.code-harness/contracts/change-analysis.schema.json','--input',$draftRel,'--format','json') 'VALID'
+$certifyRequest = [ordered]@{
+    runId = $runId
+    draftPath = $draftRel
+    baseRef = 'HEAD'
+    includeWorkingTree = $true
+    intent = [ordered]@{ mode='FULL' }
+}
+$certifyRequest | ConvertTo-Json -Depth 6 | Set-Content $certifyRequestAbs
+Invoke-ExpectedSuccess @('analysis','certify','--input',$certifyRequestRel) 'CERTIFIED'
+if (-not (Test-Path $analysisAbs) -or -not (Test-Path $certAbs)) { throw 'Runtime certification did not publish authoritative analysis + certificate' }
+$analysisText = Get-Content $analysisAbs -Raw
+if ($analysisText -notmatch 'company-framework' -or $analysisText -notmatch 'WORKSPACE_INHERITANCE') {
+    throw 'certified ChangeAnalysis missing runtime-produced workspace evidence'
+}
+Write-Host 'Certified ChangeAnalysis PASS'
+
 $request = [ordered]@{ runId=$runId; target='XxxController'; changeAnalysisPath=$analysisRel }
 $request | ConvertTo-Json -Depth 6 | Set-Content $requestAbs
 Invoke-ExpectedSuccess @('chain','discover','--input',$requestRel) 'COMPLETE'
