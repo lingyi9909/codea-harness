@@ -198,12 +198,12 @@ func Test153Upgrade152To153PreservesAllProjectStateBytes(t *testing.T) {
 	write(t, target, "skills/stale-152/SKILL.md", "remove-me\n")
 	write(t, target, "bin/codea-harness-tools.exe", "accepted-1.5.2-runtime")
 	state := map[string][]byte{
-		"harness.yaml": validConfig("review:\n  baseRef: origin/custom-release\n  includeWorkingTree: false\n"),
-		"project.md": []byte("project-152\r\n"),
-		"database.yaml": []byte("version: 1\r\npassword: keep-secret\r\n"),
+		"harness.yaml":                    []byte(validConfig("review:\n  baseRef: origin/custom-release\n  includeWorkingTree: false\n")),
+		"project.md":                      []byte("project-152\r\n"),
+		"database.yaml":                   []byte("version: 1\r\npassword: keep-secret\r\n"),
 		"runs/run-152/requests/agent-proposal.json": []byte("{\"proposal\":\"must-remain-proposal\"}\r\n"),
-		"runs/run-152/evidence/result.bin": []byte{1, 2, 3, 4, 5},
-		"chains/order-approve.yaml": []byte("# accepted user chain\r\nversion: 1\r\nid: order-approve\r\nstatus: ACCEPTED\r\n"),
+		"runs/run-152/evidence/result.bin":          []byte{1, 2, 3, 4, 5},
+		"chains/order-approve.yaml":                 []byte("# accepted user chain\r\nversion: 1\r\nid: order-approve\r\nstatus: ACCEPTED\r\n"),
 	}
 	before := make(map[string][32]byte, len(state))
 	for rel, data := range state {
