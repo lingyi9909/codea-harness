@@ -24,7 +24,7 @@ func setupTask153AcceptedChainForEdit(t *testing.T, runID string) (string, strin
 }
 
 func task153EditCandidatePath(runID, chainID string) string {
-	return filepath.Join(".code-harness", "runs", runID, "analysis", "edit-candidates", chainID+".yaml")
+	return filepath.Join(".code-harness", "runs", runID, "analysis", "chain-edit-candidates", chainID+".yaml")
 }
 
 func runTask153RenameEdit(t *testing.T, runID, chainID, name string) string {
@@ -63,6 +63,23 @@ func sealTask153NewCandidate(t *testing.T, runID, candidatePath string) string {
 	}
 	if len(added) != 1 { t.Fatalf("expected exactly one new write plan, got %v", added) }
 	return strings.TrimSuffix(added[0], ".json")
+}
+
+func Test153EditCommandRequiresChainMaintenanceCertifiedIntent(t *testing.T) {
+	runID := "run-153-edit-intent"
+	_, chainID := setupTask153AcceptedChainForEdit(t, runID)
+	requestPath := writeQueryRequest(t, runID, "chain-edit-intent.json", `{
+  "runId":"`+runID+`",
+  "chainId":"`+chainID+`",
+  "changeAnalysisPath":".code-harness/runs/`+runID+`/analysis/change-analysis.json",
+  "operations":[{"type":"RENAME_CHAIN","name":"不应被普通认证授权"}]
+}`)
+	if err := run([]string{"chain", "edit", "--input", requestPath}); err == nil || !strings.Contains(err.Error(), "CHAIN_EDIT_ANALYSIS_INTENT_MISMATCH") {
+		t.Fatalf("edit must require CHAIN_MAINTENANCE certified intent, got %v", err)
+	}
+	if _, err := os.Stat(task153EditCandidatePath(runID, chainID)); !os.IsNotExist(err) {
+		t.Fatalf("wrong analysis intent must produce no edit candidate, stat=%v", err)
+	}
 }
 
 func Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite(t *testing.T) {
