@@ -29,16 +29,20 @@ type chainRefreshRequest struct {
 	DiscoveredPath string `json:"discoveredPath"`
 }
 
-type chainPersistRequest struct {
+type chainSealPersistRequest struct {
 	RunID               string `json:"runId"`
 	CandidatePath        string `json:"candidatePath"`
-	ChangeAnalysisPath   string `json:"changeAnalysisPath"`
 	ExpectedExistingHash string `json:"expectedExistingHash,omitempty"`
+}
+
+type chainPersistRequest struct {
+	RunID  string `json:"runId"`
+	PlanID string `json:"planId"`
 }
 
 func runChain(args []string) error {
 	if len(args) == 0 {
-		return errors.New("chain requires list, show, discover, review-context, refresh, validate, or persist")
+		return errors.New("chain requires list, show, discover, review-context, refresh, validate, seal-persist, or persist")
 	}
 	switch args[0] {
 	case "list":
@@ -53,6 +57,8 @@ func runChain(args []string) error {
 		return runChainRefresh(args[1:])
 	case "validate":
 		return runChainValidate(args[1:])
+	case "seal-persist":
+		return runChainSealPersist(args[1:])
 	case "persist":
 		return runChainPersist(args[1:])
 	default:
@@ -149,13 +155,19 @@ func runChainDiscover(args []string) error {
 		return errors.New("chain discovery changeAnalysisPath must be .code-harness/runs/<runId>/analysis/change-analysis.json for the same run")
 	}
 
-	evidence, _, err := loadVerifiedChainAnalysis(req.ChangeAnalysisPath)
+	evidence, cert, err := loadCertifiedChainAnalysis(req.ChangeAnalysisPath)
 	if err != nil {
 		return err
 	}
 	result, err := chain.Discover(".", chain.DiscoverInput{RunID: req.RunID, Target: req.Target, ChangeAnalysis: evidence})
 	if err != nil {
 		return err
+	}
+	for _, candidate := range result.Chains {
+		candidatePath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "discovered-chains", candidate.ID+".yaml"))
+		if _, err := chain.CertifyCandidate(".", candidate, candidatePath, "DISCOVERED", cert); err != nil {
+			return fmt.Errorf("certify discovered chain candidate: %w", err)
+		}
 	}
 	return writeJSONAndStatus(result, result.Status == chain.DiscoveryComplete)
 }
@@ -191,7 +203,8 @@ func runChainRefresh(args []string) error {
 		return errors.New("chain refresh discoveredPath must be under the same run analysis/discovered-chains directory")
 	}
 	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-analysis.json"))
-	if _, _, err := loadVerifiedChainAnalysis(analysisPath); err != nil {
+	_, cert, err := loadCertifiedChainAnalysis(analysisPath)
+	if err != nil {
 		return fmt.Errorf("chain refresh requires certified ChangeAnalysis: %w", err)
 	}
 	existingPath, err := chain.ChainPath(".", req.ID)
@@ -202,9 +215,9 @@ func runChainRefresh(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load existing chain: %w", err)
 	}
-	discovered, err := chain.Load(filepath.Clean(req.DiscoveredPath))
+	discovered, _, err := chain.LoadRuntimeCandidate(".", filepath.ToSlash(filepath.Clean(req.DiscoveredPath)), cert)
 	if err != nil {
-		return fmt.Errorf("load discovered chain: %w", err)
+		return fmt.Errorf("load Runtime-certified discovered chain: %w", err)
 	}
 	result := chain.Refresh(".", existing, discovered)
 	if len(result.Errors) != 0 {
@@ -221,7 +234,39 @@ func runChainRefresh(args []string) error {
 	if err := os.WriteFile(candidatePath, candidateBytes, 0o644); err != nil {
 		return fmt.Errorf("write refresh candidate: %w", err)
 	}
+	if _, err := chain.CertifyCandidate(".", result.Candidate, filepath.ToSlash(candidatePath), "REFRESH", cert); err != nil {
+		return fmt.Errorf("certify refresh chain candidate: %w", err)
+	}
 	return writeJSONAndStatus(map[string]any{"status": "DIFF_READY", "candidatePath": filepath.ToSlash(candidatePath), "refresh": result}, true)
+}
+
+func runChainSealPersist(args []string) error {
+	fs := flag.NewFlagSet("chain seal-persist", flag.ContinueOnError)
+	inputPath := fs.String("input", "", "chain persistence sealing request under .code-harness/runs/<runId>/requests/*.json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || *inputPath == "" {
+		return errors.New("chain seal-persist requires --input")
+	}
+	pathRunID, cleanInput, err := validateChainRequestPath(*inputPath)
+	if err != nil { return err }
+	data, err := os.ReadFile(cleanInput)
+	if err != nil { return err }
+	var req chainSealPersistRequest
+	if err := decodeStrictChainRequest(data, &req, "chain seal-persist request"); err != nil {
+		return err
+	}
+	if req.RunID != pathRunID || !validChainArtifactID(req.RunID) {
+		return fmt.Errorf("RUN_ID_PATH_MISMATCH: body runId %q does not match request path runId %q", req.RunID, pathRunID)
+	}
+	if strings.TrimSpace(req.CandidatePath) == "" {
+		return errors.New("chain seal-persist request requires candidatePath")
+	}
+	plan, err := chain.SealWritePlan(".", req.RunID, req.CandidatePath, req.ExpectedExistingHash)
+	if err != nil { return err }
+	planPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "chain-write-plans", plan.PlanID+".json"))
+	return writeJSONAndStatus(map[string]any{"status": "SEALED", "planId": plan.PlanID, "planPath": planPath, "plan": plan}, true)
 }
 
 func runChainPersist(args []string) error {
@@ -243,35 +288,18 @@ func runChainPersist(args []string) error {
 	}
 	var req chainPersistRequest
 	if err := decodeStrictChainRequest(data, &req, "chain persist request"); err != nil {
-		return err
+		return fmt.Errorf("chain persist request accepts only runId and planId: %w", err)
 	}
 	if req.RunID != pathRunID || !validChainArtifactID(req.RunID) {
 		return fmt.Errorf("RUN_ID_PATH_MISMATCH: body runId %q does not match request path runId %q", req.RunID, pathRunID)
 	}
-	if !sameRunChangeAnalysisPath(req.ChangeAnalysisPath, req.RunID) {
-		return errors.New("chain persist changeAnalysisPath must be under the same run")
+	if strings.TrimSpace(req.PlanID) == "" {
+		return errors.New("chain persist request requires planId")
 	}
-	if !sameRunChainAnalysisArtifact(req.CandidatePath, req.RunID, "refresh-candidates") && !sameRunChainAnalysisArtifact(req.CandidatePath, req.RunID, "discovered-chains") {
-		return errors.New("chain persist candidatePath must be a same-run discovered or refresh candidate")
-	}
-	candidate, err := chain.Load(filepath.Clean(req.CandidatePath))
-	if err != nil {
-		return fmt.Errorf("load chain persistence candidate: %w", err)
-	}
-	candidate.Status = chain.StatusAccepted
-	analysis, _, err := loadVerifiedChainAnalysis(req.ChangeAnalysisPath)
-	if err != nil {
+	if err := chain.PersistWritePlan(".", req.RunID, req.PlanID); err != nil {
 		return err
 	}
-	validation := chain.Validate(".", candidate, chain.EvidenceSnapshot(analysis))
-	if validation.Status != chain.ValidationValid {
-		return writeJSONAndStatus(map[string]any{"status": "VALIDATION_FAILED", "validation": validation}, false)
-	}
-	if err := chain.SaveAccepted(".", candidate, req.ExpectedExistingHash); err != nil {
-		return err
-	}
-	path, _ := chain.ChainPath(".", candidate.ID)
-	return writeJSONAndStatus(map[string]any{"status": "PERSISTED", "chainId": candidate.ID, "path": filepath.ToSlash(path), "validation": validation}, true)
+	return writeJSONAndStatus(map[string]any{"status": "PERSISTED", "planId": req.PlanID}, true)
 }
 
 func findProjectChain(root, target string) (chain.Chain, error) {
@@ -323,18 +351,26 @@ func exactSymbolOwner(symbol string) string {
 	return symbol[:idx]
 }
 
-func loadVerifiedChainAnalysis(value string) (chain.ChangeAnalysisEvidence, string, error) {
+func loadCertifiedChainAnalysis(value string) (chain.ChangeAnalysisEvidence, analysisruntime.Certificate, error) {
 	certified, cert, err := loadCertifiedAnalysis153(".", value)
 	if err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("load certified ChangeAnalysis: %w", err)
+		return chain.ChangeAnalysisEvidence{}, analysisruntime.Certificate{}, fmt.Errorf("load certified ChangeAnalysis: %w", err)
 	}
 	analysisBytes, err := json.Marshal(certified)
 	if err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("encode certified ChangeAnalysis for chain: %w", err)
+		return chain.ChangeAnalysisEvidence{}, analysisruntime.Certificate{}, fmt.Errorf("encode certified ChangeAnalysis for chain: %w", err)
 	}
 	var evidence chain.ChangeAnalysisEvidence
 	if err := json.Unmarshal(analysisBytes, &evidence); err != nil {
-		return chain.ChangeAnalysisEvidence{}, "", fmt.Errorf("decode certified chain ChangeAnalysis: %w", err)
+		return chain.ChangeAnalysisEvidence{}, analysisruntime.Certificate{}, fmt.Errorf("decode certified chain ChangeAnalysis: %w", err)
+	}
+	return evidence, cert, nil
+}
+
+func loadVerifiedChainAnalysis(value string) (chain.ChangeAnalysisEvidence, string, error) {
+	evidence, cert, err := loadCertifiedChainAnalysis(value)
+	if err != nil {
+		return chain.ChangeAnalysisEvidence{}, "", err
 	}
 	return evidence, cert.RunID, nil
 }
