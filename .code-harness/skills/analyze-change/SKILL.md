@@ -1,7 +1,7 @@
 ---
 name: analyze-change
 description: 计算完整 Review Change Set，并按 FULL/TARGETED 意图通过受控 Code Navigation 与资源关系证据建立可机器验证的 Review Scope。
-version: 5
+version: 6
 agent: reviewer
 tools:
   - git_diff
@@ -54,6 +54,8 @@ TARGETED 不是 sampled review。只有它声明的全部 scopedFiles 与 select
 8. current project 符号定位优先使用 `find_symbol` / `find_references` / `find_implementations`；只有在 superclass/template inheritance 导致 current-project 导航断链时，才允许进入下述 VERIFIED workspace fallback。不得靠 basename/简单类名猜路径。
 9. Agent 声明 COMPLETE 不是事实，必须经过 Runtime machine gate。
 10. **不允许 sampled review** 进入 COMPLETE/PASSED。
+11. 1.5.3 起本 Skill 产出的 ChangeAnalysis 只是 proposal；Agent 只能写同 run `requests/change-analysis-draft.json`，不得直接写 authoritative `analysis/change-analysis.json` / `entrypoint-inventory.json` / `change-analysis.cert.json`。
+12. 后续 Review/Chain 只能消费 Controlled Runtime `analysis certify` 生成并经 `LoadCertified` 验证的 Certified ChangeAnalysis。
 
 ## A. 建立完整 Change Set
 
@@ -187,7 +189,7 @@ from
     - dependency workspace 仅作为 Navigation / Chain Context，不作为 Review 文件；
     - 外部边界已明确列为 `externalDependencies`；
     - `unresolvedSymbols` 为空。
-26. 组装 ChangeAnalysis 后用 `change-analysis.schema.json` + Runtime FULL Coverage 验证；不得跳过 `coverage.VerifyAnalysisJSON`。Runtime 必须拒绝 dependency workspace path 混入 `reviewCoverage.reviewedFiles[]`。
+26. 组装 ChangeAnalysis draft 后先按 schema 自检，但最终必须交给 Runtime `analysis certify` 重新计算并执行 FULL Coverage；不得仅凭 Agent `coverage.VerifyAnalysisJSON` 结果把 draft 视为 authoritative。Runtime 必须拒绝 dependency workspace path 混入 `reviewCoverage.reviewedFiles[]`。
 
 ## E. TARGETED Review
 
@@ -216,7 +218,7 @@ role/source 合法：MapperXml/MAPPER_STATEMENT 或 YamlConfig/CONFIG_REFERENCE
 32. 满足上述条件的 changed Mapper.xml/YML 必须加入 TARGETED scopedFiles；遗漏时 Runtime 拒绝。与 selected chain 无关的 changed resource 必须留在完整 Change Set，但不得加入本次 scopedFiles。
 33. **无法证明关联时不得加入 TARGETED scopedFiles**；不得为了“多看一点”把 UserMapper.xml 或无关 YML 塞进定向 Scope。
 34. 读取所有 verified scopedFiles；任一缺失都必须 PARTIAL。
-35. Controlled Runtime `reviewscope.Verify` 必须重新验证：selected chain、Controller 防漏链、Java exact path、resource relation exact path、required resources、scoped coverage。
+35. Controlled Runtime `reviewscope.Verify` 必须基于 Certified ChangeAnalysis 重新验证：selected chain、Controller 防漏链、Java exact path、resource relation exact path、required resources、scoped coverage。
 36. TARGETED 不允许使用 FULL Coverage 去要求 unrelated changed files 被读取；但也不得仅凭 Agent 自报 COMPLETE 放行。
 
 ## F. `harness review list`
@@ -228,9 +230,35 @@ role/source 合法：MapperXml/MAPPER_STATEMENT 或 YamlConfig/CONFIG_REFERENCE
 
 向下 Java 导航仍在以下边界停止：Repository / Mapper / DAO、明确 RPC/HTTP/MQ/Cache/第三方 SDK、JDK/Spring Framework。Task 2 允许读取 changed Mapper.xml/YML 本身，但不因此继续深入 DB、Redis、MQ、RPC 内部链路。
 
+## 1.5.3 Certification Boundary
+
+完成上述分析后，本 Skill **只写 proposal**：
+
+```text
+.code-harness/runs/<runId>/requests/change-analysis-draft.json
+```
+
+随后创建同 run certify request，并由 Controlled Runtime 执行：
+
+```text
+codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests/<certify-request>.json
+```
+
+Runtime 固定执行：重新计算当前 Change Set → 重新生成 EntryPoint Inventory → exact changedFiles/source 对比 → EntryPoint completeness → symbol/resource evidence invariants → Coverage → canonical hash/certificate → 原子发布。
+
+成功后唯一权威产物为：
+
+```text
+.code-harness/runs/<runId>/analysis/change-analysis.json
+.code-harness/runs/<runId>/analysis/entrypoint-inventory.json
+.code-harness/runs/<runId>/analysis/change-analysis.cert.json
+```
+
+Agent 不得直接创建、覆盖、补写或修复这三个文件。Certification 返回 `ENTRYPOINT_COMPLETENESS_INCOMPLETE`、`CHANGE_SET_MISMATCH`、evidence invariant failure 或其他错误时，固定停止为 `MANUAL_ACTION_REQUIRED` / `PARTIAL`；不得偷偷删除漏掉的 endpoint、changed file 或 evidence 后继续。后续如 Change Set 变化，原 certificate 视为 stale，必须重新分析并重新 certify。
+
 ## 输出
 
-ChangeAnalysis 继续符合 `.code-harness/contracts/change-analysis.schema.json`，可包含：
+Proposal 的 JSON 结构继续符合 `.code-harness/contracts/change-analysis.schema.json`，可包含：
 
 - `reviewScope`
 - `changedFiles[]`
@@ -242,13 +270,15 @@ ChangeAnalysis 继续符合 `.code-harness/contracts/change-analysis.schema.json
 - `riskAreas[]`
 - `reviewCoverage`
 
-TARGETED 额外生成的 ReviewScopeSelection 必须继续通过 `.code-harness/contracts/review-scope.schema.json`，然后由 Controlled Runtime 对照 ChangeAnalysis 验证。
+但只有 `analysis certify` 成功后，同 run `analysis/change-analysis.json` 才能被称为 Certified ChangeAnalysis；`requests/change-analysis-draft.json` 永远不能直接作为 Review/Chain authority。
+
+TARGETED 额外生成的 ReviewScopeSelection 必须继续通过 `.code-harness/contracts/review-scope.schema.json`，然后由 Controlled Runtime 对照 Certified ChangeAnalysis 验证。
 
 `resourceRelations[]` 是可选证据集合；FULL 可没有 relation 但不能漏读 changed resources。TARGETED 只有 relation 被机器验证后才允许资源进入 Scope。
 
 ## Lazy Chain Discovery（1.5 Task 2）
 
-`analyze-change` 仍然负责建立唯一的机器证据源；Chain Discovery 不重新解析 Java，也不得覆盖 ChangeAnalysis 事实。
+`analyze-change` 仍然负责建立唯一的证据 proposal；Chain Discovery 不重新解析 Java，也不得覆盖 Certified ChangeAnalysis 事实。
 
 当用户发起：
 
@@ -258,7 +288,7 @@ harness chain discover <Class>
 harness chain discover <Class.method>
 ```
 
-必须先完成当前 Change Set 的 ChangeAnalysis，并通过 `change-analysis.schema.json` 与 Runtime machine coverage。之后 `discover-chain` 只消费已验证的：
+必须先完成当前 Change Set 的 draft 并通过 `analysis certify`。之后 `discover-chain` 只消费 Certified：
 
 ```text
 ChangeAnalysis.affectedControllers[]
@@ -269,7 +299,7 @@ ChangeAnalysis.externalDependencies[]
 ChangeAnalysis.reviewCoverage.unresolvedSymbols[]
 ```
 
-EntryPoint 只允许 **生产 Controller Method**。exact path 与 role 必须来自 `ChangeAnalysis.symbolLocations[]`；Mapper.xml/YML 只允许来自 `ChangeAnalysis.resourceRelations[]`。不得根据类名后缀、basename 或同名文件猜 Controller/Service/Impl/Mapper role/path。
+EntryPoint 只允许 **生产 Controller Method**。exact path 与 role 必须来自 Certified `ChangeAnalysis.symbolLocations[]`；Mapper.xml/YML 只允许来自 Certified `ChangeAnalysis.resourceRelations[]`。不得根据类名后缀、basename 或同名文件猜 Controller/Service/Impl/Mapper role/path。
 
 Lazy 范围固定：无 target 只处理当前 Change Set 的 affectedControllers；有 target 只处理当前 confirmed callChains 中与 target 有关系的入口/分支。Service 等下游 target 可以沿 verified callChains 向上解析生产 Controller Method，但不得因此全仓扫描所有 Controller。
 
@@ -285,29 +315,33 @@ Task 2 发现结果只写：
 
 ## Review Chain Context（1.5 Task 4）
 
-Review 使用 Chain 时仍必须**先完成 ChangeAnalysis**；Chain 解析不建立第二套 Java/resource 事实源。
+Review 使用 Chain 时仍必须**先完成 Certified ChangeAnalysis**；Chain 解析不建立第二套 Java/resource 事实源。
 
 固定顺序：
 
-1. 按本 Skill 原流程建立完整 Change Set、ChangeAnalysis、symbolLocations/resourceRelations/callChains。
-2. FULL 先通过原 FULL machine coverage；TARGETED 先生成并通过 Runtime verified ReviewScopeSelection + scoped coverage。
-3. 将已经验证的 Review Scope 连同同 run `changeAnalysisPath` 写入 controlled request。
-4. 由 Orchestrator 调用：
+1. 按本 Skill 原流程建立完整 Change Set、ChangeAnalysis draft、symbolLocations/resourceRelations/callChains。
+2. 调用 `analysis certify`，获得同 run Certified ChangeAnalysis；失败立即停止。
+3. FULL 使用 Certified ChangeAnalysis 的 FULL machine coverage；TARGETED 基于 Certified ChangeAnalysis 生成并通过 Runtime verified ReviewScopeSelection + scoped coverage。
+4. 将已经验证的 Review Scope 连同同 run `changeAnalysisPath` 写入 controlled request。
+5. 由 Orchestrator 调用：
 
 ```text
 codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
 ```
 
-5. Runtime 才能决定复用 `ACCEPTED + VALID`、缺失时 lazy discover `DISCOVERED + TEMPORARY`，或返回 STALE/partial 决策状态。
+6. Runtime 才能决定复用 `ACCEPTED + VALID`、缺失时 lazy discover `DISCOVERED + TEMPORARY`，或返回 STALE/partial 决策状态。
 
 **不得因为存在 Chain 而减少 changedFiles**；FULL 的 Change Set 与 required coverage 完全不变。
-**不得因为存在 Chain 而减少 scopedFiles**；TARGETED 的 scopedFiles 仍只能由 verified ChangeAnalysis + ReviewScopeSelection 决定。
+**不得因为存在 Chain 而减少 scopedFiles**；TARGETED 的 scopedFiles 仍只能由 Certified ChangeAnalysis + ReviewScopeSelection 决定。
 
 Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 symbol/path/role/resource relation，不得用 `.code-harness/chains/*.yaml` 替代 Code Navigation evidence。
 
 ## 禁止行为
 
 - 不得跳过 Change Set 计算。
+- 不得把 `requests/change-analysis-draft.json` 当成权威 ChangeAnalysis。
+- 不得直接写/改 Runtime-owned `analysis/change-analysis.json`、`analysis/entrypoint-inventory.json`、`analysis/change-analysis.cert.json`。
+- 不得跳过 `analysis certify`。
 - FULL 不得跳过 changed Java/test/Mapper.xml/YML required files。
 - FULL 不得把 `workspace != current` 的 dependency source 写入 `reviewCoverage.reviewedFiles[]`。
 - TARGETED 不得把 scope 外 changed files 标为 reviewed。
@@ -319,4 +353,4 @@ Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 s
 - 不得跳过 Runtime machine gate 并相信 Agent COMPLETE。
 - 不得 sampled review。
 - 不得执行任意 Shell、`git fetch` 或 `git pull`。
-- 不得修改文件。
+- 不得修改生产代码或测试代码。
