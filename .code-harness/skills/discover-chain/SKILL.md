@@ -23,7 +23,7 @@ harness chain discover OrderController.approve
 
 ## Chain Discover Bootstrap（1.5.1）
 
-`harness chain discover [target] 是自包含流程`。用户直接执行 discovery 时，不要求历史 Chain、既有 Review Run，也不得要求用户先执行 `harness review`。
+`harness chain discover [target] 是自包含流程`。用户直接执行 discovery 时，不要求历史 Chain、既有 Review Run，**不得要求用户先执行 harness review**。
 
 1.5.3 在保留 1.5.1 bootstrap 语义的基础上，把原来的 Schema/coverage 前置校验收敛进 Runtime certification：`analyze-change` 提案完成后，由 Runtime 执行 `ChangeAnalysis Schema validate` 与 `Runtime machine coverage verify`，再产出 Certified ChangeAnalysis。source revision / Change Set 不存在或已过期时自动重新 analyze-change，不复用 stale authority。
 
