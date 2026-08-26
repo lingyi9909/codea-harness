@@ -1,0 +1,42 @@
+name: task153-chain-reliability
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.code-harness/contracts/change-analysis-cert.schema.json'
+      - '.code-harness/tools-runtime/internal/analysis/**'
+      - '.code-harness/tools-runtime/internal/coverage/**'
+      - '.code-harness/tools-runtime/internal/chain/**'
+      - '.code-harness/tools-runtime/internal/reviewscope/**'
+      - '.code-harness/tools-runtime/cmd/codea-harness-tools/**'
+      - '.code-harness/skills/analyze-change/SKILL.md'
+      - '.code-harness/agents/reviewer.md'
+      - '.code-harness/AGENTS.md'
+      - '.github/workflows/task153-chain-reliability.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  certified-analysis-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+
+      - name: Task 2 exact certified ChangeAnalysis gate
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./internal/analysis ./internal/coverage ./internal/chain ./internal/reviewscope ./cmd/codea-harness-tools -run 'Test153|Test151|Test152'
+
+      - name: Full Go test
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./...
+
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        run: go vet ./...
