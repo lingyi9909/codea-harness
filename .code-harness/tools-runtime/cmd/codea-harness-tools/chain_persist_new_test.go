@@ -15,6 +15,7 @@ func TestChainPersistNewDiscoveredCandidateAfterValidation(t *testing.T) {
 	runID := "run-new-chain"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
 	writeFile(t, analysisPath, task3AnalysisJSON(false))
+	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
 	candidatePath := filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains", "order-approve.yaml")
 	writeFile(t, candidatePath, strings.Replace(task3AcceptedYAML, "status: ACCEPTED", "status: DISCOVERED", 1))
 	requestPath := writeQueryRequest(t, runID, "chain-persist.json", `{"runId":"run-new-chain","candidatePath":".code-harness/runs/run-new-chain/analysis/discovered-chains/order-approve.yaml","changeAnalysisPath":".code-harness/runs/run-new-chain/analysis/change-analysis.json"}`)
