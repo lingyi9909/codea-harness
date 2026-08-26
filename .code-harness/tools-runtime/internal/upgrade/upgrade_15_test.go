@@ -177,3 +177,85 @@ func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectState
 		t.Fatalf("stage/backup leaked after current 1.5.x upgrade: %v", matches)
 	}
 }
+
+func Test153Upgrade152To153PreservesAllProjectStateBytes(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, ".code-harness")
+	source := filepath.Join(root, ".code-harness-upgrade")
+	harnessRoot := filepath.Clean(filepath.Join("..", "..", ".."))
+	if err := copyTree(harnessRoot, source, nil); err != nil {
+		t.Fatalf("copy 1.5.3 release source: %v", err)
+	}
+	if got := strings.TrimSpace(string(mustRead153Upgrade(t, filepath.Join(source, "VERSION")))); got != "1.5.3" {
+		t.Fatalf("Task 6 source VERSION=%q want 1.5.3", got)
+	}
+	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-1.5.3")
+	write(t, source, "bin/ast-grep.exe", "release-ast-grep-0.42.1")
+	write(t, source, "chains/package-business.yaml", "must-never-install\n")
+
+	write(t, target, "VERSION", "1.5.2\n")
+	write(t, target, "AGENTS.md", "accepted-1.5.2-framework\n")
+	write(t, target, "skills/stale-152/SKILL.md", "remove-me\n")
+	write(t, target, "bin/codea-harness-tools.exe", "accepted-1.5.2-runtime")
+	state := map[string][]byte{
+		"harness.yaml": validConfig("review:\n  baseRef: origin/custom-release\n  includeWorkingTree: false\n"),
+		"project.md": []byte("project-152\r\n"),
+		"database.yaml": []byte("version: 1\r\npassword: keep-secret\r\n"),
+		"runs/run-152/requests/agent-proposal.json": []byte("{\"proposal\":\"must-remain-proposal\"}\r\n"),
+		"runs/run-152/evidence/result.bin": []byte{1, 2, 3, 4, 5},
+		"chains/order-approve.yaml": []byte("# accepted user chain\r\nversion: 1\r\nid: order-approve\r\nstatus: ACCEPTED\r\n"),
+	}
+	before := make(map[string][32]byte, len(state))
+	for rel, data := range state {
+		p := filepath.Join(target, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil { t.Fatal(err) }
+		if err := os.WriteFile(p, data, 0o644); err != nil { t.Fatal(err) }
+		before[rel] = sha256.Sum256(data)
+	}
+
+	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/custom-release"}}})
+	if result.Status != StatusUpgraded || result.FromVersion != "1.5.2" || result.ToVersion != "1.5.3" {
+		t.Fatalf("expected exact 1.5.2 -> 1.5.3 upgrade, result=%+v", result)
+	}
+	for rel, want := range before {
+		got := mustRead153Upgrade(t, filepath.Join(target, filepath.FromSlash(rel)))
+		if sum := sha256.Sum256(got); sum != want {
+			t.Fatalf("1.5.2 -> 1.5.3 changed Project State %s: got=%x want=%x", rel, sum, want)
+		}
+	}
+	if got := strings.TrimSpace(string(mustRead153Upgrade(t, filepath.Join(target, "VERSION")))); got != "1.5.3" {
+		t.Fatalf("upgraded VERSION=%q want 1.5.3", got)
+	}
+	if strings.Contains(string(mustRead153Upgrade(t, filepath.Join(target, "harness.yaml"))), "workspaceDependencies:") {
+		t.Fatal("1.5.2 -> 1.5.3 must not auto-inject workspaceDependencies")
+	}
+	for _, rel := range []string{
+		"contracts/entrypoint-inventory.schema.json",
+		"contracts/change-analysis-cert.schema.json",
+		"contracts/review-options.schema.json",
+		"contracts/chain-edit-request.schema.json",
+		"skills/edit-chain/SKILL.md",
+	} {
+		if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("1.5.3 Framework missing %s: %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(target, "chains", "package-business.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("release package Chain leaked into Project State: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "skills", "stale-152", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatal("stale 1.5.2 Framework survived managed replace")
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("upgrade source must be consumed after success: %v", err)
+	}
+}
+
+func mustRead153Upgrade(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return data
+}
