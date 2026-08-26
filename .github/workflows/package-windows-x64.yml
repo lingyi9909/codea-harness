@@ -322,6 +322,15 @@ jobs:
             )) {
               if (!(Test-Path $rel)) { throw "installed 1.5.3 missing $rel" }
             }
+
+            $probeOut = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe-153.out'
+            $probeErr = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe-153.err'
+            $probeExe = (Resolve-Path '.\.code-harness\bin\codea-harness-tools.exe').Path
+            $probe = Start-Process -FilePath $probeExe -ArgumentList @('chain','validate') -Wait -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
+            $probeText = @((Get-Content $probeOut -ErrorAction SilentlyContinue),(Get-Content $probeErr -ErrorAction SilentlyContinue)) -join "`n"
+            if ($probe.ExitCode -eq 0 -or $probeText -notmatch 'chain validate requires --id and --change-analysis') { throw "installed chain validate capability probe failed: $probeText" }
+            $global:LASTEXITCODE = 0
+
             if (Test-Path '.code-harness-upgrade') { throw 'upgrade source was not cleaned' }
           } finally {
             Pop-Location
