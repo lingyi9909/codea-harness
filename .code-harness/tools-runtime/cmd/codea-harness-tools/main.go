@@ -151,16 +151,8 @@ func runValidate(args []string) error {
 			if !safeHarnessPath(*changeAnalysisPath, "") {
 				return errors.New("change analysis path outside .code-harness is not allowed")
 			}
-			changeAnalysisJSON, err := os.ReadFile(*changeAnalysisPath)
+			changeAnalysisJSON, err := loadCertifiedReviewScopeAnalysis153(*input, *changeAnalysisPath)
 			if err != nil {
-				return err
-			}
-			changeAnalysisSchemaPath := filepath.Join(".code-harness", "contracts", "change-analysis.schema.json")
-			changeAnalysisSchema, err := os.ReadFile(changeAnalysisSchemaPath)
-			if err != nil {
-				return err
-			}
-			if err := schema.ValidateJSON(changeAnalysisSchema, changeAnalysisJSON); err != nil {
 				return err
 			}
 			verifiedScope, machine, err := validateReviewScopeAgainstAnalysis(ib, changeAnalysisJSON)
