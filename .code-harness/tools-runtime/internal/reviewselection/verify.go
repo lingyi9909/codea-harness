@@ -44,8 +44,18 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 			return nil, fmt.Errorf("REVIEW_SELECTION_UNKNOWN_CHAIN: %s", strings.TrimSpace(req.SelectionIDs[0]))
 		}
 	case DecisionUser:
-		if mode != "TARGETED" || len(req.SelectionIDs) == 0 {
-			return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: USER_SELECTION requires TARGETED selectionIds")
+		switch mode {
+		case "FULL":
+			if len(req.SelectionIDs) != 0 {
+				return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: FULL must not contain selectionIds")
+			}
+			return []ChainOption{}, nil
+		case "TARGETED":
+			if len(req.SelectionIDs) == 0 {
+				return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: USER_SELECTION TARGETED requires selectionIds")
+			}
+		default:
+			return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: USER_SELECTION requires FULL, TARGETED, or LIST")
 		}
 	default:
 		return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: unknown Runtime decision %q", options.Decision)
