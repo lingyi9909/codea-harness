@@ -128,7 +128,10 @@ func Test153EditRejectsUnverifiedCodeFacts(t *testing.T) {
 	}{
 		{name: "invented replacement", ops: []EditOperation{{Type: "REPLACE_NODE", From: "ServiceA.step", To: "InventedService.process"}}},
 		{name: "existing symbol without verified edge", ops: []EditOperation{{Type: "ADD_NODE", Symbol: "LooseService.check", After: "ServiceA.step"}}},
-		{name: "unverified reorder", ops: []EditOperation{{Type: "REORDER_NODE", Order: []string{"ServiceA.step", "ServiceB.step", "LooseService.check"}}}},
+		{name: "unverified reorder", ops: []EditOperation{
+			{Type: "ADD_NODE", Symbol: "AuditService.record", After: "ServiceA.step"},
+			{Type: "REORDER_NODE", Order: []string{"ServiceA.step", "ServiceB.step", "AuditService.record"}},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
