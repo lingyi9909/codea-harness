@@ -178,6 +178,12 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 	if err := schema.ValidateJSON(certSchema, certBytes); err != nil {
 		return Certificate{}, fmt.Errorf("ANALYSIS_CERT_SCHEMA_INVALID: %w", err)
 	}
+	// Privileged Chain Edit authority is sealed outside the workspace before the
+	// workspace certificate is published. Workspace artifacts cannot mint it by
+	// rewriting cert/inventory bytes and recomputing hashes.
+	if err := sealChainMaintenanceAuthority153(root, cert); err != nil {
+		return Certificate{}, err
+	}
 
 	analysisDir := filepath.Join(root, ".code-harness", "runs", req.RunID, "analysis")
 	if err := os.MkdirAll(analysisDir, 0o755); err != nil {
