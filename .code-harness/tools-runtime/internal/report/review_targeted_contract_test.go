@@ -17,6 +17,7 @@ func readHarnessContract(t *testing.T, parts ...string) string {
 	return string(data)
 }
 
+// Task 4 contract assertions intentionally validate semantics, not Markdown spacing.
 func TestTargetedReviewIntentContract(t *testing.T) {
 	text := readHarnessContract(t, "agents", "orchestrator.md")
 	for _, want := range []string{
