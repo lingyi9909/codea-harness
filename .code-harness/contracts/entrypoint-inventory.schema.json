@@ -15,6 +15,18 @@
     "changeSetSha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["FULL", "LIST", "TARGETED", "CHAIN_MAINTENANCE"]
+        },
+        "target": { "type": "string", "minLength": 1 }
+      }
     }
   },
   "$defs": {
