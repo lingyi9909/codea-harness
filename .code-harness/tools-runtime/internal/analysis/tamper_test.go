@@ -34,6 +34,17 @@ func Test153TamperRejectsChangedEntrypointInventoryBytes(t *testing.T) {
 	}
 }
 
+func Test153TamperRejectsChangedCertificateBytes(t *testing.T) {
+	root, analysisPath, runtime := writeCertifiedFixture153(t)
+	p := filepath.Join(root, ".code-harness", "runs", "r153", "analysis", "change-analysis.cert.json")
+	b, err := os.ReadFile(p)
+	if err != nil { t.Fatal(err) }
+	if err := os.WriteFile(p, append(b, '\n'), 0o644); err != nil { t.Fatal(err) }
+	if _, _, err := loadCertifiedWithRuntime153(root, analysisPath, runtime); err == nil || !strings.Contains(err.Error(), "CERTIFICATE_BYTES_NOT_CANONICAL") {
+		t.Fatalf("mutated certificate bytes must fail closed, got %v", err)
+	}
+}
+
 func Test153TamperRejectsStaleCurrentChangeSet(t *testing.T) {
 	root, analysisPath, runtime := writeCertifiedFixture153(t)
 	runtime.snapshot.SHA256 = strings.Repeat("f", 64)
