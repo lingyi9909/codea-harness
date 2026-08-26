@@ -28,27 +28,33 @@ func task153EditCandidatePath(runID, chainID string) string {
 	return filepath.Join(".code-harness", "runs", runID, "analysis", "chain-edit-candidates", chainID+".yaml")
 }
 
-func stampTask153ChainMaintenanceIntent(t *testing.T, runID, target string) {
-	t.Helper()
-	certPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.cert.json")
-	data, err := os.ReadFile(certPath)
-	if err != nil { t.Fatal(err) }
-	var cert analysisruntime.Certificate
-	if err := json.Unmarshal(data, &cert); err != nil { t.Fatal(err) }
-	cert.Intent = &analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: target}
-	canonical, err := json.MarshalIndent(cert, "", "  ")
-	if err != nil { t.Fatal(err) }
-	canonical = append(canonical, '\n')
-	if err := os.WriteFile(certPath, canonical, 0o644); err != nil { t.Fatal(err) }
-}
-
 func setupTask153MaintenanceChainForEdit(t *testing.T, runID string) (string, string) {
 	t.Helper()
-	projectPath, chainID := setupTask153AcceptedChainForEdit(t, runID)
-	accepted, err := chain.Load(projectPath)
+	candidatePath, chainID := setupTask153AuthorityDiscovery(t, runID)
+	discovered, err := chain.Load(candidatePath)
 	if err != nil { t.Fatal(err) }
-	if len(accepted.EntryPoints) == 0 || strings.TrimSpace(accepted.EntryPoints[0].Symbol) == "" { t.Fatal("accepted Chain missing exact entrypoint") }
-	stampTask153ChainMaintenanceIntent(t, runID, accepted.EntryPoints[0].Symbol)
+	if len(discovered.EntryPoints) == 0 || strings.TrimSpace(discovered.EntryPoints[0].Symbol) == "" {
+		t.Fatal("discovered Chain missing exact entrypoint")
+	}
+	exactEntrypoint := strings.TrimSpace(discovered.EntryPoints[0].Symbol)
+
+	// Positive edit authority must always come from the real Runtime certify path.
+	recertifyTask153AnalysisForEdit(t, runID, analysisruntime.Intent{
+		Mode:   "CHAIN_MAINTENANCE",
+		Target: exactEntrypoint,
+	})
+	// Refresh discovery provenance against the newly certified analysis before
+	// sealing the Project State candidate.
+	rerunTask153DiscoveryAfterCertify(t, runID)
+	planID := sealTask153Candidate(t, runID, candidatePath)
+	if err := persistTask153Plan(t, runID, planID); err != nil {
+		t.Fatalf("persist maintenance discovery candidate: %v", err)
+	}
+	projectPath, err := chain.ChainPath(".", chainID)
+	if err != nil { t.Fatal(err) }
+	if _, err := os.Stat(projectPath); err != nil {
+		t.Fatalf("accepted maintenance Project State Chain missing: %v", err)
+	}
 	return projectPath, chainID
 }
 
