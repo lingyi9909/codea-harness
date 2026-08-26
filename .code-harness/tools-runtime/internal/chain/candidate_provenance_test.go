@@ -59,7 +59,9 @@ func Test153CandidateAuthorityRejectsMutatedRuntimeCandidate(t *testing.T) {
 	installTask153ChainAuthorityContract(t, root, "chain-candidate-cert.schema.json")
 	candidatePath := ".code-harness/runs/r153/analysis/discovered-chains/order-approve.yaml"
 	candidate := task153AuthorityCandidate()
-	writeTask153AuthorityCandidate(t, root, candidatePath, candidate)
+	if err := persistDiscovered(root, "r153", []Chain{candidate}); err != nil {
+		t.Fatalf("persist Runtime candidate: %v", err)
+	}
 	if _, err := CertifyCandidate(root, candidate, candidatePath, "DISCOVERED", task153AnalysisCert()); err != nil {
 		t.Fatalf("certify Runtime candidate: %v", err)
 	}
@@ -80,7 +82,9 @@ func Test153CandidateAuthorityRejectsMutationBeforeRuntimeCertification(t *testi
 	installTask153ChainAuthorityContract(t, root, "chain-candidate-cert.schema.json")
 	candidatePath := ".code-harness/runs/r153/analysis/discovered-chains/order-approve.yaml"
 	runtimeCandidate := task153AuthorityCandidate()
-	writeTask153AuthorityCandidate(t, root, candidatePath, runtimeCandidate)
+	if err := persistDiscovered(root, "r153", []Chain{runtimeCandidate}); err != nil {
+		t.Fatalf("persist Runtime candidate: %v", err)
+	}
 
 	mutated := runtimeCandidate
 	mutated.Nodes = []Node{{Workspace: CurrentWorkspace, Symbol: "InjectedService.approve", Path: "src/main/java/com/example/order/InjectedService.java", Role: "SERVICE"}}
