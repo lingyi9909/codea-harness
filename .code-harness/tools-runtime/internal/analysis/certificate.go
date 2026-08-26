@@ -136,10 +136,15 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 	}
 
 	versionBytes, err := os.ReadFile(filepath.Join(root, ".code-harness", "VERSION"))
-	if err == nil {
-		if currentVersion := strings.TrimSpace(string(versionBytes)); currentVersion != "" && currentVersion != cert.RuntimeVersion {
-			return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_RUNTIME_VERSION_MISMATCH: cert=%s current=%s", cert.RuntimeVersion, currentVersion)
-		}
+	if err != nil {
+		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFIED_RUNTIME_VERSION_UNAVAILABLE: %w", err)
+	}
+	currentVersion := strings.TrimSpace(string(versionBytes))
+	if currentVersion == "" {
+		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFIED_RUNTIME_VERSION_UNAVAILABLE: VERSION is empty")
+	}
+	if currentVersion != cert.RuntimeVersion {
+		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_RUNTIME_VERSION_MISMATCH: cert=%s current=%s", cert.RuntimeVersion, currentVersion)
 	}
 	return typed, cert, nil
 }
