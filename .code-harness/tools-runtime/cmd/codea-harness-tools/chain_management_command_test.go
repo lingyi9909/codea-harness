@@ -77,6 +77,7 @@ func setupTask3CommandProject(t *testing.T, includeRisk bool) string {
 
 func TestChainListShowAndValidateCommands(t *testing.T) {
 	analysisPath := setupTask3CommandProject(t, false)
+	prepareCommittedCertifiedAnalysisFixture153(t, "run-task3", analysisPath)
 	if err := run([]string{"chain", "list"}); err != nil {
 		t.Fatal(err)
 	}
@@ -90,6 +91,7 @@ func TestChainListShowAndValidateCommands(t *testing.T) {
 
 func TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash(t *testing.T) {
 	analysisPath := setupTask3CommandProject(t, true)
+	prepareCommittedCertifiedAnalysisFixture153(t, "run-task3", analysisPath)
 	discovered := strings.Replace(task3AcceptedYAML, "status: ACCEPTED", "status: DISCOVERED", 1)
 	discovered = strings.Replace(discovered,
 		"  - symbol: OrderMapper.updateStatus\n    path: src/main/java/com/example/order/OrderMapper.java\n    role: MAPPER",
@@ -137,6 +139,7 @@ func TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash(t *testing.T) {
 
 func TestChainPersistValidationFailureMakesZeroProjectStateWrites(t *testing.T) {
 	analysisPath := setupTask3CommandProject(t, false)
+	prepareCommittedCertifiedAnalysisFixture153(t, "run-task3", analysisPath)
 	candidate := strings.Replace(task3AcceptedYAML, "OrderServiceImpl.approve", "MissingService.approve", 1)
 	candidatePath := filepath.Join(".code-harness", "runs", "run-task3", "analysis", "refresh-candidates", "order-approve.yaml")
 	writeFile(t, candidatePath, candidate)
