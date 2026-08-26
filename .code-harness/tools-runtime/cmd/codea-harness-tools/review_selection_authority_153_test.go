@@ -145,6 +145,44 @@ func Test153ReviewSelectRejectsRehashedOptionSetDeletion(t *testing.T) {
 	}
 }
 
+func Test153ReviewSelectRejectsJointOriginAndOptionsIntentRewrite(t *testing.T) {
+	analysisPath, options := task153PrepareReviewOptionsFixture(t, true, "")
+	if options.Decision != reviewselection.DecisionUser || len(options.Chains) != 2 || options.Intent.Mode != "FULL" {
+		t.Fatalf("plain review fixture must be FULL C1+C2 USER_SELECTION: %+v", options)
+	}
+	_, cert, err := loadCertifiedAnalysis153(".", filepath.ToSlash(analysisPath))
+	if err != nil { t.Fatal(err) }
+
+	originPath := filepath.Join(".code-harness", "runs", "run-task4-review", "analysis", "review-options-origin.json")
+	originBytes, err := os.ReadFile(originPath)
+	if err != nil { t.Fatal(err) }
+	var origin map[string]any
+	if err := json.Unmarshal(originBytes, &origin); err != nil { t.Fatal(err) }
+	origin["intent"] = map[string]any{"mode": "TARGETED", "target": "OrderService.approve"}
+	originBytes, err = json.MarshalIndent(origin, "", "  ")
+	if err != nil { t.Fatal(err) }
+	originBytes = append(originBytes, '\n')
+	if err := os.WriteFile(originPath, originBytes, 0o644); err != nil { t.Fatal(err) }
+
+	optionsPath, raw := task153ReadRawOptions(t)
+	chains := raw["chains"].([]any)
+	raw["intent"] = map[string]any{"mode": "TARGETED", "target": "OrderService.approve"}
+	raw["chains"] = chains[:1]
+	raw["decision"] = "AUTO_SINGLE"
+	raw["autoSelectionIds"] = []any{"C1"}
+	raw["optionsHash"] = task153AttackerOptionsHash(t, raw, cert.AnalysisSHA256)
+	task153WriteRawOptions(t, optionsPath, raw)
+
+	selection := writeQueryRequest(t, "run-task4-review", "review-select-origin-options-joint-tamper.json", fmt.Sprintf(`{"runId":"run-task4-review","mode":"TARGETED","selectionIds":["C1"],"optionsHash":"%s"}`, raw["optionsHash"]))
+	err = run([]string{"review", "select", "--input", selection})
+	if err == nil || (!strings.Contains(err.Error(), "REVIEW_OPTIONS_STALE") && !strings.Contains(err.Error(), "REVIEW_OPTIONS_TAMPERED")) {
+		t.Fatalf("joint origin/options intent rewrite must fail closed, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(".code-harness", "runs", "run-task4-review", "analysis", "review-scope.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("joint origin/options tamper must make 0 review-scope writes, stat=%v", statErr)
+	}
+}
+
 func Test153ExplicitTargetIsImmutableAndHashBound(t *testing.T) {
 	analysisPath, options := task153PrepareReviewOptionsFixture(t, false, "OrderServiceImpl.approve")
 	if options.Decision != reviewselection.DecisionAutoSingle { t.Fatalf("one upstream explicit target must AUTO_SINGLE: %+v", options) }
