@@ -67,6 +67,8 @@ func Test153AnalysisCertifyPublishesCertifiedBundle(t *testing.T) {
 			t.Fatalf("published bundle must load as certified: %v", err)
 		} else if cert.RunID != "r153" || cert.ChangeSetSHA256 == "" || cert.AnalysisSHA256 == "" || cert.EntrypointInventorySHA256 == "" {
 			t.Fatalf("unexpected certificate: %+v", cert)
+		} else if cert.Intent == nil || cert.Intent.Mode != "FULL" || cert.Intent.Target != "" {
+			t.Fatalf("certificate must bind certify intent, got %+v", cert.Intent)
 		}
 		if _, runID, err := loadVerifiedChainAnalysis(analysisPath); err != nil {
 			t.Fatalf("Chain consumer must accept Runtime-certified ChangeAnalysis: %v", err)
