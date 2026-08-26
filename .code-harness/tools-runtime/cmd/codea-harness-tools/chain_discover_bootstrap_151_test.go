@@ -92,7 +92,6 @@ func Test151ChainDiscoverBootstrapContractIsSelfContained(t *testing.T) {
 func Test151DirectDiscoverSupportsFreshAddedControllerServiceMapperStack(t *testing.T) {
 	withTempProject(t)
 	installChangeAnalysisSchema(t)
-	installCertifiedSchemas153(t)
 	setup151FreshGitFixture(t)
 
 	runID := "run-151-bootstrap"
@@ -273,7 +272,6 @@ func executeHarnessDiscoverIntent151(t *testing.T, intent, runID string) ([]stri
 		return trace, fmt.Errorf("ChangeAnalysis schema/coverage verification failed: %w", err)
 	}
 	trace = append(trace, "ChangeAnalysis Schema validate", "Runtime machine coverage verify")
-	sealExistingAnalysisFixture153(t, runID, analysisPath)
 
 	request := map[string]any{
 		"runId":              runID,
@@ -328,6 +326,7 @@ func analyzeCurrentChangeSet151(t *testing.T, target string) (map[string]any, er
 				if iface := implementedInterface151(string(data)); iface != "" {
 					implementedServiceInterfaces[iface] = true
 				}
+			}
 		}
 	}
 
