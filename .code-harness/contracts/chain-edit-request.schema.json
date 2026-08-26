@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChainEditRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "chainId", "changeAnalysisPath", "operations"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "chainId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "changeAnalysisPath": {
+      "type": "string",
+      "pattern": "^\\.code-harness/runs/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/analysis/change-analysis\\.json$"
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "from", "to"],
+            "properties": {
+              "type": {"const": "REPLACE_NODE"},
+              "from": {"type": "string", "minLength": 1},
+              "to": {"type": "string", "minLength": 1}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "symbol", "after"],
+            "properties": {
+              "type": {"const": "ADD_NODE"},
+              "symbol": {"type": "string", "minLength": 1},
+              "after": {"type": "string", "minLength": 1}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "symbol"],
+            "properties": {
+              "type": {"const": "REMOVE_NODE"},
+              "symbol": {"type": "string", "minLength": 1}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "order"],
+            "properties": {
+              "type": {"const": "REORDER_NODE"},
+              "order": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "name"],
+            "properties": {
+              "type": {"const": "RENAME_CHAIN"},
+              "name": {"type": "string", "minLength": 1}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "notes"],
+            "properties": {
+              "type": {"const": "UPDATE_NOTES"},
+              "notes": {"type": "string"}
+            }
+          }
+        ]
+      }
+    }
+  }
+}
