@@ -99,8 +99,8 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 	if err != nil {
 		return Certificate{}, err
 	}
-	if strings.TrimSpace(meta.ReviewScope.HeadCommit) != "" && meta.ReviewScope.HeadCommit != snapshot.Head {
-		return Certificate{}, fmt.Errorf("CHANGE_SET_MISMATCH: draft headCommit=%s runtime HEAD=%s", meta.ReviewScope.HeadCommit, snapshot.Head)
+	if strings.TrimSpace(meta.ReviewScope.HeadCommit) == "" || meta.ReviewScope.HeadCommit != snapshot.Head {
+		return Certificate{}, fmt.Errorf("CHANGE_SET_MISMATCH: draft headCommit=%q runtime HEAD=%s", meta.ReviewScope.HeadCommit, snapshot.Head)
 	}
 	if err := compareDraftChangeSet153(meta.ChangedFiles, snapshot.Files); err != nil {
 		return Certificate{}, err
