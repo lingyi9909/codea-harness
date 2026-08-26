@@ -311,11 +311,11 @@ Task 2 发现结果只写：
 .code-harness/runs/<runId>/analysis/discovered-chains/<id>.yaml
 ```
 
-即 `runs/<runId>/analysis/discovered-chains/`。所有结果保持 `status: DISCOVERED`；不得写 `.code-harness/chains/**`，不得提前执行 Task 3 的 validate/accept/refresh。
+即 `runs/<runId>/analysis/discovered-chains/`；所有结果保持 `status: DISCOVERED`；不得写 `.code-harness/chains/**`，不得提前执行 Task 3 的 validate/accept/refresh。
 
 ## Review Chain Context（1.5 Task 4）
 
-Review 使用 Chain 时仍必须**先完成 Certified ChangeAnalysis**；Chain 解析不建立第二套 Java/resource 事实源。
+Review 使用 Chain 时仍必须**先完成 ChangeAnalysis certification，获得 Certified ChangeAnalysis**；Chain 解析不建立第二套 Java/resource 事实源。
 
 固定顺序：
 
