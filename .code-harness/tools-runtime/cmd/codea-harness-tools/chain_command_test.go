@@ -70,8 +70,16 @@ func TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState(t *testing.T
 	}
 	discovered := filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains")
 	entries, err := os.ReadDir(discovered)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("discovered run artifact missing: entries=%v err=%v", entries, err)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("discovered candidate + provenance artifacts missing: entries=%v err=%v", entries, err)
+	}
+	var yamlCount, certCount int
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".yaml") { yamlCount++ }
+		if strings.HasSuffix(entry.Name(), ".cert.json") { certCount++ }
+	}
+	if yamlCount != 1 || certCount != 1 {
+		t.Fatalf("discovery must emit exactly one YAML and one cert, got yaml=%d cert=%d", yamlCount, certCount)
 	}
 	if _, err := os.Stat(filepath.Join(".code-harness", "chains")); !os.IsNotExist(err) {
 		t.Fatalf("Task 2 discovery must not create Project State chains/**, err=%v", err)
