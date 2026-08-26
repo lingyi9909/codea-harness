@@ -2,18 +2,27 @@ package analysis
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
+	"sort"
 	"strings"
+
+	"codea-harness-tools/internal/workspace"
 )
 
 func validateEvidence153(a ChangeAnalysis, inventory EntrypointInventory) error {
+	return validateEvidenceAtRoot153(".", a, inventory)
+}
+
+func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory EntrypointInventory) error {
 	type fact struct {
 		workspace string
 		path      string
 		role      string
 	}
 	facts := map[string]fact{}
-	dependencyPaths := map[string]string{}
+	workspaceIDs := map[string]struct{}{}
 
 	for _, loc := range a.SymbolLocations {
 		symbol := strings.TrimSpace(loc.Symbol)
@@ -21,34 +30,38 @@ func validateEvidence153(a ChangeAnalysis, inventory EntrypointInventory) error 
 		if symbol == "" || !ok {
 			return fmt.Errorf("SYMBOL_LOCATION_INVALID: symbol=%q path=%q", loc.Symbol, loc.Path)
 		}
-		workspace := normalizeWorkspace153(loc.Workspace)
+		workspaceID := normalizeWorkspace153(loc.Workspace)
 		role := strings.TrimSpace(loc.Role)
-		candidate := fact{workspace: workspace, path: p, role: role}
+		candidate := fact{workspace: workspaceID, path: p, role: role}
 		if previous, exists := facts[symbol]; exists && previous != candidate {
 			return fmt.Errorf("SYMBOL_LOCATION_CONFLICT: %s has %s/%s/%s and %s/%s/%s", symbol, previous.workspace, previous.path, previous.role, candidate.workspace, candidate.path, candidate.role)
 		}
 		facts[symbol] = candidate
-		if workspace != "current" {
-			dependencyPaths[p] = workspace
+		if workspaceID != "current" {
+			workspaceIDs[workspaceID] = struct{}{}
 		}
 	}
 
-	for _, f := range a.ChangedFiles {
-		p, ok := safeEvidencePath153(f.Path)
-		if !ok {
-			return fmt.Errorf("CHANGE_SET_PATH_INVALID: %q", f.Path)
+	ids := make([]string, 0, len(workspaceIDs))
+	for id := range workspaceIDs { ids = append(ids, id) }
+	sort.Strings(ids)
+	for _, id := range ids {
+		if err := verifyWorkspaceEvidence153(root, id); err != nil {
+			return err
 		}
-		if workspace := dependencyPaths[p]; workspace != "" {
-			return fmt.Errorf("WORKSPACE_DEPENDENCY_SCOPE_VIOLATION: changed file %q belongs to workspace %q", p, workspace)
+	}
+
+	// Changed/reviewed paths are always current-workspace paths. A dependency may
+	// legitimately contain the same relative path; workspace identity, not the
+	// bare relative path, determines whether evidence belongs to a dependency.
+	for _, f := range a.ChangedFiles {
+		if _, ok := safeEvidencePath153(f.Path); !ok {
+			return fmt.Errorf("CHANGE_SET_PATH_INVALID: %q", f.Path)
 		}
 	}
 	for _, f := range a.ReviewCoverage.ReviewedFiles {
-		p, ok := safeEvidencePath153(f.Path)
-		if !ok {
+		if _, ok := safeEvidencePath153(f.Path); !ok {
 			return fmt.Errorf("REVIEWED_PATH_INVALID: %q", f.Path)
-		}
-		if workspace := dependencyPaths[p]; workspace != "" {
-			return fmt.Errorf("WORKSPACE_DEPENDENCY_SCOPE_VIOLATION: reviewed file %q belongs to workspace %q", p, workspace)
 		}
 	}
 
@@ -123,6 +136,41 @@ func validateEvidence153(a ChangeAnalysis, inventory EntrypointInventory) error 
 	return nil
 }
 
+func verifyWorkspaceEvidence153(root, id string) error {
+	configPath := filepath.Join(root, ".code-harness", "harness.yaml")
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("WORKSPACE_DEPENDENCY_NOT_CONFIGURED: %s: %w", id, err)
+	}
+	deps, err := workspace.ValidateConfigYAML(root, configData)
+	if err != nil {
+		return err
+	}
+	var selected *workspace.Dependency
+	for i := range deps {
+		if deps[i].ID == id {
+			selected = &deps[i]
+			break
+		}
+	}
+	if selected == nil {
+		return fmt.Errorf("WORKSPACE_DEPENDENCY_NOT_CONFIGURED: %s", id)
+	}
+	results := workspace.VerifyDirectMavenDependencies(root, []workspace.Dependency{*selected})
+	if len(results) != 1 {
+		return fmt.Errorf("WORKSPACE_DEPENDENCY_COORDINATE_MISMATCH: %s", id)
+	}
+	result := results[0]
+	if result.Status != workspace.StatusVerified {
+		code := strings.TrimSpace(result.Code)
+		if code == "" {
+			code = workspace.CodeCoordinateMismatch
+		}
+		return fmt.Errorf("%s: %s", code, id)
+	}
+	return nil
+}
+
 func entrypointController153(symbol string) string {
 	symbol = strings.TrimSpace(symbol)
 	i := strings.LastIndex(symbol, ".")
@@ -146,12 +194,12 @@ func affectedControllerContainsEntrypoint153(controllers []AffectedController, c
 	return false
 }
 
-func normalizeWorkspace153(workspace string) string {
-	workspace = strings.TrimSpace(workspace)
-	if workspace == "" {
+func normalizeWorkspace153(workspaceID string) string {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
 		return "current"
 	}
-	return workspace
+	return workspaceID
 }
 
 func safeEvidencePath153(value string) (string, bool) {
