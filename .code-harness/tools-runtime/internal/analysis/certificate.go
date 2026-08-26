@@ -118,6 +118,9 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 	if !certificationIntentsEqual153(cert.Intent, inventory.Intent) {
 		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_INTENT_AUTHORITY_MISMATCH")
 	}
+	if err := verifyChainMaintenanceAuthority153(root, cert); err != nil {
+		return ChangeAnalysis{}, Certificate{}, err
+	}
 
 	snapshot, err := runtime.Compute(root, cert.BaseRef, meta.ReviewScope.IncludeWorkingTree)
 	if err != nil {
