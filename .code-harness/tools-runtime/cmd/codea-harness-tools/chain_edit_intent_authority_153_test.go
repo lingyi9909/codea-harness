@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,8 +12,23 @@ import (
 	"codea-harness-tools/internal/chain"
 )
 
+func installTask153NoopAstGrep(t *testing.T) {
+	t.Helper()
+	binDir := filepath.Join(".code-harness", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil { t.Fatal(err) }
+	sourcePath := filepath.Join(binDir, "ast-grep-stub.go")
+	if err := os.WriteFile(sourcePath, []byte("package main\nfunc main() {}\n"), 0o644); err != nil { t.Fatal(err) }
+	binaryPath := filepath.Join(binDir, "ast-grep.exe")
+	cmd := exec.Command("go", "build", "-o", binaryPath, sourcePath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build host ast-grep stub: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	if err := os.Remove(sourcePath); err != nil { t.Fatal(err) }
+}
+
 func recertifyTask153AnalysisForEdit(t *testing.T, runID string, intent analysisruntime.Intent) {
 	t.Helper()
+	installTask153NoopAstGrep(t)
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
 	analysisBytes, err := os.ReadFile(analysisPath)
 	if err != nil { t.Fatal(err) }
