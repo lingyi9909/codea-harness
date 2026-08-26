@@ -276,7 +276,7 @@ Write-Host 'STAGED + UNSTAGED + UNTRACKED PASS'
 
 # The required Runtime navigation commands are executed for evidence. Current find-references may return
 # matches:null for member-call shapes; relationship confirmation below therefore also checks the just-read source.
-$controller = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxController','--scope','src/main/java')
+$controller = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxController.submit','--scope','src/main/java')
 $service = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxService','--scope','src/main/java')
 $implementationSearch = Invoke-RuntimeJson $current @('nav','find-implementations','--symbol','XxxService','--scope','src/main/java')
 $mapper = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxMapper','--scope','src/main/java')
@@ -284,7 +284,7 @@ $serviceRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol',
 $submitRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService.submit','--scope','src/main/java')
 $mapperRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxMapper.updateStatus','--scope','src/main/java')
 
-Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.java' 'Controller find-symbol'
+Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.java' 'Controller endpoint find-symbol'
 Assert-OneMatchPath $service 'src/main/java/com/company/order/XxxService.java' 'Service find-symbol'
 Assert-OneMatchPath $mapper 'src/main/java/com/company/order/XxxMapper.java' 'Mapper find-symbol'
 if ($implementationSearch.symbol -ne 'XxxService' -or $implementationSearch.scope -ne 'src/main/java') { throw "find-implementations runtime evidence mismatch: $($implementationSearch | ConvertTo-Json -Depth 8 -Compress)" }
