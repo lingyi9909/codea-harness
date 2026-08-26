@@ -116,7 +116,7 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 	if err := VerifyEntrypointDispositions(inventory, typed); err != nil {
 		return Certificate{}, err
 	}
-	if err := validateEvidence153(typed, inventory); err != nil {
+	if err := validateEvidenceAtRoot153(root, typed, inventory); err != nil {
 		return Certificate{}, err
 	}
 
