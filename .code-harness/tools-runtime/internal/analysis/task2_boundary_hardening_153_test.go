@@ -1,6 +1,8 @@
 package analysis
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -53,7 +55,7 @@ func Test153CertRejectsEmptyHeadCommitWithoutAuthoritativeWrite(t *testing.T) {
 
 func writeAnalysisVersion153(t *testing.T, root, version string) {
 	t.Helper()
-	p := root + "/.code-harness/VERSION"
-	if err := osMkdirAll153(p); err != nil { t.Fatal(err) }
-	if err := osWriteFile153(p, []byte(version+"\n")); err != nil { t.Fatal(err) }
+	p := filepath.Join(root, ".code-harness", "VERSION")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(p, []byte(version+"\n"), 0o644); err != nil { t.Fatal(err) }
 }
