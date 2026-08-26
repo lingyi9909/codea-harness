@@ -346,8 +346,8 @@ jobs:
       - name: Record 1.5.3 release checklist and digests
         shell: pwsh
         env:
-          INSTALL_ARTIFACT_ID: ${{ steps.upload_install.outputs.artifact-id }}
-          UPGRADE_ARTIFACT_ID: ${{ steps.upload_upgrade.outputs.artifact-id }}
+          INSTALL_ARTIFACT_ID: ${{ steps.upload_install.outputs['artifact-id'] }}
+          UPGRADE_ARTIFACT_ID: ${{ steps.upload_upgrade.outputs['artifact-id'] }}
         run: |
           $install = Get-Item 'codea-harness-1.5.3-windows-x64-install.zip'
           $upgrade = Get-Item 'codea-harness-1.5.3-windows-x64-upgrade.zip'
