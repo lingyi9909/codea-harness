@@ -1,5 +1,7 @@
 package chain
 
+// Task 5 contract assertions intentionally verify semantic authority, not Markdown formatting.
+
 import (
 	"os"
 	"path/filepath"
