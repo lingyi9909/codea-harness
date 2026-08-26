@@ -68,6 +68,11 @@ func Test153AnalysisCertifyPublishesCertifiedBundle(t *testing.T) {
 		} else if cert.RunID != "r153" || cert.ChangeSetSHA256 == "" || cert.AnalysisSHA256 == "" || cert.EntrypointInventorySHA256 == "" {
 			t.Fatalf("unexpected certificate: %+v", cert)
 		}
+		if _, runID, err := loadVerifiedChainAnalysis(analysisPath); err != nil {
+			t.Fatalf("Chain consumer must accept Runtime-certified ChangeAnalysis: %v", err)
+		} else if runID != "r153" {
+			t.Fatalf("Chain consumer certified runId=%q want r153", runID)
+		}
 	})
 }
 
