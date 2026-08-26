@@ -106,6 +106,10 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 		return Certificate{}, err
 	}
 
+	certifyIntent := Intent{
+		Mode:   strings.ToUpper(strings.TrimSpace(req.Intent.Mode)),
+		Target: strings.TrimSpace(req.Intent.Target),
+	}
 	inventory, err := runtime.Inventory(root, req.RunID, snapshot, req.Intent)
 	if err != nil {
 		return Certificate{}, err
@@ -113,6 +117,9 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 	if inventory.RunID != req.RunID || inventory.ChangeSetSHA256 != snapshot.SHA256 || inventory.Status != inventoryComplete153 {
 		return Certificate{}, fmt.Errorf("ENTRYPOINT_INVENTORY_IDENTITY_MISMATCH")
 	}
+	// The Runtime publishes the original certify intent in a second, hash-bound
+	// artifact. Consumers therefore never authorize from cert.Intent alone.
+	inventory.Intent = &Intent{Mode: certifyIntent.Mode, Target: certifyIntent.Target}
 	if err := VerifyEntrypointDispositions(inventory, typed); err != nil {
 		return Certificate{}, err
 	}
@@ -157,7 +164,7 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 		EntrypointInventorySHA256: hashBytes153(inventoryBytes),
 		BaseRef: snapshot.BaseRef,
 		Head: snapshot.Head,
-		Intent: &Intent{Mode: strings.ToUpper(strings.TrimSpace(req.Intent.Mode)), Target: strings.TrimSpace(req.Intent.Target)},
+		Intent: &Intent{Mode: certifyIntent.Mode, Target: certifyIntent.Target},
 	}
 	certBytes, err := json.MarshalIndent(cert, "", "  ")
 	if err != nil {
