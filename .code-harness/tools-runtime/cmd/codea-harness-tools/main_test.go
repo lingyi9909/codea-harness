@@ -20,6 +20,7 @@ func withTempProject(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(old) })
+	useLegacyChainAnalysisLoader153(t)
 	return root
 }
 
