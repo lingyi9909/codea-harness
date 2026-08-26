@@ -300,6 +300,7 @@ func findProjectChain(root, target string) (chain.Chain, error) {
 			if ep.Symbol == target || exactSymbolOwner(ep.Symbol) == target {
 				matched = true
 			}
+		}
 		if matched {
 			matches = append(matches, c)
 		}
