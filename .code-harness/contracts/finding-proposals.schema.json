@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FindingProposals",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["proposalId", "reviewUnitId", "ruleId", "category", "severity", "anchor", "evidenceRefs", "problem", "impact", "recommendation", "needsTest", "introducedByChange", "confidence"],
+    "properties": {
+      "proposalId": {"type": "string", "minLength": 1},
+      "reviewUnitId": {"type": "string", "minLength": 1},
+      "ruleId": {"type": "string", "minLength": 1},
+      "category": {"enum": ["PRODUCTION_CODE", "TEST_VALIDITY"]},
+      "severity": {"enum": ["critical", "high", "medium", "low"]},
+      "anchor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind"],
+        "properties": {
+          "kind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]},
+          "path": {"type": "string", "minLength": 1},
+          "line": {"type": "integer", "minimum": 1},
+          "symbol": {"type": "string", "minLength": 1}
+        },
+        "allOf": [
+          {"if": {"properties": {"kind": {"const": "LINE"}}}, "then": {"required": ["path", "line"]}},
+          {"if": {"properties": {"kind": {"const": "SYMBOL"}}}, "then": {"required": ["symbol"]}},
+          {"if": {"properties": {"kind": {"const": "FILE"}}}, "then": {"required": ["path"]}}
+        ]
+      },
+      "evidenceRefs": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {"enum": ["SYMBOL", "SOURCE_RANGE", "CHANGED_RANGE", "RESOURCE_RELATION", "CHAIN"]},
+            "value": {"type": "string", "minLength": 1},
+            "path": {"type": "string", "minLength": 1},
+            "startLine": {"type": "integer", "minimum": 1},
+            "endLine": {"type": "integer", "minimum": 1}
+          }
+        }
+      },
+      "problem": {"type": "string", "minLength": 1},
+      "impact": {"type": "string", "minLength": 1},
+      "recommendation": {"type": "string", "minLength": 1},
+      "needsTest": {"type": "boolean"},
+      "introducedByChange": {"type": "boolean"},
+      "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+    }
+  }
+}
