@@ -21,7 +21,7 @@ func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrul
 		if !ok {
 			return Anchor{}, "", findingError160("FINDING_SCOPE_VIOLATION", "invalid anchor path %q", anchor.Path)
 		}
-		if dependencyPath160(ctx, p) {
+		if isDependencyPath160(ctx, p) {
 			return Anchor{}, "", findingError160("FINDING_DEPENDENCY_SCOPE_FORBIDDEN", "dependency path %s", p)
 		}
 		if !unitCurrentPath160(unit, p) {
@@ -64,7 +64,7 @@ func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrul
 		if !ok {
 			return Anchor{}, "", findingError160("FINDING_SCOPE_VIOLATION", "invalid file anchor path %q", anchor.Path)
 		}
-		if dependencyPath160(ctx, p) {
+		if isDependencyPath160(ctx, p) {
 			return Anchor{}, "", findingError160("FINDING_DEPENDENCY_SCOPE_FORBIDDEN", "dependency path %s", p)
 		}
 		if !unitCurrentPath160(unit, p) {
@@ -177,7 +177,7 @@ func unitCurrentPath160(unit reviewunit.Unit, candidate string) bool {
 	return false
 }
 
-func dependencyPath160(ctx VerifyContext, candidate string) bool {
+func isDependencyPath160(ctx VerifyContext, candidate string) bool {
 	for _, loc := range ctx.analysis.SymbolLocations {
 		p, ok := safeFindingPath160(loc.Path)
 		if ok && p == candidate {
