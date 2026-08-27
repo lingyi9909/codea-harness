@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CertifiedFindingsCertificate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "certifiedFindingsSha256", "changeSetSha256", "changeAnalysisSha256", "reviewUnitsSha256", "ruleDispatchSha256", "findingProposalsSha256", "mode"],
+  "properties": {
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "certifiedFindingsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "changeSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "changeAnalysisSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "reviewUnitsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "ruleDispatchSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "findingProposalsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "mode": {"enum": ["FULL", "TARGETED"]},
+    "scopeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

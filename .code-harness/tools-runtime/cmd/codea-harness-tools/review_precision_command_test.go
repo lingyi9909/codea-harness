@@ -114,6 +114,18 @@ func Test160ReviewDispatchCommandRejectsNonCanonicalRunID(t *testing.T) {
 	}
 }
 
+func Test160ReviewCertifyFindingsRequiresInput(t *testing.T) {
+	if err := run([]string{"review", "certify-findings"}); err == nil || !strings.Contains(err.Error(), "--input") {
+		t.Fatalf("review certify-findings without input must reject, got %v", err)
+	}
+}
+
+func Test160ReviewCertifyFindingsRejectsOutsideRunRequests(t *testing.T) {
+	if err := run([]string{"review", "certify-findings", "--input", "finding-certify-request.json"}); err == nil || !strings.Contains(err.Error(), "runs/<runId>/requests") {
+		t.Fatalf("review certify-findings must reject transport outside same-run requests, got %v", err)
+	}
+}
+
 func installTask160DispatchFramework(t *testing.T, sourceRoot string) {
 	t.Helper()
 	copyTask153CommandContract(t, ".", "rule-dispatch.schema.json")

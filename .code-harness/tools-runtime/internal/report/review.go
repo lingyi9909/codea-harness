@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"codea-harness-tools/internal/finding"
 )
 
 type Result string
@@ -87,6 +89,8 @@ type Finding struct {
 	Severity           string  `json:"severity"`
 	File               string  `json:"file"`
 	Line               int     `json:"line,omitempty"`
+	AnchorKind         string  `json:"anchorKind,omitempty"`
+	Symbol             string  `json:"symbol,omitempty"`
 	Problem            string  `json:"problem"`
 	Evidence           string  `json:"evidence"`
 	Impact             string  `json:"impact"`
@@ -185,14 +189,20 @@ func Validate(req ReviewRequest) error {
 		}
 	}
 	for i, f := range req.Findings {
-		if strings.TrimSpace(f.ID) == "" || strings.TrimSpace(f.File) == "" || strings.TrimSpace(f.Problem) == "" || strings.TrimSpace(f.Evidence) == "" || strings.TrimSpace(f.Impact) == "" || strings.TrimSpace(f.Recommendation) == "" {
+		anchorKind := strings.ToUpper(strings.TrimSpace(f.AnchorKind))
+		if strings.TrimSpace(f.ID) == "" || strings.TrimSpace(f.Problem) == "" || strings.TrimSpace(f.Evidence) == "" || strings.TrimSpace(f.Impact) == "" || strings.TrimSpace(f.Recommendation) == "" {
 			return fmt.Errorf("finding %d has missing required fields", i)
 		}
-		if _, ok := findingFiles[normalizeReportPath(f.File)]; !ok {
-			if mode == "TARGETED" {
-				return fmt.Errorf("finding %q file %q is outside verified scopedFiles", f.ID, f.File)
+		if anchorKind != "CHANGESET" {
+			if strings.TrimSpace(f.File) == "" {
+				return fmt.Errorf("finding %d has missing required fields", i)
 			}
-			return fmt.Errorf("finding %q file %q is outside verified reviewedFiles", f.ID, f.File)
+			if _, ok := findingFiles[normalizeReportPath(f.File)]; !ok {
+				if mode == "TARGETED" {
+					return fmt.Errorf("finding %q file %q is outside verified scopedFiles", f.ID, f.File)
+				}
+				return fmt.Errorf("finding %q file %q is outside verified reviewedFiles", f.ID, f.File)
+			}
 		}
 		switch f.Category {
 		case "PRODUCTION_CODE", "TEST_VALIDITY":
@@ -204,8 +214,19 @@ func Validate(req ReviewRequest) error {
 		default:
 			return fmt.Errorf("finding %q has invalid severity %q", f.ID, f.Severity)
 		}
-		if f.Line < 0 {
-			return fmt.Errorf("finding %q has invalid line", f.ID)
+		switch anchorKind {
+		case "":
+			if f.Line < 0 { return fmt.Errorf("finding %q has invalid line", f.ID) }
+		case "LINE":
+			if f.Line < 1 || strings.TrimSpace(f.Symbol) != "" { return fmt.Errorf("finding %q has invalid LINE anchor", f.ID) }
+		case "SYMBOL":
+			if f.Line != 0 || strings.TrimSpace(f.Symbol) == "" { return fmt.Errorf("finding %q has invalid SYMBOL anchor", f.ID) }
+		case "FILE":
+			if f.Line != 0 || strings.TrimSpace(f.Symbol) != "" { return fmt.Errorf("finding %q has invalid FILE anchor", f.ID) }
+		case "CHANGESET":
+			if f.Line != 0 || strings.TrimSpace(f.Symbol) != "" { return fmt.Errorf("finding %q has invalid CHANGESET anchor", f.ID) }
+		default:
+			return fmt.Errorf("finding %q has invalid anchorKind %q", f.ID, f.AnchorKind)
 		}
 		if f.Confidence < 0 || f.Confidence > 1 {
 			return fmt.Errorf("finding %q has invalid confidence", f.ID)
@@ -571,10 +592,7 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 		fmt.Fprintf(b, "### %s %s｜%s\n\n", emoji, singleLine(f.ID), name)
 		fmt.Fprintln(b, "📍 **位置**")
 		fmt.Fprintln(b)
-		location := singleLine(f.File)
-		if f.Line > 0 {
-			location += ":" + strconv.Itoa(f.Line)
-		}
+		location := findingLocation160(f)
 		fmt.Fprintf(b, "`%s`\n\n", location)
 		writeIconSection(b, "❗", "问题", f.Problem)
 		writeIconSection(b, "🔎", "证据", f.Evidence)
@@ -596,6 +614,22 @@ func writeFindings(b *strings.Builder, findings []Finding) {
 	}
 }
 
+func findingLocation160(f Finding) string {
+	switch strings.ToUpper(strings.TrimSpace(f.AnchorKind)) {
+	case "SYMBOL":
+		return singleLine(f.File) + " · " + singleLine(f.Symbol)
+	case "FILE":
+		return singleLine(f.File)
+	case "CHANGESET":
+		return "跨文件变更集"
+	case "LINE":
+		return singleLine(f.File) + ":" + strconv.Itoa(f.Line)
+	default:
+		location := singleLine(f.File)
+		if f.Line > 0 { location += ":" + strconv.Itoa(f.Line) }
+		return location
+	}
+}
 func sortedFindings(findings []Finding) []Finding {
 	sorted := append([]Finding(nil), findings...)
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -801,6 +835,71 @@ func isTestFile(path string) bool {
 }
 
 func Write(repoRoot string, req ReviewRequest) (string, error) {
+	contract := filepath.Join(repoRoot, ".code-harness", "contracts", "certified-findings.schema.json")
+	if _, err := os.Stat(contract); err == nil {
+		return WriteCertifiedReport(repoRoot, req)
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("inspect Certified Findings contract: %w", err)
+	}
+	return writeReviewTransport160(repoRoot, req)
+}
+
+func WriteCertifiedReport(repoRoot string, req ReviewRequest) (string, error) {
+	if len(req.Findings) != 0 {
+		return "", errors.New("RAW_AGENT_FINDINGS_FORBIDDEN: formal report accepts only same-run Certified Findings")
+	}
+	set, err := finding.LoadCertified(repoRoot, req.RunID)
+	if err != nil {
+		return "", err
+	}
+	req.Findings = mapCertifiedFindings160(set.Findings)
+	if req.Coverage.Status == "PARTIAL" {
+		req.Result = ResultManualActionRequired
+	} else if len(req.Findings) > 0 {
+		req.Result = ResultFailed
+	} else {
+		req.Result = ResultPassed
+	}
+	return writeReviewTransport160(repoRoot, req)
+}
+
+func mapCertifiedFindings160(in []finding.CertifiedFinding) []Finding {
+	out := make([]Finding, 0, len(in))
+	for _, certified := range in {
+		item := Finding{
+			ID: certified.ID, Category: certified.Category, Severity: certified.Severity,
+			Problem: certified.Problem, Evidence: certifiedEvidenceSummary160(certified.EvidenceRefs),
+			Impact: certified.Impact, Recommendation: certified.Recommendation,
+			NeedsTest: certified.NeedsTest, IntroducedByChange: certified.IntroducedByChange,
+			Confidence: certified.Confidence, AnchorKind: string(certified.Anchor.Kind),
+		}
+		switch certified.Anchor.Kind {
+		case finding.AnchorLine:
+			item.File, item.Line = certified.Anchor.Path, certified.Anchor.Line
+		case finding.AnchorSymbol:
+			item.File, item.Symbol = certified.Anchor.Path, certified.Anchor.Symbol
+		case finding.AnchorFile:
+			item.File = certified.Anchor.Path
+		case finding.AnchorChangeSet:
+			// CHANGESET has no invented file/line authority; evidence summary carries the cross-file proof.
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func certifiedEvidenceSummary160(refs []finding.EvidenceRef) string {
+	parts := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		part := strings.ToUpper(strings.TrimSpace(ref.Kind))
+		if strings.TrimSpace(ref.Path) != "" { part += " " + strings.TrimSpace(ref.Path) }
+		if ref.StartLine > 0 { part += fmt.Sprintf(":%d-%d", ref.StartLine, ref.EndLine) }
+		if strings.TrimSpace(ref.Value) != "" { part += " " + strings.TrimSpace(ref.Value) }
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, "；")
+}
+func writeReviewTransport160(repoRoot string, req ReviewRequest) (string, error) {
 	markdown, err := Render(req)
 	if err != nil {
 		return "", err
@@ -917,3 +1016,5 @@ func singleLine(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	return strings.TrimSpace(s)
 }
+
+

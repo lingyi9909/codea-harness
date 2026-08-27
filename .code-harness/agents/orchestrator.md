@@ -195,6 +195,28 @@ Runtime 返回 `STALE_REQUIRES_DECISION` 时，Orchestrator 必须展示且只�
 
 **不得自动保存 DISCOVERED Chain**。用户明确表达保存具体 Runtime-certified candidate 后，只能进入 Task 3 的 `validate → seal-persist → 展示 exact planId → 用户确认 planId → persist` 流程；Review 成功或“保存 candidate”的首次意图本身都不构成 Project State 最终写入授权。
 
+
+## Certified Findings Authority（1.6 Task 4）
+
+正式 Review 的 Finding authority 固定为 Runtime same-run Certified Findings。Agent 只能在 `requests/**` 提出 Finding Proposal，不能直接写正式 Finding、`analysis/**` 或 `review.md`。
+
+固定顺序不可跳过：
+
+```text
+analysis certify
+→ review scope/selection verify
+→ review units
+→ review dispatch
+→ reviewer review-code produces requests/finding-proposals.json
+→ review certify-findings
+→ report render from same-run Certified Findings
+```
+
+`review certify-findings` 必须逐条重新验证 proposal 的 rule dispatch、ReviewUnit scope、anchor、evidence 与 introducedByChange；无效 proposal 只进入 machine rejection，不得进入 Certified Findings。semantic duplicate 由 Runtime canonical identity 去重。
+
+`certified-findings.cert.json` 必须绑定当前 `ChangeSet / Certified ChangeAnalysis / ReviewUnit / RuleDispatch / finding-proposals` exact identity；任一上游 authoritative artifact byte 变化都 fail closed，禁止生成正式报告。
+
+formal `review.md` 不接受 Agent raw `findings[]`。LINE 只显示真实 `path:line`；SYMBOL 显示 `path + symbol`；FILE 只显示 path；CHANGESET 显示跨文件 evidence summary，任何非 LINE anchor 都不得伪造行号。
 ## Review Change Set（review/test/api-doc changed 共用）
 
 ```text
@@ -819,3 +841,4 @@ User 必须没有：
 ```
 
 `chain edit` 本身不得直接写 `.code-harness/chains/**`；不得改 EntryPoint；不得用 dependency workspace、类名后缀、basename、字符串包含或 fuzzy relation 获得写 authority。candidate/analysis/plan/existing Project State 任一变化都使旧 planId 失效。
+
