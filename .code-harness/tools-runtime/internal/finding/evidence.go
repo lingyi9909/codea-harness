@@ -50,7 +50,7 @@ func verifyEvidenceRef160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceR
 		if !ok {
 			return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "invalid evidence path %q", ref.Path)
 		}
-		if dependencyPath160(ctx, p) {
+		if isDependencyPath160(ctx, p) {
 			return EvidenceRef{}, findingError160("FINDING_DEPENDENCY_SCOPE_FORBIDDEN", "dependency evidence path %s", p)
 		}
 		if !unitCurrentPath160(unit, p) {
