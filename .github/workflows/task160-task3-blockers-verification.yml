@@ -11,6 +11,12 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
-      - name: Task 3 blocker regression gate
+      - name: Task 3 exact gate
         working-directory: .code-harness/tools-runtime
-        run: go test -count=1 ./internal/finding
+        run: go test -count=1 ./internal/finding ./internal/report ./cmd/codea-harness-tools
+      - name: Full regression
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./...
+      - name: Vet
+        working-directory: .code-harness/tools-runtime
+        run: go vet ./...
