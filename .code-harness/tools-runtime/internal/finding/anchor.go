@@ -78,8 +78,12 @@ func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrul
 		}
 		resolved.Path = p
 	case AnchorChangeSet:
-		if len(evidence) < 2 {
-			return Anchor{}, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "CHANGESET anchor requires at least two evidence refs")
+		verifiedEvidence, err := canonicalVerifiedEvidence160(ctx, unit, evidence)
+		if err != nil {
+			return Anchor{}, "", err
+		}
+		if len(verifiedEvidence) < 2 {
+			return Anchor{}, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "CHANGESET anchor requires at least two distinct verified evidence refs")
 		}
 	default:
 		return Anchor{}, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "unsupported anchor kind %q", anchor.Kind)

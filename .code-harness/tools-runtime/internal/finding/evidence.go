@@ -12,16 +12,14 @@ import (
 )
 
 func verifyEvidence160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrules.Dispatch, refs []EvidenceRef) ([]EvidenceRef, string, error) {
-	verified := make([]EvidenceRef, 0, len(refs))
+	verified, err := canonicalVerifiedEvidence160(ctx, unit, refs)
+	if err != nil {
+		return nil, "", err
+	}
 	kinds := map[string]bool{}
-	for _, ref := range refs {
-		v, err := verifyEvidenceRef160(ctx, unit, ref)
-		if err != nil {
-			return nil, "", err
-		}
+	for _, v := range verified {
 		kind := strings.ToUpper(strings.TrimSpace(v.Kind))
 		kinds[kind] = true
-		verified = append(verified, v)
 	}
 	for _, required := range dispatch.RequiredEvidence {
 		kind := strings.ToUpper(strings.TrimSpace(required))
@@ -29,16 +27,36 @@ func verifyEvidence160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewr
 			return nil, "", findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "rule %s requires %s evidence", dispatch.RuleID, kind)
 		}
 	}
-	sort.Slice(verified, func(i, j int) bool {
-		li, _ := json.Marshal(verified[i])
-		lj, _ := json.Marshal(verified[j])
-		return string(li) < string(lj)
-	})
 	data, err := json.Marshal(verified)
 	if err != nil {
 		return nil, "", findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "canonicalize evidence: %v", err)
 	}
 	return verified, fmt.Sprintf("%x", sha256.Sum256(data)), nil
+}
+
+func canonicalVerifiedEvidence160(ctx VerifyContext, unit reviewunit.Unit, refs []EvidenceRef) ([]EvidenceRef, error) {
+	seen := make(map[string]EvidenceRef, len(refs))
+	for _, ref := range refs {
+		v, err := verifyEvidenceRef160(ctx, unit, ref)
+		if err != nil {
+			return nil, err
+		}
+		canonical, err := json.Marshal(v)
+		if err != nil {
+			return nil, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "canonicalize evidence ref: %v", err)
+		}
+		seen[string(canonical)] = v
+	}
+	verified := make([]EvidenceRef, 0, len(seen))
+	for _, v := range seen {
+		verified = append(verified, v)
+	}
+	sort.Slice(verified, func(i, j int) bool {
+		li, _ := json.Marshal(verified[i])
+		lj, _ := json.Marshal(verified[j])
+		return string(li) < string(lj)
+	})
+	return verified, nil
 }
 
 func verifyEvidenceRef160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceRef) (EvidenceRef, error) {
@@ -87,8 +105,8 @@ func verifyEvidenceRef160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceR
 			}
 		}
 	case "CHANGED_RANGE":
-		if v.Path == "" || !validCurrentRange160(ctx, v.Path, v.StartLine, v.EndLine) || !rangeOverlapsHunk160(unit, v.Path, v.StartLine, v.EndLine) {
-			return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "changed range is not verified by ReviewUnit hunks")
+		if v.Path == "" || !validCurrentRange160(ctx, v.Path, v.StartLine, v.EndLine) || !rangeCoveredByHunk160(unit, v.Path, v.StartLine, v.EndLine) {
+			return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "changed range is not fully covered by a ReviewUnit hunk")
 		}
 	case "RESOURCE_RELATION":
 		if v.Path == "" || !resourceRelationVerified160(ctx, unit, v) {
@@ -133,6 +151,20 @@ func rangeOverlapsHunk160(unit reviewunit.Unit, p string, start, end int) bool {
 	return false
 }
 
+func rangeCoveredByHunk160(unit reviewunit.Unit, p string, start, end int) bool {
+	for _, h := range unit.ChangedHunks {
+		hp, ok := safeFindingPath160(h.Path)
+		if !ok || hp != p || h.NewStart < 1 || h.NewLines < 1 {
+			continue
+		}
+		hEnd := h.NewStart + h.NewLines - 1
+		if start >= h.NewStart && end <= hEnd {
+			return true
+		}
+	}
+	return false
+}
+
 func resourceRelationVerified160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceRef) bool {
 	for _, relation := range ctx.analysis.ResourceRelations {
 		p, ok := safeFindingPath160(relation.Path)
@@ -156,7 +188,11 @@ func introducedByChangeVerified160(ctx VerifyContext, unit reviewunit.Unit, anch
 	}
 	for _, ref := range refs {
 		switch strings.ToUpper(strings.TrimSpace(ref.Kind)) {
-		case "CHANGED_RANGE", "SOURCE_RANGE":
+		case "CHANGED_RANGE":
+			if ref.Path != "" && rangeCoveredByHunk160(unit, ref.Path, ref.StartLine, ref.EndLine) {
+				return true
+			}
+		case "SOURCE_RANGE":
 			if ref.Path != "" && rangeOverlapsHunk160(unit, ref.Path, ref.StartLine, ref.EndLine) {
 				return true
 			}
