@@ -85,7 +85,7 @@ rules:
     version: 1
     kind: AGENT
     severityDefault: high
-    roles: [Config]
+    roles: [YamlConfig]
     requiredEvidence: [CHANGED_RANGE]
     prompt: >-
       检查本次配置变更中的 datasource、连接池、timeout、retry、log-level 或 feature-switch key 是否可能造成高风险运行行为；仅针对真实 changed config 范围判断。
