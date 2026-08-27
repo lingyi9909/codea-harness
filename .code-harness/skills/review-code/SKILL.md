@@ -1,7 +1,7 @@
 ---
 name: review-code
 description: 在 FULL 或 Runtime 已验证的 TARGETED Review Scope 完整后执行 Finding Proposal Review；Java/Mapper/YML 生产变更按证据评审，测试代码只执行 Test Validity Gate。
-version: 5
+version: 4
 agent: reviewer
 tools:
   - read_code
