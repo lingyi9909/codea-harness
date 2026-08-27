@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"codea-harness-tools/internal/finding"
 )
 
 type Result string
@@ -87,6 +89,8 @@ type Finding struct {
 	Severity           string  `json:"severity"`
 	File               string  `json:"file"`
 	Line               int     `json:"line,omitempty"`
+	AnchorKind         string  `json:"anchorKind,omitempty"`
+	Symbol             string  `json:"symbol,omitempty"`
 	Problem            string  `json:"problem"`
 	Evidence           string  `json:"evidence"`
 	Impact             string  `json:"impact"`
@@ -1012,4 +1016,5 @@ func singleLine(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	return strings.TrimSpace(s)
 }
+
 
