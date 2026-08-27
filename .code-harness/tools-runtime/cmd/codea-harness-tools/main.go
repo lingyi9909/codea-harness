@@ -51,7 +51,7 @@ func run(args []string) error {
 	case "analysis":
 		return runAnalysis(args[1:])
 	case "review":
-		return runReview(args[1:])
+		return runReview160(args[1:])
 	case "report":
 		return runReport(args[1:])
 	case "seal-apply":
