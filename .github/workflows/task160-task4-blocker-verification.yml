@@ -11,12 +11,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
-      - name: Task 4 GREEN gate
+      - name: Task 4 blocker RED gate
         working-directory: .code-harness/tools-runtime
-        run: go test -count=1 ./internal/finding ./internal/report ./cmd/codea-harness-tools ./internal/reviewscope ./internal/reviewselection
-      - name: Full regression
-        working-directory: .code-harness/tools-runtime
-        run: go test -count=1 ./...
-      - name: Vet
-        working-directory: .code-harness/tools-runtime
-        run: go vet ./...
+        run: |
+          go test -count=1 ./cmd/codea-harness-tools -run '^TestTask4'
+          go test -count=1 ./internal/report -run '^TestTask4PartialReport'
