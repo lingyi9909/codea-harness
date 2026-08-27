@@ -3,25 +3,20 @@ name: task160-task4-blocker-verification
 on:
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
   task4-blocker-gate:
     runs-on: windows-latest
-    env:
-      TASK4_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-      - name: Apply Task 4 report authority patch once
-        run: ./.github/scripts/task160-task4-blocker-patch.ps1
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
-      - name: Task 4 blocker focused gate
+      - name: Task 4 GREEN gate
         working-directory: .code-harness/tools-runtime
-        run: |
-          go test -count=1 ./cmd/codea-harness-tools -run '^TestTask4'
-          go test -count=1 ./internal/report -run '^TestTask4PartialReport'
+        run: go test -count=1 ./internal/finding ./internal/report ./cmd/codea-harness-tools ./internal/reviewscope ./internal/reviewselection
+      - name: Full regression
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./...
+      - name: Vet
+        working-directory: .code-harness/tools-runtime
+        run: go vet ./...
