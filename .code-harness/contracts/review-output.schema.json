@@ -17,81 +17,24 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "category",
-          "severity",
-          "file",
-          "line",
-          "problem",
-          "evidence",
-          "impact",
-          "recommendation",
-          "needsTest",
-          "introducedByChange",
-          "confidence"
-        ],
+        "required": ["id", "category", "severity", "problem", "evidence", "impact", "recommendation", "needsTest", "introducedByChange", "confidence"],
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "发现编号，如 F-001"
-          },
-          "category": {
-            "enum": ["PRODUCTION_CODE", "TEST_VALIDITY"],
-            "description": "生产代码问题或测试有效性问题"
-          },
-          "severity": {
-            "enum": ["critical", "high", "medium", "low"],
-            "description": "严重程度"
-          },
-          "file": {
-            "type": "string",
-            "minLength": 1,
-            "description": "问题所在文件路径"
-          },
-          "anchorKind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]},`n          "symbol": {"type": "string", "minLength": 1},`n          "line": {
-            "type": ["integer", "null"],
-            "minimum": 1,
-            "description": "问题所在行号"
-          },
-          "problem": {
-            "type": "string",
-            "minLength": 1,
-            "description": "中文问题描述，只概括已有代码证据"
-          },
-          "evidence": {
-            "type": "string",
-            "minLength": 1,
-            "description": "中文证据说明，代码符号和路径保持原文"
-          },
-          "impact": {
-            "type": "string",
-            "minLength": 1,
-            "description": "中文问题影响"
-          },
-          "recommendation": {
-            "type": "string",
-            "minLength": 1,
-            "description": "中文最小修复建议"
-          },
-          "needsTest": {
-            "type": "boolean",
-            "description": "是否需要补充测试"
-          },
-          "introducedByChange": {
-            "type": "boolean",
-            "description": "是否由本次变更引入"
-          },
-          "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "置信度（0-1）"
-          }
+          "id": {"type": "string", "minLength": 1},
+          "category": {"enum": ["PRODUCTION_CODE", "TEST_VALIDITY"]},
+          "severity": {"enum": ["critical", "high", "medium", "low"]},
+          "anchorKind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]},
+          "file": {"type": "string", "minLength": 1},
+          "line": {"type": "integer", "minimum": 1},
+          "symbol": {"type": "string", "minLength": 1},
+          "problem": {"type": "string", "minLength": 1},
+          "evidence": {"type": "string", "minLength": 1},
+          "impact": {"type": "string", "minLength": 1},
+          "recommendation": {"type": "string", "minLength": 1},
+          "needsTest": {"type": "boolean"},
+          "introducedByChange": {"type": "boolean"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
         }
       }
     }
   }
 }
-
