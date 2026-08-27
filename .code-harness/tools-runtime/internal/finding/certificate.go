@@ -76,53 +76,58 @@ func WriteCertified(repoRoot string, set CertifiedSet, cert Certificate) error {
 }
 
 func LoadCertified(repoRoot, runID string) (CertifiedSet, error) {
+	set, _, err := LoadCertifiedWithCertificate(repoRoot, runID)
+	return set, err
+}
+
+func LoadCertifiedWithCertificate(repoRoot, runID string) (CertifiedSet, Certificate, error) {
 	root := filepath.Clean(repoRoot)
 	runID = strings.TrimSpace(runID)
 	if !findingRunID160.MatchString(runID) {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_RUN_ID_INVALID", "%q", runID)
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_RUN_ID_INVALID", "%q", runID)
 	}
 	analysisDir := filepath.Join(root, ".code-harness", "runs", runID, "analysis")
 	setPath := filepath.Join(analysisDir, "certified-findings.json")
 	certPath := filepath.Join(analysisDir, "certified-findings.cert.json")
 	setBytes, err := os.ReadFile(setPath)
 	if err != nil {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_READ_FAILED", "%v", err)
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_READ_FAILED", "%v", err)
 	}
 	certBytes, err := os.ReadFile(certPath)
 	if err != nil {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_CERT_READ_FAILED", "%v", err)
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_CERT_READ_FAILED", "%v", err)
 	}
 	if err := validateFindingArtifactSchema160(root, "certified-findings.schema.json", setBytes); err != nil {
-		return CertifiedSet{}, err
+		return CertifiedSet{}, Certificate{}, err
 	}
 	if err := validateFindingArtifactSchema160(root, "certified-findings-cert.schema.json", certBytes); err != nil {
-		return CertifiedSet{}, err
+		return CertifiedSet{}, Certificate{}, err
 	}
 	var set CertifiedSet
 	if err := strictFindingDecode160(setBytes, &set); err != nil {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_DECODE_FAILED", "%v", err)
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_DECODE_FAILED", "%v", err)
 	}
 	var cert Certificate
 	if err := strictFindingDecode160(certBytes, &cert); err != nil {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_CERT_DECODE_FAILED", "%v", err)
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_CERT_DECODE_FAILED", "%v", err)
 	}
 	canonicalSet, err := canonicalCertifiedSet160(set, true)
 	if err != nil || !bytes.Equal(setBytes, canonicalSet) {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_BYTES_NOT_CANONICAL", "artifact bytes are not canonical")
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_BYTES_NOT_CANONICAL", "artifact bytes are not canonical")
 	}
 	canonicalCert, err := canonicalCertificate160(cert)
 	if err != nil || !bytes.Equal(certBytes, canonicalCert) {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_CERT_BYTES_NOT_CANONICAL", "certificate bytes are not canonical")
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_CERT_BYTES_NOT_CANONICAL", "certificate bytes are not canonical")
 	}
 	unsigned, err := canonicalCertifiedSet160(set, false)
 	if err != nil || hashFindingBytes160(unsigned) != set.SHA256 {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_HASH_MISMATCH", "internal sha256 mismatch")
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_HASH_MISMATCH", "internal sha256 mismatch")
 	}
 	if cert.RunID != runID || set.RunID != runID || cert.CertifiedFindingsSHA256 != hashFindingBytes160(setBytes) {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "run/artifact identity mismatch")
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "run/artifact identity mismatch")
 	}
 	if set.ChangeSetSHA256 != cert.ChangeSetSHA256 || set.ChangeAnalysisSHA256 != cert.ChangeAnalysisSHA256 || set.ReviewUnitsSHA256 != cert.ReviewUnitsSHA256 || set.RuleDispatchSHA256 != cert.RuleDispatchSHA256 || set.FindingProposalsSHA256 != cert.FindingProposalsSHA256 {
-		return CertifiedSet{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "certificate authority hashes differ from set")
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "certificate authority hashes differ from set")
 	}
 	current := []struct {
 		path string
@@ -137,13 +142,28 @@ func LoadCertified(repoRoot, runID string) (CertifiedSet, error) {
 	for _, authority := range current {
 		data, err := os.ReadFile(authority.path)
 		if err != nil {
-			return CertifiedSet{}, findingError160(authority.code, "read authority: %v", err)
+			return CertifiedSet{}, Certificate{}, findingError160(authority.code, "read authority: %v", err)
 		}
 		if hashFindingBytes160(data) != authority.want {
-			return CertifiedSet{}, findingError160(authority.code, "authority bytes changed")
+			return CertifiedSet{}, Certificate{}, findingError160(authority.code, "authority bytes changed")
 		}
 	}
-	return set, nil
+
+	// Re-enter the existing Runtime authority instead of trusting unchanged run artifacts.
+	// This revalidates Certified ChangeAnalysis against the current Working Tree/Change Set,
+	// ReviewUnit/ReviewScope identity, current Runtime VERSION, and current RuleDispatch/catalog.
+	authority, err := LoadVerifyContext(root, runID, "")
+	if err != nil {
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_UPSTREAM_STALE", "%v", err)
+	}
+	mode := strings.ToUpper(strings.TrimSpace(cert.Mode))
+	if string(authority.units.Mode) != mode || authority.units.RunID != runID || authority.units.ChangeSetSHA256 != cert.ChangeSetSHA256 || authority.units.ChangeAnalysisSHA256 != cert.ChangeAnalysisSHA256 || authority.units.HarnessVersion != set.HarnessVersion {
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_UPSTREAM_STALE", "Runtime authority identity differs from Certified Findings")
+	}
+	if authority.units.ReviewScopeSHA256 != strings.TrimSpace(cert.ScopeSHA256) {
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_UPSTREAM_STALE", "Runtime ReviewScope identity differs from certificate")
+	}
+	return set, cert, nil
 }
 
 func validateFindingArtifactSchema160(root, name string, data []byte) error {
