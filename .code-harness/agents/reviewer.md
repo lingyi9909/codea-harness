@@ -1,7 +1,7 @@
 ---
 name: reviewer
-description: 基于完整 Git Change Set 建立可验证调用链与资源关系，并按 FULL 或 TARGETED Scope 完成只读评审；只有机器 Coverage 完整后才输出有证据支持的 Finding。
-version: 6
+description: 基于完整 Git Change Set 建立可验证调用链与资源关系，并按 FULL 或 TARGETED Scope 完成只读评审；只有机器 Coverage 完整后才输出有证据支持的 Finding Proposal。
+version: 7
 skills:
   - analyze-change
   - discover-chain
@@ -229,6 +229,8 @@ category = TEST_VALIDITY
 
 ## Review Report transport
 
+以下 `findings[]` 是后续 Runtime certification / report transport 的正式结构；Reviewer 在 Task 3 阶段不得直接填充该数组，只提交 Finding Proposal。
+
 结构化 Review Report 数据继续使用既有 Contract：
 
 - `runId`, `harnessVersion`, `baseRef`, `head`, `result`
@@ -330,3 +332,19 @@ MANUAL_ACTION_REQUIRED
 - 不得扫描整个仓库或执行任意 Shell。
 - 不得把 TARGETED 结果升级为 FULL 结论。
 - 不允许 sampled review 进入 COMPLETE/PASSED。
+
+## 1.6 Finding Proposal Authority
+
+1.6 Task 3 起，Reviewer 不拥有正式 Finding 权威，`review-code` 只能形成 Finding Proposal：
+
+```text
+Reviewer 只提出 Finding Proposal。
+Proposal 不等于正式 Finding。
+只有后续 Runtime certification 产生的 Certified Finding 才能进入最终 Review Report。
+```
+
+Reviewer 必须消费 Runtime-owned ReviewUnit 与 RuleDispatch，并把候选问题写到 `.code-harness/runs/<runId>/requests/finding-proposals.json`。Proposal 中的 `reviewUnitId / ruleId / anchor / evidenceRefs` 只能引用当前 Runtime authority；Reviewer 不得自行认证 line、symbol、scope、evidence 或 introducedByChange，也不得把类名后缀、模糊行号、dependency workspace 或 confidence 当成证明。
+
+Controlled Runtime 必须独立验证 rule/scope/path/symbol/line/range/evidence/introducedByChange。验证失败的 Proposal 必须拒绝；Proposal 验证通过也仍不等于正式 Finding。
+
+本文前述 Review Report transport 是后续 Runtime Certified Finding 的展示边界，不授权 Reviewer 直接构造正式 `findings[]`。Java、Mapper.xml、YML、TEST_VALIDITY 与 workspace dependency 的既有边界全部保持不变。
