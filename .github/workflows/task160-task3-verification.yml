@@ -1,0 +1,41 @@
+name: task160-task3-verification
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.code-harness/**'
+      - '.github/workflows/task160-task3-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  task3-gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.5'
+      - name: Baseline or Task 3 RED/GREEN package gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./internal/finding ./internal/report
+      - name: Task 3 GREEN exact gate
+        if: success()
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./internal/finding ./internal/report ./cmd/codea-harness-tools
+      - name: Full regression
+        if: success()
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./...
+      - name: Vet
+        if: success()
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
