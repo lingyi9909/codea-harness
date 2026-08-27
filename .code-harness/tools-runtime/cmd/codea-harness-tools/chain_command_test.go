@@ -14,12 +14,14 @@ func installChangeAnalysisSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("locate test source")
 	}
-	source := filepath.Join(filepath.Dir(testFile), "..", "..", "..", "contracts", "change-analysis.schema.json")
-	data, err := os.ReadFile(source)
-	if err != nil {
-		t.Fatal(err)
+	contractsDir := filepath.Join(filepath.Dir(testFile), "..", "..", "..", "contracts")
+	for _, name := range []string{"change-analysis.schema.json", "chain-candidate-cert.schema.json", "chain-write-plan.schema.json"} {
+		data, err := os.ReadFile(filepath.Join(contractsDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(".code-harness", "contracts", name), string(data))
 	}
-	writeFile(t, filepath.Join(".code-harness", "contracts", "change-analysis.schema.json"), string(data))
 }
 
 func validChainDiscoveryAnalysis() string {
@@ -62,6 +64,7 @@ func TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState(t *testing.T
 	runID := "run-task2"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
 	writeFile(t, analysisPath, validChainDiscoveryAnalysis())
+	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
 	requestPath := writeQueryRequest(t, runID, "chain-discover.json", `{"runId":"run-task2","target":"OrderController.approve","changeAnalysisPath":".code-harness/runs/run-task2/analysis/change-analysis.json"}`)
 
 	if err := run([]string{"chain", "discover", "--input", requestPath}); err != nil {
@@ -69,8 +72,16 @@ func TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState(t *testing.T
 	}
 	discovered := filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains")
 	entries, err := os.ReadDir(discovered)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("discovered run artifact missing: entries=%v err=%v", entries, err)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("discovered candidate + provenance artifacts missing: entries=%v err=%v", entries, err)
+	}
+	var yamlCount, certCount int
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".yaml") { yamlCount++ }
+		if strings.HasSuffix(entry.Name(), ".cert.json") { certCount++ }
+	}
+	if yamlCount != 1 || certCount != 1 {
+		t.Fatalf("discovery must emit exactly one YAML and one cert, got yaml=%d cert=%d", yamlCount, certCount)
 	}
 	if _, err := os.Stat(filepath.Join(".code-harness", "chains")); !os.IsNotExist(err) {
 		t.Fatalf("Task 2 discovery must not create Project State chains/**, err=%v", err)

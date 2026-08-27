@@ -48,6 +48,7 @@ func runtimeCallerForTest() (uintptr, string, int, bool) {
 
 func TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted(t *testing.T) {
 	analysisPath := setupTask4ReviewContextProject(t)
+	prepareCommittedCertifiedAnalysisFixture153(t, "run-task4-review", analysisPath)
 	request := `{
 	  "runId":"run-task4-review",
 	  "changeAnalysisPath":".code-harness/runs/run-task4-review/analysis/change-analysis.json",
@@ -93,7 +94,8 @@ func TestChainReviewContextRejectsOutsideRequestAndCrossRunAnalysis(t *testing.T
 }
 
 func TestChainReviewContextRejectsUnverifiedScopeBeforeResolution(t *testing.T) {
-	setupTask4ReviewContextProject(t)
+	analysisPath := setupTask4ReviewContextProject(t)
+	prepareCommittedCertifiedAnalysisFixture153(t, "run-task4-review", analysisPath)
 	request := `{
 	  "runId":"run-task4-review",
 	  "changeAnalysisPath":".code-harness/runs/run-task4-review/analysis/change-analysis.json",

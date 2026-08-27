@@ -111,6 +111,7 @@ interface XxxMapper {
 '@
     Write-Utf8NoBom (Join-Path $currentJava 'XxxController.java') @'
 package com.company.order;
+@RestController
 class XxxController {
     private XxxService service;
     public void health() {}
@@ -189,6 +190,7 @@ workspaceDependencies:
     # Real mixed working tree required by Task 5.
     Write-Utf8NoBom (Join-Path $currentJava 'XxxController.java') @'
 package com.company.order;
+@RestController
 class XxxController {
     private XxxService service;
     @PostMapping
@@ -274,7 +276,7 @@ Write-Host 'STAGED + UNSTAGED + UNTRACKED PASS'
 
 # The required Runtime navigation commands are executed for evidence. Current find-references may return
 # matches:null for member-call shapes; relationship confirmation below therefore also checks the just-read source.
-$controller = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxController','--scope','src/main/java')
+$controller = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxController.submit','--scope','src/main/java')
 $service = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxService','--scope','src/main/java')
 $implementationSearch = Invoke-RuntimeJson $current @('nav','find-implementations','--symbol','XxxService','--scope','src/main/java')
 $mapper = Invoke-RuntimeJson $current @('nav','find-symbol','--symbol','XxxMapper','--scope','src/main/java')
@@ -282,7 +284,7 @@ $serviceRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol',
 $submitRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxService.submit','--scope','src/main/java')
 $mapperRefs = Invoke-RuntimeJson $current @('nav','find-references','--symbol','XxxMapper.updateStatus','--scope','src/main/java')
 
-Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.java' 'Controller find-symbol'
+Assert-OneMatchPath $controller 'src/main/java/com/company/order/XxxController.java' 'Controller endpoint find-symbol'
 Assert-OneMatchPath $service 'src/main/java/com/company/order/XxxService.java' 'Service find-symbol'
 Assert-OneMatchPath $mapper 'src/main/java/com/company/order/XxxMapper.java' 'Mapper find-symbol'
 if ($implementationSearch.symbol -ne 'XxxService' -or $implementationSearch.scope -ne 'src/main/java') { throw "find-implementations runtime evidence mismatch: $($implementationSearch | ConvertTo-Json -Depth 8 -Compress)" }
@@ -361,16 +363,20 @@ $analysis = [ordered]@{
 }
 
 $runId = 'run-task5-real-business'
+$draftRel = ".code-harness/runs/$runId/requests/change-analysis-draft.json"
+$certifyRequestRel = ".code-harness/runs/$runId/requests/analysis-certify.json"
 $analysisRel = ".code-harness/runs/$runId/analysis/change-analysis.json"
 $requestRel = ".code-harness/runs/$runId/requests/chain-discover.json"
+$draftAbs = Join-Path $current ($draftRel -replace '/', [IO.Path]::DirectorySeparatorChar)
+$certifyRequestAbs = Join-Path $current ($certifyRequestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
 $analysisAbs = Join-Path $current ($analysisRel -replace '/', [IO.Path]::DirectorySeparatorChar)
 $requestAbs = Join-Path $current ($requestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
 if (Test-Path $analysisAbs) { throw 'precondition violated: change-analysis.json already existed' }
 if (Test-Path (Join-Path $current '.code-harness/chains')) { throw 'precondition violated: historical chains/** exists' }
-New-Item -ItemType Directory -Force (Split-Path $analysisAbs),(Split-Path $requestAbs) | Out-Null
-$analysis | ConvertTo-Json -Depth 12 | Set-Content $analysisAbs
+New-Item -ItemType Directory -Force (Split-Path $draftAbs),(Split-Path $analysisAbs) | Out-Null
+$analysis | ConvertTo-Json -Depth 12 | Set-Content $draftAbs
 
-$coverageResult = Invoke-RuntimeJson $current @('validate','--schema','.code-harness/contracts/change-analysis.schema.json','--input',$analysisRel,'--format','json')
+$coverageResult = Invoke-RuntimeJson $current @('validate','--schema','.code-harness/contracts/change-analysis.schema.json','--input',$draftRel,'--format','json')
 if ($coverageResult.status -ne 'VALID' -or $coverageResult.reviewCoverage.status -ne 'COMPLETE') {
     throw "Schema/FULL Coverage verification failed: $($coverageResult | ConvertTo-Json -Depth 10 -Compress)"
 }
@@ -378,6 +384,20 @@ foreach ($reviewed in @($coverageResult.reviewCoverage.reviewedFiles)) {
     if ([string]($reviewed.path) -match 'company-framework|\.\./') { throw "dependency leaked into FULL Coverage: $($reviewed.path)" }
 }
 Write-Host 'Coverage COMPLETE PASS'
+
+$certifyRequest = [ordered]@{
+    runId = $runId
+    draftPath = $draftRel
+    baseRef = 'HEAD'
+    includeWorkingTree = $true
+    intent = [ordered]@{ mode='FULL' }
+}
+$certifyRequest | ConvertTo-Json -Depth 6 | Set-Content $certifyRequestAbs
+$certification = Invoke-RuntimeJson $current @('analysis','certify','--input',$certifyRequestRel)
+if ($certification.status -ne 'CERTIFIED' -or -not (Test-Path $analysisAbs)) {
+    throw "ChangeAnalysis certification failed: $($certification | ConvertTo-Json -Depth 10 -Compress)"
+}
+Write-Host 'Certified ChangeAnalysis PASS'
 
 $request = [ordered]@{ runId=$runId; target='XxxController'; changeAnalysisPath=$analysisRel }
 $request | ConvertTo-Json -Depth 6 | Set-Content $requestAbs

@@ -20,26 +20,15 @@ func TestReportDispatchRecognizesReport(t *testing.T) {
 
 func TestReportReviewWritesArtifactAndDeletesTransport(t *testing.T) {
 	withTempProject(t)
-	req := report.ReviewRequest{
-		RunID:          "review-001",
-		HarnessVersion: "1.3.0",
-		BaseRef:        "origin/develop",
-		Head:           "abc123",
-		Result:         report.ResultPassed,
-		Scope:          report.ReviewScope{},
-		Coverage:       report.ReviewCoverage{Status: "COMPLETE"},
-		Findings:       []report.Finding{},
-	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	input := filepath.Join(".code-harness", "runs", req.RunID, "requests", "review-report.json")
-	writeFile(t, input, string(data))
+	runID := "review-001"
+	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
+	writeFile(t, analysisPath, fullReportAnalysis153())
+	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
+	input := writeReportTransport153(t, runID)
 	if err := run([]string{"report", "review", "--input", input}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(".code-harness", "runs", req.RunID, "review.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(".code-harness", "runs", runID, "review.md")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(input); !os.IsNotExist(err) {

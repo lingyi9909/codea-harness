@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChainWritePlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["planId", "runId", "chainId", "candidatePath", "candidateHash", "analysisHash", "previewSha256"],
+  "properties": {
+    "planId": {"type": "string", "pattern": "^chain-write-[0-9a-f]{64}$"},
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "chainId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "candidatePath": {"type": "string", "minLength": 1},
+    "candidateHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "analysisHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "expectedExistingHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "previewSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

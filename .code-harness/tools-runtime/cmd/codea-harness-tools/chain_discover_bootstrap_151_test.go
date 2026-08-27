@@ -153,10 +153,24 @@ func Test151DirectDiscoverSupportsFreshAddedControllerServiceMapperStack(t *test
 
 	discoveredDir := filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains")
 	entries, err := os.ReadDir(discoveredDir)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("expected exactly one DISCOVERED chain, entries=%v err=%v", entries, err)
+	if err != nil {
+		t.Fatalf("read discovered chains: %v", err)
 	}
-	yamlBytes, err := os.ReadFile(filepath.Join(discoveredDir, entries[0].Name()))
+	var yamlEntries []os.DirEntry
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.EqualFold(filepath.Ext(entry.Name()), ".yaml") {
+			yamlEntries = append(yamlEntries, entry)
+		}
+	}
+	if len(yamlEntries) != 1 {
+		t.Fatalf("expected exactly one DISCOVERED YAML candidate, entries=%v", entries)
+	}
+	yamlPath := filepath.Join(discoveredDir, yamlEntries[0].Name())
+	certPath := strings.TrimSuffix(yamlPath, filepath.Ext(yamlPath)) + ".cert.json"
+	if _, err := os.Stat(certPath); err != nil {
+		t.Fatalf("DISCOVERED candidate must have Runtime provenance certificate: %v", err)
+	}
+	yamlBytes, err := os.ReadFile(yamlPath)
 	if err != nil {
 		t.Fatal(err)
 	}

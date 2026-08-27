@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"codea-harness-tools/internal/coverage"
+	"codea-harness-tools/internal/chain"
 	"codea-harness-tools/internal/reviewscope"
 	"codea-harness-tools/internal/schema"
 )
@@ -52,17 +52,18 @@ func runChainReviewContext(args []string) error {
 		return errors.New("chain review-context requires reviewScope")
 	}
 
-	analysisBytes, err := os.ReadFile(filepath.Clean(req.ChangeAnalysisPath))
+	certified, cert, err := loadCertifiedAnalysis153(".", req.ChangeAnalysisPath)
 	if err != nil {
-		return fmt.Errorf("read review-context ChangeAnalysis: %w", err)
+		return fmt.Errorf("load certified review-context ChangeAnalysis: %w", err)
 	}
-	analysisSchema, err := os.ReadFile(filepath.Join(".code-harness", "contracts", "change-analysis.schema.json"))
+	if cert.RunID != req.RunID {
+		return fmt.Errorf("RUN_ID_PATH_MISMATCH: certified runId %q does not match request runId %q", cert.RunID, req.RunID)
+	}
+	analysisBytes, err := json.Marshal(certified)
 	if err != nil {
-		return fmt.Errorf("read ChangeAnalysis schema: %w", err)
+		return fmt.Errorf("encode certified review-context ChangeAnalysis: %w", err)
 	}
-	if err := schema.ValidateJSON(analysisSchema, analysisBytes); err != nil {
-		return fmt.Errorf("validate review-context ChangeAnalysis: %w", err)
-	}
+
 	reviewScopeSchema, err := os.ReadFile(filepath.Join(".code-harness", "contracts", "review-scope.schema.json"))
 	if err != nil {
 		return fmt.Errorf("read ReviewScope schema: %w", err)
@@ -81,15 +82,15 @@ func runChainReviewContext(args []string) error {
 	if machine.Status != "COMPLETE" {
 		return fmt.Errorf("review-context scope coverage incomplete: missingFiles=%v unresolvedSymbols=%v", machine.MissingFiles, machine.UnresolvedSymbols)
 	}
-	if selection.Mode == "FULL" {
-		if _, err := coverage.VerifyAnalysisJSON(analysisBytes); err != nil {
-			return fmt.Errorf("verify review-context FULL coverage: %w", err)
-		}
-	}
 
 	result, err := reviewscope.ResolveChainContexts(".", selection, analysisBytes, reviewscope.ChainResolveOptions{
 		RunID:                  req.RunID,
 		AllowTemporaryForStale: req.AllowTemporaryForStale,
+		CertifyDiscovered: func(candidate chain.Chain) error {
+			candidatePath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "discovered-chains", candidate.ID+".yaml"))
+			_, err := chain.CertifyCandidate(".", candidate, candidatePath, "DISCOVERED", cert)
+			return err
+		},
 	})
 	if err != nil {
 		return err

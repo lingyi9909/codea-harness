@@ -20,8 +20,8 @@ func TestRelease152WorkspaceDependencyPackagingContract(t *testing.T) {
 		return string(b)
 	}
 
-	if got := strings.TrimSpace(mustRead(filepath.Join(harnessRoot, "VERSION"))); got != "1.5.2" {
-		t.Fatalf("release VERSION=%q want 1.5.2", got)
+	if got := strings.TrimSpace(mustRead(filepath.Join(harnessRoot, "VERSION"))); got != "1.5.3" {
+		t.Fatalf("current release VERSION=%q want 1.5.3", got)
 	}
 
 	changelog := mustRead(filepath.Join(repoRoot, "CHANGELOG.md"))
@@ -40,10 +40,10 @@ func TestRelease152WorkspaceDependencyPackagingContract(t *testing.T) {
 
 	workflow := mustRead(filepath.Join(repoRoot, ".github", "workflows", "package-windows-x64.yml"))
 	for _, want := range []string{
-		"cd020fb319af95d28518b484593e2e0a0a03b7b5",
-		"codea-harness-1.5.2-windows-x64-install",
-		"codea-harness-1.5.2-windows-x64-upgrade",
-		"1.5.1 to 1.5.2",
+		"6f290d8ff160767bb981278aa123aa1621ea3343",
+		"codea-harness-1.5.3-windows-x64-install",
+		"codea-harness-1.5.3-windows-x64-upgrade",
+		"1.5.2 to 1.5.3",
 		"Workspace dependency Maven identity regression",
 		"Template inheritance navigation regression",
 		"Task 6 review isolation regression",
@@ -51,7 +51,7 @@ func TestRelease152WorkspaceDependencyPackagingContract(t *testing.T) {
 		"workspaceDependencies",
 	} {
 		if !strings.Contains(workflow, want) {
-			t.Fatalf("package-windows-x64 missing 1.5.2 release gate %q", want)
+			t.Fatalf("package-windows-x64 missing preserved 1.5.2 release gate %q", want)
 		}
 	}
 }

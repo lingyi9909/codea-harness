@@ -47,7 +47,21 @@ func (n Navigator) run(ctx context.Context, symbol, scope string, patterns ...st
 	return res,nil
 }
 func splitSymbol(s string)(owner,member string){ if i:=strings.Index(s,"."); i>=0 { return s[:i],s[i+1:] }; return s,"" }
-func (n Navigator) FindSymbol(ctx context.Context,symbol,scope string)(Result,error){ owner,member:=splitSymbol(symbol); if member!="" { return n.run(ctx,symbol,scope,"$RET "+member+"($$$ARGS) { $$$BODY }") }; return n.run(ctx,symbol,scope,"class "+owner+" { $$$BODY }","interface "+owner+" { $$$BODY }","enum "+owner+" { $$$BODY }") }
+func (n Navigator) FindSymbol(ctx context.Context,symbol,scope string)(Result,error){
+	owner,member:=splitSymbol(symbol)
+	if member!="" {
+		res,err:=n.run(ctx,symbol,scope,"$RET "+member+"($$$ARGS) { $$$BODY }")
+		if err!=nil || len(res.Matches)>0 { return res,err }
+		endpoints,err:=n.FindControllerEndpoints(ctx,scope)
+		if err!=nil { return Result{},err }
+		for _,endpoint:=range endpoints {
+			if endpoint.Symbol!=symbol { continue }
+			res.Matches=append(res.Matches,Match{Path:endpoint.Path,Line:endpoint.StartLine,Column:endpoint.StartColumn,Text:endpoint.Symbol})
+		}
+		return res,nil
+	}
+	return n.run(ctx,symbol,scope,"class "+owner+" { $$$BODY }","interface "+owner+" { $$$BODY }","enum "+owner+" { $$$BODY }")
+}
 func (n Navigator) FindReferences(ctx context.Context,symbol,scope string)(Result,error){ _,member:=splitSymbol(symbol); if member!="" { return n.run(ctx,symbol,scope,"$OBJ."+member+"($$$ARGS)",member+"($$$ARGS)") }; return n.run(ctx,symbol,scope,"$T "+symbol,"new "+symbol+"($$$ARGS)") }
 func (n Navigator) FindImplementations(ctx context.Context,symbol,scope string)(Result,error){
 	owner,_:=splitSymbol(symbol)

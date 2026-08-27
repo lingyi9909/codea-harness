@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: 顶层意图路由与 Agent 协调器。负责路由、Review Coverage/审批门禁、Agent 交接、Runtime Apply Safety Gate、修复轮次和统一摘要。
-version: 7
+version: 8
 ---
 
 # Orchestrator
@@ -20,6 +20,7 @@ version: 7
 | `harness chain show <id\|target>` | Orchestrator → validate-chain | 否 |
 | `harness chain discover [target]` | Reviewer → discover-chain | 否 |
 | `harness chain refresh <id>` | Orchestrator → discover-chain → validate-chain | 否 |
+| `harness chain edit <id|Controller|Controller.method>` | Orchestrator → edit-chain → validate-chain | 否 |
 | `harness chain validate [id]` | Orchestrator → validate-chain | 否 |
 | `harness upgrade` | upgrade-harness | 否 |
 | `harness test` | Reviewer → Integration Test Agent → Runtime Debugger → Fix Agent(需要时) | 是 |
@@ -30,20 +31,22 @@ version: 7
 | `harness verify fix:<fixPlanId>` | Runtime Debugger | 是 |
 | `harness verify service:<runId>` | Runtime Debugger | 是 |
 
-1.4 Review intent 规范：
+1.5.3 Review intent 规范（覆盖 1.4 的 plain review 默认 FULL 语义）：
 
 ```text
-harness review` → FULL
-harness review list` → LIST
-harness review <Class>` → TARGETED CLASS
-harness review <Class.method>` → TARGETED METHOD
+harness review      → Runtime ReviewOptions 决策（AUTO_FULL / AUTO_SINGLE / USER_SELECTION）
+harness review list → LIST
+harness review <Class>        → direct TARGETED CLASS；自动包含该 Controller 全部机器要求分支，不展示 Controller/Chain 选择
+harness review <Class.method> → direct TARGETED METHOD；自动包含该 method 全部机器要求分支，不展示 Controller/Chain 选择
 ```
+
+只有 plain `harness review` 和显式 Service/其他下游 target 的多上游场景使用 ReviewOptions 选择。显式 Controller/Controller.method 不进入 2+ Chain 菜单；最终 direct TARGETED scope 仍必须通过 Runtime `reviewscope.Verify` 的 Controller 防漏链校验。
 
 测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。历史 Existing Test 不自动修改。对 GENERATED_BY_PLAN 测试仍保留最多 2 轮 repair 计数，但 Task 4 后每个实际发生变化的 repair patch 都必须生成新的 patch identity 与新 planId，并在审批前重新 Runtime seal 后再获得精确批准，旧批准不得授权不同 bytes。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
 
-## Chain Management（1.5 Task 3）
+## Chain Management（1.5.3 Task 3）
 
-Task 3 只负责 Chain 的 list/show/discover/validate/refresh 与用户确认后的 Project State 持久化，不把 Chain 接入 Review/Test/Debug/Fix/Verify。
+Task 3 只负责 Chain 的 list/show/discover/validate/refresh 与用户明确确认后的 Project State 持久化，不把 Chain 接入 Review/Test/Debug/Fix/Verify。
 
 用户意图固定为：
 
@@ -52,10 +55,25 @@ harness chain list
 harness chain show <id|target>
 harness chain discover [target]
 harness chain refresh <id>
+harness chain edit <id|Controller|Controller.method>
 harness chain validate [id]
 ```
 
-不得新增 `chain accept/merge/split/edit/ignore` 用户命令；保存/更新 Chain 是上述流程中的用户确认动作，不是新的用户 CLI。
+除 Task 5 明确定义的 `harness chain edit <id|Controller|Controller.method>` 外，不得新增 `chain accept/merge/split/ignore` 等用户命令；保存/更新仍必须经过 Runtime candidate 与不可变 write plan。
+
+### Authority boundary
+
+Generic Agent / Orchestrator 只能创建同 run 的 `requests/**` proposal。以下路径属于 Runtime / Framework Managed authority：
+
+```text
+.code-harness/runs/<runId>/analysis/**
+.code-harness/runs/<runId>/review.md
+.code-harness/chains/**
+```
+
+仅仅把 YAML/JSON 放进 Runtime-owned path 不产生 authority。Runtime candidate 必须携带同 run provenance certificate，至少绑定 `runId / kind / chainId / candidatePath / candidateHash / analysisHash`，且后续 seal/persist 必须重新验证 exact candidate bytes、Certified ChangeAnalysis identity 与当前代码事实。
+
+同一 OS 用户下不声称 provenance 是密码学身份认证；宿主若能配置路径权限，可限制 Agent 为 `ALLOW requests/**`、`DENY analysis/**|review.md|chains/**`，但无论 ACL 是否存在，Runtime provenance/hash/certified-analysis revalidation 都是强制门禁。
 
 ### list / show
 
@@ -65,45 +83,62 @@ harness chain validate [id]
 
 ### validate
 
-1. Orchestrator 针对 Chain/target 建立当前 source 的 ChangeAnalysis。
-2. ChangeAnalysis 必须先通过 `change-analysis.schema.json` 与 Runtime machine coverage 校验。
+1. Orchestrator 针对 Chain/target 建立当前 source 的 Certified ChangeAnalysis。
+2. ChangeAnalysis 必须通过 Runtime certification；raw/uncertified/tampered/stale analysis 不得进入 Chain validation。
 3. 调用 Controlled Runtime `chain validate` 验证 exact EntryPoint、node、call order、resource relation、boundary、id/filename/project uniqueness。
 4. `notes` 不参与代码事实判断。
 5. machine `VALID / STALE / INVALID` 只保留在内部结构化结果；用户摘要固定翻译为“Chain 验证通过 / Chain 已过期，需要刷新 / Chain 无效，需要修正”。
 6. validate 不得静默修改 `.code-harness/chains/**`。
 
-### refresh：diff-first + 用户确认
+### refresh：diff-first + immutable write plan
 
 固定流程：
 
 ```text
 现有 Project State Chain
-→ 当前 source 的 verified ChangeAnalysis
-→ Lazy Discover 当前 candidate
+→ 当前 source 的 Certified ChangeAnalysis
+→ Runtime-certified DISCOVERED candidate + provenance
 → Controlled Runtime refresh
-→ .code-harness/runs/<runId>/analysis/refresh-candidates/<id>.yaml
+→ .code-harness/runs/<runId>/analysis/refresh-candidates/<id>.yaml + .cert.json
 → 展示 deterministic added/removed facts + existingHash
-→ 等待用户明确确认保存/更新
+→ 用户明确表示要保存/更新该 candidate
+→ Controlled Runtime chain seal-persist
+→ .code-harness/runs/<runId>/analysis/chain-write-plans/<planId>.json
+→ 展示 exact preview + planId
+→ 用户明确确认该 exact planId
+→ Controlled Runtime chain persist(runId + planId only)
+→ atomic Project State write
 ```
 
-在用户确认前：
+在 `seal-persist` 之前：
 
 - 不得调用内部 `chain persist`；
 - 不得覆盖 `.code-harness/chains/**`；
 - 不得把 refresh candidate 宣称为已保存 Chain。
 
-用户明确确认保存/更新后，Orchestrator 才能生成同 run 的 `chain-persist.json` 并调用内部 Controlled Runtime `chain persist`。Runtime 必须按顺序执行：
+首次“保存/更新”确认只授权 Runtime 封存当前 candidate，并不授权最终 Project State write。`chain seal-persist` 必须重新验证：
 
 ```text
-candidate code-fact validation == VALID
-→ existing Chain 时 expectedExistingHash 精确匹配
-→ status=ACCEPTED
-→ atomic replace .code-harness/chains/<id>.yaml
+Runtime candidate provenance + exact candidateHash
+→ same-run Certified ChangeAnalysis + analysisHash
+→ candidate code-fact validation == VALID
+→ existing Project State 当前 hash/absence
+→ deterministic ACCEPTED preview + previewSha256
+→ immutable planId
 ```
 
-首次保存不存在 existing Chain 时 expected hash 为空；已有同 id Chain 没有 expected hash、hash 已变化、validation 非 VALID、duplicate id 或 path/contract 不安全时一律 0 Project State writes。
+最终用户确认授权的是**当前展示的 exact planId**。确认后 Orchestrator 只能生成：
 
-**“继续/可以/好/ok”不能在没有明确保存/更新对象与 refresh diff 上下文时自动触发 Project State 写入。** refresh 的确认只授权该次 Chain candidate，不构成 Test/Fix Approval，也不得复用为其他写操作审批。
+```json
+{
+  "runId": "<runId>",
+  "planId": "chain-write-..."
+}
+```
+
+最终 `chain persist` 不得重新接受 `candidatePath / changeAnalysisPath / expectedExistingHash` 来改变已确认计划。Runtime 写入前必须重新读取 sealed plan、Certified ChangeAnalysis、candidate provenance/bytes、preview 与现有 Project State，并逐项匹配 sealed hashes；任一 candidate/analysis/plan/existing Project State byte/fact 变化都必须拒绝并产生 0 Project State writes，需要重新 seal 并重新取得新 planId 的确认。
+
+**“继续/可以/好/ok”不能在没有明确的当前 planId 上下文时自动触发 Project State 写入。** 对 candidate 的首次保存意图不等于对 sealed planId 的最终确认；Chain 确认也不构成 Test/Fix Approval，不能复用为其他写操作审批。
 
 ## Review Consumes Verified Chains（1.5 Task 4）
 
@@ -134,7 +169,7 @@ codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requ
 Runtime 返回 `STALE_REQUIRES_DECISION` 时，Orchestrator 必须展示且只允许用户明确选择：
 
 - **使用本次临时发现的 Chain 继续评审**：同一请求显式设置 `allowTemporaryForStale=true` 后重新调用 `chain review-context`；只使用 Run State，不刷新 Project State。
-- **刷新项目 Chain**：进入 Task 3 的 `chain refresh` diff-first 流程，仍需用户明确确认后才能 persist；刷新本身不自动代表继续 Review。
+- **刷新项目 Chain**：进入 Task 3 的 `chain refresh` diff-first 流程；若用户决定保存，必须继续走 `seal-persist → exact planId confirmation → persist`，刷新本身不自动代表继续 Review或写 Project State。
 - **停止本次评审**：STOP。
 
 不得默认第一项，不得把 STALE Chain 静默当 VALID 使用，也不得因为 Review 需要上下文而自动 refresh/overwrite `.code-harness/chains/**`。
@@ -158,7 +193,7 @@ Runtime 返回 `STALE_REQUIRES_DECISION` 时，Orchestrator 必须展示且只�
 是否沉淀到项目 `.code-harness/chains/`？
 ```
 
-**不得自动保存 DISCOVERED Chain**。只有用户明确确认保存具体 candidate 后，才复用 Task 3 的 validate + controlled `chain persist` 流程；Review 成功本身不构成 Project State 写入授权。
+**不得自动保存 DISCOVERED Chain**。用户明确表达保存具体 Runtime-certified candidate 后，只能进入 Task 3 的 `validate → seal-persist → 展示 exact planId → 用户确认 planId → persist` 流程；Review 成功或“保存 candidate”的首次意图本身都不构成 Project State 最终写入授权。
 
 ## Review Change Set（review/test/api-doc changed 共用）
 
@@ -313,26 +348,35 @@ TARGETED 报告必须保留固定免责声明：
 - TARGETED 正式报告中 `Finding.file` 必须属于 Runtime verified `scopedFiles`；Controlled Runtime Renderer 必须拒绝 scope 外 Finding。
 - OpenCode 最终摘要必须同时展示中文 Review 结果和 `review.md` 路径，不得泄漏 machine enum。
 
-## `harness review`
+## `harness review`（1.5.3 ReviewOptions）
 
-默认 `harness review` 始终是 FULL，保持 1.3.2 语义：
+plain `harness review` 不再预先固定为 FULL。它必须以同 run Certified ChangeAnalysis 和完整 EntrypointInventory 为事实基线，由 Controlled Runtime 决定本次 Review 模式：
 
 ```text
 1. 解析并校验 effectiveBaseRef
-2. Reviewer.analyze-change：完整 Change Set + 全 changedFiles + 确定性调用链
-3. Tool Runtime: validate_contract(ChangeAnalysis JSON)
-   - JSON Schema 校验
-   - 机器 Coverage 校验
-4. 输出 评审范围
-5. 输出 评审覆盖（含 validated callChains[]）
-6. 无变化 → 形成 Result=PASSED 的 structured Review result → Controlled Runtime 生成 review.md → 展示 report path → STOP
-7. Runtime 校验失败 / coverage!=COMPLETE → 形成 Result=MANUAL_ACTION_REQUIRED（包含 unresolved/missing/runtimeErrors）→ Controlled Runtime 生成 review.md → 展示 report path → STOP
-8. Reviewer.review-code
-9. findings 为空 → Result=PASSED；findings 非空 → Result=FAILED
-10. findings category 只允许 PRODUCTION_CODE / TEST_VALIDITY
-11. 形成 structured Review result → Controlled Runtime 生成 review.md
-12. 输出 问题清单 + 中文最终结果 + report path
+2. Reviewer.analyze-change 形成 proposal → Runtime analysis certify → Certified ChangeAnalysis
+3. EntrypointInventory 必须 COMPLETE；不完整 → MANUAL_ACTION_REQUIRED / STOP
+4. Runtime `review options` 生成并持久化 Runtime-owned review-options.json
+5. decision=AUTO_FULL（0 valid Chains）→ 不询问用户，立即 `review select`：mode=FULL、无 selectionIds、current optionsHash
+6. decision=AUTO_SINGLE（1 valid Chain）→ 不询问用户，立即 `review select`：mode=TARGETED、exact autoSelectionIds、current optionsHash
+7. decision=USER_SELECTION（2+ valid Chains）→ 此时才展示一级选择：
+   1) 全部评审
+   2) 按业务链评审
+   3) 仅查看调用链
+   - 选择“全部评审” → `review select` mode=FULL、无 Chain IDs
+   - 选择“按业务链评审” → 再展示 Runtime 生成的 C1..Cn，多选/编号 fallback；不得默认 ALL
+   - 选择“仅查看调用链” → `review select` mode=LIST；不授权 Finding Review
+   - 空选择/取消 → STOP
+8. Runtime `review select` 必须校验 current optionsHash、Runtime-bound selection IDs，并生成 FULL/TARGETED verified scope；stale/forged/invalid scope 全部 fail closed
+9. FULL 使用完整 Change Set machine coverage；TARGETED 使用 Runtime verified scopedFiles/selectedCallChains coverage
+10. Coverage 不完整或 Runtime validation 失败 → MANUAL_ACTION_REQUIRED review.md → STOP
+11. COMPLETE 后才允许 Reviewer.review-code；findings 为空 → PASSED，非空 → FAILED
+12. Controlled Runtime Renderer 生成唯一正式 `.code-harness/runs/<runId>/review.md`，最终摘要使用中文结果并展示 report path
 ```
+
+`AUTO_SINGLE` 是机器执行规则，不得出现“请选择唯一 Controller/Chain”的冗余提示。`USER_SELECTION` 只是说明存在 2+ valid Chain options；用户仍可明确选择 FULL 或 LIST，只有选择“按业务链评审”时才提交 TARGETED Runtime Chain IDs。
+
+显式 `harness review <Class>` / `<Class.method>` 不走上述 plain ReviewOptions 一级菜单，继续使用下文 direct TARGETED 流程，并由 Runtime 强制包含 Controller target 的全部 required confirmed branches。
 
 用户可见顺序固定为：
 
@@ -750,6 +794,28 @@ User 必须没有：
 - 不得把 TARGETED 结果表述成整个 Change Set 已完整评审。
 - 不得把任何 direct host write / `write_test` / `apply_approved_patch` / arbitrary write_file 作为生产或测试代码正式写入成功。
 - 不得跳过审批前 `codea-harness-tools seal-apply --input` 或修改 sealed request 后复用旧批准。
+- 不得把手工写入 Runtime-owned Chain candidate/certificate/write-plan path 的内容视为 authority；最终 Chain Project State 写入必须经过 Runtime provenance、Certified Analysis、immutable write plan 与 exact planId confirmation。
 - 不得超过 2 轮 GENERATED_BY_PLAN repair 计数。
 - 不得直接执行任意 Shell。
 - 不得自动 commit/push/PR。
+
+
+### Semantic Chain Editing（1.5.3 Task 5）
+
+`harness chain edit <id|Controller|Controller.method>` 固定路由到 `edit-chain`。Orchestrator 只能在同 run `requests/**` 提交 `REPLACE_NODE / ADD_NODE / REMOVE_NODE / REORDER_NODE / RENAME_CHAIN / UPDATE_NOTES` proposal。
+
+```text
+现有 ACCEPTED Chain
+→ same-run Certified ChangeAnalysis
+→ Controlled Runtime chain edit
+→ analysis/chain-edit-candidates/<id>.yaml + provenance(kind=EDIT)
+→ 展示 deterministic diff
+→ 用户首次保存意图
+→ chain seal-persist
+→ exact preview + planId
+→ 用户明确确认当前 planId
+→ chain persist(runId + planId only)
+→ atomic Project State write
+```
+
+`chain edit` 本身不得直接写 `.code-harness/chains/**`；不得改 EntryPoint；不得用 dependency workspace、类名后缀、basename、字符串包含或 fuzzy relation 获得写 authority。candidate/analysis/plan/existing Project State 任一变化都使旧 planId 失效。

@@ -11,6 +11,8 @@ on:
       - 'THIRD_PARTY_NOTICES.md'
       - '.github/scripts/task152-workspace-smoke.ps1'
       - '.github/scripts/task152-task5-real-business-regression.ps1'
+      - '.github/scripts/task153-task1-real-entrypoint-inventory.ps1'
+      - '.github/scripts/task153-real-review-chain-regression.ps1'
       - '.github/workflows/package-windows-x64.yml'
   push:
     branches: [develop]
@@ -21,6 +23,8 @@ on:
       - 'THIRD_PARTY_NOTICES.md'
       - '.github/scripts/task152-workspace-smoke.ps1'
       - '.github/scripts/task152-task5-real-business-regression.ps1'
+      - '.github/scripts/task153-task1-real-entrypoint-inventory.ps1'
+      - '.github/scripts/task153-real-review-chain-regression.ps1'
       - '.github/workflows/package-windows-x64.yml'
 
 permissions:
@@ -38,11 +42,11 @@ jobs:
         with:
           go-version: '1.23.x'
 
-      - name: 1.5.2 exact controlled runtime release gate
+      - name: 1.5.3 exact controlled runtime release gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/workspace ./internal/nav ./internal/chain ./internal/reviewscope ./internal/coverage ./internal/report ./internal/apply ./internal/schema ./internal/upgrade ./cmd/codea-harness-tools
+          go test -count=1 ./internal/workspace ./internal/nav ./internal/changeset ./internal/analysis ./internal/reviewselection ./internal/chain ./internal/reviewscope ./internal/coverage ./internal/report ./internal/apply ./internal/schema ./internal/upgrade ./cmd/codea-harness-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go test -count=1 ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -131,15 +135,21 @@ jobs:
           go test -count=1 ./internal/coverage ./internal/reviewscope ./internal/apply ./internal/chain ./internal/report
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Stage formal 1.5.2 install and upgrade releases
+      - name: Task 1.5.3 real review/chain reliability regression
+        shell: pwsh
+        run: |
+          ./.github/scripts/task153-real-review-chain-regression.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Stage formal 1.5.3 install and upgrade releases
         shell: pwsh
         run: |
           $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
-          if ($version -ne '1.5.2') { throw "unexpected release version: $version" }
+          if ($version -ne '1.5.3') { throw "unexpected release version: $version" }
           $runtimeHash = (Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash.ToLowerInvariant()
           $astHash = (Get-FileHash -Algorithm SHA256 '.code-harness/bin/ast-grep.exe').Hash.ToLowerInvariant()
-          $installStage = Join-Path $env:RUNNER_TEMP 'codea-release-install'
-          $upgradeStage = Join-Path $env:RUNNER_TEMP 'codea-release-upgrade'
+          $installStage = Join-Path $env:RUNNER_TEMP 'codea-release-install-153'
+          $upgradeStage = Join-Path $env:RUNNER_TEMP 'codea-release-upgrade-153'
           Remove-Item -Recurse -Force $installStage,$upgradeStage -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $installStage,$upgradeStage | Out-Null
           Copy-Item -Recurse '.code-harness' (Join-Path $installStage '.code-harness')
@@ -164,10 +174,13 @@ jobs:
             'VERSION','RELEASE-MANIFEST.json','AGENTS.md','bootstrap.md','upgrade.md',
             'harness.template.yaml','project.template.md','bin/codea-harness-tools.exe','bin/ast-grep.exe',
             'agents/orchestrator.md','agents/reviewer.md',
-            'skills/analyze-change/SKILL.md','skills/discover-chain/SKILL.md','skills/validate-chain/SKILL.md',
-            'contracts/harness-config.schema.json','contracts/change-analysis.schema.json','contracts/chain.schema.json','contracts/chain-validation-result.schema.json',
+            'skills/analyze-change/SKILL.md','skills/discover-chain/SKILL.md','skills/validate-chain/SKILL.md','skills/edit-chain/SKILL.md',
+            'contracts/harness-config.schema.json','contracts/change-analysis.schema.json','contracts/entrypoint-inventory.schema.json','contracts/change-analysis-cert.schema.json',
+            'contracts/chain.schema.json','contracts/chain-validation-result.schema.json','contracts/chain-candidate-cert.schema.json','contracts/chain-write-plan.schema.json','contracts/chain-edit-request.schema.json',
+            'contracts/review-options.schema.json','contracts/review-selection-request.schema.json',
             'templates/chain.template.yaml','tools-runtime/internal/workspace/config.go','tools-runtime/internal/workspace/maven.go',
             'tools-runtime/internal/nav/workspace.go','tools-runtime/internal/nav/workspace_ast.go',
+            'tools-runtime/internal/analysis/certificate.go','tools-runtime/internal/chain/edit.go','tools-runtime/internal/reviewselection/options.go',
             'tools-runtime/internal/chain/model.go','tools-runtime/internal/reviewscope/chain_context.go',
             'tools-runtime/cmd/codea-harness-tools/chain_command.go'
           )
@@ -183,22 +196,22 @@ jobs:
             }
           }
 
-      - name: Build 1.5.2 install and upgrade ZIPs
+      - name: Build 1.5.3 install and upgrade ZIPs
         shell: pwsh
         run: |
-          $installStage = Join-Path $env:RUNNER_TEMP 'codea-release-install'
-          $upgradeStage = Join-Path $env:RUNNER_TEMP 'codea-release-upgrade'
-          Compress-Archive -Path (Join-Path $installStage '.code-harness') -DestinationPath 'codea-harness-1.5.2-windows-x64-install.zip' -Force
-          Compress-Archive -Path (Join-Path $upgradeStage '.code-harness-upgrade') -DestinationPath 'codea-harness-1.5.2-windows-x64-upgrade.zip' -Force
+          $installStage = Join-Path $env:RUNNER_TEMP 'codea-release-install-153'
+          $upgradeStage = Join-Path $env:RUNNER_TEMP 'codea-release-upgrade-153'
+          Compress-Archive -Path (Join-Path $installStage '.code-harness') -DestinationPath 'codea-harness-1.5.3-windows-x64-install.zip' -Force
+          Compress-Archive -Path (Join-Path $upgradeStage '.code-harness-upgrade') -DestinationPath 'codea-harness-1.5.3-windows-x64-upgrade.zip' -Force
 
-      - name: Validate ZIP layouts and real accepted 1.5.1 to 1.5.2 Windows live upgrade
+      - name: Validate ZIP layouts and real accepted 1.5.2 to 1.5.3 Windows live upgrade
         shell: pwsh
         run: |
-          $installExtract = Join-Path $env:RUNNER_TEMP 'codea-install-extract'
-          $upgradeExtract = Join-Path $env:RUNNER_TEMP 'codea-upgrade-extract'
+          $installExtract = Join-Path $env:RUNNER_TEMP 'codea-install-extract-153'
+          $upgradeExtract = Join-Path $env:RUNNER_TEMP 'codea-upgrade-extract-153'
           Remove-Item -Recurse -Force $installExtract,$upgradeExtract -ErrorAction SilentlyContinue
-          Expand-Archive 'codea-harness-1.5.2-windows-x64-install.zip' $installExtract -Force
-          Expand-Archive 'codea-harness-1.5.2-windows-x64-upgrade.zip' $upgradeExtract -Force
+          Expand-Archive 'codea-harness-1.5.3-windows-x64-install.zip' $installExtract -Force
+          Expand-Archive 'codea-harness-1.5.3-windows-x64-upgrade.zip' $upgradeExtract -Force
           if (!(Test-Path (Join-Path $installExtract '.code-harness'))) { throw 'install.zip must extract directly to .code-harness/' }
           if (!(Test-Path (Join-Path $upgradeExtract '.code-harness-upgrade'))) { throw 'upgrade.zip must extract directly to .code-harness-upgrade/' }
           foreach ($releaseRoot in @((Join-Path $installExtract '.code-harness'), (Join-Path $upgradeExtract '.code-harness-upgrade'))) {
@@ -207,23 +220,23 @@ jobs:
             }
           }
 
-          $baseline = 'cd020fb319af95d28518b484593e2e0a0a03b7b5'
-          $root = Join-Path $env:RUNNER_TEMP 'codea-real-upgrade-151-to-152'
+          $baseline = '6f290d8ff160767bb981278aa123aa1621ea3343'
+          $root = Join-Path $env:RUNNER_TEMP 'codea-real-upgrade-152-to-153'
           Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $root | Out-Null
-          $baselineZip = Join-Path $env:RUNNER_TEMP 'codea-baseline-151.zip'
+          $baselineZip = Join-Path $env:RUNNER_TEMP 'codea-baseline-152.zip'
           git cat-file -e "$baseline^{commit}"
-          if ($LASTEXITCODE -ne 0) { throw "accepted 1.5.1 baseline commit is unavailable: $baseline" }
+          if ($LASTEXITCODE -ne 0) { throw "accepted 1.5.2 baseline commit is unavailable: $baseline" }
           git archive --format=zip --output $baselineZip $baseline .code-harness
-          if ($LASTEXITCODE -ne 0) { throw 'failed to archive accepted 1.5.1 baseline' }
+          if ($LASTEXITCODE -ne 0) { throw 'failed to archive accepted 1.5.2 baseline' }
           Expand-Archive $baselineZip $root -Force
           $target = Join-Path $root '.code-harness'
-          if ((Get-Content (Join-Path $target 'VERSION') -Raw).Trim() -ne '1.5.1') { throw 'accepted baseline archive is not VERSION=1.5.1' }
+          if ((Get-Content (Join-Path $target 'VERSION') -Raw).Trim() -ne '1.5.2') { throw 'accepted baseline archive is not VERSION=1.5.2' }
 
           New-Item -ItemType Directory -Force (Join-Path $target 'bin') | Out-Null
-          [System.IO.File]::WriteAllBytes((Join-Path $target 'bin/codea-harness-tools.exe'), [byte[]](79,76,68,45,49,46,53,46,49))
-          New-Item -ItemType Directory -Force (Join-Path $target 'skills/stale-151') | Out-Null
-          [System.IO.File]::WriteAllText((Join-Path $target 'skills/stale-151/SKILL.md'), 'stale-151', [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::WriteAllBytes((Join-Path $target 'bin/codea-harness-tools.exe'), [byte[]](79,76,68,45,49,46,53,46,50))
+          New-Item -ItemType Directory -Force (Join-Path $target 'skills/stale-152') | Out-Null
+          [System.IO.File]::WriteAllText((Join-Path $target 'skills/stale-152/SKILL.md'), 'stale-152', [System.Text.UTF8Encoding]::new($false))
 
           $harnessYaml = @'
           version: 2
@@ -265,10 +278,11 @@ jobs:
             directory: .code-harness/runs
           '@
           [System.IO.File]::WriteAllText((Join-Path $target 'harness.yaml'), $harnessYaml, [System.Text.UTF8Encoding]::new($false))
-          [System.IO.File]::WriteAllText((Join-Path $target 'project.md'), "project-state-sentinel-151`r`n", [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::WriteAllText((Join-Path $target 'project.md'), "project-state-sentinel-152`r`n", [System.Text.UTF8Encoding]::new($false))
           [System.IO.File]::WriteAllText((Join-Path $target 'database.yaml'), "version: 1`r`nenvironment: TEST`r`npassword: sentinel-secret`r`n", [System.Text.UTF8Encoding]::new($false))
-          New-Item -ItemType Directory -Force (Join-Path $target 'runs') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $target 'runs/keep-run/requests') | Out-Null
           [System.IO.File]::WriteAllBytes((Join-Path $target 'runs/keep.bin'), [byte[]](1,2,3,4,5,6))
+          [System.IO.File]::WriteAllText((Join-Path $target 'runs/keep-run/requests/agent-proposal.json'), '{"proposal":"must-remain-proposal"}', [System.Text.UTF8Encoding]::new($false))
           New-Item -ItemType Directory -Force (Join-Path $target 'chains') | Out-Null
           [System.IO.File]::WriteAllText((Join-Path $target 'chains/order-approve.yaml'), "# user chain`r`nversion: 1`r`nid: order-approve`r`nstatus: ACCEPTED`r`n", [System.Text.UTF8Encoding]::new($false))
           $stateHashes = @{
@@ -276,6 +290,7 @@ jobs:
             project = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'project.md')).Hash
             database = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'database.yaml')).Hash
             runs = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'runs/keep.bin')).Hash
+            proposal = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'runs/keep-run/requests/agent-proposal.json')).Hash
             chain = (Get-FileHash -Algorithm SHA256 (Join-Path $target 'chains/order-approve.yaml')).Hash
           }
 
@@ -284,44 +299,89 @@ jobs:
           Push-Location $root
           try {
             $out = & '.\.code-harness-upgrade\bin\codea-harness-tools.exe' upgrade 2>&1
-            if ($LASTEXITCODE -ne 0) { throw "real accepted 1.5.1 -> 1.5.2 live upgrade failed: $($out -join "`n")" }
+            if ($LASTEXITCODE -ne 0) { throw "real accepted 1.5.2 -> 1.5.3 live upgrade failed: $($out -join "`n")" }
             $text = $out -join "`n"
             if ($text -notmatch '"status": "UPGRADED"') { throw "unexpected upgrade output: $text" }
-            if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.5.2') { throw 'target VERSION is not 1.5.2 after live upgrade' }
-            if ((Get-FileHash -Algorithm SHA256 '.code-harness/harness.yaml').Hash -ne $stateHashes.harness) { throw 'harness.yaml changed during 1.5.1 -> 1.5.2 upgrade' }
-            if ((Get-FileHash -Algorithm SHA256 '.code-harness/project.md').Hash -ne $stateHashes.project) { throw 'project.md changed during 1.5.1 -> 1.5.2 upgrade' }
-            if ((Get-FileHash -Algorithm SHA256 '.code-harness/database.yaml').Hash -ne $stateHashes.database) { throw 'database.yaml changed during 1.5.1 -> 1.5.2 upgrade' }
-            if ((Get-FileHash -Algorithm SHA256 '.code-harness/runs/keep.bin').Hash -ne $stateHashes.runs) { throw 'runs/** changed during 1.5.1 -> 1.5.2 upgrade' }
-            if ((Get-FileHash -Algorithm SHA256 '.code-harness/chains/order-approve.yaml').Hash -ne $stateHashes.chain) { throw 'chains/** changed during 1.5.1 -> 1.5.2 upgrade' }
+            if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.5.3') { throw 'target VERSION is not 1.5.3 after live upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/harness.yaml').Hash -ne $stateHashes.harness) { throw 'harness.yaml changed during 1.5.2 -> 1.5.3 upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/project.md').Hash -ne $stateHashes.project) { throw 'project.md changed during 1.5.2 -> 1.5.3 upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/database.yaml').Hash -ne $stateHashes.database) { throw 'database.yaml changed during 1.5.2 -> 1.5.3 upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/runs/keep.bin').Hash -ne $stateHashes.runs) { throw 'runs/** changed during 1.5.2 -> 1.5.3 upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/runs/keep-run/requests/agent-proposal.json').Hash -ne $stateHashes.proposal) { throw 'Agent proposal changed or was promoted during upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/chains/order-approve.yaml').Hash -ne $stateHashes.chain) { throw 'chains/** changed during 1.5.2 -> 1.5.3 upgrade' }
             $afterHarness = Get-Content '.code-harness/harness.yaml' -Raw
-            if ($afterHarness -match '(?m)^\s*workspaceDependencies\s*:') { throw '1.5.1 -> 1.5.2 upgrade injected workspaceDependencies into existing harness.yaml' }
-            if (Test-Path '.code-harness/skills/stale-151/SKILL.md') { throw 'stale 1.5.1 Framework survived live upgrade' }
-            if ((Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash -ne $expectedRuntimeHash) { throw 'installed runtime does not match 1.5.2 release runtime' }
-            if (!(Test-Path '.code-harness/tools-runtime/internal/workspace/maven.go')) { throw 'installed 1.5.2 missing workspace Maven verifier' }
-            if (!(Test-Path '.code-harness/tools-runtime/internal/nav/workspace.go')) { throw 'installed 1.5.2 missing workspace navigation' }
-            if (Test-Path '.code-harness-upgrade') { throw 'upgrade source was not cleaned' }
+            if ($afterHarness -match '(?m)^\s*workspaceDependencies\s*:') { throw '1.5.2 -> 1.5.3 upgrade injected workspaceDependencies into existing harness.yaml' }
+            if (Test-Path '.code-harness/skills/stale-152/SKILL.md') { throw 'stale 1.5.2 Framework survived live upgrade' }
+            if ((Get-FileHash -Algorithm SHA256 '.code-harness/bin/codea-harness-tools.exe').Hash -ne $expectedRuntimeHash) { throw 'installed runtime does not match 1.5.3 release runtime' }
+            foreach ($rel in @(
+              '.code-harness/contracts/entrypoint-inventory.schema.json',
+              '.code-harness/contracts/change-analysis-cert.schema.json',
+              '.code-harness/contracts/review-options.schema.json',
+              '.code-harness/contracts/chain-edit-request.schema.json',
+              '.code-harness/skills/edit-chain/SKILL.md'
+            )) {
+              if (!(Test-Path $rel)) { throw "installed 1.5.3 missing $rel" }
+            }
 
-            $probeOut = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe.out'
-            $probeErr = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe.err'
+            $probeOut = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe-153.out'
+            $probeErr = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe-153.err'
             $probeExe = (Resolve-Path '.\.code-harness\bin\codea-harness-tools.exe').Path
             $probe = Start-Process -FilePath $probeExe -ArgumentList @('chain','validate') -Wait -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
             $probeText = @((Get-Content $probeOut -ErrorAction SilentlyContinue),(Get-Content $probeErr -ErrorAction SilentlyContinue)) -join "`n"
             if ($probe.ExitCode -eq 0 -or $probeText -notmatch 'chain validate requires --id and --change-analysis') { throw "installed chain validate capability probe failed: $probeText" }
             $global:LASTEXITCODE = 0
+
+            if (Test-Path '.code-harness-upgrade') { throw 'upgrade source was not cleaned' }
           } finally {
             Pop-Location
           }
 
-      - name: Upload 1.5.2 install package
+      - name: Upload 1.5.3 install package
+        id: upload_install
         uses: actions/upload-artifact@v4
         with:
-          name: codea-harness-1.5.2-windows-x64-install
-          path: codea-harness-1.5.2-windows-x64-install.zip
+          name: codea-harness-1.5.3-windows-x64-install
+          path: codea-harness-1.5.3-windows-x64-install.zip
           if-no-files-found: error
 
-      - name: Upload 1.5.2 upgrade package
+      - name: Upload 1.5.3 upgrade package
+        id: upload_upgrade
         uses: actions/upload-artifact@v4
         with:
-          name: codea-harness-1.5.2-windows-x64-upgrade
-          path: codea-harness-1.5.2-windows-x64-upgrade.zip
+          name: codea-harness-1.5.3-windows-x64-upgrade
+          path: codea-harness-1.5.3-windows-x64-upgrade.zip
+          if-no-files-found: error
+
+      - name: Record 1.5.3 release checklist and digests
+        shell: pwsh
+        env:
+          INSTALL_ARTIFACT_ID: ${{ steps.upload_install.outputs['artifact-id'] }}
+          UPGRADE_ARTIFACT_ID: ${{ steps.upload_upgrade.outputs['artifact-id'] }}
+        run: |
+          $install = Get-Item 'codea-harness-1.5.3-windows-x64-install.zip'
+          $upgrade = Get-Item 'codea-harness-1.5.3-windows-x64-upgrade.zip'
+          $checklist = [ordered]@{
+            workflowRunId = '${{ github.run_id }}'
+            exactHeadSha = '${{ github.event.pull_request.head.sha || github.sha }}'
+            install = [ordered]@{
+              artifactId = $env:INSTALL_ARTIFACT_ID
+              file = $install.Name
+              size = $install.Length
+              sha256 = (Get-FileHash -Algorithm SHA256 $install.FullName).Hash.ToLowerInvariant()
+            }
+            upgrade = [ordered]@{
+              artifactId = $env:UPGRADE_ARTIFACT_ID
+              file = $upgrade.Name
+              size = $upgrade.Length
+              sha256 = (Get-FileHash -Algorithm SHA256 $upgrade.FullName).Hash.ToLowerInvariant()
+            }
+          } | ConvertTo-Json -Depth 5
+          [System.IO.File]::WriteAllText('codea-harness-1.5.3-release-checklist.json', $checklist, [System.Text.UTF8Encoding]::new($false))
+          Get-Content 'codea-harness-1.5.3-release-checklist.json'
+
+      - name: Upload 1.5.3 release checklist
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.5.3-release-checklist
+          path: codea-harness-1.5.3-release-checklist.json
           if-no-files-found: error

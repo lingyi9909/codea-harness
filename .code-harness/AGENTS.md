@@ -12,11 +12,18 @@
 - `reviewCoverage.status != COMPLETE` 时，review/test 均停止为 `MANUAL_ACTION_REQUIRED`。
 - `harness api-doc` 是只读流程，最终 `api-doc.md` 只能由 Controlled Runtime deterministic renderer 生成。
 - 集成测试仍以 MockMvc + 真实 Controller/Service/Repository 为主；内部 Bean 默认不 Mock，外部依赖沿用项目测试替代方式。
-- 1.5 Chain Management 只管理 Business Chain 的发现、读取、验证、刷新和用户确认后的 Project State 持久化；Task 3 不把 Chain 接入 Review/Test/Debug/Fix/Verify。
+- 1.5 Chain Management 管理 Business Chain 的发现、读取、验证、刷新和用户确认后的 Project State 持久化；Task 5 新增 `harness chain edit <id|Controller|Controller.method>` 语义编辑，但不得把 Chain 扩成 Review/Test/Debug/Fix/Verify 的写边界。
+- Task 5 的 edit 只允许六类 semantic operation；代码事实必须来自 same-run Certified ChangeAnalysis，Runtime 只输出 `analysis/chain-edit-candidates/<id>.yaml` + provenance，edit 本身不得直接写 `.code-harness/chains/**`。
+- 1.5.3 起 Agent/Orchestrator 产生的 ChangeAnalysis 只能先写 `.code-harness/runs/<runId>/requests/change-analysis-draft.json`；它只是 proposal，不是权威事实。
+- 权威 ChangeAnalysis 只能由 Controlled Runtime `analysis certify` 重新计算 Change Set、EntryPoint Inventory、Coverage 与 evidence invariants 后生成到同 run 的 `analysis/change-analysis.json`、`analysis/entrypoint-inventory.json`、`analysis/change-analysis.cert.json`。
+- Chain/Review 等消费者只能通过 Runtime Certified loader 消费上述权威产物；analysis/certificate/inventory 任一被篡改、Change Set 已变化或 certification 失败都必须 fail closed，进入 `MANUAL_ACTION_REQUIRED` / `PARTIAL`，不得由 Agent 直接修改 Runtime-owned artifact“修复”。
+- 1.5.3 Task 3 起，Generic Agent 的写权限边界是 `requests/**` proposal only；`analysis/**`、`review.md`、`.code-harness/chains/**` 都是 Runtime/Framework Managed artifact。仅把文件放进 Runtime-owned path 不产生 authority，必须有 Runtime provenance 并在消费时重新验证。
+- Chain candidate 保存必须经过不可变双阶段授权：Runtime-certified candidate → `chain seal-persist` 生成绑定 candidateHash / analysisHash / expectedExistingHash / previewSha256 的 planId → 用户明确确认当前 planId → `chain persist` 只凭 runId + planId 写入 Project State。candidate、analysis、write plan 或 existing Project State 任一变化都使旧授权失效，必须重新 seal 并重新确认。
+- 不声称同一 OS 用户下的 ACL 能提供密码学身份隔离；即使宿主支持路径 ACL，Runtime provenance/hash/certified-analysis revalidation 仍是强制边界。可配置时遵循 `ALLOW requests/**`、`DENY analysis/**|review.md|chains/**` 的 Agent 写权限策略。
 
 ## 初始化门禁
 
-`harness init`、`harness review`、`harness api-doc`、`harness chain list/show/discover/refresh/validate`、`harness upgrade` 不要求 READY。`harness test/debug-service/fix/verify` 必须 `initialization.status=READY`。
+`harness init`、`harness review`、`harness api-doc`、`harness chain list/show/discover/refresh/edit/validate`、`harness upgrade` 不要求 READY。`harness test/debug-service/fix/verify` 必须 `initialization.status=READY`。
 
 ## Agent 职责
 
@@ -33,8 +40,8 @@
 - 测试代码修改前必须精确 `批准 <planId>`；REUSE_EXISTING 无需审批。
 - 生产代码修改前必须精确 `批准 <fixPlanId>`。
 - `harness api-doc` 的 target selection 仅决定只读文档范围，不构成任何写操作审批，也不得要求 `批准 <planId>`。
-- Chain refresh 只有在当前 diff/candidate 已展示后，用户明确确认保存/更新该条 Chain，才允许内部 `chain persist`；该确认只授权该 candidate，不等同 Test/Fix Approval。
-- 「好/继续/可以/yes/ok」不算测试/修复审批；计划变化后旧审批失效。对 Chain Project State 写入，也不得在缺少明确保存/更新对象与当前 refresh diff 上下文时把模糊肯定当作确认。
+- Chain refresh/discover/edit candidate 的首次“保存/更新”确认只允许 Runtime 执行 `chain seal-persist` 并展示 exact planId；只有用户随后明确确认该 planId，才允许内部 `chain persist`。任何新 candidate/plan bytes 都必须获得新的确认。
+- 「好/继续/可以/yes/ok」不算测试/修复审批；对 Chain Project State 写入，也不能把没有 exact 当前 planId 的模糊肯定解释为 persist 授权。
 - 自动测试修复最多 2 轮，且仅限本次 `GENERATED_BY_PLAN`；历史 Existing Test 不自动改。
 
 ## 受控 Tool Runtime
@@ -54,11 +61,15 @@ codea-harness-tools workspace verify --id <id>
 codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
 codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-harness-tools analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain list
 codea-harness-tools chain show --target <id|Controller|Controller.method>
 codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain validate --id <chainId> --change-analysis .code-harness/runs/<runId>/analysis/change-analysis.json
 codea-harness-tools chain refresh --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools chain edit --input .code-harness/runs/<runId>/requests/<file>.json
+codea-harness-tools chain seal-persist --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools chain persist --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<file>.json
 codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
@@ -66,7 +77,11 @@ codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<
 
 Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/template inheritance 确定性断链时使用；候选只来自显式 `harness.yaml.workspaceDependencies`。必须先 `workspace verify --id <id>`，且只有 `VERIFIED` 才允许三个 `workspace-*` nav 子命令。不得扫描任意 sibling，不得把 dependency workspace 扩成 Change Set、Review Scope 或 Write Scope。
 
-`chain persist` 是内部 Controlled Runtime 写入动作，只能在 `validate-chain` / Orchestrator 已满足用户确认、candidate validation 与 expected-hash 门禁后调用；它不是独立用户意图。
+`analysis certify` 是 ChangeAnalysis authority boundary：请求必须位于同 run 的 `requests/**`，Runtime 独立重算并验证后才发布 authoritative artifacts。Agent 不得直接创建/覆盖 `.code-harness/runs/<runId>/analysis/change-analysis.json`、`entrypoint-inventory.json` 或 `change-analysis.cert.json`。
+
+`chain seal-persist` 只接受同 run 的 Runtime-certified candidate，重新加载 Certified ChangeAnalysis、验证 candidate provenance/bytes/code facts 与当前 existing Project State hash，并生成不可变 write plan；它本身不得修改 `.code-harness/chains/**`。
+
+`chain persist` 是内部 Controlled Runtime 写入动作，只接受同 run 的 exact `planId`。Runtime 必须重新验证 sealed plan、Certified ChangeAnalysis、candidate hash、preview hash 与 existing Project State hash 后才可原子写入；最终 persist request 不得重新携带 candidatePath/changeAnalysisPath/expectedExistingHash 改写已确认计划。
 
 禁止 `cmd /c`、`powershell -Command`、`bash -c`、shell 求值、管道、重定向或用户命令拼接。Code Navigation 由 Runtime 封装随包 `ast-grep.exe`；Agent/Skill 不得直接调用 ast-grep、raw rule、raw pattern、regex 或 arbitrary query language。
 
@@ -84,3 +99,8 @@ Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/
 - 不得自动安装依赖、git fetch/pull、commit/push/PR。
 - 不得直接执行任意 Shell。
 - 不得为让测试通过而删除/禁用测试、弱化断言、吞异常或 Mock 内部 Bean。
+
+
+### Chain edit authority（1.5.3 Task 5）
+
+`harness chain edit` 只能生成 same-run `requests/**` proposal。Controlled Runtime `codea-harness-tools chain edit --input ...` 基于 Certified ChangeAnalysis 验证后，只能生成 `analysis/chain-edit-candidates/<id>.yaml` + `kind=EDIT` provenance；不得直接修改 `.code-harness/chains/**`。EDIT candidate 的最终保存继续走 `chain seal-persist → exact planId confirmation → chain persist`。

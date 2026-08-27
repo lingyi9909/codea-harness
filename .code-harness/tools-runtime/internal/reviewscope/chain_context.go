@@ -34,6 +34,7 @@ type StaleChain struct {
 type ChainResolveOptions struct {
 	RunID                  string `json:"runId"`
 	AllowTemporaryForStale bool   `json:"allowTemporaryForStale,omitempty"`
+	CertifyDiscovered      func(chain.Chain) error `json:"-"`
 }
 
 type ChainResolution struct {
@@ -143,6 +144,9 @@ func ResolveChainContexts(root string, selection Selection, changeAnalysisJSON [
 		}
 		toDiscover = append(toDiscover, branch)
 	}
+	if len(toDiscover) > 0 && opts.CertifyDiscovered == nil {
+		return result, errors.New("review chain lazy discovery requires Runtime candidate certification")
+	}
 
 	for _, branch := range toDiscover {
 		discovered, err := chain.Discover(root, chain.DiscoverInput{
@@ -152,6 +156,11 @@ func ResolveChainContexts(root string, selection Selection, changeAnalysisJSON [
 		})
 		if err != nil {
 			return result, fmt.Errorf("discover temporary review chain for %q: %w", branch.EntryPoint, err)
+		}
+		for _, candidate := range discovered.Chains {
+			if err := opts.CertifyDiscovered(candidate); err != nil {
+				return result, fmt.Errorf("certify temporary review chain %q: %w", candidate.ID, err)
+			}
 		}
 		if discovered.Status != chain.DiscoveryComplete {
 			result.Status = ChainResolutionPartial

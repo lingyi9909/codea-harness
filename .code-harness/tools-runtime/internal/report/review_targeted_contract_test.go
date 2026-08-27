@@ -17,13 +17,20 @@ func readHarnessContract(t *testing.T, parts ...string) string {
 	return string(data)
 }
 
+// Task 4 contract assertions intentionally validate semantics, not Markdown spacing.
 func TestTargetedReviewIntentContract(t *testing.T) {
 	text := readHarnessContract(t, "agents", "orchestrator.md")
 	for _, want := range []string{
-		"harness review` → FULL",
-		"harness review list` → LIST",
-		"harness review <Class>` → TARGETED CLASS",
-		"harness review <Class.method>` → TARGETED METHOD",
+		"Runtime ReviewOptions",
+		"harness review list",
+		"direct TARGETED CLASS",
+		"direct TARGETED METHOD",
+		"AUTO_FULL",
+		"AUTO_SINGLE",
+		"USER_SELECTION",
+		"全部评审",
+		"按业务链评审",
+		"仅查看调用链",
 		"Controller CLASS",
 		"Controller METHOD",
 		"自动包含",
@@ -34,6 +41,9 @@ func TestTargetedReviewIntentContract(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("orchestrator missing targeted review rule %q", want)
 		}
+	}
+	if strings.Contains(text, "默认 `harness review` 始终是 FULL") {
+		t.Fatal("orchestrator still contains superseded plain review always-FULL rule")
 	}
 }
 
@@ -64,6 +74,9 @@ func TestAnalyzeChangeDefinesFullAndTargetedCoverage(t *testing.T) {
 		"Controller CLASS",
 		"Controller METHOD",
 		"Service/其他下游 target",
+		"AUTO_FULL",
+		"AUTO_SINGLE",
+		"USER_SELECTION",
 		"不允许 sampled review",
 	} {
 		if !strings.Contains(text, want) {
@@ -81,6 +94,9 @@ func TestReviewerDoesNotPromoteTargetedToFullReview(t *testing.T) {
 		"scopedFiles",
 		"symbolLocations",
 		"exact repository path",
+		"Runtime 的 C1..Cn",
+		"Controller CLASS",
+		"Controller METHOD",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("reviewer missing targeted safety rule %q", want)

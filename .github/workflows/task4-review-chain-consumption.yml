@@ -21,9 +21,9 @@ jobs:
         with:
           go-version: '1.23.x'
 
-      - name: Task 4 targeted gate
+      - name: Task 4 review selection exact gate
         working-directory: .code-harness/tools-runtime
-        run: go test -count=1 ./internal/chain ./internal/reviewscope ./internal/coverage ./internal/report ./cmd/codea-harness-tools
+        run: go test -count=1 ./internal/reviewselection ./internal/reviewscope ./internal/coverage ./internal/chain ./internal/report ./cmd/codea-harness-tools -run 'Test153|Test152'
 
       - name: Full Go test
         working-directory: .code-harness/tools-runtime

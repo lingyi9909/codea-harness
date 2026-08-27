@@ -33,7 +33,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|workspace|nav|db|chain|report|seal-apply|apply>")
+		return errors.New("usage: codea-harness-tools <upgrade|validate|workspace|nav|db|chain|analysis|review|report|seal-apply|apply>")
 	}
 	switch args[0] {
 	case "upgrade":
@@ -48,6 +48,10 @@ func run(args []string) error {
 		return runDB(args[1:])
 	case "chain":
 		return runChain(args[1:])
+	case "analysis":
+		return runAnalysis(args[1:])
+	case "review":
+		return runReview(args[1:])
 	case "report":
 		return runReport(args[1:])
 	case "seal-apply":
@@ -149,16 +153,8 @@ func runValidate(args []string) error {
 			if !safeHarnessPath(*changeAnalysisPath, "") {
 				return errors.New("change analysis path outside .code-harness is not allowed")
 			}
-			changeAnalysisJSON, err := os.ReadFile(*changeAnalysisPath)
+			changeAnalysisJSON, err := loadCertifiedReviewScopeAnalysis153(*input, *changeAnalysisPath)
 			if err != nil {
-				return err
-			}
-			changeAnalysisSchemaPath := filepath.Join(".code-harness", "contracts", "change-analysis.schema.json")
-			changeAnalysisSchema, err := os.ReadFile(changeAnalysisSchemaPath)
-			if err != nil {
-				return err
-			}
-			if err := schema.ValidateJSON(changeAnalysisSchema, changeAnalysisJSON); err != nil {
 				return err
 			}
 			verifiedScope, machine, err := validateReviewScopeAgainstAnalysis(ib, changeAnalysisJSON)

@@ -15,12 +15,14 @@ func TestChainPersistNewDiscoveredCandidateAfterValidation(t *testing.T) {
 	runID := "run-new-chain"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
 	writeFile(t, analysisPath, task3AnalysisJSON(false))
+	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
 	candidatePath := filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains", "order-approve.yaml")
 	writeFile(t, candidatePath, strings.Replace(task3AcceptedYAML, "status: ACCEPTED", "status: DISCOVERED", 1))
-	requestPath := writeQueryRequest(t, runID, "chain-persist.json", `{"runId":"run-new-chain","candidatePath":".code-harness/runs/run-new-chain/analysis/discovered-chains/order-approve.yaml","changeAnalysisPath":".code-harness/runs/run-new-chain/analysis/change-analysis.json"}`)
+	certifyTask3Candidate(t, analysisPath, candidatePath, "DISCOVERED")
+	planID := sealTask153Candidate(t, runID, filepath.ToSlash(candidatePath))
 
-	if err := run([]string{"chain", "persist", "--input", requestPath}); err != nil {
-		t.Fatalf("new verified discovered Chain must persist after explicit confirmation flow: %v", err)
+	if err := persistTask153Plan(t, runID, planID); err != nil {
+		t.Fatalf("new verified discovered Chain must persist through sealed confirmation flow: %v", err)
 	}
 	persisted := filepath.Join(".code-harness", "chains", "order-approve.yaml")
 	data, err := os.ReadFile(persisted)
