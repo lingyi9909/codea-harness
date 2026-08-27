@@ -1,0 +1,77 @@
+name: task160-task3-contract-patch
+
+on:
+  push:
+    branches: [task160-task3-finding-proposal-verify]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-contracts:
+    if: ${{ !contains(github.event.head_commit.message, 'docs: bind reviewer to finding proposals') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task160-task3-finding-proposal-verify
+          fetch-depth: 0
+      - name: Apply exact Task 3 reviewer contract patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $skillPath = '.code-harness/skills/review-code/SKILL.md'
+          $agentPath = '.code-harness/agents/reviewer.md'
+          $skill = Get-Content -Raw -Encoding UTF8 $skillPath
+          $agent = Get-Content -Raw -Encoding UTF8 $agentPath
+
+          $skill = $skill.Replace('version: 4', 'version: 5')
+          $skill = $skill.Replace('output_schema: .code-harness/contracts/review-output.schema.json', 'output_schema: .code-harness/contracts/finding-proposals.schema.json')
+          if (-not $skill.Contains('## 1.6 Finding Proposal Authority')) {
+            $skill += @'
+
+## 1.6 Finding Proposal Authority
+
+本节优先于本文中沿用的“Finding”术语：
+
+```text
+Reviewer 只提出 Finding Proposal。
+Proposal 不等于正式 Finding。
+只有 Runtime certify-findings 成功后的 Certified Finding 才能进入 review.md。
+```
+
+Reviewer 输出固定写入 `.code-harness/runs/<runId>/requests/finding-proposals.json`，并必须通过 `.code-harness/contracts/finding-proposals.schema.json`。每条 Proposal 必须绑定当前 Runtime `reviewUnitId` 与该 Unit 已分发的 `ruleId`，anchor/evidence 只能引用当前 ReviewUnit 允许的事实；不得创造 scope 外 path/symbol/line，也不得把 Proposal 表述成已经由 Runtime 证明成立的正式 Finding。
+
+本文既有 Java、Mapper.xml、YML 与 Test Validity Gate 的评审边界保持不变；这些边界现在约束“允许提出什么 Proposal”，而不是赋予 Agent 正式 Finding 权威。
+'@
+          }
+
+          $agent = $agent.Replace('version: 6', 'version: 7')
+          $agent = $agent.Replace('只有机器 Coverage 完整后才输出有证据支持的 Finding。', '只有机器 Coverage 完整后才输出有证据支持的 Finding Proposal；Agent 不拥有正式 Finding 权威。')
+          if (-not $agent.Contains('## 1.6 Finding Proposal Authority')) {
+            $agent += @'
+
+## 1.6 Finding Proposal Authority
+
+1.6 Task 3 起，Reviewer 的 Finding Review 输出降级为 Proposal：
+
+```text
+Reviewer 只提出 Finding Proposal。
+Proposal 不等于正式 Finding。
+只有 Runtime certify-findings 成功后的 Certified Finding 才能进入 review.md。
+```
+
+Reviewer 必须消费 Runtime-owned ReviewUnit 与 RuleDispatch，并把候选问题写到 `.code-harness/runs/<runId>/requests/finding-proposals.json`。Proposal 中的 `reviewUnitId / ruleId / anchor / evidenceRefs` 只能引用当前 Runtime authority；Reviewer 不得自行认证 line、symbol、scope、evidence 或 introducedByChange。
+
+本文前述 Review Report transport 是后续 Runtime Certified Finding 的展示边界，不授权 Reviewer 直接构造正式 `findings[]`。Java、Mapper.xml、YML、TEST_VALIDITY 与 workspace dependency 的既有边界全部保持不变。
+'@
+          }
+
+          Set-Content -Path $skillPath -Value $skill -Encoding UTF8 -NoNewline
+          Set-Content -Path $agentPath -Value $agent -Encoding UTF8 -NoNewline
+          git config user.name 'lingyi9909'
+          git config user.email 'zhanhui9909@gmail.com'
+          git add -- $skillPath $agentPath
+          if (git diff --cached --quiet) { exit 0 }
+          git commit -m 'docs: bind reviewer to finding proposals'
+          git push origin HEAD:task160-task3-finding-proposal-verify
