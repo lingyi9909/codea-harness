@@ -151,7 +151,7 @@ public class FakeController {
 
         Write-Host 'TASK153 REAL AST_GREP ENTRYPOINTS AController.create + BController.submit + CController.update EXACTLY 3 PASS'
         Write-Host 'TASK153 FakeController excluded PASS'
-        Write-Host 'TASK153_TASK1_REAL_ENTRYPOINT_INVENTORY PASS'
+        Write-Output 'TASK153_TASK1_REAL_ENTRYPOINT_INVENTORY PASS'
     }
     finally {
         Pop-Location
