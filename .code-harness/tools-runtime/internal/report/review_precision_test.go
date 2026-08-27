@@ -24,7 +24,7 @@ func TestReportUsesCertifiedFindingAnchor(t *testing.T) {
 	root := t.TempDir()
 	runID := "run-report-anchor"
 	writeReportCertifiedFixture160(t, root, runID, []finding.CertifiedFinding{{
-		ID: "CF-ANCHOR",
+		ID: "CF-1234567890abcdef",
 		RuleID: "SPRING-TX-001",
 		ReviewUnitID: "RU-TASK4",
 		Category: "PRODUCTION_CODE",
@@ -79,6 +79,7 @@ func task4ReportRequest160(runID string) ReviewRequest {
 
 func writeReportCertifiedFixture160(t *testing.T, root, runID string, findings []finding.CertifiedFinding) {
 	t.Helper()
+	installReportFindingContracts160(t, root)
 	analysisDir := filepath.Join(root, ".code-harness", "runs", runID, "analysis")
 	requestsDir := filepath.Join(root, ".code-harness", "runs", runID, "requests")
 	if err := os.MkdirAll(analysisDir, 0o755); err != nil { t.Fatal(err) }
@@ -95,6 +96,18 @@ func writeReportCertifiedFixture160(t *testing.T, root, runID string, findings [
 	set := finding.CertifiedSet{RunID: runID, HarnessVersion: "1.6.0", ChangeSetSHA256: strings.Repeat("a", 64), ChangeAnalysisSHA256: task4SHA160(authorities[filepath.Join(analysisDir, "change-analysis.json")]), ReviewUnitsSHA256: task4SHA160(authorities[filepath.Join(analysisDir, "review-units.json")]), RuleDispatchSHA256: task4SHA160(authorities[filepath.Join(analysisDir, "rule-dispatch.json")]), FindingProposalsSHA256: task4SHA160(authorities[filepath.Join(requestsDir, "finding-proposals.json")]), Findings: findings}
 	cert := finding.Certificate{RunID: runID, ChangeSetSHA256: set.ChangeSetSHA256, ChangeAnalysisSHA256: set.ChangeAnalysisSHA256, ReviewUnitsSHA256: set.ReviewUnitsSHA256, RuleDispatchSHA256: set.RuleDispatchSHA256, FindingProposalsSHA256: set.FindingProposalsSHA256, Mode: "FULL"}
 	if err := finding.WriteCertified(root, set, cert); err != nil { t.Fatalf("write certified fixture: %v", err) }
+}
+
+func installReportFindingContracts160(t *testing.T, root string) {
+	t.Helper()
+	for _, name := range []string{"certified-findings.schema.json", "certified-findings-cert.schema.json"} {
+		source := filepath.Clean(filepath.Join("..", "..", "..", "contracts", name))
+		data, err := os.ReadFile(source)
+		if err != nil { t.Fatalf("read contract %s: %v", source, err) }
+		destination := filepath.Join(root, ".code-harness", "contracts", name)
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil { t.Fatal(err) }
+		if err := os.WriteFile(destination, data, 0o644); err != nil { t.Fatal(err) }
+	}
 }
 
 func task4SHA160(data []byte) string { return fmt.Sprintf("%x", sha256.Sum256(data)) }
