@@ -4,12 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"codea-harness-tools/internal/reviewunit"
+	"codea-harness-tools/internal/schema"
 )
 
 func TestDispatchMapperXmlGetsOnlyRelevantMyBatisRules(t *testing.T) {
@@ -53,7 +55,7 @@ func TestDispatchYamlGetsConfigRule(t *testing.T) {
 	rules, catalogSHA := springRules160(t)
 	units := sealedUnits160(t, []reviewunit.Unit{{
 		ID: "RU-CONFIG",
-		Files: []reviewunit.FileRef{{Path: "src/main/resources/application.yml", Role: "Config", Changed: true, Workspace: "current"}},
+		Files: []reviewunit.FileRef{{Path: "src/main/resources/application.yml", Role: "YamlConfig", Changed: true, Workspace: "current"}},
 		ChangedHunks: []reviewunit.HunkRef{{Path: "src/main/resources/application.yml", NewStart: 10, NewLines: 2}},
 	}})
 	manifest, err := BuildDispatch(units, rules, catalogSHA)
@@ -63,7 +65,34 @@ func TestDispatchYamlGetsConfigRule(t *testing.T) {
 	got := ruleIDs160(manifest, "RU-CONFIG")
 	want := []string{"SPRING-CONFIG-001"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Config dispatch mismatch: got %v want %v", got, want)
+		t.Fatalf("YamlConfig dispatch mismatch: got %v want %v", got, want)
+	}
+}
+
+func TestYamlConfigReviewUnitDispatchesSpringConfigRuleContract(t *testing.T) {
+	rules, catalogSHA := springRules160(t)
+	units := sealedUnits160(t, []reviewunit.Unit{{
+		ID: "RU-YAML-CONTRACT",
+		Files: []reviewunit.FileRef{{Path: "src/main/resources/application-prod.yml", Role: "YamlConfig", Changed: true, Workspace: "current"}},
+		ChangedHunks: []reviewunit.HunkRef{{Path: "src/main/resources/application-prod.yml", NewStart: 3, NewLines: 4}},
+	}})
+	manifest, err := BuildDispatch(units, rules, catalogSHA)
+	if err != nil {
+		t.Fatalf("build dispatch: %v", err)
+	}
+	if got, want := ruleIDs160(manifest, "RU-YAML-CONTRACT"), []string{"SPRING-CONFIG-001"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("YamlConfig ReviewUnit must dispatch SPRING-CONFIG-001: got %v want %v", got, want)
+	}
+	encoded, err := CanonicalBytes(manifest)
+	if err != nil {
+		t.Fatalf("canonicalize rule dispatch: %v", err)
+	}
+	contract, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "rule-dispatch.schema.json"))
+	if err != nil {
+		t.Fatalf("read rule-dispatch contract: %v", err)
+	}
+	if err := schema.ValidateJSON(contract, encoded); err != nil {
+		t.Fatalf("YamlConfig RuleDispatch must satisfy runtime contract: %v", err)
 	}
 }
 
