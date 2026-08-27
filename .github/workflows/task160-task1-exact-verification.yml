@@ -1,0 +1,38 @@
+name: task160-task1-exact-verification
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.code-harness/**'
+      - '.github/workflows/task160-task1-exact-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-task1-green:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.5'
+
+      - name: Task 1 exact package gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./internal/reviewunit ./cmd/codea-harness-tools
+
+      - name: Task 1 exact full test gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./...
+
+      - name: Task 1 exact vet gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
