@@ -23,7 +23,7 @@ func TestReportRejectsRawAgentFindingWithoutCertifiedSet(t *testing.T) {
 func TestReportUsesCertifiedFindingAnchor(t *testing.T) {
 	root := t.TempDir()
 	runID := "run-report-anchor"
-	writeReportCertifiedFixture160(t, root, runID, []finding.CertifiedFinding{{
+	certified := []finding.CertifiedFinding{{
 		ID: "CF-1234567890abcdef",
 		RuleID: "SPRING-TX-001",
 		ReviewUnitID: "RU-TASK4",
@@ -36,10 +36,10 @@ func TestReportUsesCertifiedFindingAnchor(t *testing.T) {
 		Recommendation: "通过代理边界调用",
 		NeedsTest: true,
 		Confidence: 0.95,
-	}})
+	}}
 	req := task4ReportRequest160(runID)
-	path, err := WriteCertifiedReport(root, req)
-	if err != nil { t.Fatalf("write certified report: %v", err) }
+	path, err := writeCertifiedSetReport160(root, req, finding.CertifiedSet{Findings: certified})
+	if err != nil { t.Fatalf("write certified renderer transport: %v", err) }
 	data, err := os.ReadFile(path)
 	if err != nil { t.Fatal(err) }
 	text := string(data)
@@ -51,11 +51,10 @@ func TestReportUsesCertifiedFindingAnchor(t *testing.T) {
 func TestReportCanPassWithZeroCertifiedFindings(t *testing.T) {
 	root := t.TempDir()
 	runID := "run-report-zero"
-	writeReportCertifiedFixture160(t, root, runID, nil)
 	req := task4ReportRequest160(runID)
 	req.Result = ResultPassed
-	path, err := WriteCertifiedReport(root, req)
-	if err != nil { t.Fatalf("zero Certified Findings must permit a complete passing report: %v", err) }
+	path, err := writeCertifiedSetReport160(root, req, finding.CertifiedSet{Findings: []finding.CertifiedFinding{}})
+	if err != nil { t.Fatalf("zero Certified Findings must permit a complete passing renderer transport: %v", err) }
 	data, err := os.ReadFile(path)
 	if err != nil { t.Fatal(err) }
 	if !strings.Contains(string(data), "本次评审通过") {
