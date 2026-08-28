@@ -130,22 +130,22 @@ func LoadCertifiedWithCertificate(repoRoot, runID string) (CertifiedSet, Certifi
 		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "certificate authority hashes differ from set")
 	}
 	current := []struct {
+		name string
 		path string
 		want string
-		code string
 	}{
-		{filepath.Join(analysisDir, "change-analysis.json"), cert.ChangeAnalysisSHA256, "CHANGED_ANALYSIS_HASH_MISMATCH"},
-		{filepath.Join(analysisDir, "review-units.json"), cert.ReviewUnitsSHA256, "CHANGED_REVIEW_UNIT_HASH_MISMATCH"},
-		{filepath.Join(analysisDir, "rule-dispatch.json"), cert.RuleDispatchSHA256, "CHANGED_RULE_DISPATCH_HASH_MISMATCH"},
-		{filepath.Join(root, ".code-harness", "runs", runID, "requests", "finding-proposals.json"), cert.FindingProposalsSHA256, "CHANGED_FINDING_PROPOSALS_HASH_MISMATCH"},
+		{"CHANGE_ANALYSIS", filepath.Join(analysisDir, "change-analysis.json"), cert.ChangeAnalysisSHA256},
+		{"REVIEW_UNITS", filepath.Join(analysisDir, "review-units.json"), cert.ReviewUnitsSHA256},
+		{"RULE_DISPATCH", filepath.Join(analysisDir, "rule-dispatch.json"), cert.RuleDispatchSHA256},
+		{"FINDING_PROPOSALS", filepath.Join(root, ".code-harness", "runs", runID, "requests", "finding-proposals.json"), cert.FindingProposalsSHA256},
 	}
 	for _, authority := range current {
 		data, err := os.ReadFile(authority.path)
 		if err != nil {
-			return CertifiedSet{}, Certificate{}, findingError160(authority.code, "read authority: %v", err)
+			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "CHANGED_%s_HASH_MISMATCH: read authority: %v", authority.name, err)
 		}
 		if hashFindingBytes160(data) != authority.want {
-			return CertifiedSet{}, Certificate{}, findingError160(authority.code, "authority bytes changed")
+			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "CHANGED_%s_HASH_MISMATCH: authority bytes changed", authority.name)
 		}
 	}
 
@@ -154,14 +154,14 @@ func LoadCertifiedWithCertificate(repoRoot, runID string) (CertifiedSet, Certifi
 	// ReviewUnit/ReviewScope identity, current Runtime VERSION, and current RuleDispatch/catalog.
 	authority, err := LoadVerifyContext(root, runID, "")
 	if err != nil {
-		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_UPSTREAM_STALE", "%v", err)
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "upstream Runtime authority stale: %v", err)
 	}
 	mode := strings.ToUpper(strings.TrimSpace(cert.Mode))
 	if string(authority.units.Mode) != mode || authority.units.RunID != runID || authority.units.ChangeSetSHA256 != cert.ChangeSetSHA256 || authority.units.ChangeAnalysisSHA256 != cert.ChangeAnalysisSHA256 || authority.units.HarnessVersion != set.HarnessVersion {
-		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_UPSTREAM_STALE", "Runtime authority identity differs from Certified Findings")
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "Runtime authority identity differs from Certified Findings")
 	}
 	if authority.units.ReviewScopeSHA256 != strings.TrimSpace(cert.ScopeSHA256) {
-		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_UPSTREAM_STALE", "Runtime ReviewScope identity differs from certificate")
+		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "Runtime ReviewScope identity differs from certificate")
 	}
 	return set, cert, nil
 }
