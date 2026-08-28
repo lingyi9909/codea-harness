@@ -204,7 +204,7 @@
       "enum": ["Controller", "Service", "Repository", "Mapper", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
     },
     "fileRole": {
-      "enum": ["Controller", "Service", "Repository", "Mapper", "MapperXml", "YamlConfig", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
+      "enum": ["Controller", "Service", "Repository", "Mapper", "MapperXml", "YamlConfig", "Test", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
     }
   }
 }

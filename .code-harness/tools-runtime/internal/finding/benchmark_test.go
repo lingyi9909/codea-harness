@@ -261,9 +261,9 @@ func prepareBenchmarkRepo160(t *testing.T, c benchmarkCase160) (string, string) 
 		reviewed = append(reviewed, map[string]any{"path": f.Path, "role": f.Role, "reason": "CHANGED"})
 	}
 	locations := make([]map[string]any, 0, len(c.Symbols)+1)
-	locations = append(locations, map[string]any{"workspace": "current", "symbol": "BenchmarkController.entry", "path": "src/main/java/com/acme/BenchmarkController.java", "role": "Controller", "source": "BENCHMARK_RUNTIME"})
+	locations = append(locations, map[string]any{"workspace": "current", "symbol": "BenchmarkController.entry", "path": "src/main/java/com/acme/BenchmarkController.java", "role": "Controller", "source": "FIND_SYMBOL"})
 	for _, s := range c.Symbols {
-		locations = append(locations, map[string]any{"workspace": normalizeBenchmarkWorkspace160(s.Workspace), "symbol": s.Symbol, "path": s.Path, "role": s.Role, "source": "BENCHMARK_RUNTIME"})
+		locations = append(locations, map[string]any{"workspace": normalizeBenchmarkWorkspace160(s.Workspace), "symbol": s.Symbol, "path": s.Path, "role": s.Role, "source": "FIND_SYMBOL"})
 	}
 	chains := []map[string]any{}
 	if len(c.Chain) > 0 {

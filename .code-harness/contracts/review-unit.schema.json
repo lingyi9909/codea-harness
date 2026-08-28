@@ -20,7 +20,7 @@
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "fileRole": {
-      "enum": ["Controller", "Service", "Repository", "Mapper", "MapperXml", "YamlConfig", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
+      "enum": ["Controller", "Service", "Repository", "Mapper", "MapperXml", "YamlConfig", "Test", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
     },
     "file": {
       "type": "object",
