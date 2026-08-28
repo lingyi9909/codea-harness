@@ -431,6 +431,8 @@ func isFindingScopePath160(p string) bool {
 	switch {
 	case strings.HasPrefix(p, "src/main/java/") && strings.HasSuffix(p, ".java"):
 		return true
+	case strings.HasPrefix(p, "src/test/java/") && strings.HasSuffix(p, ".java"):
+		return true
 	case strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(path.Base(p), "Mapper.xml"):
 		return true
 	case strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml"):
