@@ -15,3 +15,15 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: go test -count=1 ./cmd/codea-harness-tools -run 'TestTask4(LoadCertifiedAndReportRejectSourceMutationAfterCertification|ProposalBytesMutationReturnsCertifiedFindingsStale|CertifiedFindingsHashTamperKeepsHashMismatchCode)$'
+      - name: Task 4 GREEN gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./internal/finding ./internal/report ./cmd/codea-harness-tools
+      - name: Full regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./...
+      - name: Vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
