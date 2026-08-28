@@ -63,15 +63,7 @@ func TestTask4CertifiedFindingsHashTamperKeepsHashMismatchCode(t *testing.T) {
 		tampered = strings.Replace(string(before), `"sha256": "`+set.SHA256+`"`, `"sha256": "`+strings.Repeat("0", 64)+`"`, 1)
 	}
 	if tampered == string(before) {
-		tampered = strings.Replace(string(before), `"sha256" : "`+set.SHA256+`"`, `"sha256" : "`+strings.Repeat("0", 64)+`"`, 1)
-	}
-	if tampered == string(before) {
-		var raw map[string]any
-		if err := json.Unmarshal(before, &raw); err != nil { t.Fatal(err) }
-		raw["sha256"] = strings.Repeat("0", 64)
-		encoded, err := json.Marshal(raw)
-		if err != nil { t.Fatal(err) }
-		tampered = string(encoded) + "\n"
+		t.Fatalf("failed to locate Certified Findings sha256 in canonical bytes: %s", before)
 	}
 	if err := os.WriteFile(setPath, []byte(tampered), 0o644); err != nil { t.Fatal(err) }
 
