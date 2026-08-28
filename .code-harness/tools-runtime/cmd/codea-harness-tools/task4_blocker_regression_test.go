@@ -32,12 +32,38 @@ func TestTask4LoadCertifiedAndReportRejectSourceMutationAfterCertification(t *te
 	if err != nil { t.Fatal(err) }
 	if err := os.WriteFile(sourcePath, append(before, []byte("\n// task4 stale source\n")...), 0o644); err != nil { t.Fatal(err) }
 
-	if _, err := finding.LoadCertified(".", runID); err == nil {
-		t.Fatal("LoadCertified must reject when source/Working Tree changes after certification even if runs/** bytes are untouched")
-	}
+	_, err = finding.LoadCertified(".", runID)
+	requireTask4MachineCode160(t, err, "CERTIFIED_FINDINGS_STALE")
 	if _, err := report.WriteCertifiedReport(".", req); err == nil {
 		t.Fatal("formal report must reject when source/Working Tree changes after certification")
 	}
+}
+
+func TestTask4ProposalBytesMutationReturnsCertifiedFindingsStale(t *testing.T) {
+	runID, _ := prepareTask4CertifiedTargetedAuthority160(t)
+	proposalPath := filepath.Join(".code-harness", "runs", runID, "requests", "finding-proposals.json")
+	before, err := os.ReadFile(proposalPath)
+	if err != nil { t.Fatal(err) }
+	if err := os.WriteFile(proposalPath, append(before, '\n'), 0o644); err != nil { t.Fatal(err) }
+
+	_, err = finding.LoadCertified(".", runID)
+	requireTask4MachineCode160(t, err, "CERTIFIED_FINDINGS_STALE")
+}
+
+func TestTask4CertifiedFindingsHashTamperKeepsHashMismatchCode(t *testing.T) {
+	runID, _ := prepareTask4CertifiedTargetedAuthority160(t)
+	setPath := filepath.Join(".code-harness", "runs", runID, "analysis", "certified-findings.json")
+	before, err := os.ReadFile(setPath)
+	if err != nil { t.Fatal(err) }
+	var set finding.CertifiedSet
+	if err := json.Unmarshal(before, &set); err != nil { t.Fatal(err) }
+	if len(set.SHA256) != 64 { t.Fatalf("fixture requires sha256, got %q", set.SHA256) }
+	tampered := strings.Replace(string(before), `"sha256":"`+set.SHA256+`"`, `"sha256":"`+strings.Repeat("0", 64)+`"`, 1)
+	if tampered == string(before) { t.Fatal("failed to tamper Certified Findings sha256") }
+	if err := os.WriteFile(setPath, []byte(tampered), 0o644); err != nil { t.Fatal(err) }
+
+	_, err = finding.LoadCertified(".", runID)
+	requireTask4MachineCode160(t, err, "CERTIFIED_FINDINGS_HASH_MISMATCH")
 }
 
 func TestTask4TargetedCertificateRejectsFullReport(t *testing.T) {
@@ -172,6 +198,13 @@ func prepareTask4CertifiedTargetedAuthority160(t *testing.T) (string, report.Rev
 		Findings: []report.Finding{},
 	}
 	return runID, req
+}
+
+func requireTask4MachineCode160(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil { t.Fatalf("expected machine code %s, got nil", want) }
+	got := strings.TrimSpace(strings.SplitN(err.Error(), ":", 2)[0])
+	if got != want { t.Fatalf("machine code = %s, want %s; err=%v", got, want, err) }
 }
 
 func task4BlockerSHA160(data []byte) string { return fmt.Sprintf("%x", sha256.Sum256(data)) }
