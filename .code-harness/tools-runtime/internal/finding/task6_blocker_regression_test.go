@@ -107,7 +107,7 @@ func TestTask6TestValidityUsesDedicatedAuthorityWithoutChangingSpringTen(t *test
 }
 
 func TestTask6WindowsDependencySentinelRequiresExactMachineCodeAndEvidence(t *testing.T) {
-	script := string(task6Read160(t, filepath.Join("..", "..", "..", "..", "github", "scripts", "task160-real-review-precision-regression.ps1")))
+	script := string(task6Read160(t, filepath.Join("..", "..", "..", "..", ".github", "scripts", "task160-real-review-precision-regression.ps1")))
 	if !strings.Contains(script, "FINDING_DEPENDENCY_SCOPE_FORBIDDEN") {
 		t.Fatal("Windows P-DEPENDENCY must assert FINDING_DEPENDENCY_SCOPE_FORBIDDEN before sentinel")
 	}
@@ -120,7 +120,7 @@ func TestTask6WorkflowGoVersionMatchesGoMod(t *testing.T) {
 	goMod := string(task6Read160(t, filepath.Join("..", "..", "go.mod")))
 	match := regexp.MustCompile(`(?m)^go\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)\s*$`).FindStringSubmatch(goMod)
 	if len(match) != 2 { t.Fatalf("cannot read go version from go.mod") }
-	workflow := string(task6Read160(t, filepath.Join("..", "..", "..", "..", "github", "workflows", "task160-review-precision.yml")))
+	workflow := string(task6Read160(t, filepath.Join("..", "..", "..", "..", ".github", "workflows", "task160-review-precision.yml")))
 	if !strings.Contains(workflow, "go-version: '"+match[1]+"'") {
 		t.Fatalf("task160-review-precision.yml must use go.mod version %s", match[1])
 	}
