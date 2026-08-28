@@ -210,7 +210,7 @@ workspaceDependencies:
             reviewCoverage = [ordered]@{
                 reviewedFiles = @('src/main/resources/application.yml')
                 callChains = @()
-                externalDependencies = @()
+                externalDependencies = @('company-framework')
                 unresolved = @()
                 missingReviewedFiles = @()
                 runtimeErrors = @()
