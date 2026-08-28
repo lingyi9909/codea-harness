@@ -12,6 +12,8 @@ foreach ($required in @($runtimeSource, $versionSource, $catalogSource)) {
 
 $fixture = Join-Path $env:RUNNER_TEMP ("task160-review-precision-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $fixture | Out-Null
+$dependencyName = "company-framework-" + [guid]::NewGuid().ToString('N')
+$dependencyRoot = Join-Path (Split-Path -Parent $fixture) $dependencyName
 
 function Write-Utf8NoBom([string]$Path, [string]$Content) {
     $parent = Split-Path -Parent $Path
@@ -49,6 +51,9 @@ try {
   <groupId>com.acme</groupId>
   <artifactId>task160-fixture</artifactId>
   <version>1.0.0</version>
+  <dependencies>
+    <dependency><groupId>com.company</groupId><artifactId>company-framework</artifactId><version>2.3.1</version></dependency>
+  </dependencies>
 </project>
 '@
         $configPath = Join-Path $fixture 'src/main/resources/application.yml'
@@ -57,6 +62,12 @@ spring:
   datasource:
     hikari:
       connection-timeout: 30000
+'@
+        Write-Utf8NoBom (Join-Path $dependencyRoot 'pom.xml') @'
+<project><modelVersion>4.0.0</modelVersion><groupId>com.company</groupId><artifactId>company-framework</artifactId><version>2.3.1</version></project>
+'@
+        Write-Utf8NoBom (Join-Path $dependencyRoot 'src/main/java/com/company/framework/SharedPolicy.java') @'
+package com.company.framework; public class SharedPolicy { public void check() {} }
 '@
         Invoke-Git add .
         Invoke-Git commit -m 'base Spring Maven fixture'
@@ -87,6 +98,16 @@ spring:
             'certified-findings-cert.schema.json'
         )) { Copy-Contract $contract }
 
+        Write-Utf8NoBom (Join-Path $fixture '.code-harness/harness.yaml') @"
+version: 2
+workspaceDependencies:
+  - id: company-framework
+    root: ../$dependencyName
+    maven:
+      groupId: com.company
+      artifactId: company-framework
+    mode: READ_ONLY
+"@
         $script:runtime = (Resolve-Path '.code-harness\bin\codea-harness-tools.exe').Path
         $runID = 'task160-real'
         $requestDir = Join-Path $fixture ".code-harness\runs\$runID\requests"
@@ -104,9 +125,9 @@ spring:
             changedFiles = @([ordered]@{ path = 'src/main/resources/application.yml'; role = 'YamlConfig'; sources = @('UNSTAGED') })
             affectedControllers = @()
             callChains = @()
-            symbolLocations = @()
+            symbolLocations = @([ordered]@{ workspace='company-framework'; symbol='SharedPolicy.check'; path='src/main/java/com/company/framework/SharedPolicy.java'; role='Service'; source='FIND_SYMBOL' })
             resourceRelations = @()
-            externalDependencies = @()
+            externalDependencies = @('company-framework')
             riskAreas = @()
             reviewCoverage = [ordered]@{
                 status = 'COMPLETE'
@@ -151,7 +172,7 @@ spring:
             [ordered]@{ proposalId='P-VALID-B'; reviewUnitId=$unitId; ruleId='SPRING-CONFIG-001'; category='PRODUCTION_CODE'; severity='high'; anchor=[ordered]@{kind='LINE'; path='src/main/resources/application.yml'; line=$changedLine}; evidenceRefs=$changedEvidence; problem='同一配置风险的另一种描述'; impact='另一种影响措辞'; recommendation='另一种修复措辞'; needsTest=$true; introducedByChange=$true; confidence=0.95 },
             [ordered]@{ proposalId='P-BAD-LINE'; reviewUnitId=$unitId; ruleId='SPRING-CONFIG-001'; category='PRODUCTION_CODE'; severity='high'; anchor=[ordered]@{kind='LINE'; path='src/main/resources/application.yml'; line=999}; evidenceRefs=$changedEvidence; problem='伪造行号'; impact='无'; recommendation='无'; needsTest=$false; introducedByChange=$false; confidence=0.8 },
             [ordered]@{ proposalId='P-INVENTED-SYMBOL'; reviewUnitId=$unitId; ruleId='SPRING-CONFIG-001'; category='PRODUCTION_CODE'; severity='high'; anchor=[ordered]@{kind='SYMBOL'; symbol='Invented.missing'}; evidenceRefs=$changedEvidence; problem='伪造 symbol'; impact='无'; recommendation='无'; needsTest=$false; introducedByChange=$false; confidence=0.8 },
-            [ordered]@{ proposalId='P-DEPENDENCY'; reviewUnitId=$unitId; ruleId='SPRING-CONFIG-001'; category='PRODUCTION_CODE'; severity='high'; anchor=[ordered]@{kind='FILE'; path='workspace/shared/src/main/resources/application.yml'}; evidenceRefs=$changedEvidence; problem='scope 外 dependency finding'; impact='无'; recommendation='无'; needsTest=$false; introducedByChange=$false; confidence=0.8 }
+            [ordered]@{ proposalId='P-DEPENDENCY'; reviewUnitId=$unitId; ruleId='SPRING-CONFIG-001'; category='PRODUCTION_CODE'; severity='high'; anchor=[ordered]@{kind='FILE'; path='src/main/java/com/company/framework/SharedPolicy.java'}; evidenceRefs=$changedEvidence; problem='scope 外 dependency finding'; impact='无'; recommendation='无'; needsTest=$false; introducedByChange=$false; confidence=0.8 }
         )
         $proposalPath = Join-Path $requestDir 'finding-proposals.json'
         Write-Utf8NoBom $proposalPath ($proposals | ConvertTo-Json -Depth 20)
@@ -166,6 +187,11 @@ spring:
         }
         Write-Output 'TASK160_INVALID_LINE_REJECTED PASS'
         Write-Output 'TASK160_INVENTED_SYMBOL_REJECTED PASS'
+        $dependencyRejection = @($certify.rejections | Where-Object { $_.proposalId -eq 'P-DEPENDENCY' }) | Select-Object -First 1
+        if ($null -eq $dependencyRejection -or [string]$dependencyRejection.code -ne 'FINDING_DEPENDENCY_SCOPE_FORBIDDEN') {
+            $actualCode = if ($null -eq $dependencyRejection) { '<missing>' } else { [string]$dependencyRejection.code }
+            throw "Task160 P-DEPENDENCY expected FINDING_DEPENDENCY_SCOPE_FORBIDDEN, got $actualCode"
+        }
         Write-Output 'TASK160_DEPENDENCY_SCOPE_REJECTED PASS'
 
         $certifiedPath = Join-Path $fixture ".code-harness\runs\$runID\analysis\certified-findings.json"
@@ -184,7 +210,7 @@ spring:
             reviewCoverage = [ordered]@{
                 reviewedFiles = @('src/main/resources/application.yml')
                 callChains = @()
-                externalDependencies = @()
+                externalDependencies = @('company-framework')
                 unresolved = @()
                 missingReviewedFiles = @()
                 runtimeErrors = @()
@@ -206,4 +232,5 @@ spring:
 }
 finally {
     Remove-Item $fixture -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $dependencyRoot -Recurse -Force -ErrorAction SilentlyContinue
 }

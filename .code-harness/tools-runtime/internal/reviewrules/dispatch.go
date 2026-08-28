@@ -10,6 +10,18 @@ import (
 	"codea-harness-tools/internal/reviewunit"
 )
 
+const TestValidityRuleID = "TEST-VALIDITY-001"
+
+var testValidityRule160 = Rule{
+	ID:               TestValidityRuleID,
+	Version:          1,
+	Kind:             KindAgent,
+	SeverityDefault:  "high",
+	Roles:            []string{"Test"},
+	RequiredEvidence: []string{"CHANGED_RANGE"},
+	Prompt:           "只检查本次测试变更是否使关键断言、失败路径或有效性校验失效；必须引用 changed test range 证明 Test Validity 问题由本次变更引入，不审普通测试风格。",
+}
+
 func BuildDispatch(units reviewunit.Manifest, rules []Rule, catalogSHA string) (Manifest, error) {
 	if err := verifyReviewUnits160(units); err != nil {
 		return Manifest{}, err
@@ -53,6 +65,20 @@ func BuildDispatch(units reviewunit.Manifest, rules []Rule, catalogSHA string) (
 				SeverityDefault:  rule.SeverityDefault,
 				RequiredEvidence: append([]string(nil), rule.RequiredEvidence...),
 				DispatchReason:   reasons,
+			})
+		}
+		// Test Validity is Runtime-owned authority, deliberately outside the
+		// locked Spring Rule Pack catalog. It is dispatched only for a changed
+		// current-workspace Test file and therefore cannot add an 11th Spring rule.
+		if changedRoles["Test"] {
+			dispatches = append(dispatches, Dispatch{
+				ReviewUnitID:     unitID,
+				RuleID:           testValidityRule160.ID,
+				RuleVersion:      testValidityRule160.Version,
+				Kind:             testValidityRule160.Kind,
+				SeverityDefault:  testValidityRule160.SeverityDefault,
+				RequiredEvidence: append([]string(nil), testValidityRule160.RequiredEvidence...),
+				DispatchReason:   []string{"CHANGED_ROLE:Test"},
 			})
 		}
 	}
