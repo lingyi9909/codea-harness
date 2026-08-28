@@ -3,19 +3,36 @@ name: task160-task6-blocker-verification
 on:
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     if: github.head_ref == 'task160-task6-blockers'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-go@v7
         with:
           go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Apply blocker patch once
+        shell: pwsh
+        run: |
+          python .github/scripts/task160-task6-blocker-patch.py
+          if (-not (git diff --quiet)) {
+            git config user.email 'task160@codea.local'
+            git config user.name 'Task 160 Verification'
+            git add .code-harness/tools-runtime/internal/finding/benchmark_test.go `.code-harness/tools-runtime/internal/reviewunit/build.go `.code-harness/tools-runtime/testdata/review-benchmark `.github/scripts/task160-real-review-precision-regression.ps1 `.github/workflows/task160-review-precision.yml `.github/task160-red-marker.txt
+            git commit -m 'fix: harden Task 6 benchmark authority'
+            git push origin HEAD:${{ github.head_ref }}
+          }
       - name: Task 6 blocker exact gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
-        run: go test -count=1 ./internal/finding ./internal/reviewrules -run 'Benchmark|TestValidity|GroundTruth|RealReviewUnit'
+        run: go test -count=1 ./internal/finding ./internal/reviewrules ./internal/reviewunit -run 'Benchmark|Task6|TestValidity|GroundTruth|RealReviewUnit'
       - name: Full Go regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
