@@ -197,3 +197,27 @@ Reviewer 输出固定写入 `.code-harness/runs/<runId>/requests/finding-proposa
 Controlled Runtime 必须对同 run 的 ReviewUnit、RuleDispatch、Certified ChangeAnalysis、源码与 changed hunk 独立验证 rule/scope/path/symbol/line/range/evidence/introducedByChange；任一验证失败都必须拒绝 Proposal。
 
 本文既有 Java、Mapper.xml、YML 与 Test Validity Gate 的评审边界保持不变；这些边界现在约束“允许提出什么 Proposal”，而不是赋予 Agent 正式 Finding 权威。
+## 1.6 Spring Rule Pack v1 深度评审约束
+
+Runtime `RuleDispatch` 决定当前 ReviewUnit 要检查的规则；Reviewer 只消费当前 `reviewUnitId / ruleId` 对应的已分发规则，不得自行扩展规则集或把 matcher 结果升级成事实。
+
+对每个 dispatched rule，Reviewer 可以输出 **0..N** 个 Finding Proposal。`0` 表示当前证据不足以支持问题，不是漏审；不得为了覆盖已分发规则而强行提出 Proposal。不得把 rule passed 输出为 Finding，也不得输出“规则通过”之类的伪 Finding。matcher hit 不等于 bug。
+
+每个 Proposal 必须由本次 current-change evidence 支撑，并遵守该规则的 requiredEvidence；证据不足时不提出 Finding Proposal。Reviewer 不得仅凭注解名、类名/方法名、配置文件中未变化 key、`${}` matcher、普通 DTO 缺少注解或模型 confidence 得出确定性结论。
+
+Task 5 明确禁止以下低价值 Finding：
+
+```text
+命名
+格式
+缩进
+重复代码
+建议重构
+普通测试代码风格
+未变化配置
+scope 外潜在问题
+workspace dependency finding
+```
+
+既有 FULL/TARGETED scope、workspace dependency 隔离和 `TEST_VALIDITY` 边界保持不变；Task 5 只深化已分发 Spring/MyBatis 规则的证据要求，不新增 Finding 权威。
+
