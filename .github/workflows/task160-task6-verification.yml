@@ -1,0 +1,17 @@
+name: task160-task6-verification
+
+on:
+  pull_request:
+
+jobs:
+  task6-red-green:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.5'
+      - name: Task 6 benchmark gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./internal/finding -run Benchmark -v
