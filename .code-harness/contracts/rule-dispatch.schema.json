@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codea.local/contracts/rule-dispatch.schema.json",
+  "title": "Codea Rule Dispatch Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "runId",
+    "reviewUnitsSha256",
+    "ruleCatalogSha256",
+    "dispatches",
+    "sha256"
+  ],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "reviewUnitsSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "ruleCatalogSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "dispatches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dispatch"
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$defs": {
+    "dispatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewUnitId",
+        "ruleId",
+        "ruleVersion",
+        "kind",
+        "severityDefault",
+        "requiredEvidence",
+        "dispatchReason"
+      ],
+      "properties": {
+        "reviewUnitId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleId": {
+          "type": "string",
+          "pattern": "^[A-Z0-9-]+$"
+        },
+        "ruleVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["AGENT", "MACHINE"]
+        },
+        "severityDefault": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "requiredEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dispatchReason": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

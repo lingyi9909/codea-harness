@@ -1,0 +1,92 @@
+version: 1
+rules:
+  - id: MYBATIS-SQL-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [MapperXml]
+    requiredEvidence: [CHANGED_RANGE, RESOURCE_RELATION]
+    prompt: >-
+      检查本次 Mapper XML 中 UPDATE/DELETE 变更是否删除、遗漏或显著弱化 WHERE 条件；必须引用当前 changed range 中的明确 SQL 证据与 verified resource relation，证明风险由本次变更引入；无明确 SQL 证据不报，证据不足时不提出 Finding Proposal。
+
+  - id: MYBATIS-ISOLATION-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [MapperXml]
+    requiredEvidence: [CHANGED_RANGE, RESOURCE_RELATION]
+    prompt: >-
+      检查本次 SQL 变更是否删除或弱化 tenant、org、user 等数据隔离条件；必须对照变更前条件与当前 changed range，或引用 verified contract evidence 证明隔离约束确实存在并被弱化；不得仅凭命名推断，证据不足时不提出 Finding Proposal。
+
+  - id: MYBATIS-BIND-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [MapperXml]
+    requiredEvidence: [CHANGED_RANGE]
+    prompt: >-
+      检查本次 Mapper XML 变更是否新增或扩大使用 ${} 进行 SQL 动态拼接，并以 changed range、输入来源与可控性证据判断是否形成注入或越权风险；不能把所有 `${}` 一律当漏洞，matcher hit 本身不等于 bug，证据不足时不提出 Finding Proposal。
+
+  - id: MYBATIS-CONTRACT-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [Mapper, MapperXml]
+    requiredEvidence: [RESOURCE_RELATION, SYMBOL]
+    prompt: >-
+      检查本次 Mapper Java/XML 的 statement id、param、result contract 是否发生不一致；必须关联 verified resource relation 与当前 symbol evidence，证明 mismatch 位于本次变更涉及的 contract；证据不足时不提出 Finding Proposal。
+
+  - id: SPRING-TX-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [Service]
+    requiredEvidence: [CHAIN, SYMBOL]
+    prompt: >-
+      检查本次事务变更是否存在 transactional self-invocation；必须用 verified chain 与 symbol evidence 证明 caller/callee 同 Bean、自调用绕过代理且代理语义确实受影响，不能只因看到 @Transactional 就报；证据不足时不提出 Finding Proposal。
+
+  - id: SPRING-TX-002
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [Service]
+    requiredEvidence: [CHAIN, SYMBOL]
+    prompt: >-
+      检查本次 checked exception、catch/rethrow 路径是否与 Spring rollback 默认行为冲突；必须证明真实异常路径、事务边界及默认行为会导致预期回滚不发生，不能仅凭异常类型名判断；证据不足时不提出 Finding Proposal。
+
+  - id: SPRING-TX-003
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [Service]
+    requiredEvidence: [CHAIN, SYMBOL]
+    prompt: >-
+      检查本次 Service 变更是否在 readOnly transaction 下进入写路径；必须同时证明事务 annotation 与 verified write path，并沿当前 verified chain 关联到真实写操作，不能仅凭方法名推断；证据不足时不提出 Finding Proposal。
+
+  - id: SPRING-AUTH-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [Controller]
+    requiredEvidence: [CHAIN, SYMBOL]
+    prompt: >-
+      检查 changed/new endpoint 的鉴权或权限约束是否相对项目内 verified auth pattern 或 explicit evidence 被删除、绕过或弱化；不得把缺少某个固定注解作为唯一证据，也不得从端点命名猜权限；证据不足时不提出 Finding Proposal。
+
+  - id: SPRING-VALIDATION-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [Controller]
+    requiredEvidence: [CHAIN, SYMBOL]
+    prompt: >-
+      检查 changed/new request handling 是否缺少关键输入约束，并必须沿 verified chain 到达有风险操作后才能判断影响；普通 DTO 无注解不能直接报，必须有入口、链路和风险操作证据；证据不足时不提出 Finding Proposal。
+
+  - id: SPRING-CONFIG-001
+    version: 1
+    kind: AGENT
+    severityDefault: high
+    roles: [YamlConfig]
+    requiredEvidence: [CHANGED_RANGE]
+    prompt: >-
+      只检查本次 changed key 中 datasource/pool、timeout、retry、log-level、feature-switch 等配置变化；必须引用真实 changed range 证明运行行为风险，不得泛扫未变化配置或把同文件其他 key 带入 Finding；证据不足时不提出 Finding Proposal。
+

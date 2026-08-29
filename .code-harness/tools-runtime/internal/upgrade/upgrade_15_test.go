@@ -178,18 +178,19 @@ func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectState
 	}
 }
 
-func Test153Upgrade152To153PreservesAllProjectStateBytes(t *testing.T) {
+func TestCurrentUpgradeFrom152PreservesAllProjectStateBytes(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, ".code-harness")
 	source := filepath.Join(root, ".code-harness-upgrade")
 	harnessRoot := filepath.Clean(filepath.Join("..", "..", ".."))
 	if err := copyTree(harnessRoot, source, nil); err != nil {
-		t.Fatalf("copy 1.5.3 release source: %v", err)
+		t.Fatalf("copy current release source: %v", err)
 	}
-	if got := strings.TrimSpace(string(mustRead153Upgrade(t, filepath.Join(source, "VERSION")))); got != "1.5.3" {
-		t.Fatalf("Task 6 source VERSION=%q want 1.5.3", got)
+	currentVersion := strings.TrimSpace(string(mustRead153Upgrade(t, filepath.Join(source, "VERSION"))))
+	if currentVersion != "1.6.0" {
+		t.Fatalf("current release source VERSION=%q want 1.6.0", currentVersion)
 	}
-	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-1.5.3")
+	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-1.6.0")
 	write(t, source, "bin/ast-grep.exe", "release-ast-grep-0.42.1")
 	write(t, source, "chains/package-business.yaml", "must-never-install\n")
 
@@ -222,20 +223,20 @@ func Test153Upgrade152To153PreservesAllProjectStateBytes(t *testing.T) {
 	}
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/custom-release"}}})
-	if result.Status != StatusUpgraded || result.FromVersion != "1.5.2" || result.ToVersion != "1.5.3" {
-		t.Fatalf("expected exact 1.5.2 -> 1.5.3 upgrade, result=%+v", result)
+	if result.Status != StatusUpgraded || result.FromVersion != "1.5.2" || result.ToVersion != currentVersion {
+		t.Fatalf("expected exact 1.5.2 -> %s upgrade, result=%+v", currentVersion, result)
 	}
 	for rel, want := range before {
 		got := mustRead153Upgrade(t, filepath.Join(target, filepath.FromSlash(rel)))
 		if sum := sha256.Sum256(got); sum != want {
-			t.Fatalf("1.5.2 -> 1.5.3 changed Project State %s: got=%x want=%x", rel, sum, want)
+			t.Fatalf("1.5.2 -> %s changed Project State %s: got=%x want=%x", currentVersion, rel, sum, want)
 		}
 	}
-	if got := strings.TrimSpace(string(mustRead153Upgrade(t, filepath.Join(target, "VERSION")))); got != "1.5.3" {
-		t.Fatalf("upgraded VERSION=%q want 1.5.3", got)
+	if got := strings.TrimSpace(string(mustRead153Upgrade(t, filepath.Join(target, "VERSION")))); got != currentVersion {
+		t.Fatalf("upgraded VERSION=%q want %s", got, currentVersion)
 	}
 	if strings.Contains(string(mustRead153Upgrade(t, filepath.Join(target, "harness.yaml"))), "workspaceDependencies:") {
-		t.Fatal("1.5.2 -> 1.5.3 must not auto-inject workspaceDependencies")
+		t.Fatalf("1.5.2 -> %s must not auto-inject workspaceDependencies", currentVersion)
 	}
 	for _, rel := range []string{
 		"contracts/entrypoint-inventory.schema.json",
@@ -245,7 +246,7 @@ func Test153Upgrade152To153PreservesAllProjectStateBytes(t *testing.T) {
 		"skills/edit-chain/SKILL.md",
 	} {
 		if _, err := os.Stat(filepath.Join(target, filepath.FromSlash(rel))); err != nil {
-			t.Fatalf("1.5.3 Framework missing %s: %v", rel, err)
+			t.Fatalf("current Framework missing preserved 1.5.3 capability %s: %v", rel, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(target, "chains", "package-business.yaml")); !os.IsNotExist(err) {

@@ -1,11 +1,11 @@
 ---
 name: review-code
-description: 在 FULL 或 Runtime 已验证的 TARGETED Review Scope 完整后执行 Finding Review；Java/Mapper/YML 生产变更按证据评审，测试代码只执行 Test Validity Gate。
+description: 在 FULL 或 Runtime 已验证的 TARGETED Review Scope 完整后执行 Finding Proposal Review；Java/Mapper/YML 生产变更按证据评审，测试代码只执行 Test Validity Gate。
 version: 4
 agent: reviewer
 tools:
   - read_code
-output_schema: .code-harness/contracts/review-output.schema.json
+output_schema: .code-harness/contracts/finding-proposals.schema.json
 ---
 
 # 评审变更代码
@@ -180,4 +180,44 @@ TARGETED 在输出前必须再次检查 `Finding.file ∈ verified scopedFiles`�
 
 ## 输出
 
-必须通过 `.code-harness/contracts/review-output.schema.json`；Resource Finding 不新增 category，Mapper.xml/YML 继续使用 `PRODUCTION_CODE`。TARGETED 正式 Review Report 还必须通过 Controlled Runtime 的 scoped Finding 校验。
+必须通过 `.code-harness/contracts/finding-proposals.schema.json`。本 Skill 输出的是 Finding Proposal，不是正式 Finding；Proposal 不得直接进入最终 Review Report。Resource Proposal 不新增 category，Mapper.xml/YML 继续使用 `PRODUCTION_CODE`。TARGETED Proposal 的 path/anchor/evidence 仍必须位于 Runtime verified scope，并由 Runtime 独立校验。
+
+## 1.6 Finding Proposal Authority
+
+本节优先于本文中沿用的“Finding”术语：
+
+```text
+Reviewer 只提出 Finding Proposal。
+Proposal 不等于正式 Finding。
+只有后续 Runtime certification 产生的 Certified Finding 才能进入最终 Review Report。
+```
+
+Reviewer 输出固定写入 `.code-harness/runs/<runId>/requests/finding-proposals.json`，并必须通过 `.code-harness/contracts/finding-proposals.schema.json`。每条 Proposal 必须绑定当前 Runtime `reviewUnitId` 与该 Unit 已分发的 `ruleId`，anchor/evidence 只能引用当前 ReviewUnit 允许的事实；不得创造 scope 外 path/symbol/line，也不得把 confidence 或 Proposal 本身表述成已经由 Runtime 证明成立的正式 Finding。
+
+Controlled Runtime 必须对同 run 的 ReviewUnit、RuleDispatch、Certified ChangeAnalysis、源码与 changed hunk 独立验证 rule/scope/path/symbol/line/range/evidence/introducedByChange；任一验证失败都必须拒绝 Proposal。
+
+本文既有 Java、Mapper.xml、YML 与 Test Validity Gate 的评审边界保持不变；这些边界现在约束“允许提出什么 Proposal”，而不是赋予 Agent 正式 Finding 权威。
+## 1.6 Spring Rule Pack v1 深度评审约束
+
+Runtime `RuleDispatch` 决定当前 ReviewUnit 要检查的规则；Reviewer 只消费当前 `reviewUnitId / ruleId` 对应的已分发规则，不得自行扩展规则集或把 matcher 结果升级成事实。
+
+对每个 dispatched rule，Reviewer 可以输出 **0..N** 个 Finding Proposal。`0` 表示当前证据不足以支持问题，不是漏审；不得为了覆盖已分发规则而强行提出 Proposal。不得把 rule passed 输出为 Finding，也不得输出“规则通过”之类的伪 Finding。matcher hit 不等于 bug。
+
+每个 Proposal 必须由本次 current-change evidence 支撑，并遵守该规则的 requiredEvidence；证据不足时不提出 Finding Proposal。Reviewer 不得仅凭注解名、类名/方法名、配置文件中未变化 key、`${}` matcher、普通 DTO 缺少注解或模型 confidence 得出确定性结论。
+
+Task 5 明确禁止以下低价值 Finding：
+
+```text
+命名
+格式
+缩进
+重复代码
+建议重构
+普通测试代码风格
+未变化配置
+scope 外潜在问题
+workspace dependency finding
+```
+
+既有 FULL/TARGETED scope、workspace dependency 隔离和 `TEST_VALIDITY` 边界保持不变；Task 5 只深化已分发 Spring/MyBatis 规则的证据要求，不新增 Finding 权威。
+

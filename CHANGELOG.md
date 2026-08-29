@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0 - 2026-08-29
+
+- **deterministic ReviewUnit**：Review Scope 由 Controlled Runtime 构造并 canonicalize 为 deterministic ReviewUnit，使同一评审单元内的 changed files、调用链与资源关系具备机器权威边界。
+- **deterministic Spring Rule Dispatch**：Runtime 基于 ReviewUnit 的 role/evidence 对 Spring Rule Pack v1 做确定性分发；规则分发本身不等同于 Finding。
+- **Finding Proposal -> Runtime Verified/Certified Finding**：Agent 只提交 Finding Proposal；Runtime 独立校验 scope、anchor、evidence、introducedByChange 与 semantic dedup 后生成 Certified Finding。
+- **Spring Rule Pack v1**：正式发布 10 high-value rules，覆盖计划定义的 Spring/MyBatis 高价值 Review 场景，并坚持 current-change evidence 与低噪音约束。
+- **24-case Review Precision benchmark**：固定 24-case 正负 benchmark，持续校验 Precision、MustFindRecall、AnchorRate、DuplicateRate 与 DeterministicArtifactStability。
+- **1.5.3 behavior preserved**：保留 1.5.3 的 Certified ChangeAnalysis、EntryPoint completeness、Review Selection、Chain authority/edit/persist、Workspace Dependency isolation 与 Test Validity 行为。
+
 ## 1.5.3 - 2026-08-26
 
 - **Controller EntryPoint Completeness**：Runtime 独立重算 Change Set，并对 changed production Controller 的 endpoint obligation 做机器清单；新增/修改 Controller 不允许因 Agent draft 遗漏而静默跳过，缺失项以 `ENTRYPOINT_COMPLETENESS_INCOMPLETE` fail closed。
