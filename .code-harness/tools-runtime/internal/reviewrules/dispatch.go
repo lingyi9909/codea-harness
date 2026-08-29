@@ -51,7 +51,10 @@ func BuildDispatch(units reviewunit.Manifest, rules []Rule, catalogSHA string) (
 			return Manifest{}, fmt.Errorf("RULE_DISPATCH_INVALID: duplicate ReviewUnit id %s", unitID)
 		}
 		seenUnits[unitID] = true
-		changedRoles := changedCurrentRoles160(unit)
+		changedRoles, err := changedCurrentRoles160(unit)
+		if err != nil {
+			return Manifest{}, err
+		}
 		for _, rule := range normalizedRules {
 			reasons := matchReasons160(rule, changedRoles)
 			if len(reasons) == 0 {
@@ -68,8 +71,9 @@ func BuildDispatch(units reviewunit.Manifest, rules []Rule, catalogSHA string) (
 			})
 		}
 		// Test Validity is Runtime-owned authority, deliberately outside the
-		// locked Spring Rule Pack catalog. It is dispatched only for a changed
-		// current-workspace Test file and therefore cannot add an 11th Spring rule.
+		// locked Spring Rule Pack catalog. Test scope is derived from the path,
+		// and src/test/** <-> Test is machine-enforced below; Agent role claims
+		// cannot create or suppress this dispatch authority.
 		if changedRoles["Test"] {
 			dispatches = append(dispatches, Dispatch{
 				ReviewUnitID:     unitID,
@@ -110,18 +114,30 @@ func verifyReviewUnits160(units reviewunit.Manifest) error {
 	return nil
 }
 
-func changedCurrentRoles160(unit reviewunit.Unit) map[string]bool {
+func changedCurrentRoles160(unit reviewunit.Unit) (map[string]bool, error) {
 	roles := map[string]bool{}
 	for _, file := range unit.Files {
 		if !file.Changed || strings.TrimSpace(file.Workspace) != "current" {
 			continue
 		}
+		p := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(file.Path), "\\", "/"))
 		role := strings.TrimSpace(file.Role)
+		isTestPath := strings.HasPrefix(p, "src/test/") || strings.Contains(p, "/src/test/")
+		if isTestPath && role != "Test" {
+			return nil, fmt.Errorf("RULE_DISPATCH_PATH_ROLE_INVALID: src/test path %s requires role Test", file.Path)
+		}
+		if role == "Test" && !isTestPath {
+			return nil, fmt.Errorf("RULE_DISPATCH_PATH_ROLE_INVALID: role Test requires src/test path, got %s", file.Path)
+		}
+		if isTestPath {
+			roles["Test"] = true
+			continue
+		}
 		if role != "" {
 			roles[role] = true
 		}
 	}
-	return roles
+	return roles, nil
 }
 
 func matchReasons160(rule Rule, changedRoles map[string]bool) []string {
