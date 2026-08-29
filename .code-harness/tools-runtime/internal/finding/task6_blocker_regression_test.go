@@ -55,6 +55,28 @@ func TestTask6ProblemFixturesEncodeRuleGroundTruthInSource(t *testing.T) {
 	}
 }
 
+func TestTask6MyBatisDollarBindReviewUnitCarriesControllabilityEvidence(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "review-benchmark", "positive", "03-mybatis-dollar-bind", "case.json")
+	var c benchmarkCase160
+	if err := json.Unmarshal(task6Read160(t, path), &c); err != nil { t.Fatal(err) }
+	if len(c.Chain) < 2 || len(c.Symbols) < 2 || len(c.Relations) == 0 { t.Fatal("03 must encode verified Controller->Mapper chain, symbol locations and Mapper resource relation") }
+	got := runBenchmarkCase160(t, c)
+	var unitID string
+	for _, d := range got.Dispatch.Dispatches { if d.RuleID == "MYBATIS-BIND-001" { unitID = d.ReviewUnitID; break } }
+	if unitID == "" { t.Fatal("MYBATIS-BIND-001 must be dispatched") }
+	for _, u := range got.Units.Units {
+		if u.ID != unitID { continue }
+		hasController, hasMapperXML := false, false
+		for _, f := range u.Files {
+			if f.Path == "src/main/java/com/acme/OrderQueryController.java" { hasController = true }
+			if f.Path == "src/main/resources/OrderMapper.xml" { hasMapperXML = true }
+		}
+		if !hasController || !hasMapperXML { t.Fatalf("MYBATIS-BIND-001 ReviewUnit must contain Controller controllability evidence and Mapper XML together: controller=%v mapperXml=%v", hasController, hasMapperXML) }
+		return
+	}
+	t.Fatalf("ReviewUnit %s not found", unitID)
+}
+
 func TestTask6TestValidityPathRoleIsRuntimeOwned(t *testing.T) {
 	dispatch := string(task6Read160(t, filepath.Join("..", "reviewrules", "dispatch.go")))
 	for _, want := range []string{"RULE_DISPATCH_PATH_ROLE_INVALID", `src/test/`, `role Test requires src/test path`, `changedRoles["Test"]`} {
@@ -63,8 +85,10 @@ func TestTask6TestValidityPathRoleIsRuntimeOwned(t *testing.T) {
 }
 
 func TestTask6AnalyzeChangeSkillMapsTestRole(t *testing.T) {
-	mapping := string(task6Read160(t, filepath.Join("..", "..", "..", "skills", "analyze-change", "task6-test-role.md")))
-	if !strings.Contains(mapping, "src/test/java/**/*.java -> Test") || !strings.Contains(mapping, "machine-enforce") { t.Fatal("analyze-change Skill must explicitly map test scope to Test role") }
+	skill := string(task6Read160(t, filepath.Join("..", "..", "..", "skills", "analyze-change", "SKILL.md")))
+	for _, want := range []string{"src/test/java/**/*.java", "-> Test", "src/test/**", "非 `src/test/**` 不得声明为 `Test`"} {
+		if !strings.Contains(skill, want) { t.Fatalf("analyze-change/SKILL.md missing Test path-role authority %q", want) }
+	}
 }
 
 func TestTask6DeterminismComparesCanonicalArtifacts(t *testing.T) {
