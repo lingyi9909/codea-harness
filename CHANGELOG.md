@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.0 - 2026-08-29
+
+- **deterministic ReviewUnit**：Review Scope 先由 Controlled Runtime 构造并 canonicalize 为 deterministic ReviewUnit；Finding 不再直接消费松散的 Agent scope，Controller、内部调用链、Mapper/XML 与资源关系证据在同一机器权威单元内闭合。
+- **deterministic Spring Rule Dispatch**：Spring Rule Pack 由 Runtime 对 ReviewUnit 的 role/evidence 做确定性 RuleDispatch；`src/test/** <-> Test` 等 path-role invariant 由 Runtime fail closed，Agent 自报 role 不能创建或抑制规则权限。
+- **Finding Proposal -> Runtime Verified/Certified Finding**：Agent 只提交 Finding Proposal；Runtime 重新校验 rule dispatch、scope、anchor、introduced-by-change、evidence 与 semantic dedup identity 后生成 Certified Finding，并用证书/哈希绑定 ChangeAnalysis、ReviewUnit、RuleDispatch 与 proposal。
+- **Spring Rule Pack v1**：新增正式 `.code-harness/review-rules/spring-v1.yaml` 规则包，覆盖高价值 Spring/MyBatis/事务/并发/空值/测试有效性场景；规则事实、证据要求和 Runtime authority 显式化。
+- **24-case Review Precision benchmark**：新增 24-case 正负 benchmark 与 Windows real regression，正式 Gate 校验 Must-Find Recall、`Precision=TP/(TP+FP)`、AnchorRate、formal semantic DuplicateRate，以及两次真实执行的 ReviewUnit / RuleDispatch / CertifiedSet canonical artifact stability。
+- **1.5.3 behavior preserved**：1.5.3 的 Certified ChangeAnalysis、EntryPoint completeness、Chain authority、Review selection、Workspace Dependency isolation 和 Project State 边界全部保留；Task 1～6 回归与 Windows release gate 持续作为 1.6.0 发布前置条件。
+- **1.5.3 -> 1.6.0 Release Gate**：Windows x64 真实升级从 accepted 1.5.3 baseline 验证到 1.6.0；byte-for-byte 保持既有 `harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**`，同时安装/替换新的 review rules、contracts、skills 与 Controlled Runtime，并发布 install / upgrade 双 ZIP 和 release checklist。
+
 ## 1.5.3 - 2026-08-26
 
 - **Controller EntryPoint Completeness**：Runtime 独立重算 Change Set，并对 changed production Controller 的 endpoint obligation 做机器清单；新增/修改 Controller 不允许因 Agent draft 遗漏而静默跳过，缺失项以 `ENTRYPOINT_COMPLETENESS_INCOMPLETE` fail closed。
