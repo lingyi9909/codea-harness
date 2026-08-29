@@ -63,8 +63,10 @@ func TestTask6TestValidityPathRoleIsRuntimeOwned(t *testing.T) {
 }
 
 func TestTask6AnalyzeChangeSkillMapsTestRole(t *testing.T) {
-	mapping := string(task6Read160(t, filepath.Join("..", "..", "..", "skills", "analyze-change", "task6-test-role.md")))
-	if !strings.Contains(mapping, "src/test/java/**/*.java -> Test") || !strings.Contains(mapping, "machine-enforce") { t.Fatal("analyze-change Skill must explicitly map test scope to Test role") }
+	skill := string(task6Read160(t, filepath.Join("..", "..", "..", "skills", "analyze-change", "SKILL.md")))
+	for _, want := range []string{"src/test/java/**/*.java", "-> Test", "src/test/**", "非 `src/test/**` 不得声明为 `Test`"} {
+		if !strings.Contains(skill, want) { t.Fatalf("analyze-change/SKILL.md missing Test path-role authority %q", want) }
+	}
 }
 
 func TestTask6DeterminismComparesCanonicalArtifacts(t *testing.T) {
