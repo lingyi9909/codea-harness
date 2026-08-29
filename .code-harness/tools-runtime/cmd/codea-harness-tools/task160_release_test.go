@@ -22,10 +22,15 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 		"deterministic Spring Rule Dispatch",
 		"Finding Proposal -> Runtime Verified/Certified Finding",
 		"Spring Rule Pack v1",
+		"10 high-value rules",
 		"24-case Review Precision benchmark",
 		"1.5.3 behavior preserved",
 	} {
 		if !strings.Contains(text, want) { t.Fatalf("CHANGELOG missing %q", want) }
+	}
+	section := strings.SplitN(text, "## 1.5.3", 2)[0]
+	if got := strings.Count(section, "\n- **"); got != 6 {
+		t.Fatalf("1.6.0 CHANGELOG must contain exactly 6 scoped bullets, got %d", got)
 	}
 
 	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "package-windows-x64.yml"))
@@ -40,7 +45,11 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 		"codea-harness-1.6.0-release-checklist",
 		"review units --run-id __missing__",
 		"review-rules/spring-v1.yaml",
+		"@('review','units','--run-id','__missing__')",
 	} {
 		if !strings.Contains(w, want) { t.Fatalf("package workflow missing %q", want) }
+	}
+	if strings.Contains(w, "@('review','units','--run-id','__missing__','--project-root'") {
+		t.Fatal("review units capability probe must not pass unsupported --project-root")
 	}
 }
