@@ -360,7 +360,7 @@ jobs:
             # Capability probe: review units --run-id __missing__ must enter Controlled Runtime and fail on missing run authority, never as unknown command.
             $probeOut = Join-Path $env:RUNNER_TEMP 'codea-review-units-probe-160.out'
             $probeErr = Join-Path $env:RUNNER_TEMP 'codea-review-units-probe-160.err'
-            $probe = Start-Process -FilePath $probeExe -ArgumentList @('review','units','--run-id','__missing__','--project-root',$root) -Wait -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
+            $probe = Start-Process -FilePath $probeExe -ArgumentList @('review','units','--run-id','__missing__') -Wait -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
             $probeText = @((Get-Content $probeOut -ErrorAction SilentlyContinue),(Get-Content $probeErr -ErrorAction SilentlyContinue)) -join "`n"
             if ($probe.ExitCode -eq 0) { throw "review units missing-run probe unexpectedly succeeded: $probeText" }
             if ($probeText -match '(?i)unknown command') { throw "review units capability missing after upgrade: $probeText" }
