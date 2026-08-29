@@ -346,10 +346,20 @@ jobs:
               if (!(Test-Path $rel)) { throw "installed 1.6.0 missing $rel" }
             }
 
+            # Preserved 1.5.3 capability probe: chain validate must still reach its controlled validation boundary.
+            $chainProbeOut = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe-160.out'
+            $chainProbeErr = Join-Path $env:RUNNER_TEMP 'codea-chain-validate-probe-160.err'
+            $probeExe = (Resolve-Path '.\.code-harness\bin\codea-harness-tools.exe').Path
+            $chainProbe = Start-Process -FilePath $probeExe -ArgumentList @('chain','validate') -Wait -PassThru -RedirectStandardOutput $chainProbeOut -RedirectStandardError $chainProbeErr
+            $chainProbeText = @((Get-Content $chainProbeOut -ErrorAction SilentlyContinue),(Get-Content $chainProbeErr -ErrorAction SilentlyContinue)) -join "`n"
+            if ($chainProbe.ExitCode -eq 0 -or $chainProbeText -notmatch 'chain validate requires --id and --change-analysis') {
+              throw "installed chain validate capability probe failed: $chainProbeText"
+            }
+            $global:LASTEXITCODE = 0
+
             # Capability probe: review units --run-id __missing__ must enter Controlled Runtime and fail on missing run authority, never as unknown command.
             $probeOut = Join-Path $env:RUNNER_TEMP 'codea-review-units-probe-160.out'
             $probeErr = Join-Path $env:RUNNER_TEMP 'codea-review-units-probe-160.err'
-            $probeExe = (Resolve-Path '.\.code-harness\bin\codea-harness-tools.exe').Path
             $probe = Start-Process -FilePath $probeExe -ArgumentList @('review','units','--run-id','__missing__','--project-root',$root) -Wait -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
             $probeText = @((Get-Content $probeOut -ErrorAction SilentlyContinue),(Get-Content $probeErr -ErrorAction SilentlyContinue)) -join "`n"
             if ($probe.ExitCode -eq 0) { throw "review units missing-run probe unexpectedly succeeded: $probeText" }
