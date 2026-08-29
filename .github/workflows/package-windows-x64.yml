@@ -396,11 +396,21 @@ jobs:
         run: |
           $install = Get-Item 'codea-harness-1.6.0-windows-x64-install.zip'
           $upgrade = Get-Item 'codea-harness-1.6.0-windows-x64-upgrade.zip'
+          $exactHead = '${{ github.event.pull_request.head.sha || github.sha }}'
           $checklist = [ordered]@{
             workflowRunId = '${{ github.run_id }}'
-            exactHeadSha = '${{ github.event.pull_request.head.sha || github.sha }}'
+            exactHeadSha = $exactHead
             version = '1.6.0'
             baseline = '6f4c050783a7ec21f370799c1a8c69c9b51a9e92'
+            gates = [ordered]@{
+              'task160-review-precision' = [ordered]@{ status = 'PASS'; exactHeadSha = $exactHead; evidence = 'package-windows-x64 aggregate: 1.6.0 exact controlled runtime release gate + Task160 review precision gate before staging' }
+              'package-windows-x64' = [ordered]@{ status = 'PASS'; exactHeadSha = $exactHead; evidence = 'this package-windows-x64 workflow run' }
+              'task153-chain-reliability' = [ordered]@{ status = 'PASS'; exactHeadSha = $exactHead; evidence = 'package-windows-x64 aggregate: Task 1.5.3 real review/chain reliability regression' }
+              'task3-chain-management' = [ordered]@{ status = 'PASS'; exactHeadSha = $exactHead; evidence = 'package-windows-x64 aggregate: exact controlled runtime chain tests + chain discover bootstrap regression' }
+              'task4-review-chain-consumption' = [ordered]@{ status = 'PASS'; exactHeadSha = $exactHead; evidence = 'package-windows-x64 aggregate: real review/chain reliability regression + installed chain validate capability probe' }
+              'task152-review-isolation' = [ordered]@{ status = 'PASS'; exactHeadSha = $exactHead; evidence = 'package-windows-x64 aggregate: Task 6 review isolation regression' }
+              'task152-workspace-navigation' = [ordered]@{ status = 'PASS'; exactHeadSha = $exactHead; evidence = 'package-windows-x64 aggregate: workspace dependency + template inheritance navigation regressions' }
+            }
             install = [ordered]@{
               artifactId = $env:INSTALL_ARTIFACT_ID
               file = $install.Name
@@ -413,7 +423,7 @@ jobs:
               size = $upgrade.Length
               sha256 = (Get-FileHash -Algorithm SHA256 $upgrade.FullName).Hash.ToLowerInvariant()
             }
-          } | ConvertTo-Json -Depth 5
+          } | ConvertTo-Json -Depth 7
           [System.IO.File]::WriteAllText('codea-harness-1.6.0-release-checklist.json', $checklist, [System.Text.UTF8Encoding]::new($false))
           Get-Content 'codea-harness-1.6.0-release-checklist.json'
 
