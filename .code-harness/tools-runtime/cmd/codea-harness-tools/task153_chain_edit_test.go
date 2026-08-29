@@ -22,8 +22,8 @@ func Test153Task6ChainEditAndReleaseContract(t *testing.T) {
 		"UNVERIFIED_EDIT_REJECTED",
 		"TASK153_REAL_REVIEW_CHAIN_RELIABILITY PASS",
 	)
-	if strings.TrimSpace(version) != "1.5.3" {
-		t.Fatalf("Task 6 release VERSION=%q want 1.5.3", version)
+	if strings.TrimSpace(version) != "1.6.0" {
+		t.Fatalf("current release VERSION=%q want 1.6.0", version)
 	}
 	task153Task6RequireContains(t, changelog,
 		"## 1.5.3",
@@ -34,9 +34,9 @@ func Test153Task6ChainEditAndReleaseContract(t *testing.T) {
 	)
 	task153Task6RequireContains(t, packageWorkflow,
 		"Task 1.5.3 real review/chain reliability regression",
-		"6f290d8ff160767bb981278aa123aa1621ea3343",
-		"codea-harness-1.5.3-windows-x64-install.zip",
-		"codea-harness-1.5.3-windows-x64-upgrade.zip",
-		"1.5.2 to 1.5.3 Windows live upgrade",
+		"6f4c050783a7ec21f370799c1a8c69c9b51a9e92",
+		"codea-harness-1.6.0-windows-x64-install.zip",
+		"codea-harness-1.6.0-windows-x64-upgrade.zip",
+		"1.5.3 -> 1.6.0",
 	)
 }
