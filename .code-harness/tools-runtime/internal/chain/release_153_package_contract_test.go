@@ -21,14 +21,14 @@ func Test153ReleasePackageKeepsInstalledChainValidateProbe(t *testing.T) {
 	}
 	workflow := string(data)
 	for _, want := range []string{
-		"6f290d8ff160767bb981278aa123aa1621ea3343",
-		"codea-harness-1.5.3-windows-x64-install.zip",
-		"codea-harness-1.5.3-windows-x64-upgrade.zip",
+		"6f4c050783a7ec21f370799c1a8c69c9b51a9e92",
+		"codea-harness-1.6.0-windows-x64-install.zip",
+		"codea-harness-1.6.0-windows-x64-upgrade.zip",
 		"@('chain','validate')",
 		"installed chain validate capability probe failed",
 	} {
 		if !strings.Contains(workflow, want) {
-			t.Fatalf("1.5.3 package workflow missing release contract %q", want)
+			t.Fatalf("current package workflow missing preserved 1.5.3 release contract %q", want)
 		}
 	}
 }
