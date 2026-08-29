@@ -63,14 +63,15 @@ TARGETED 不是 sampled review。只有它声明的全部 scopedFiles 与 select
 2. 校验 baseRef 本地存在；不存在 → `MANUAL_ACTION_REQUIRED`，不得自动换 main/develop。
 3. 使用 `git_diff` 获取 committed/staged/unstaged/untracked。
 4. 同路径多来源合并去重，保留 `sources`。
-5. 对匹配资源 scope 的 changed file 使用显式 role：
+5. 对匹配 Test / 资源 scope 的 changed file 使用显式 role：
 
 ```text
-*Mapper.xml                         -> MapperXml
-src/main/resources/**/*.yml        -> YamlConfig
+src/test/java/**/*.java             -> Test
+*Mapper.xml                          -> MapperXml
+src/main/resources/**/*.yml         -> YamlConfig
 ```
 
-不得把这两类官方 Scope 降级为 `Other`。
+`src/test/**` 必须映射为 `Test`，非 `src/test/**` 不得声明为 `Test`；不得依赖 Agent 自由声明 role。MapperXml/YamlConfig 也不得降级为 `Other`。
 6. 生成完整 `changedFiles[]`；TARGETED 也不得丢掉 scope 外 changed file 的 Change Set 元数据。
 
 ## B. 建立 confirmed callChains 与 Navigation Evidence
@@ -228,7 +229,7 @@ role/source 合法：MapperXml/MAPPER_STATEMENT 或 YamlConfig/CONFIG_REFERENCE
 ## F. `harness review list`
 
 37. LIST 只建立 Change Set + confirmed/candidate/unresolved chain 信息。
-38. 不调用 `review-code`，不产生 Finding，不把 candidate/unresolved 伪装为 confirmed。
+38. 不调用 `review-code`，不产生 Finding，不把 candidate/unresolved 伪装成 confirmed。
 
 ## 停止边界
 
