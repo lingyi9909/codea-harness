@@ -133,7 +133,7 @@ public class OrderServiceTest {
         if ($navService -notmatch 'order-service[/\\]src[/\\]main[/\\]java') { throw "module Service navigation lost path prefix: $navService" }
         $navMapper = Invoke-Runtime nav find-symbol --symbol OrderMapper --scope order-dao/src/main/java
         if ($navMapper -notmatch 'order-dao[/\\]src[/\\]main[/\\]java') { throw "module Mapper navigation lost path prefix: $navMapper" }
-        $callers = Invoke-Runtime nav find-callers --symbol createOrder --scope order-api/src/main/java
+        $callers = Invoke-Runtime nav find-callers --symbol OrderService.createOrder --scope order-api/src/main/java
         if ($callers -notmatch 'order-api[/\\]src[/\\]main[/\\]java') { throw "module caller navigation lost path prefix: $callers" }
         Write-Output 'TASK162_CODE_NAVIGATION PASS'
 
