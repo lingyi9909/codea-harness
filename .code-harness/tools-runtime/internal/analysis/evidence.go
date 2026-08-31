@@ -51,6 +51,9 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		}
 	}
 
+	// Changed/reviewed paths are always current-workspace paths. A dependency may
+	// legitimately contain the same relative path; workspace identity, not the
+	// bare relative path, determines whether evidence belongs to a dependency.
 	for _, f := range a.ChangedFiles {
 		if _, ok := safeEvidencePath153(f.Path); !ok {
 			return fmt.Errorf("CHANGE_SET_PATH_INVALID: %q", f.Path)
