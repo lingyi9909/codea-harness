@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.1
+
+- Windows Tool Runtime 正式从 `codea-harness-tools.exe` 改名为 `codea-dcep-tools.exe`，production invocation 与 active regression 统一使用新名称。
+- 1.6.0 → 1.6.1 upgrade 删除 legacy Runtime，仅保留 `.code-harness/bin/codea-dcep-tools.exe`，Project State 保护语义不变。
+- Windows release 自动生成 `codea-dcep-tools-whitelist.txt`，绑定正式 EXE SHA256、大小、exact HEAD、Go 版本与真实 Authenticode 状态，供企业安全团队加白。
 ## 1.6.0 - 2026-08-29
 
 - **deterministic ReviewUnit**：Review Scope 由 Controlled Runtime 构造并 canonicalize 为 deterministic ReviewUnit，使同一评审单元内的 changed files、调用链与资源关系具备机器权威边界。

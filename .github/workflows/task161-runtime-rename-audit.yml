@@ -1,0 +1,42 @@
+name: task161-runtime-rename-audit
+
+on:
+  pull_request:
+    branches: [docs/1.6-review-precision]
+  push:
+    branches: [release/1.6.1-windows-tools-whitelist]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit legacy runtime references
+        shell: bash
+        run: |
+          set -euo pipefail
+          scopes=(.code-harness .github/scripts .github/workflows README.md)
+          echo 'Legacy runtime references in active scopes:'
+          git grep -n 'codea-harness-tools\.exe' -- "${scopes[@]}" || true
+          refs=$(git grep -l 'codea-harness-tools\.exe' -- "${scopes[@]}" \
+            ':!.code-harness/tools-runtime/internal/upgrade/task161_release_upgrade_test.go' \
+            ':!.github/scripts/task161-release.ps1' \
+            ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/workflows/task161-runtime-rename-audit.yml' \
+            ':!.github/workflows/task161-bulk-rename.yml' || true)
+          cmdrefs=$(git grep -l 'cmd/codea-harness-tools' -- "${scopes[@]}" \
+            ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/workflows/task161-runtime-rename-audit.yml' \
+            ':!.github/workflows/task161-bulk-rename.yml' || true)
+          if [ -n "$refs" ] || [ -n "$cmdrefs" ]; then
+            echo 'Unexpected production legacy references:'
+            printf '%s\n%s\n' "$refs" "$cmdrefs"
+            echo 'TASK161_RUNTIME_RENAME_AUDIT FAIL'
+            exit 1
+          fi
+          test -d .code-harness/tools-runtime/cmd/codea-dcep-tools
+          test ! -d .code-harness/tools-runtime/cmd/codea-harness-tools
+          echo 'TASK161_RUNTIME_RENAME_AUDIT PASS'

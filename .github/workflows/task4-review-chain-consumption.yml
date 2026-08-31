@@ -23,7 +23,7 @@ jobs:
 
       - name: Task 4 review selection exact gate
         working-directory: .code-harness/tools-runtime
-        run: go test -count=1 ./internal/reviewselection ./internal/reviewscope ./internal/coverage ./internal/chain ./internal/report ./cmd/codea-harness-tools -run 'Test153|Test152'
+        run: go test -count=1 ./internal/reviewselection ./internal/reviewscope ./internal/coverage ./internal/chain ./internal/report ./cmd/codea-dcep-tools -run 'Test153|Test152'
 
       - name: Full Go test
         working-directory: .code-harness/tools-runtime

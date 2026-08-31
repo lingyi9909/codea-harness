@@ -15,7 +15,7 @@ codea-harness-<version>-windows-x64-upgrade.zip
 ├── VERSION
 ├── RELEASE-MANIFEST.json
 ├── bin/
-│   ├── codea-harness-tools.exe
+│   ├── codea-dcep-tools.exe
 │   └── ast-grep.exe
 └── ...
 ```
@@ -26,7 +26,7 @@ codea-harness-<version>-windows-x64-upgrade.zip
 >
 > GitHub Source Code 不包含正式 Windows Release 才会注入的：
 >
-> - `bin/codea-harness-tools.exe`
+> - `bin/codea-dcep-tools.exe`
 > - `bin/ast-grep.exe`
 >
 > 安装和升级必须使用 `package-windows-x64` 生成的正式离线包。
@@ -63,7 +63,7 @@ codea-harness-<version>-windows-x64-upgrade.zip
 .code-harness-upgrade/templates/chain.template.yaml
 .code-harness-upgrade/skills/discover-chain/SKILL.md
 .code-harness-upgrade/skills/validate-chain/SKILL.md
-.code-harness-upgrade/bin/codea-harness-tools.exe
+.code-harness-upgrade/bin/codea-dcep-tools.exe
 .code-harness-upgrade/bin/ast-grep.exe
 ```
 
@@ -75,7 +75,7 @@ codea-harness-<version>-windows-x64-upgrade.zip
 version
 platform = windows
 arch = x64
-runtime = codea-harness-tools.exe
+runtime = codea-dcep-tools.exe
 astGrepVersion
 ```
 
@@ -87,14 +87,14 @@ MANUAL_ACTION_REQUIRED
 升级包不完整：
 missing: <全部缺失项，一次列完>
 
-如果缺少 bin/codea-harness-tools.exe 或 bin/ast-grep.exe：
+如果缺少 bin/codea-dcep-tools.exe 或 bin/ast-grep.exe：
 检测到的目录可能来自 GitHub Source Code，而不是正式 Windows Release。
 请使用：codea-harness-<version>-windows-x64-upgrade.zip
 
 解压后项目根目录必须存在：
 .code-harness-upgrade/VERSION
 .code-harness-upgrade/RELEASE-MANIFEST.json
-.code-harness-upgrade/bin/codea-harness-tools.exe
+.code-harness-upgrade/bin/codea-dcep-tools.exe
 .code-harness-upgrade/bin/ast-grep.exe
 ```
 
@@ -111,7 +111,7 @@ STOP
 
 1. 读取新版 `.code-harness-upgrade/AGENTS.md`。
 2. 读取新版 `.code-harness-upgrade/agents/orchestrator.md` 的 `harness upgrade` 约束。
-3. 调用新版升级包中的 `.code-harness-upgrade/bin/codea-harness-tools.exe upgrade` 执行受控升级事务。
+3. 调用新版升级包中的 `.code-harness-upgrade/bin/codea-dcep-tools.exe upgrade` 执行受控升级事务。
 4. 新版 Runtime 再执行自己的 required-source preflight；因为 Agent 层已经完整检查，正常路径不应再出现 package 缺失。
 5. Package 完整后进入既有 Upgrade transaction，并执行新版登记的确定性 Config Migration（如有）。
 6. Windows 下如果正在执行的新版 Runtime 位于 `.code-harness-upgrade/bin/`，Runtime 会在成功应用 Framework 后先把自身可执行文件移动到同卷、升级目录外的临时位置，再消费 `.code-harness-upgrade/`；Agent 不参与文件事务。
@@ -157,7 +157,7 @@ tools-runtime/internal/chain/**
 - 所有升级文件事务必须由 Tool Runtime 完成。
 - Agent 层只允许做上述只读 package bootstrap/preflight；不得自行复制、覆盖、删除 Harness 文件。
 - 不修改既有 staged replace、Windows running-exe replacement、rollback 核心语义。
-- `.code-harness-upgrade/bin/codea-harness-tools.exe upgrade` 是 Package Preflight 通过后的唯一升级事务入口。
+- `.code-harness-upgrade/bin/codea-dcep-tools.exe upgrade` 是 Package Preflight 通过后的唯一升级事务入口。
 - `harness.yaml`、`project.md`、`database.yaml`、`runs/**`、`chains/**` 是 Project State，升级时保护。
 - `database.yaml` 与 `chains/**` 必须 byte-for-byte 保持；1.4.0 → 1.5.0 因没有新 config migration，`harness.yaml` 也必须 byte-for-byte 保持。
 - `harness.yaml` 只有在目标版本登记了确定性 Config Migration 时才允许 Runtime 修改；AI 不得猜配置。

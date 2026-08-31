@@ -133,7 +133,7 @@ git -C $current commit -m baseline | Out-Null
 $baselineCommit = (git -C $current rev-parse HEAD).Trim()
 
 function Invoke-ExpectedSuccess([string[]]$Arguments, [string]$Expected) {
-    $runtime = Join-Path $current '.code-harness/bin/codea-harness-tools.exe'
+    $runtime = Join-Path $current '.code-harness/bin/codea-dcep-tools.exe'
     $stdout = Join-Path $env:RUNNER_TEMP ('task152-success-' + [guid]::NewGuid().ToString() + '.out')
     $stderr = Join-Path $env:RUNNER_TEMP ('task152-success-' + [guid]::NewGuid().ToString() + '.err')
     $p = Start-Process -FilePath $runtime -ArgumentList $Arguments -WorkingDirectory $current -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
@@ -144,7 +144,7 @@ function Invoke-ExpectedSuccess([string[]]$Arguments, [string]$Expected) {
 }
 
 function Invoke-ExpectedFailure([string[]]$Arguments, [string]$ExpectedCode) {
-    $runtime = Join-Path $current '.code-harness/bin/codea-harness-tools.exe'
+    $runtime = Join-Path $current '.code-harness/bin/codea-dcep-tools.exe'
     $stdout = Join-Path $env:RUNNER_TEMP ('task152-failure-' + [guid]::NewGuid().ToString() + '.out')
     $stderr = Join-Path $env:RUNNER_TEMP ('task152-failure-' + [guid]::NewGuid().ToString() + '.err')
     $p = Start-Process -FilePath $runtime -ArgumentList $Arguments -WorkingDirectory $current -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
@@ -155,7 +155,7 @@ function Invoke-ExpectedFailure([string[]]$Arguments, [string]$ExpectedCode) {
 }
 
 function Invoke-RuntimeJson([string[]]$Arguments) {
-    $runtime = Join-Path $current '.code-harness/bin/codea-harness-tools.exe'
+    $runtime = Join-Path $current '.code-harness/bin/codea-dcep-tools.exe'
     $stdout = Join-Path $env:RUNNER_TEMP ('task152-json-' + [guid]::NewGuid().ToString() + '.out')
     $stderr = Join-Path $env:RUNNER_TEMP ('task152-json-' + [guid]::NewGuid().ToString() + '.err')
     $p = Start-Process -FilePath $runtime -ArgumentList $Arguments -WorkingDirectory $current -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
@@ -269,7 +269,7 @@ $draftText = Get-Content $draftAbs -Raw
 if ($draftText -notmatch 'company-framework' -or $draftText -notmatch 'WORKSPACE_INHERITANCE') {
     throw 'generated ChangeAnalysis draft missing runtime-produced workspace evidence'
 }
-if (($analysis.reviewCoverage.reviewedFiles | Where-Object { $_.path -eq $inherited.fact.path }).Count -ne 0) {
+if (@($analysis.reviewCoverage.reviewedFiles | Where-Object { $_.path -eq $inherited.fact.path }).Count -ne 0) {
     throw 'dependency workspace path leaked into reviewCoverage.reviewedFiles'
 }
 

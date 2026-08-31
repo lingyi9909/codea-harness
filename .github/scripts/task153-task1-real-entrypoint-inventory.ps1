@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$runtimeSource = Join-Path $repoRoot '.code-harness/bin/codea-harness-tools.exe'
+$runtimeSource = Join-Path $repoRoot '.code-harness/bin/codea-dcep-tools.exe'
 $astGrepSource = Join-Path $repoRoot '.code-harness/bin/ast-grep.exe'
 $schemaSource = Join-Path $repoRoot '.code-harness/contracts/entrypoint-inventory.schema.json'
 
@@ -122,14 +122,14 @@ public class FakeController {
 
         New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
         New-Item -ItemType Directory -Force '.code-harness/contracts' | Out-Null
-        Copy-Item $runtimeSource '.code-harness/bin/codea-harness-tools.exe' -Force
+        Copy-Item $runtimeSource '.code-harness/bin/codea-dcep-tools.exe' -Force
         Copy-Item $astGrepSource '.code-harness/bin/ast-grep.exe' -Force
         Copy-Item $schemaSource '.code-harness/contracts/entrypoint-inventory.schema.json' -Force
 
         New-Item -ItemType Directory -Force '.code-harness/runs/task153-real/requests' | Out-Null
         Write-Utf8NoBom (Join-Path $fixture '.code-harness/runs/task153-real/requests/entrypoint-inventory.json') '{"runId":"task153-real","baseRef":"HEAD","includeWorkingTree":true,"intent":{"mode":"FULL"}}'
 
-        & '.code-harness/bin/codea-harness-tools.exe' analysis inventory --input '.code-harness/runs/task153-real/requests/entrypoint-inventory.json'
+        & '.code-harness/bin/codea-dcep-tools.exe' analysis inventory --input '.code-harness/runs/task153-real/requests/entrypoint-inventory.json'
         if ($LASTEXITCODE -ne 0) { throw "analysis inventory failed with exit code $LASTEXITCODE" }
 
         $artifactPath = Join-Path $fixture '.code-harness/runs/task153-real/analysis/entrypoint-inventory.json'

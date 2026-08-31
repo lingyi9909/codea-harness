@@ -28,7 +28,7 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/changeset ./internal/analysis ./internal/workspace ./cmd/codea-harness-tools
+          go test -count=1 ./internal/changeset ./internal/analysis ./internal/workspace ./cmd/codea-dcep-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -64,7 +64,7 @@ jobs:
         run: |
           $env:GOOS = 'windows'
           $env:GOARCH = 'amd64'
-          go build -trimpath -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
+          go build -trimpath -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Task 1 real three-controller entrypoint inventory regression

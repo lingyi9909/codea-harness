@@ -25,7 +25,7 @@ db_describe_table(schema, table, runId)
 db_query_readonly(sql, params, runId, purpose)
 ```
 
-这些逻辑工具只能映射到 `.code-harness/bin/codea-harness-tools.exe db ...`。Agent 不得直接执行 runtime binary 参数拼接；Host/Runtime 负责把 `db_query_readonly` 请求序列化为：
+这些逻辑工具只能映射到 `.code-harness/bin/codea-dcep-tools.exe db ...`。Agent 不得直接执行 runtime binary 参数拼接；Host/Runtime 负责把 `db_query_readonly` 请求序列化为：
 
 ```text
 .code-harness/runs/<runId>/requests/<file>.json

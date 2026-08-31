@@ -11,7 +11,7 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..")
 	version, err := os.ReadFile(filepath.Join(root, ".code-harness", "VERSION"))
 	if err != nil { t.Fatal(err) }
-	if strings.TrimSpace(string(version)) != "1.6.0" { t.Fatalf("VERSION must be 1.6.0, got %q", strings.TrimSpace(string(version))) }
+	if strings.TrimSpace(string(version)) != "1.6.1" { t.Fatalf("VERSION must be 1.6.1, got %q", strings.TrimSpace(string(version))) }
 
 	changelog, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
 	if err != nil { t.Fatal(err) }
@@ -30,26 +30,38 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	}
 	section := strings.SplitN(text, "## 1.5.3", 2)[0]
 	if got := strings.Count(section, "\n- **"); got != 6 {
-		t.Fatalf("1.6.0 CHANGELOG must contain exactly 6 scoped bullets, got %d", got)
+		t.Fatalf("1.6.0 CHANGELOG must preserve exactly 6 scoped Task160 bullets, got %d", got)
 	}
 
 	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "package-windows-x64.yml"))
 	if err != nil { t.Fatal(err) }
 	w := string(workflow)
 	for _, want := range []string{
-		"Task160 review precision gate before staging",
-		"6f4c050783a7ec21f370799c1a8c69c9b51a9e92",
-		"1.5.3 -> 1.6.0",
-		"codea-harness-1.6.0-windows-x64-install.zip",
-		"codea-harness-1.6.0-windows-x64-upgrade.zip",
-		"codea-harness-1.6.0-release-checklist",
-		"review units --run-id __missing__",
-		"review-rules/spring-v1.yaml",
-		"@('review','units','--run-id','__missing__')",
+		"./.github/scripts/task161-release.ps1",
+		"codea-harness-1.6.1-windows-x64-install",
+		"codea-harness-1.6.1-windows-x64-upgrade",
+		"codea-harness-1.6.1-release-checklist",
+		"codea-dcep-tools-whitelist",
 	} {
 		if !strings.Contains(w, want) { t.Fatalf("package workflow missing %q", want) }
 	}
-	if strings.Contains(w, "@('review','units','--run-id','__missing__','--project-root'") {
+
+	releaseScript, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "task161-release.ps1"))
+	if err != nil { t.Fatal(err) }
+	r := string(releaseScript)
+	for _, want := range []string{
+		"task160-real-review-precision-regression.ps1",
+		"c07f0a4e029a50de64d271fc4ea83015b06355a1",
+		"1.6.0 -> 1.6.1",
+		"codea-harness-1.6.1-windows-x64-install.zip",
+		"codea-harness-1.6.1-windows-x64-upgrade.zip",
+		"codea-harness-1.6.1-release-checklist.json",
+		"review units --run-id __missing__",
+		"codea-dcep-tools.exe",
+	} {
+		if !strings.Contains(r, want) { t.Fatalf("1.6.1 release driver missing %q", want) }
+	}
+	if strings.Contains(r, "review units --run-id __missing__ --project-root") {
 		t.Fatal("review units capability probe must not pass unsupported --project-root")
 	}
 }

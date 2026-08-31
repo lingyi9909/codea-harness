@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 # TASK5_REAL_DUAL_PROJECT_BUSINESS_REGRESSION
 # Acceptance-only driver. It must use the built Controlled Runtime and the pinned real ast-grep.exe.
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$runtimeSource = Join-Path $repoRoot '.code-harness/bin/codea-harness-tools.exe'
+$runtimeSource = Join-Path $repoRoot '.code-harness/bin/codea-dcep-tools.exe'
 $astGrepSource = Join-Path $repoRoot '.code-harness/bin/ast-grep.exe'
 if (-not (Test-Path $runtimeSource)) { throw "Controlled Runtime missing: $runtimeSource" }
 if (-not (Test-Path $astGrepSource)) { throw "pinned ast-grep.exe missing: $astGrepSource" }
@@ -14,7 +14,7 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
 }
 
 function Invoke-RuntimeJson([string]$Current, [string[]]$Arguments) {
-    $runtime = Join-Path $Current '.code-harness/bin/codea-harness-tools.exe'
+    $runtime = Join-Path $Current '.code-harness/bin/codea-dcep-tools.exe'
     $stdout = Join-Path $env:RUNNER_TEMP ('task5-json-' + [guid]::NewGuid().ToString() + '.out')
     $stderr = Join-Path $env:RUNNER_TEMP ('task5-json-' + [guid]::NewGuid().ToString() + '.err')
     $p = Start-Process -FilePath $runtime -ArgumentList $Arguments -WorkingDirectory $Current -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
@@ -28,7 +28,7 @@ function Invoke-RuntimeJson([string]$Current, [string[]]$Arguments) {
 }
 
 function Invoke-RuntimeFailure([string]$Current, [string[]]$Arguments, [string]$ExpectedCode) {
-    $runtime = Join-Path $Current '.code-harness/bin/codea-harness-tools.exe'
+    $runtime = Join-Path $Current '.code-harness/bin/codea-dcep-tools.exe'
     $stdout = Join-Path $env:RUNNER_TEMP ('task5-fail-' + [guid]::NewGuid().ToString() + '.out')
     $stderr = Join-Path $env:RUNNER_TEMP ('task5-fail-' + [guid]::NewGuid().ToString() + '.err')
     $p = Start-Process -FilePath $runtime -ArgumentList $Arguments -WorkingDirectory $Current -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
@@ -380,7 +380,7 @@ $coverageResult = Invoke-RuntimeJson $current @('validate','--schema','.code-har
 if ($coverageResult.status -ne 'VALID' -or $coverageResult.reviewCoverage.status -ne 'COMPLETE') {
     throw "Schema/FULL Coverage verification failed: $($coverageResult | ConvertTo-Json -Depth 10 -Compress)"
 }
-foreach ($reviewed in @($coverageResult.reviewCoverage.reviewedFiles)) {
+foreach ($reviewed in @($analysis.reviewCoverage.reviewedFiles)) {
     if ([string]($reviewed.path) -match 'company-framework|\.\./') { throw "dependency leaked into FULL Coverage: $($reviewed.path)" }
 }
 Write-Host 'Coverage COMPLETE PASS'

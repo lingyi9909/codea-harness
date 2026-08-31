@@ -31,7 +31,7 @@ jobs:
       - name: Controlled Runtime command gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
-        run: go test -count=1 ./cmd/codea-harness-tools
+        run: go test -count=1 ./cmd/codea-dcep-tools
       - name: Full Go regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
@@ -43,7 +43,7 @@ jobs:
       - name: Build Windows x64 Controlled Runtime
         working-directory: .code-harness/tools-runtime
         shell: pwsh
-        run: go build -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
+        run: go build -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
       - name: Real Windows review precision regression
         shell: pwsh
         run: ./.github/scripts/task160-real-review-precision-regression.ps1

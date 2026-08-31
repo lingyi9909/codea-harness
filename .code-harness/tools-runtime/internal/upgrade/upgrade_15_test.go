@@ -83,7 +83,7 @@ func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectState
 		t.Fatal("current release VERSION must not be empty")
 	}
 
-	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-current-1.5.x")
+	write(t, source, "bin/codea-dcep-tools.exe", "release-runtime-current-1.5.x")
 	write(t, source, "bin/ast-grep.exe", "release-ast-grep")
 	write(t, source, "chains/package-business.yaml", "must-never-install\n")
 
@@ -103,7 +103,7 @@ func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectState
 	}
 	write(t, target, "AGENTS.md", "accepted-1.4-framework\n")
 	write(t, target, "skills/stale-140/SKILL.md", "remove-me\n")
-	write(t, target, "bin/codea-harness-tools.exe", "accepted-1.4-runtime")
+	write(t, target, "bin/codea-dcep-tools.exe", "accepted-1.4-runtime")
 
 	state := map[string][]byte{
 		"harness.yaml":                    accepted140Config,
@@ -187,10 +187,10 @@ func TestCurrentUpgradeFrom152PreservesAllProjectStateBytes(t *testing.T) {
 		t.Fatalf("copy current release source: %v", err)
 	}
 	currentVersion := strings.TrimSpace(string(mustRead153Upgrade(t, filepath.Join(source, "VERSION"))))
-	if currentVersion != "1.6.0" {
-		t.Fatalf("current release source VERSION=%q want 1.6.0", currentVersion)
+	if currentVersion == "" {
+		t.Fatal("current release source VERSION must not be empty")
 	}
-	write(t, source, "bin/codea-harness-tools.exe", "release-runtime-1.6.0")
+	write(t, source, "bin/codea-dcep-tools.exe", "release-runtime-current")
 	write(t, source, "bin/ast-grep.exe", "release-ast-grep-0.42.1")
 	write(t, source, "chains/package-business.yaml", "must-never-install\n")
 
@@ -205,7 +205,7 @@ func TestCurrentUpgradeFrom152PreservesAllProjectStateBytes(t *testing.T) {
 	write(t, target, "VERSION", "1.5.2\n")
 	write(t, target, "AGENTS.md", "accepted-1.5.2-framework\n")
 	write(t, target, "skills/stale-152/SKILL.md", "remove-me\n")
-	write(t, target, "bin/codea-harness-tools.exe", "accepted-1.5.2-runtime")
+	write(t, target, "bin/codea-dcep-tools.exe", "accepted-1.5.2-runtime")
 	state := map[string][]byte{
 		"harness.yaml":                              accepted152Config,
 		"project.md":                                []byte("project-152\r\n"),
@@ -217,8 +217,12 @@ func TestCurrentUpgradeFrom152PreservesAllProjectStateBytes(t *testing.T) {
 	before := make(map[string][32]byte, len(state))
 	for rel, data := range state {
 		p := filepath.Join(target, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil { t.Fatal(err) }
-		if err := os.WriteFile(p, data, 0o644); err != nil { t.Fatal(err) }
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
 		before[rel] = sha256.Sum256(data)
 	}
 

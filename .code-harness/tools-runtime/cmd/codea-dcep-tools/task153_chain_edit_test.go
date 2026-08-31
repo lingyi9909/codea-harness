@@ -1,15 +1,12 @@
 package main
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func Test153Task6ChainEditAndReleaseContract(t *testing.T) {
 	workflow := task153Task6Read(t, ".github/workflows/task153-chain-reliability.yml")
 	packageWorkflow := task153Task6Read(t, ".github/workflows/package-windows-x64.yml")
+	releaseDriver := task153Task6Read(t, ".github/scripts/task161-release.ps1")
 	script := task153Task6Read(t, ".github/scripts/task153-real-review-chain-regression.ps1")
-	version := task153Task6Read(t, ".code-harness/VERSION")
 	changelog := task153Task6Read(t, "CHANGELOG.md")
 
 	task153Task6RequireContains(t, workflow,
@@ -22,9 +19,6 @@ func Test153Task6ChainEditAndReleaseContract(t *testing.T) {
 		"UNVERIFIED_EDIT_REJECTED",
 		"TASK153_REAL_REVIEW_CHAIN_RELIABILITY PASS",
 	)
-	if strings.TrimSpace(version) != "1.6.0" {
-		t.Fatalf("current release VERSION=%q want 1.6.0", version)
-	}
 	task153Task6RequireContains(t, changelog,
 		"## 1.5.3",
 		"Controller",
@@ -32,11 +26,13 @@ func Test153Task6ChainEditAndReleaseContract(t *testing.T) {
 		"AUTO_SINGLE",
 		"Chain Edit",
 	)
+	// This is a historical 1.5.3 compatibility contract. Verify the regression
+	// remains wired through the current release driver without pinning the
+	// repository's current patch release, artifact names, or workflow display text.
 	task153Task6RequireContains(t, packageWorkflow,
-		"Task 1.5.3 real review/chain reliability regression",
-		"6f4c050783a7ec21f370799c1a8c69c9b51a9e92",
-		"codea-harness-1.6.0-windows-x64-install.zip",
-		"codea-harness-1.6.0-windows-x64-upgrade.zip",
-		"1.5.3 -> 1.6.0",
+		"task161-release.ps1",
+	)
+	task153Task6RequireContains(t, releaseDriver,
+		"task153-real-review-chain-regression.ps1",
 	)
 }

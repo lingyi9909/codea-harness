@@ -26,13 +26,13 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/nav ./internal/schema ./cmd/codea-harness-tools
+          go test -count=1 ./internal/nav ./internal/schema ./cmd/codea-dcep-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:GOOS = 'windows'
           $env:GOARCH = 'amd64'
-          go build -trimpath -o ../bin/codea-harness-tools.exe ./cmd/codea-harness-tools
+          go build -trimpath -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Vendor pinned ast-grep Windows x64
@@ -83,18 +83,18 @@ jobs:
           }
           '@ | Set-Content 'smoke/src/main/java/OrderController.java'
 
-          $info = & '.code-harness/bin/codea-harness-tools.exe' nav get-symbol-info --symbol OrderController.approve --scope smoke/src/main/java
+          $info = & '.code-harness/bin/codea-dcep-tools.exe' nav get-symbol-info --symbol OrderController.approve --scope smoke/src/main/java
           if ($LASTEXITCODE -ne 0) { throw "get-symbol-info failed: $($info -join "`n")" }
           $infoText = $info -join "`n"
           if ($infoText -notmatch 'OrderController.approve') { throw "symbol info missing: $infoText" }
           if ($infoText -notmatch 'RequestParam') { throw "Spring parameter annotations were not preserved: $infoText" }
           if ($infoText -notmatch '/approve') { throw "multiline PostMapping value was not preserved: $infoText" }
 
-          $ann = & '.code-harness/bin/codea-harness-tools.exe' nav find-by-annotation --annotation PostMapping --scope smoke/src/main/java
+          $ann = & '.code-harness/bin/codea-dcep-tools.exe' nav find-by-annotation --annotation PostMapping --scope smoke/src/main/java
           if ($LASTEXITCODE -ne 0) { throw "find-by-annotation failed: $($ann -join "`n")" }
           if (($ann -join "`n") -notmatch 'OrderController.approve') { throw 'PostMapping method not found' }
 
-          $callers = & '.code-harness/bin/codea-harness-tools.exe' nav find-callers --symbol OrderService.approve --scope smoke/src/main/java
+          $callers = & '.code-harness/bin/codea-dcep-tools.exe' nav find-callers --symbol OrderService.approve --scope smoke/src/main/java
           if ($LASTEXITCODE -ne 0) { throw "find-callers failed: $($callers -join "`n")" }
           $callerText = $callers -join "`n"
           if ($callerText -notmatch 'CONFIRMED') { throw "typed OrderService caller not confirmed: $callerText" }

@@ -20,8 +20,8 @@ func TestRelease152WorkspaceDependencyPackagingContract(t *testing.T) {
 		return string(b)
 	}
 
-	if got := strings.TrimSpace(mustRead(filepath.Join(harnessRoot, "VERSION"))); got != "1.6.0" {
-		t.Fatalf("current release VERSION=%q want 1.6.0", got)
+	if got := strings.TrimSpace(mustRead(filepath.Join(harnessRoot, "VERSION"))); got == "" {
+		t.Fatal("current release VERSION must not be empty")
 	}
 
 	changelog := mustRead(filepath.Join(repoRoot, "CHANGELOG.md"))
@@ -39,19 +39,24 @@ func TestRelease152WorkspaceDependencyPackagingContract(t *testing.T) {
 	}
 
 	workflow := mustRead(filepath.Join(repoRoot, ".github", "workflows", "package-windows-x64.yml"))
-	for _, want := range []string{
-		"6f4c050783a7ec21f370799c1a8c69c9b51a9e92",
-		"codea-harness-1.6.0-windows-x64-install",
-		"codea-harness-1.6.0-windows-x64-upgrade",
-		"1.5.3 -> 1.6.0",
-		"Workspace dependency Maven identity regression",
-		"Template inheritance navigation regression",
-		"Task 6 review isolation regression",
-		"Task 5 real dual-project business regression",
-		"workspaceDependencies",
-	} {
+	releaseDriver := mustRead(filepath.Join(repoRoot, ".github", "scripts", "task161-release.ps1"))
+	for _, want := range []string{"task161-release.ps1"} {
 		if !strings.Contains(workflow, want) {
-			t.Fatalf("package-windows-x64 missing preserved 1.5.2 release gate %q", want)
+			t.Fatalf("package-windows-x64 missing current release driver %q", want)
 		}
+	}
+	for _, want := range []string{
+		"task152-workspace-smoke.ps1",
+		"task152-task5-real-business-regression.ps1",
+		"task153-real-review-chain-regression.ps1",
+	} {
+		if !strings.Contains(releaseDriver, want) {
+			t.Fatalf("current release driver missing preserved 1.5.2/1.5.3 regression %q", want)
+		}
+	}
+
+	config := mustRead(filepath.Join(harnessRoot, "harness.template.yaml"))
+	if !strings.Contains(config, "workspaceDependencies") {
+		t.Fatal("current harness template lost workspaceDependencies contract")
 	}
 }

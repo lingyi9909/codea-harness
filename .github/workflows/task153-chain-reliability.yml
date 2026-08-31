@@ -12,7 +12,7 @@ on:
       - '.code-harness/tools-runtime/internal/chain/**'
       - '.code-harness/tools-runtime/internal/reviewselection/**'
       - '.code-harness/tools-runtime/internal/reviewscope/**'
-      - '.code-harness/tools-runtime/cmd/codea-harness-tools/**'
+      - '.code-harness/tools-runtime/cmd/codea-dcep-tools/**'
       - '.code-harness/skills/**'
       - '.code-harness/agents/**'
       - '.code-harness/AGENTS.md'
@@ -32,53 +32,45 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: actions/setup-go@v7
         with:
           go-version: '1.23.x'
-
       - name: Task 1 Controller EntryPoint completeness gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/changeset ./internal/analysis ./cmd/codea-harness-tools -run 'Test153.*Entrypoint|Test153.*ChangeSet|Test153Task6ControllerCompletenessReleaseContract'
+          go test -count=1 ./internal/changeset ./internal/analysis ./cmd/codea-dcep-tools -run 'Test153.*Entrypoint|Test153.*ChangeSet|Test153Task6ControllerCompletenessReleaseContract'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Task 2 Certified ChangeAnalysis gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/analysis ./internal/coverage ./cmd/codea-harness-tools -run 'Test153.*Cert|Test153.*Tamper|Test153.*Analysis|Test153Task6ArtifactAuthorityReleaseContract'
+          go test -count=1 ./internal/analysis ./internal/coverage ./cmd/codea-dcep-tools -run 'Test153.*Cert|Test153.*Tamper|Test153.*Analysis|Test153Task6ArtifactAuthorityReleaseContract'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Task 3 Chain artifact authority gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/chain ./cmd/codea-harness-tools -run 'Test153.*Candidate|Test153.*WritePlan|Test153.*Seal|Test153Task6ArtifactAuthorityReleaseContract'
+          go test -count=1 ./internal/chain ./cmd/codea-dcep-tools -run 'Test153.*Candidate|Test153.*WritePlan|Test153.*Seal|Test153Task6ArtifactAuthorityReleaseContract'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Task 4 Review options and AUTO_SINGLE gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/reviewselection ./internal/reviewscope ./cmd/codea-harness-tools -run 'Test153.*Review|Test153.*Selection|Test153.*AutoSingle|Test153Task6ReviewSelectionReleaseContract'
+          go test -count=1 ./internal/reviewselection ./internal/reviewscope ./cmd/codea-dcep-tools -run 'Test153.*Review|Test153.*Selection|Test153.*AutoSingle|Test153Task6ReviewSelectionReleaseContract'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Task 5 Chain edit gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/analysis ./internal/chain ./cmd/codea-harness-tools -run 'Test153.*Edit|Test153.*WritePlan|Test153ChainEditAgentContract|Test153Task6ChainEditAndReleaseContract'
+          go test -count=1 ./internal/analysis ./internal/chain ./cmd/codea-dcep-tools -run 'Test153.*Edit|Test153.*WritePlan|Test153ChainEditAgentContract|Test153Task6ChainEditAndReleaseContract'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Full Go test
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
           go test -count=1 ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Go vet
         working-directory: .code-harness/tools-runtime
         shell: pwsh

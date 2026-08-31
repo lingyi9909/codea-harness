@@ -21,7 +21,7 @@ function Invoke-Task153GoGate {
 
 Push-Location $repoRoot
 try {
-    $runtime = Join-Path $repoRoot '.code-harness\bin\codea-harness-tools.exe'
+    $runtime = Join-Path $repoRoot '.code-harness\bin\codea-dcep-tools.exe'
     $astGrep = Join-Path $repoRoot '.code-harness\bin\ast-grep.exe'
     if (!(Test-Path $runtime)) { throw "Windows Runtime missing: $runtime" }
     if (!(Test-Path $astGrep)) { throw "pinned ast-grep missing: $astGrep" }
@@ -43,7 +43,7 @@ try {
     Invoke-Task153GoGate -Packages @('./internal/chain') -Pattern 'Test153CandidateAuthorityRejectsMutatedRuntimeCandidate|Test153CandidateAuthorityRejectsMutationBeforeRuntimeCertification'
     Write-Output 'CHAIN_CANDIDATE_TAMPER_REJECTED'
 
-    Invoke-Task153GoGate -Packages @('./internal/reviewselection','./cmd/codea-harness-tools') -Pattern 'Test153AutoSingleSelectionIsMachineExecutable|Test153ReviewOptionsAutoSingleExecutesWithoutUserChoice'
+    Invoke-Task153GoGate -Packages @('./internal/reviewselection','./cmd/codea-dcep-tools') -Pattern 'Test153AutoSingleSelectionIsMachineExecutable|Test153ReviewOptionsAutoSingleExecutesWithoutUserChoice'
     Write-Output 'AUTO_SINGLE_NO_SELECTION'
 
     Invoke-Task153GoGate -Packages @('./internal/reviewselection') -Pattern 'Test153ReviewOptionsDecisionZeroOneTwo|Test153SelectionRejectsStaleOptionsHash|Test153SelectionRejectsUnknownChain|Test153SelectionAcceptsRuntimeBoundIDs'

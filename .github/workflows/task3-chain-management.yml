@@ -22,7 +22,7 @@ jobs:
           go-version: '1.23.x'
       - name: Task 3 Chain artifact authority gate
         working-directory: .code-harness/tools-runtime
-        run: go test -count=1 ./internal/chain ./internal/apply ./cmd/codea-harness-tools -run 'Test153|Test152|TestChainPersist|TestApply'
+        run: go test -count=1 ./internal/chain ./internal/apply ./cmd/codea-dcep-tools -run 'Test153|Test152|TestChainPersist|TestApply'
       - name: Full Go test
         working-directory: .code-harness/tools-runtime
         run: go test -count=1 ./...

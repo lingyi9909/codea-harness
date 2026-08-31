@@ -136,10 +136,10 @@ func TestUpgradeBootstrapUsesNewRuntimeForRegisteredMigrations(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(b)
-	if !strings.Contains(text, ".code-harness-upgrade/bin/codea-harness-tools.exe upgrade") {
+	if !strings.Contains(text, ".code-harness-upgrade/bin/codea-dcep-tools.exe upgrade") {
 		t.Fatal("1.4 upgrade bootstrap must execute the new runtime so registered migrations are available")
 	}
-	if strings.Contains(text, "调用**当前已安装**的 `.code-harness/bin/codea-harness-tools.exe upgrade`") {
+	if strings.Contains(text, "调用**当前已安装**的 `.code-harness/bin/codea-dcep-tools.exe upgrade`") {
 		t.Fatal("1.4 upgrade bootstrap must not delegate migration execution to the old installed runtime")
 	}
 }
@@ -167,7 +167,7 @@ func TestWindowsUpgradeCanRunFromUpgradePackageAndConsumeItsSource(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceExe := filepath.Join(source, "bin", "codea-harness-tools.exe")
+	sourceExe := filepath.Join(source, "bin", "codea-dcep-tools.exe")
 	if err := os.WriteFile(sourceExe, runtimeBytes, 0o755); err != nil {
 		t.Fatal(err)
 	}

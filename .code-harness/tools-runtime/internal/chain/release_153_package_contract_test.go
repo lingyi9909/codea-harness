@@ -14,21 +14,33 @@ func Test153ReleasePackageKeepsInstalledChainValidateProbe(t *testing.T) {
 		t.Fatal("runtime.Caller failed")
 	}
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", ".."))
-	workflowPath := filepath.Join(repoRoot, ".github", "workflows", "package-windows-x64.yml")
-	data, err := os.ReadFile(workflowPath)
-	if err != nil {
-		t.Fatalf("read package workflow: %v", err)
+	read := func(rel string) string {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		return string(data)
 	}
-	workflow := string(data)
+
+	workflow := read(".github/workflows/package-windows-x64.yml")
+	releaseDriver := read(".github/scripts/task161-release.ps1")
+	chainRegression := read(".github/scripts/task153-real-review-chain-regression.ps1")
+
+	if !strings.Contains(workflow, "task161-release.ps1") {
+		t.Fatal("current package workflow missing 1.6.1 release driver")
+	}
+	if !strings.Contains(releaseDriver, "task153-real-review-chain-regression.ps1") {
+		t.Fatal("current release driver missing preserved Task153 regression")
+	}
 	for _, want := range []string{
-		"6f4c050783a7ec21f370799c1a8c69c9b51a9e92",
-		"codea-harness-1.6.0-windows-x64-install.zip",
-		"codea-harness-1.6.0-windows-x64-upgrade.zip",
-		"@('chain','validate')",
-		"installed chain validate capability probe failed",
+		"./internal/chain",
+		"CHAIN_CANDIDATE_TAMPER_REJECTED",
+		"CHAIN_EDIT_VERIFIED",
+		"TASK153_REAL_REVIEW_CHAIN_RELIABILITY PASS",
 	} {
-		if !strings.Contains(workflow, want) {
-			t.Fatalf("current package workflow missing preserved 1.5.3 release contract %q", want)
+		if !strings.Contains(chainRegression, want) {
+			t.Fatalf("Task153 regression missing preserved chain contract %q", want)
 		}
 	}
 }

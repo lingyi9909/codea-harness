@@ -66,13 +66,13 @@ func makePair(t *testing.T, config string) (string, string) {
 	write(t, target, "runs/keep.txt", "keep-run\n")
 	write(t, target, "AGENTS.md", "old\n")
 	write(t, target, "skills/stale/SKILL.md", "stale\n")
-	write(t, target, "bin/codea-harness-tools.exe", "old-runtime")
+	write(t, target, "bin/codea-dcep-tools.exe", "old-runtime")
 	write(t, source, "VERSION", "1.1.1\n")
 	for _, rel := range []string{"AGENTS.md", "bootstrap.md", "upgrade.md", "harness.template.yaml", "project.template.md", "agents/x.md", "skills/x/SKILL.md", "contracts/upgrade-result.schema.json", "tools/README.md"} {
 		write(t, source, rel, "new "+rel+"\n")
 	}
 	write(t, source, "contracts/harness-config.schema.json", harnessSchema)
-	write(t, source, "bin/codea-harness-tools.exe", "new-runtime")
+	write(t, source, "bin/codea-dcep-tools.exe", "new-runtime")
 	write(t, source, "bin/ast-grep.exe", "ast-grep")
 	return source, target
 }
@@ -213,9 +213,9 @@ func contains(xs []string, want string) bool {
 
 func TestStagedSelfReplacementNeverWritesOverLivePath(t *testing.T) {
 	root := t.TempDir()
-	dst := filepath.Join(root, "codea-harness-tools.exe")
+	dst := filepath.Join(root, "codea-dcep-tools.exe")
 	staged := filepath.Join(root, "new.tmp")
-	write(t, root, "codea-harness-tools.exe", "old")
+	write(t, root, "codea-dcep-tools.exe", "old")
 	write(t, root, "new.tmp", "new")
 	if err := replaceRunningExecutable(staged, dst, dst); err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestStagedSelfReplacementNeverWritesOverLivePath(t *testing.T) {
 }
 func TestRunningExecutableParkingPathStaysOutsideHarnessOnSameVolume(t *testing.T) {
 	root := t.TempDir()
-	dst := filepath.Join(root, ".code-harness", "bin", "codea-harness-tools.exe")
+	dst := filepath.Join(root, ".code-harness", "bin", "codea-dcep-tools.exe")
 	parked := runningExecutableParkingPath(dst)
 	if filepath.Dir(parked) != filepath.Clean(root) {
 		t.Fatalf("parking path must be sibling of harness: %s", parked)

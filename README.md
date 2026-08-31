@@ -42,7 +42,7 @@ Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Har
 源码仓库不会提交：
 
 ```text
-.code-harness/bin/codea-harness-tools.exe
+.code-harness/bin/codea-dcep-tools.exe
 .code-harness/bin/ast-grep.exe
 ```
 
@@ -68,7 +68,7 @@ codea-harness-1.5.0-windows-x64-install.zip
 .code-harness/
 ├── VERSION
 ├── RELEASE-MANIFEST.json
-├── bin/codea-harness-tools.exe
+├── bin/codea-dcep-tools.exe
 ├── bin/ast-grep.exe
 ├── contracts/chain.schema.json
 ├── contracts/chain-validation-result.schema.json
@@ -125,7 +125,7 @@ MANUAL_ACTION_REQUIRED
 Package Preflight 通过后，调用**目标版本升级包 Runtime**：
 
 ```text
-.code-harness-upgrade/bin/codea-harness-tools.exe upgrade
+.code-harness-upgrade/bin/codea-dcep-tools.exe upgrade
 ```
 
 registered migration 属于目标版本 Runtime，因此不能依赖旧安装 Runtime 预知未来版本 migration。升级事务仍由 Controlled Runtime 完成，并继续保持 staged replace、rollback、Windows executable replacement 和 Project State 保护。
@@ -178,7 +178,7 @@ runs/**               # 保持原内容
   "version": "1.5.0",
   "platform": "windows",
   "arch": "x64",
-  "runtime": "codea-harness-tools.exe",
+  "runtime": "codea-dcep-tools.exe",
   "runtimeSha256": "...",
   "astGrepVersion": "0.42.1",
   "astGrepSha256": "..."

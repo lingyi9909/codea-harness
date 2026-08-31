@@ -100,7 +100,7 @@ func cmp(a, b [3]int) int {
 var requiredSource = []string{
 	"VERSION", "AGENTS.md", "bootstrap.md", "upgrade.md", "harness.template.yaml", "project.template.md",
 	"agents", "skills", "contracts", "tools", "contracts/harness-config.schema.json",
-	"bin/codea-harness-tools.exe", "bin/ast-grep.exe",
+	"bin/codea-dcep-tools.exe", "bin/ast-grep.exe",
 }
 
 var managedFiles = map[string]bool{
@@ -423,7 +423,7 @@ func applyStaged(stage, target, running string) error {
 	}
 	removeEmptyManagedDirs(target)
 
-	selfRel := "bin/codea-harness-tools.exe"
+	selfRel := "bin/codea-dcep-tools.exe"
 	for _, rel := range newFiles {
 		if rel == selfRel {
 			continue

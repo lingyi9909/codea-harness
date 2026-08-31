@@ -30,7 +30,7 @@ func normalizePackagePreflightErrors(sourceDir string, original []string) []stri
 	binaryMissing := false
 	for _, rel := range missing {
 		errs = append(errs, "missing: "+rel)
-		if rel == "bin/codea-harness-tools.exe" || rel == "bin/ast-grep.exe" {
+		if rel == "bin/codea-dcep-tools.exe" || rel == "bin/ast-grep.exe" {
 			binaryMissing = true
 		}
 	}
@@ -44,7 +44,7 @@ func normalizePackagePreflightErrors(sourceDir string, original []string) []stri
 			fmt.Sprintf("请使用：codea-harness-%s-windows-x64-upgrade.zip", version),
 			"解压后项目根目录必须存在：",
 			".code-harness-upgrade/VERSION",
-			".code-harness-upgrade/bin/codea-harness-tools.exe",
+			".code-harness-upgrade/bin/codea-dcep-tools.exe",
 			".code-harness-upgrade/bin/ast-grep.exe",
 		)
 	}

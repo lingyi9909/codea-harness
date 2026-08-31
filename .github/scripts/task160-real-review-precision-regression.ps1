@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$runtimeSource = Join-Path $repoRoot '.code-harness\bin\codea-harness-tools.exe'
+$runtimeSource = Join-Path $repoRoot '.code-harness\bin\codea-dcep-tools.exe'
 $versionSource = Join-Path $repoRoot '.code-harness\VERSION'
 $catalogSource = Join-Path $repoRoot '.code-harness\review-rules\spring-v1.yaml'
 
@@ -84,7 +84,7 @@ spring:
         New-Item -ItemType Directory -Force '.code-harness\bin' | Out-Null
         New-Item -ItemType Directory -Force '.code-harness\contracts' | Out-Null
         New-Item -ItemType Directory -Force '.code-harness\review-rules' | Out-Null
-        Copy-Item $runtimeSource '.code-harness\bin\codea-harness-tools.exe' -Force
+        Copy-Item $runtimeSource '.code-harness\bin\codea-dcep-tools.exe' -Force
         Copy-Item $versionSource '.code-harness\VERSION' -Force
         Copy-Item $catalogSource '.code-harness\review-rules\spring-v1.yaml' -Force
         foreach ($contract in @(
@@ -108,7 +108,7 @@ workspaceDependencies:
       artifactId: company-framework
     mode: READ_ONLY
 "@
-        $script:runtime = (Resolve-Path '.code-harness\bin\codea-harness-tools.exe').Path
+        $script:runtime = (Resolve-Path '.code-harness\bin\codea-dcep-tools.exe').Path
         $runID = 'task160-real'
         $requestDir = Join-Path $fixture ".code-harness\runs\$runID\requests"
         New-Item -ItemType Directory -Force $requestDir | Out-Null

@@ -46,7 +46,7 @@
 
 ## 受控 Tool Runtime
 
-`.code-harness/bin/codea-harness-tools.exe` 是 Harness 背后的确定性工具实现，不是新的产品 CLI。Agent 只可调用固定子命令：
+`.code-harness/bin/codea-dcep-tools.exe` 是 Harness 背后的确定性工具实现，不是新的产品 CLI。Agent 只可调用固定子命令：
 
 ```text
 codea-harness-tools upgrade

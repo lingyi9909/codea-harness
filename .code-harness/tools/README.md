@@ -3,7 +3,7 @@
 Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** Upgrade / Schema Validate / Code Navigation / Database Evidence / Review Report / API Documentation Report 均有确定性 Go Runtime 实现：
 
 ```text
-.code-harness/bin/codea-harness-tools.exe
+.code-harness/bin/codea-dcep-tools.exe
 ```
 
 它不是新的 Harness CLI 产品；用户仍然只表达 `harness review/test/api-doc/debug-service/fix/verify/upgrade`。Agent 只能映射到固定子命令，禁止 `cmd /c`、PowerShell、`bash -c`、管道、重定向、命令链接或用户输入命令拼接。
@@ -11,24 +11,24 @@ Subagent 只能使用本文件定义的操作。**禁止任意 Shell。** Upgrad
 ## Runtime 固定入口
 
 ```text
-codea-harness-tools.exe upgrade
-codea-harness-tools.exe validate --schema <under .code-harness/contracts> --input <under .code-harness> [--format auto|yaml|json]
-codea-harness-tools.exe nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools.exe nav find-references --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools.exe nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools.exe nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools.exe nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
-codea-harness-tools.exe nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
-codea-harness-tools.exe workspace verify --id <id>
-codea-harness-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
-codea-harness-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
-codea-harness-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
-codea-harness-tools.exe db ping --run-id <id>
-codea-harness-tools.exe db list-tables --schema <schema> --run-id <id>
-codea-harness-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
-codea-harness-tools.exe db query --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe upgrade
+codea-dcep-tools.exe validate --schema <under .code-harness/contracts> --input <under .code-harness> [--format auto|yaml|json]
+codea-dcep-tools.exe nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-references --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe workspace verify --id <id>
+codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-dcep-tools.exe db ping --run-id <id>
+codea-dcep-tools.exe db list-tables --schema <schema> --run-id <id>
+codea-dcep-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
+codea-dcep-tools.exe db query --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
 未知子命令、目录逃逸、非法 symbol/identifier/annotation name 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。`db query` 不接受 raw SQL CLI 参数。
@@ -282,7 +282,7 @@ Project Adapter 只可写 `.code-harness/harness.yaml` / `project.md`；禁止�
 
 ### `upgrade_harness(sourceDir?, targetDir?) -> UpgradeResult`
 
-唯一升级入口；真实实现为 `codea-harness-tools.exe upgrade`。
+唯一升级入口；真实实现为 `codea-dcep-tools.exe upgrade`。
 
 ### Preflight
 
@@ -293,7 +293,7 @@ Project Adapter 只可写 `.code-harness/harness.yaml` / `project.md`；禁止�
 VERSION AGENTS.md bootstrap.md upgrade.md
 harness.template.yaml project.template.md
 agents/** skills/** contracts/** tools/**
-bin/codea-harness-tools.exe
+bin/codea-dcep-tools.exe
 bin/ast-grep.exe
 ```
 
@@ -347,7 +347,7 @@ review:
 → 执行 registered migration
 → 使用 stage 中的新 Schema validate harness.yaml
 → PASS：把 stage 的 Framework Managed 应用到 target，删除 stale
-→ 最后替换 codea-harness-tools.exe
+→ 最后替换 codea-dcep-tools.exe
 → 删除 stage + backup + 已消费的 sourceDir
 → UPGRADED
 ```
@@ -363,6 +363,6 @@ review:
 → UPGRADE_FAILED
 ```
 
-Windows 下禁止向运行中的 `.code-harness/bin/codea-harness-tools.exe` 原地写入/覆盖。Runtime 必须先把新 exe 完整写到 staged 文件，再将运行中的旧 exe rename 到 **`.code-harness` 同级、同卷**的临时路径，最后把 staged 新 exe rename 到规范路径。旧 exe 的停放路径必须在 Harness 树外且不能跨卷；旧进程退出后对该临时文件做 best-effort 清理。
+Windows 下禁止向运行中的 `.code-harness/bin/codea-dcep-tools.exe` 原地写入/覆盖。Runtime 必须先把新 exe 完整写到 staged 文件，再将运行中的旧 exe rename 到 **`.code-harness` 同级、同卷**的临时路径，最后把 staged 新 exe rename 到规范路径。旧 exe 的停放路径必须在 Harness 树外且不能跨卷；旧进程退出后对该临时文件做 best-effort 清理。
 
 禁止 AI 猜配置、自动 re-init、绕过 Runtime 复制/删除升级文件。

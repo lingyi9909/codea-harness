@@ -55,20 +55,26 @@ func TestRelease15DocumentationAndChainFrameworkContract(t *testing.T) {
 		}
 	}
 
-	workflow := mustRead(filepath.Join(repoRoot, ".github", "workflows", "package-windows-x64.yml"))
-	for _, want := range []string{
-		"internal/chain",
-		"internal/reviewscope",
+	for _, rel := range []string{
 		"contracts/chain.schema.json",
 		"contracts/chain-validation-result.schema.json",
 		"templates/chain.template.yaml",
 		"skills/discover-chain/SKILL.md",
 		"skills/validate-chain/SKILL.md",
-		"chains",
-		"chain validate",
+		"tools-runtime/internal/chain",
+		"tools-runtime/internal/reviewscope",
 	} {
-		if !strings.Contains(workflow, want) {
-			t.Fatalf("package-windows-x64 missing preserved 1.5 release gate %q", want)
+		if _, err := os.Stat(filepath.Join(harnessRoot, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("current release missing preserved 1.5 Chain Framework %s: %v", rel, err)
 		}
+	}
+
+	workflow := mustRead(filepath.Join(repoRoot, ".github", "workflows", "package-windows-x64.yml"))
+	releaseDriver := mustRead(filepath.Join(repoRoot, ".github", "scripts", "task161-release.ps1"))
+	if !strings.Contains(workflow, "task161-release.ps1") {
+		t.Fatal("package workflow no longer routes through current release certification driver")
+	}
+	if !strings.Contains(releaseDriver, "task153-real-review-chain-regression.ps1") {
+		t.Fatal("current release certification no longer executes Chain regression")
 	}
 }

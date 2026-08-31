@@ -10,7 +10,7 @@ import (
 
 func TestPreflightJSONListsAllMissingReleaseBinariesAndSourceHint(t *testing.T) {
 	source, target := make13Pair(t, validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n"))
-	if err := os.Remove(filepath.Join(source, "bin", "codea-harness-tools.exe")); err != nil {
+	if err := os.Remove(filepath.Join(source, "bin", "codea-dcep-tools.exe")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(filepath.Join(source, "bin", "ast-grep.exe")); err != nil {
@@ -47,12 +47,12 @@ func TestPreflightJSONListsAllMissingReleaseBinariesAndSourceHint(t *testing.T) 
 	}
 	text := string(encoded)
 	for _, want := range []string{
-		"missing: bin/codea-harness-tools.exe",
+		"missing: bin/codea-dcep-tools.exe",
 		"missing: bin/ast-grep.exe",
 		"GitHub Source Code",
 		"windows-x64-upgrade.zip",
 		".code-harness-upgrade/VERSION",
-		".code-harness-upgrade/bin/codea-harness-tools.exe",
+		".code-harness-upgrade/bin/codea-dcep-tools.exe",
 		".code-harness-upgrade/bin/ast-grep.exe",
 	} {
 		if !strings.Contains(text, want) {
