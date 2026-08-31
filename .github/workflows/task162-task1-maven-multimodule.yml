@@ -15,17 +15,100 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
       - uses: actions/setup-go@v7
         with:
           go-version: 1.23.x
           cache-dependency-path: .code-harness/tools-runtime/go.sum
-      - name: Shared Maven path classifier
+
+      - name: Task 1 focused Go gates
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./internal/projectpath ./internal/changeset ./internal/analysis ./internal/nav ./internal/coverage ./internal/reviewscope ./internal/reviewunit ./internal/reviewrules ./internal/finding ./internal/report ./cmd/codea-dcep-tools
+
+      - name: Full Go regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./...
+
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
+
+      - name: Build Windows x64 Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go build -trimpath -ldflags '-s -w' -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
+
+      - name: Install pinned ast-grep 0.42.1
         shell: pwsh
         run: |
-          Push-Location .code-harness/tools-runtime
-          try {
-            go test ./internal/projectpath
-          } finally {
-            Pop-Location
-          }
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-162.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-162'
+          Invoke-WebRequest -Uri "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Real Maven multi-module Review Authority E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-real-multimodule-regression.ps1
+
+      - name: Retained single-module entrypoint regression
+        shell: pwsh
+        run: ./.github/scripts/task153-task1-real-entrypoint-inventory.ps1
+
+      - name: Retained Workspace regression
+        shell: pwsh
+        run: ./.github/scripts/task152-workspace-smoke.ps1
+
+      - name: Retained single-module business regression
+        shell: pwsh
+        run: ./.github/scripts/task152-task5-real-business-regression.ps1
+
+      - name: Retained Chain regression
+        shell: pwsh
+        run: ./.github/scripts/task153-real-review-chain-regression.ps1
+
+      - name: Retained 1.6 Review Precision regression
+        shell: pwsh
+        run: ./.github/scripts/task160-real-review-precision-regression.ps1
+
+      - name: Retained 1.6.1 Runtime rename audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d .code-harness/tools-runtime/cmd/codea-dcep-tools
+          test ! -d .code-harness/tools-runtime/cmd/codea-harness-tools
+          test -f .code-harness/bin/codea-dcep-tools.exe
+          test ! -f .code-harness/bin/codea-harness-tools.exe
+          scopes=(.code-harness .github/scripts .github/workflows README.md)
+          refs=$(git grep -l 'codea-harness-tools\.exe' -- "${scopes[@]}" \
+            ':!.code-harness/tools-runtime/internal/upgrade/task161_release_upgrade_test.go' \
+            ':!.github/scripts/task161-release.ps1' \
+            ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/workflows/task161-runtime-rename-audit.yml' || true)
+          cmdrefs=$(git grep -l 'cmd/codea-harness-tools' -- "${scopes[@]}" \
+            ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/workflows/task161-runtime-rename-audit.yml' || true)
+          if [ -n "$refs" ] || [ -n "$cmdrefs" ]; then
+            printf 'Unexpected legacy Runtime refs:\n%s\n%s\n' "$refs" "$cmdrefs"
+            exit 1
+          fi
+          echo 'TASK161_RUNTIME_RENAME_AUDIT PASS'
+
+      - name: Task 1 exact-head marker
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.event.pull_request.head.sha || github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_TASK1_EXACT_HEAD PASS head=$head"
