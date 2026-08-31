@@ -1,0 +1,101 @@
+name: task162-dev-path-wiring
+
+on:
+  push:
+    branches: [hotfix/1.6.2-task1-maven-multimodule]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/1.6.2-task1-maven-multimodule
+      - name: Wire shared classifier into downstream authority gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          scope = Path('.code-harness/tools-runtime/internal/reviewscope/reviewscope.go')
+          s = scope.read_text()
+          old_import = '"sort"\n\t"strings"\n)'
+          new_import = '"sort"\n\t"strings"\n\n\t"codea-harness-tools/internal/projectpath"\n)'
+          if 'codea-harness-tools/internal/projectpath' not in s:
+              assert old_import in s
+              s = s.replace(old_import, new_import, 1)
+          old = '''func expectedResourceRole(value string) string {
+          \tif strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(path.Base(value), "Mapper.xml") {
+          \t\treturn "MapperXml"
+          \t}
+          \tif strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(value, ".yml") {
+          \t\treturn "YamlConfig"
+          \t}
+          \treturn ""
+          }'''
+          new = '''func expectedResourceRole(value string) string {
+          \tswitch projectpath.Classify(value) {
+          \tcase projectpath.MapperXML:
+          \t\treturn "MapperXml"
+          \tcase projectpath.YAMLConfig:
+          \t\treturn "YamlConfig"
+          \tdefault:
+          \t\treturn ""
+          \t}
+          }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('reviewscope expectedResourceRole target not found')
+          scope.write_text(s)
+
+          unit = Path('.code-harness/tools-runtime/internal/reviewunit/build.go')
+          s = unit.read_text()
+          old_import = '"codea-harness-tools/internal/changeset"\n\t"codea-harness-tools/internal/reviewscope"'
+          new_import = '"codea-harness-tools/internal/changeset"\n\t"codea-harness-tools/internal/projectpath"\n\t"codea-harness-tools/internal/reviewscope"'
+          if 'codea-harness-tools/internal/projectpath' not in s:
+              assert old_import in s
+              s = s.replace(old_import, new_import, 1)
+          old = '''func isFindingScopePath160(p string) bool {
+          \tp, ok := safePath160(p)
+          \tif !ok { return false }
+          \tswitch {
+          \tcase strings.HasPrefix(p, "src/main/java/") && strings.HasSuffix(p, ".java"):
+          \t\treturn true
+          \tcase strings.HasPrefix(p, "src/test/java/") && strings.HasSuffix(p, ".java"):
+          \t\treturn true
+          \tcase strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(path.Base(p), "Mapper.xml"):
+          \t\treturn true
+          \tcase strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml"):
+          \t\treturn true
+          \tdefault:
+          \t\treturn false
+          \t}
+          }'''
+          new = '''func isFindingScopePath160(p string) bool {
+          \tp, ok := safePath160(p)
+          \treturn ok && projectpath.IsReviewPath(p)
+          }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('reviewunit isFindingScopePath160 target not found')
+          unit.write_text(s)
+          PY
+          cd .code-harness/tools-runtime
+          gofmt -w internal/reviewscope/reviewscope.go internal/reviewunit/build.go
+          go test ./internal/projectpath ./internal/changeset ./internal/analysis ./internal/coverage ./internal/reviewscope ./internal/reviewunit
+          cd ../..
+          if git diff --quiet; then
+            echo 'No wiring changes needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .code-harness/tools-runtime/internal/reviewscope/reviewscope.go .code-harness/tools-runtime/internal/reviewunit/build.go
+          git commit -m 'fix(task162): wire shared classifier through review authority'
+          git push origin HEAD:hotfix/1.6.2-task1-maven-multimodule
