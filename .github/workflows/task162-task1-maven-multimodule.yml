@@ -1,0 +1,31 @@
+name: task162-task1-maven-multimodule
+
+on:
+  push:
+    branches: [hotfix/1.6.2-task1-maven-multimodule]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  task1:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Shared Maven path classifier
+        shell: pwsh
+        run: |
+          Push-Location .code-harness/tools-runtime
+          try {
+            go test ./internal/projectpath
+          } finally {
+            Pop-Location
+          }
