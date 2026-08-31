@@ -3,11 +3,11 @@ package analysis
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"codea-harness-tools/internal/projectpath"
 	"codea-harness-tools/internal/workspace"
 )
 
@@ -51,9 +51,6 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		}
 	}
 
-	// Changed/reviewed paths are always current-workspace paths. A dependency may
-	// legitimately contain the same relative path; workspace identity, not the
-	// bare relative path, determines whether evidence belongs to a dependency.
 	for _, f := range a.ChangedFiles {
 		if _, ok := safeEvidencePath153(f.Path); !ok {
 			return fmt.Errorf("CHANGE_SET_PATH_INVALID: %q", f.Path)
@@ -203,23 +200,15 @@ func normalizeWorkspace153(workspaceID string) string {
 }
 
 func safeEvidencePath153(value string) (string, bool) {
-	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
-	if value == "" || path.IsAbs(value) {
-		return "", false
-	}
-	clean := path.Clean(value)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", false
-	}
-	return clean, true
+	return projectpath.Normalize(value)
 }
 
 func validResourceRelation153(p string, relation ResourceRelation) bool {
 	switch strings.TrimSpace(relation.Role) {
 	case "MapperXml":
-		return strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(path.Base(p), "Mapper.xml") && relation.Source == "MAPPER_STATEMENT"
+		return projectpath.IsMapperXML(p) && relation.Source == "MAPPER_STATEMENT"
 	case "YamlConfig":
-		return strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml") && relation.Source == "CONFIG_REFERENCE"
+		return projectpath.IsYAMLConfig(p) && relation.Source == "CONFIG_REFERENCE"
 	default:
 		return false
 	}
