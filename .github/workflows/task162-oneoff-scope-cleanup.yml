@@ -1,0 +1,227 @@
+name: task162-oneoff-scope-cleanup
+
+on:
+  push:
+    branches: [hotfix/1.6.2-task1-maven-multimodule]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/1.6.2-task1-maven-multimodule
+          fetch-depth: 0
+
+      - name: Restore baseline formatting and apply only Task 1 path changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=87ed05c5bbc56f4fdf904dfbb239d9125b8136e0
+          files=(
+            .code-harness/tools-runtime/internal/changeset/git.go
+            .code-harness/tools-runtime/internal/analysis/entrypoints.go
+            .code-harness/tools-runtime/internal/analysis/evidence.go
+            .code-harness/tools-runtime/internal/coverage/coverage.go
+            .code-harness/tools-runtime/internal/reviewscope/reviewscope.go
+            .code-harness/tools-runtime/internal/reviewunit/build.go
+          )
+          git checkout "$baseline" -- "${files[@]}"
+          python - <<'PY'
+          from pathlib import Path
+
+          def rewrite(path, replacements):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{path}: expected one replacement, got {count}: {old[:80]!r}')
+                  text = text.replace(old, new, 1)
+              p.write_text(text, encoding='utf-8', newline='\n')
+
+          rewrite('.code-harness/tools-runtime/internal/changeset/git.go', [
+              ('\t"os/exec"\n\t"path"\n\t"regexp"\n\t"sort"\n\t"strconv"\n\t"strings"\n\t"time"\n)',
+               '\t"os/exec"\n\t"regexp"\n\t"sort"\n\t"strconv"\n\t"strings"\n\t"time"\n\n\t"codea-harness-tools/internal/projectpath"\n)'),
+              ('var changeSetScopes153 = []string{\n\t"src/main/java",\n\t"src/test/java",\n\t"src/main/resources",\n}\n\n', ''),
+              ('\tcommittedArgs = append(committedArgs, changeSetScopes153...)\n', ''),
+              ('\t\tstagedArgs = append(stagedArgs, changeSetScopes153...)\n', ''),
+              ('\t\tunstagedArgs = append(unstagedArgs, changeSetScopes153...)\n', ''),
+              ('''func normalize153Path(p string) string {
+\tp = strings.TrimSpace(strings.ReplaceAll(p, "\\\\", "/"))
+\tif p == "" { return "" }
+\tp = path.Clean(p)
+\tif p == "." || p == ".." || strings.HasPrefix(p, "../") || path.IsAbs(p) {
+\t\treturn ""
+\t}
+\treturn p
+}
+
+func inHarnessScope153(p string) bool {
+\tp = normalize153Path(p)
+\tswitch {
+\tcase strings.HasPrefix(p, "src/main/java/") && strings.HasSuffix(p, ".java"):
+\t\treturn true
+\tcase strings.HasPrefix(p, "src/test/java/") && strings.HasSuffix(p, ".java"):
+\t\treturn true
+\tcase strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, "Mapper.xml"):
+\t\treturn true
+\tcase strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml"):
+\t\treturn true
+\tdefault:
+\t\treturn false
+\t}
+}''', '''func normalize153Path(p string) string {
+\tclean, ok := projectpath.Normalize(p)
+\tif !ok { return "" }
+\treturn clean
+}
+
+func inHarnessScope153(p string) bool {
+\treturn projectpath.IsReviewPath(p)
+}''')
+          ])
+
+          rewrite('.code-harness/tools-runtime/internal/analysis/entrypoints.go', [
+              ('\t"codea-harness-tools/internal/changeset"\n\t"codea-harness-tools/internal/nav"\n',
+               '\t"codea-harness-tools/internal/changeset"\n\t"codea-harness-tools/internal/nav"\n\t"codea-harness-tools/internal/projectpath"\n'),
+              ('''func isProductionJava153(p string) bool {
+\tp = filepath.ToSlash(filepath.Clean(p))
+\treturn strings.HasPrefix(p, "src/main/java/") && strings.HasSuffix(p, ".java")
+}''', '''func isProductionJava153(p string) bool {
+\treturn projectpath.IsMainJava(p)
+}''')
+          ])
+
+          rewrite('.code-harness/tools-runtime/internal/analysis/evidence.go', [
+              ('\t"os"\n\t"path"\n\t"path/filepath"\n\t"sort"\n\t"strings"\n\n\t"codea-harness-tools/internal/workspace"\n',
+               '\t"os"\n\t"path/filepath"\n\t"sort"\n\t"strings"\n\n\t"codea-harness-tools/internal/projectpath"\n\t"codea-harness-tools/internal/workspace"\n'),
+              ('''func safeEvidencePath153(value string) (string, bool) {
+\tvalue = strings.TrimSpace(strings.ReplaceAll(value, "\\\\", "/"))
+\tif value == "" || path.IsAbs(value) {
+\t\treturn "", false
+\t}
+\tclean := path.Clean(value)
+\tif clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+\t\treturn "", false
+\t}
+\treturn clean, true
+}''', '''func safeEvidencePath153(value string) (string, bool) {
+\treturn projectpath.Normalize(value)
+}'''),
+              ('''func validResourceRelation153(p string, relation ResourceRelation) bool {
+\tswitch strings.TrimSpace(relation.Role) {
+\tcase "MapperXml":
+\t\treturn strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(path.Base(p), "Mapper.xml") && relation.Source == "MAPPER_STATEMENT"
+\tcase "YamlConfig":
+\t\treturn strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml") && relation.Source == "CONFIG_REFERENCE"
+\tdefault:
+\t\treturn false
+\t}
+}''', '''func validResourceRelation153(p string, relation ResourceRelation) bool {
+\tswitch strings.TrimSpace(relation.Role) {
+\tcase "MapperXml":
+\t\treturn projectpath.IsMapperXML(p) && relation.Source == "MAPPER_STATEMENT"
+\tcase "YamlConfig":
+\t\treturn projectpath.IsYAMLConfig(p) && relation.Source == "CONFIG_REFERENCE"
+\tdefault:
+\t\treturn false
+\t}
+}''')
+          ])
+
+          rewrite('.code-harness/tools-runtime/internal/coverage/coverage.go', [
+              ('\t"sort"\n\t"strings"\n)', '\t"sort"\n\t"strings"\n\n\t"codea-harness-tools/internal/projectpath"\n)'),
+              ('''func expectedResourceRole(value string) string {
+\tif strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(path.Base(value), "Mapper.xml") {
+\t\treturn "MapperXml"
+\t}
+\tif strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(value, ".yml") {
+\t\treturn "YamlConfig"
+\t}
+\treturn ""
+}''', '''func expectedResourceRole(value string) string {
+\tswitch projectpath.Classify(value) {
+\tcase projectpath.MapperXML:
+\t\treturn "MapperXml"
+\tcase projectpath.YAMLConfig:
+\t\treturn "YamlConfig"
+\tdefault:
+\t\treturn ""
+\t}
+}''')
+          ])
+
+          rewrite('.code-harness/tools-runtime/internal/reviewscope/reviewscope.go', [
+              ('\t"sort"\n\t"strings"\n)', '\t"sort"\n\t"strings"\n\n\t"codea-harness-tools/internal/projectpath"\n)'),
+              ('''func expectedResourceRole(value string) string {
+\tif strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(path.Base(value), "Mapper.xml") {
+\t\treturn "MapperXml"
+\t}
+\tif strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(value, ".yml") {
+\t\treturn "YamlConfig"
+\t}
+\treturn ""
+}''', '''func expectedResourceRole(value string) string {
+\tswitch projectpath.Classify(value) {
+\tcase projectpath.MapperXML:
+\t\treturn "MapperXml"
+\tcase projectpath.YAMLConfig:
+\t\treturn "YamlConfig"
+\tdefault:
+\t\treturn ""
+\t}
+}''')
+          ])
+
+          rewrite('.code-harness/tools-runtime/internal/reviewunit/build.go', [
+              ('\tanalysisruntime "codea-harness-tools/internal/analysis"\n\t"codea-harness-tools/internal/changeset"\n',
+               '\tanalysisruntime "codea-harness-tools/internal/analysis"\n\t"codea-harness-tools/internal/changeset"\n\t"codea-harness-tools/internal/projectpath"\n'),
+              ('''func isFindingScopePath160(p string) bool {
+\tp, ok := safePath160(p)
+\tif !ok { return false }
+\tswitch {
+\tcase strings.HasPrefix(p, "src/main/java/") && strings.HasSuffix(p, ".java"):
+\t\treturn true
+\tcase strings.HasPrefix(p, "src/test/java/") && strings.HasSuffix(p, ".java"):
+\t\treturn true
+\tcase strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(path.Base(p), "Mapper.xml"):
+\t\treturn true
+\tcase strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml"):
+\t\treturn true
+\tdefault:
+\t\treturn false
+\t}
+}''', '''func isFindingScopePath160(p string) bool {
+\tp, ok := safePath160(p)
+\treturn ok && projectpath.IsReviewPath(p)
+}''')
+          ])
+          PY
+
+          git diff --check
+          git diff --stat "$baseline" -- "${files[@]}"
+
+      - name: Commit scoped cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'TASK162_SCOPE_CLEANUP NO_CHANGES'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            .code-harness/tools-runtime/internal/changeset/git.go \
+            .code-harness/tools-runtime/internal/analysis/entrypoints.go \
+            .code-harness/tools-runtime/internal/analysis/evidence.go \
+            .code-harness/tools-runtime/internal/coverage/coverage.go \
+            .code-harness/tools-runtime/internal/reviewscope/reviewscope.go \
+            .code-harness/tools-runtime/internal/reviewunit/build.go
+          git commit -m 'chore(task162): minimize Review Authority path diff'
+          git push origin HEAD:hotfix/1.6.2-task1-maven-multimodule
