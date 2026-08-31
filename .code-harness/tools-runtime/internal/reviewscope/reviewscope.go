@@ -8,6 +8,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"codea-harness-tools/internal/projectpath"
 )
 
 const currentWorkspace = "current"
@@ -71,7 +73,7 @@ type changeAnalysis struct {
 	SymbolLocations   []SymbolLocation   `json:"symbolLocations"`
 	ResourceRelations []ResourceRelation `json:"resourceRelations"`
 	ReviewCoverage    struct {
-		ReviewedFiles     []analysisFile      `json:"reviewedFiles"`
+		ReviewedFiles     []analysisFile     `json:"reviewedFiles"`
 		UnresolvedSymbols []unresolvedSymbol `json:"unresolvedSymbols"`
 	} `json:"reviewCoverage"`
 }
@@ -287,13 +289,14 @@ func validateResourcePathRole(value, role string) error {
 }
 
 func expectedResourceRole(value string) string {
-	if strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(path.Base(value), "Mapper.xml") {
+	switch projectpath.Classify(value) {
+	case projectpath.MapperXML:
 		return "MapperXml"
-	}
-	if strings.HasPrefix(value, "src/main/resources/") && strings.HasSuffix(value, ".yml") {
+	case projectpath.YAMLConfig:
 		return "YamlConfig"
+	default:
+		return ""
 	}
-	return ""
 }
 
 func isResourceRole(role string) bool {

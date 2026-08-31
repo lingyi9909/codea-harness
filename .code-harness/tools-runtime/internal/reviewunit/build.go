@@ -13,6 +13,7 @@ import (
 
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/changeset"
+	"codea-harness-tools/internal/projectpath"
 	"codea-harness-tools/internal/reviewscope"
 	"codea-harness-tools/internal/schema"
 )
@@ -148,14 +149,18 @@ func loadFacts160(input BuildInput) (buildFacts160, error) {
 
 func normalizeBuildInput160(input BuildInput) (string, string, string, error) {
 	root := strings.TrimSpace(input.RepoRoot)
-	if root == "" { root = "." }
+	if root == "" {
+		root = "."
+	}
 	root = filepath.Clean(root)
 	runID := strings.TrimSpace(input.RunID)
 	if !runID160.MatchString(runID) {
 		return "", "", "", fmt.Errorf("REVIEW_UNIT_RUN_ID_INVALID: %q", input.RunID)
 	}
 	certifiedRunID := strings.TrimSpace(input.CertifiedRunID)
-	if certifiedRunID == "" { certifiedRunID = runID }
+	if certifiedRunID == "" {
+		certifiedRunID = runID
+	}
 	if !runID160.MatchString(certifiedRunID) || certifiedRunID != runID {
 		return "", "", "", fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: ReviewUnit and Certified ChangeAnalysis must use the same runId")
 	}
@@ -177,7 +182,9 @@ func buildFromFacts160(facts buildFacts160) (Manifest, error) {
 	changed := map[string]changeset.File{}
 	for _, file := range facts.snapshot.Files {
 		p, ok := safePath160(file.Path)
-		if !ok { continue }
+		if !ok {
+			continue
+		}
 		file.Path = p
 		changed[p] = file
 	}
@@ -186,9 +193,13 @@ func buildFromFacts160(facts buildFacts160) (Manifest, error) {
 	dependencyPaths := map[string]bool{}
 	addCurrentRole := func(rawPath, rawRole string) error {
 		p, ok := safePath160(rawPath)
-		if !ok { return fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: invalid current path %q", rawPath) }
+		if !ok {
+			return fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: invalid current path %q", rawPath)
+		}
 		role := strings.TrimSpace(rawRole)
-		if role == "" { return fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: missing role for %s", p) }
+		if role == "" {
+			return fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: missing role for %s", p)
+		}
 		if previous, exists := roles[p]; exists && previous != role {
 			return fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: conflicting roles for %s: %s/%s", p, previous, role)
 		}
@@ -197,10 +208,14 @@ func buildFromFacts160(facts buildFacts160) (Manifest, error) {
 		return nil
 	}
 	for _, file := range facts.analysis.ChangedFiles {
-		if err := addCurrentRole(file.Path, file.Role); err != nil { return Manifest{}, err }
+		if err := addCurrentRole(file.Path, file.Role); err != nil {
+			return Manifest{}, err
+		}
 	}
 	for _, file := range facts.analysis.ReviewCoverage.ReviewedFiles {
-		if err := addCurrentRole(file.Path, file.Role); err != nil { return Manifest{}, err }
+		if err := addCurrentRole(file.Path, file.Role); err != nil {
+			return Manifest{}, err
+		}
 	}
 
 	symbols := map[string]symbolFact160{}
@@ -217,23 +232,31 @@ func buildFromFacts160(facts buildFacts160) (Manifest, error) {
 		}
 		symbols[symbol] = fact
 		if workspace == "current" {
-			if err := addCurrentRole(p, fact.role); err != nil { return Manifest{}, err }
+			if err := addCurrentRole(p, fact.role); err != nil {
+				return Manifest{}, err
+			}
 		} else {
 			dependencyPaths[p] = true
 		}
 	}
 	for _, relation := range facts.analysis.ResourceRelations {
-		if err := addCurrentRole(relation.Path, relation.Role); err != nil { return Manifest{}, err }
+		if err := addCurrentRole(relation.Path, relation.Role); err != nil {
+			return Manifest{}, err
+		}
 	}
 
 	allowed := map[string]bool{}
 	switch mode {
 	case ModeFull:
 		for _, file := range facts.analysis.ReviewCoverage.ReviewedFiles {
-			if p, ok := safePath160(file.Path); ok && isFindingScopePath160(p) { allowed[p] = true }
+			if p, ok := safePath160(file.Path); ok && isFindingScopePath160(p) {
+				allowed[p] = true
+			}
 		}
 		for _, file := range facts.analysis.ChangedFiles {
-			if p, ok := safePath160(file.Path); ok && isFindingScopePath160(p) { allowed[p] = true }
+			if p, ok := safePath160(file.Path); ok && isFindingScopePath160(p) {
+				allowed[p] = true
+			}
 		}
 	case ModeTargeted:
 		if len(facts.scope.SelectedCallChains) == 0 || len(facts.scope.ScopedFiles) == 0 {
@@ -264,7 +287,9 @@ func buildFromFacts160(facts buildFacts160) (Manifest, error) {
 			return Manifest{}, fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: empty confirmed branch")
 		}
 		core := canonicalChain.EntryPoint + "\x00" + strings.Join(canonicalChain.Chain, "\x00")
-		if seenCore[core] { continue }
+		if seenCore[core] {
+			continue
+		}
 		seenCore[core] = true
 		unit := Unit{EntryPoint: canonicalChain.EntryPoint, Chain: canonicalChain.Chain, Files: []FileRef{}}
 		branchSymbols := map[string]bool{}
@@ -278,18 +303,28 @@ func buildFromFacts160(facts buildFacts160) (Manifest, error) {
 				unit.ContextSymbols = append(unit.ContextSymbols, symbol)
 				continue
 			}
-			if !allowed[loc.path] { continue }
+			if !allowed[loc.path] {
+				continue
+			}
 			file, err := fileRef160(loc.path, roles, changed)
-			if err != nil { return Manifest{}, err }
+			if err != nil {
+				return Manifest{}, err
+			}
 			unit.Files = append(unit.Files, file)
 			covered[loc.path] = true
 		}
 		for _, relation := range facts.analysis.ResourceRelations {
-			if !branchSymbols[strings.TrimSpace(relation.FromSymbol)] { continue }
+			if !branchSymbols[strings.TrimSpace(relation.FromSymbol)] {
+				continue
+			}
 			p, ok := safePath160(relation.Path)
-			if !ok || !allowed[p] { continue }
+			if !ok || !allowed[p] {
+				continue
+			}
 			file, err := fileRef160(p, roles, changed)
-			if err != nil { return Manifest{}, err }
+			if err != nil {
+				return Manifest{}, err
+			}
 			unit.Files = append(unit.Files, file)
 			covered[p] = true
 		}
@@ -299,25 +334,35 @@ func buildFromFacts160(facts buildFacts160) (Manifest, error) {
 		}
 		unit.ChangedHunks = hunksForFiles160(unit.Files, changed)
 		digest, err := canonicalUnitDigest160(unit)
-		if err != nil { return Manifest{}, err }
+		if err != nil {
+			return Manifest{}, err
+		}
 		unit.ID = "RU-" + digest
 		units = append(units, normalizeUnit160(unit))
 	}
 
 	paths := make([]string, 0, len(allowed))
-	for p := range allowed { paths = append(paths, p) }
+	for p := range allowed {
+		paths = append(paths, p)
+	}
 	sort.Strings(paths)
 	for _, p := range paths {
-		if covered[p] { continue }
+		if covered[p] {
+			continue
+		}
 		if mode == ModeTargeted {
 			return Manifest{}, fmt.Errorf("REVIEW_UNIT_SCOPE_VIOLATION: scoped file %s is not bound to a selected verified branch", p)
 		}
 		file, err := fileRef160(p, roles, changed)
-		if err != nil { return Manifest{}, err }
+		if err != nil {
+			return Manifest{}, err
+		}
 		unit := Unit{Files: []FileRef{file}}
 		unit.ChangedHunks = hunksForFiles160(unit.Files, changed)
 		digest, err := canonicalUnitDigest160(unit)
-		if err != nil { return Manifest{}, err }
+		if err != nil {
+			return Manifest{}, err
+		}
 		unit.ID = "RU-FILE-" + digest
 		units = append(units, normalizeUnit160(unit))
 	}
@@ -356,7 +401,9 @@ func normalizeChain160(entry string, chain []string) analysisruntime.CallChain {
 	out := make([]string, 0, len(chain))
 	for _, symbol := range chain {
 		symbol = strings.TrimSpace(symbol)
-		if symbol != "" { out = append(out, symbol) }
+		if symbol != "" {
+			out = append(out, symbol)
+		}
 	}
 	return analysisruntime.CallChain{EntryPoint: entry, Chain: out}
 }
@@ -374,7 +421,9 @@ func hunksForFiles160(files []FileRef, changed map[string]changeset.File) []Hunk
 	var out []HunkRef
 	for _, file := range files {
 		change, ok := changed[file.Path]
-		if !ok { continue }
+		if !ok {
+			continue
+		}
 		for _, hunk := range change.Hunks {
 			out = append(out, HunkRef{Path: file.Path, NewStart: hunk.NewStart, NewLines: hunk.NewLines})
 		}
@@ -413,39 +462,37 @@ func loadCanonicalWithFacts160(raw []byte, facts buildFacts160) (Manifest, error
 
 func normalizeWorkspace160(value string) string {
 	value = strings.TrimSpace(value)
-	if value == "" { return "current" }
+	if value == "" {
+		return "current"
+	}
 	return value
 }
 
 func safePath160(value string) (string, bool) {
 	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
-	if value == "" || path.IsAbs(value) { return "", false }
+	if value == "" || path.IsAbs(value) {
+		return "", false
+	}
 	clean := path.Clean(value)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") { return "", false }
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", false
+	}
 	return clean, true
 }
 
 func isFindingScopePath160(p string) bool {
 	p, ok := safePath160(p)
-	if !ok { return false }
-	switch {
-	case strings.HasPrefix(p, "src/main/java/") && strings.HasSuffix(p, ".java"):
-		return true
-	case strings.HasPrefix(p, "src/test/java/") && strings.HasSuffix(p, ".java"):
-		return true
-	case strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(path.Base(p), "Mapper.xml"):
-		return true
-	case strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml"):
-		return true
-	default:
-		return false
-	}
+	return ok && projectpath.IsReviewPath(p)
 }
 
 func canonicalJSON160(raw []byte) ([]byte, error) {
 	var value any
-	if err := json.Unmarshal(raw, &value); err != nil { return nil, err }
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
 	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return append(data, '\n'), nil
 }
