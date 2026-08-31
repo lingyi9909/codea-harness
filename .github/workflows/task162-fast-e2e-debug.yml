@@ -1,0 +1,52 @@
+name: task162-fast-e2e-debug
+
+on:
+  push:
+    branches: [hotfix/1.6.2-task1-maven-multimodule]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Build Windows x64 Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go build -trimpath -ldflags '-s -w' -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
+
+      - name: Install pinned ast-grep 0.42.1
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-162-fast.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-162-fast'
+          Invoke-WebRequest -Uri "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+
+      - name: Real Maven multi-module Review Authority E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-real-multimodule-regression.ps1
+
+      - name: Exact head marker
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_FAST_E2E_EXACT_HEAD PASS head=$head"
