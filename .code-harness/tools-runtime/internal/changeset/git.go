@@ -8,12 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"path"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"codea-harness-tools/internal/projectpath"
 )
 
 var hunkHeader153 = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
@@ -23,12 +24,6 @@ var sourceOrder153 = map[Source]int{
 	SourceStaged:    1,
 	SourceUnstaged:  2,
 	SourceUntracked: 3,
-}
-
-var changeSetScopes153 = []string{
-	"src/main/java",
-	"src/test/java",
-	"src/main/resources",
 }
 
 // Compute independently recomputes the Harness Review Change Set from local Git state.
@@ -52,19 +47,16 @@ func Compute(repoRoot, baseRef string, includeWorkingTree bool) (Snapshot, error
 
 	files := map[string]*File{}
 	committedArgs := []string{"diff", "--unified=0", "--no-ext-diff", strings.TrimSpace(mergeBase) + "..HEAD", "--"}
-	committedArgs = append(committedArgs, changeSetScopes153...)
 	if err := collectDiff153(ctx, repoRoot, files, SourceCommitted, committedArgs...); err != nil {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_COMMITTED_DIFF_FAILED: %w", err)
 	}
 
 	if includeWorkingTree {
 		stagedArgs := []string{"diff", "--cached", "--unified=0", "--no-ext-diff", "--"}
-		stagedArgs = append(stagedArgs, changeSetScopes153...)
 		if err := collectDiff153(ctx, repoRoot, files, SourceStaged, stagedArgs...); err != nil {
 			return Snapshot{}, fmt.Errorf("CHANGE_SET_STAGED_DIFF_FAILED: %w", err)
 		}
 		unstagedArgs := []string{"diff", "--unified=0", "--no-ext-diff", "--"}
-		unstagedArgs = append(unstagedArgs, changeSetScopes153...)
 		if err := collectDiff153(ctx, repoRoot, files, SourceUnstaged, unstagedArgs...); err != nil {
 			return Snapshot{}, fmt.Errorf("CHANGE_SET_UNSTAGED_DIFF_FAILED: %w", err)
 		}
@@ -253,27 +245,11 @@ func dedupeHunks153(in []Hunk) []Hunk {
 }
 
 func normalize153Path(p string) string {
-	p = strings.TrimSpace(strings.ReplaceAll(p, "\\", "/"))
-	if p == "" { return "" }
-	p = path.Clean(p)
-	if p == "." || p == ".." || strings.HasPrefix(p, "../") || path.IsAbs(p) {
-		return ""
-	}
-	return p
+	clean, ok := projectpath.Normalize(p)
+	if !ok { return "" }
+	return clean
 }
 
 func inHarnessScope153(p string) bool {
-	p = normalize153Path(p)
-	switch {
-	case strings.HasPrefix(p, "src/main/java/") && strings.HasSuffix(p, ".java"):
-		return true
-	case strings.HasPrefix(p, "src/test/java/") && strings.HasSuffix(p, ".java"):
-		return true
-	case strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, "Mapper.xml"):
-		return true
-	case strings.HasPrefix(p, "src/main/resources/") && strings.HasSuffix(p, ".yml"):
-		return true
-	default:
-		return false
-	}
+	return projectpath.IsReviewPath(p)
 }
