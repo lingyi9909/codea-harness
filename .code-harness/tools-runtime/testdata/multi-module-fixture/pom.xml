@@ -1,0 +1,12 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.acme</groupId>
+  <artifactId>multi-module-fixture</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <modules>
+    <module>order-api</module>
+    <module>order-service</module>
+    <module>order-dao</module>
+  </modules>
+</project>
