@@ -16,9 +16,13 @@ $fixture = Join-Path $env:RUNNER_TEMP ("task162-multimodule-" + [guid]::NewGuid(
 Copy-Item -Recurse $fixtureSource $fixture
 
 function Write-Utf8NoBom([string]$Path, [string]$Content) {
-    $parent = Split-Path -Parent $Path
+    $target = $Path
+    if (-not [System.IO.Path]::IsPathRooted($target)) {
+        $target = Join-Path (Get-Location).Path $target
+    }
+    $parent = Split-Path -Parent $target
     if ($parent) { New-Item -ItemType Directory -Force $parent | Out-Null }
-    [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($target, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Invoke-Git([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments) {
