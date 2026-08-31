@@ -232,7 +232,11 @@ public class OrderServiceTest {
         $reportRequest = [ordered]@{
             runId=$runID; harnessVersion='runtime-owned'; baseRef='HEAD'; head=$baseHead; result='PASSED'; mode='FULL';
             reviewScope=[ordered]@{changedFiles=@($changed | ForEach-Object {$_.path})};
-            reviewCoverage=[ordered]@{reviewedFiles=@($changed | ForEach-Object {$_.path}); callChains=@('OrderController.createOrder -> OrderService.createOrder -> OrderMapper.insertOrder'); externalDependencies=@(); unresolved=@(); missingReviewedFiles=@(); runtimeErrors=@(); status='COMPLETE'};
+            reviewCoverage=[ordered]@{
+                reviewedFiles=@($changed | ForEach-Object {$_.path});
+                callChains=@([ordered]@{entryPoint='OrderController.createOrder'; chain=@('OrderController.createOrder','OrderService.createOrder','OrderMapper.insertOrder')});
+                externalDependencies=@(); unresolved=@(); missingReviewedFiles=@(); runtimeErrors=@(); status='COMPLETE'
+            };
             findings=@()
         }
         Write-Utf8NoBom (Join-Path $requestDir 'review-report.json') ($reportRequest | ConvertTo-Json -Depth 20)
