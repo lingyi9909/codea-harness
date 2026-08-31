@@ -134,7 +134,9 @@ public class OrderServiceTest {
         $navMapper = Invoke-Runtime nav find-symbol --symbol OrderMapper --scope order-dao/src/main/java
         if ($navMapper -notmatch 'order-dao[/\\]src[/\\]main[/\\]java') { throw "module Mapper navigation lost path prefix: $navMapper" }
         $callers = Invoke-Runtime nav find-callers --symbol OrderService.createOrder --scope order-api/src/main/java
-        if ($callers -notmatch 'order-api[/\\]src[/\\]main[/\\]java') { throw "module caller navigation lost path prefix: $callers" }
+        if ($callers -notmatch 'order-api[/\\]src[/\\]main[/\\]java') { throw "module Service caller navigation lost path prefix: $callers" }
+        $mapperCallers = Invoke-Runtime nav find-callers --symbol OrderMapper.insertOrder --scope order-service/src/main/java
+        if ($mapperCallers -notmatch 'order-service[/\\]src[/\\]main[/\\]java') { throw "module Mapper caller navigation lost path prefix: $mapperCallers" }
         Write-Output 'TASK162_CODE_NAVIGATION PASS'
 
         $runID = 'task162-multimodule'
@@ -218,7 +220,7 @@ public class OrderServiceTest {
             evidenceRefs=@([ordered]@{kind='CHANGED_RANGE'; path='order-service/src/main/resources/application.yml'; startLine=$configLine; endLine=$configLine});
             problem='模块配置开关被关闭'; impact='订单能力可能被禁用'; recommendation='确认发布意图并恢复正确开关'; needsTest=$true; introducedByChange=$true; confidence=0.95
         })
-        Write-Utf8NoBom (Join-Path $requestDir 'finding-proposals.json') ($proposal | ConvertTo-Json -Depth 20)
+        Write-Utf8NoBom (Join-Path $requestDir 'finding-proposals.json') (ConvertTo-Json -InputObject $proposal -Depth 20)
         $findingRequest = [ordered]@{runId=$runID; proposalsPath=".code-harness/runs/$runID/requests/finding-proposals.json"}
         Write-Utf8NoBom (Join-Path $requestDir 'finding-certify-request.json') ($findingRequest | ConvertTo-Json -Compress)
         Invoke-Runtime review certify-findings --input ".code-harness/runs/$runID/requests/finding-certify-request.json" | Out-Null
