@@ -110,11 +110,16 @@ func collectModifiedEntrypoints153(out map[string]ExpectedEntrypoint, changed ch
 	currentBySymbol := map[string]ControllerEndpoint{}
 	for _, ep := range current { currentBySymbol[ep.Symbol] = ep }
 
+	// New-side evidence covers additions/replacements inside endpoints that exist now.
 	for _, ep := range current {
 		if anyNewHunkIntersects153(changed.Hunks, ep.StartLine, ep.EndLine) {
 			addExpected153(out, ep, "")
 		}
 	}
+
+	// Old-side evidence is equally authoritative for pure deletions. If the symbol
+	// still exists, the current endpoint remains the obligation; only a vanished
+	// symbol is represented as REMOVED.
 	for _, old := range base {
 		if !anyOldHunkIntersects153(changed.Hunks, old.StartLine, old.EndLine) { continue }
 		if now, stillPresent := currentBySymbol[old.Symbol]; stillPresent {
@@ -123,6 +128,10 @@ func collectModifiedEntrypoints153(out map[string]ExpectedEntrypoint, changed ch
 			addExpected153(out, old, DispositionRemoved)
 		}
 	}
+
+	// Class-level changes must be evaluated on both snapshots. A class-level
+	// hunk is one that intersects the controller declaration/body but no endpoint
+	// on that same side; either side makes all current endpoints obligations.
 	for _, controller := range uniqueControllers153(current) {
 		classLevelChanged := newControllerClassLevelChanged153(changed.Hunks, controller, current)
 		if !classLevelChanged {
@@ -140,6 +149,9 @@ func collectModifiedEntrypoints153(out map[string]ExpectedEntrypoint, changed ch
 			}
 		}
 	}
+
+	// Preserve the prior removed-endpoint behavior for a missing symbol when an
+	// old-side class-level change makes the old controller itself an obligation.
 	for _, old := range base {
 		if _, stillPresent := currentBySymbol[old.Symbol]; stillPresent { continue }
 		if oldControllerClassLevelChanged153(changed.Hunks, old, base) {
@@ -216,6 +228,8 @@ func targetAllowsEntrypoint153(intent Intent, symbol string) bool {
 	if !strings.Contains(target, ".") {
 		if i := strings.LastIndex(symbol, "."); i > 0 && symbol[:i] == target { return true }
 	}
+	// A downstream Service target has no changed-Controller obligation by name alone.
+	// Later certified call-chain evidence establishes its relevant upstream scope.
 	return false
 }
 
