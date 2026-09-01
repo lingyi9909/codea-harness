@@ -16,6 +16,7 @@ import (
 	"codea-harness-tools/internal/reviewrules"
 	"codea-harness-tools/internal/reviewunit"
 	"codea-harness-tools/internal/schema"
+	"codea-harness-tools/internal/symbolid"
 )
 
 var findingRunID160 = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -50,20 +51,33 @@ func LoadVerifyContext(repoRoot, runID, astGrepPath string) (VerifyContext, erro
 	ranges := map[string]nav.SymbolInfo{}
 	if strings.TrimSpace(astGrepPath) != "" {
 		navigator := nav.Navigator{RepoRoot: root, AstGrepPath: astGrepPath}
+		counts := map[string]int{}
+		unique := map[string]nav.SymbolInfo{}
+		seenIdentity := map[string]bool{}
 		for _, loc := range analysisValue.SymbolLocations {
-			workspace := strings.TrimSpace(loc.Workspace)
-			if workspace != "" && workspace != "current" {
+			ref, ok := symbolid.FromLocation(loc.Workspace, loc.Path, loc.Symbol)
+			if !ok || ref.Workspace != symbolid.CurrentWorkspace || !strings.HasSuffix(strings.ToLower(ref.Path), ".java") {
 				continue
 			}
-			p, ok := safeFindingPath160(loc.Path)
-			if !ok || !strings.HasSuffix(strings.ToLower(p), ".java") {
+			key, _ := symbolid.Key(ref)
+			if seenIdentity[key] {
 				continue
 			}
-			info, err := navigator.GetSymbolInfo(context.Background(), strings.TrimSpace(loc.Symbol), p)
+			seenIdentity[key] = true
+			info, err := navigator.GetSymbolInfo(context.Background(), ref.Symbol, ref.Path)
 			if err != nil {
-				return VerifyContext{}, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "resolve symbol %s with pinned navigation: %v", loc.Symbol, err)
+				return VerifyContext{}, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "resolve symbol %s at %s with pinned navigation: %v", ref.Symbol, ref.Path, err)
 			}
-			ranges[strings.TrimSpace(loc.Symbol)] = info
+			ranges[key] = info
+			counts[ref.Symbol]++
+			unique[ref.Symbol] = info
+		}
+		// Preserve the legacy bare-symbol lookup only when it is authoritative.
+		// Ambiguous symbols are available exclusively through their exact identity.
+		for symbol, count := range counts {
+			if count == 1 {
+				ranges[symbol] = unique[symbol]
+			}
 		}
 	}
 	return VerifyContext{
