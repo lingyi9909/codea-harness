@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"codea-harness-tools/internal/projectpath"
+	"codea-harness-tools/internal/symbolid"
 	"codea-harness-tools/internal/workspace"
 )
 
@@ -22,24 +23,54 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		role      string
 	}
 	facts := map[string]fact{}
+	refsBySymbol := map[string][]symbolid.Ref{}
 	workspaceIDs := map[string]struct{}{}
 
 	for _, loc := range a.SymbolLocations {
-		symbol := strings.TrimSpace(loc.Symbol)
-		p, ok := safeEvidencePath153(loc.Path)
-		if symbol == "" || !ok {
+		ref, ok := symbolid.FromLocation(loc.Workspace, loc.Path, loc.Symbol)
+		if !ok {
 			return fmt.Errorf("SYMBOL_LOCATION_INVALID: symbol=%q path=%q", loc.Symbol, loc.Path)
 		}
-		workspaceID := normalizeWorkspace153(loc.Workspace)
-		role := strings.TrimSpace(loc.Role)
-		candidate := fact{workspace: workspaceID, path: p, role: role}
-		if previous, exists := facts[symbol]; exists && previous != candidate {
-			return fmt.Errorf("SYMBOL_LOCATION_CONFLICT: %s has %s/%s/%s and %s/%s/%s", symbol, previous.workspace, previous.path, previous.role, candidate.workspace, candidate.path, candidate.role)
+		key, _ := symbolid.Key(ref)
+		candidate := fact{workspace: ref.Workspace, path: ref.Path, role: strings.TrimSpace(loc.Role)}
+		if previous, exists := facts[key]; exists && previous != candidate {
+			return fmt.Errorf("SYMBOL_LOCATION_CONFLICT: %s/%s/%s has roles %s and %s", ref.Workspace, ref.Path, ref.Symbol, previous.role, candidate.role)
 		}
-		facts[symbol] = candidate
-		if workspaceID != "current" {
-			workspaceIDs[workspaceID] = struct{}{}
+		if _, exists := facts[key]; !exists {
+			refsBySymbol[ref.Symbol] = append(refsBySymbol[ref.Symbol], ref)
 		}
+		facts[key] = candidate
+		if ref.Workspace != symbolid.CurrentWorkspace {
+			workspaceIDs[ref.Workspace] = struct{}{}
+		}
+	}
+
+	resolveFact := func(symbol string, exact *SymbolRef) (fact, symbolid.Ref, error) {
+		symbol = strings.TrimSpace(symbol)
+		if symbol == "" {
+			return fact{}, symbolid.Ref{}, fmt.Errorf("empty symbol")
+		}
+		if exact != nil {
+			ref, ok := symbolid.Normalize(*exact)
+			if !ok || ref.Symbol != symbol {
+				return fact{}, symbolid.Ref{}, fmt.Errorf("exact ref does not match symbol %q", symbol)
+			}
+			key, _ := symbolid.Key(ref)
+			value, exists := facts[key]
+			if !exists {
+				return fact{}, symbolid.Ref{}, fmt.Errorf("exact ref %s/%s/%s has no symbolLocation", ref.Workspace, ref.Path, ref.Symbol)
+			}
+			return value, ref, nil
+		}
+		refs := refsBySymbol[symbol]
+		if len(refs) == 0 {
+			return fact{}, symbolid.Ref{}, fmt.Errorf("symbol %q has no symbolLocation", symbol)
+		}
+		if len(refs) != 1 {
+			return fact{}, symbolid.Ref{}, fmt.Errorf("symbol %q has %d path-qualified locations", symbol, len(refs))
+		}
+		key, _ := symbolid.Key(refs[0])
+		return facts[key], refs[0], nil
 	}
 
 	ids := make([]string, 0, len(workspaceIDs))
@@ -65,24 +96,41 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		}
 	}
 
-	inventoryBySymbol := map[string]ExpectedEntrypoint{}
+	inventoryBySymbol := map[string][]ExpectedEntrypoint{}
 	for _, expected := range inventory.ExpectedEntrypoints {
-		inventoryBySymbol[expected.Symbol] = expected
+		symbol := strings.TrimSpace(expected.Symbol)
+		inventoryBySymbol[symbol] = append(inventoryBySymbol[symbol], expected)
 	}
 
 	confirmed := map[string]bool{}
 	for _, c := range a.CallChains {
 		entry := strings.TrimSpace(c.EntryPoint)
+		if len(c.ChainRefs) != 0 && len(c.ChainRefs) != len(c.Chain) {
+			return fmt.Errorf("CALL_CHAIN_EVIDENCE_MISSING: %s chainRefs length=%d chain length=%d", entry, len(c.ChainRefs), len(c.Chain))
+		}
 		if entry != "" {
-			confirmed[entry] = true
-			entryFact, ok := facts[entry]
-			if !ok || entryFact.workspace != "current" || entryFact.role != "Controller" {
+			entryFact, entryRef, err := resolveFact(entry, c.EntryPointRef)
+			if err != nil {
+				return fmt.Errorf("ENTRYPOINT_EVIDENCE_AMBIGUOUS: %s: %v", entry, err)
+			}
+			if entryFact.workspace != symbolid.CurrentWorkspace || entryFact.role != "Controller" {
 				return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s requires current Controller symbolLocation", entry)
 			}
-			if expected, exists := inventoryBySymbol[entry]; exists {
-				expectedPath, valid := safeEvidencePath153(expected.Path)
-				if !valid || entryFact.path != expectedPath {
-					return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s expected path %q got %q", entry, expected.Path, entryFact.path)
+			entryKey, _ := symbolid.Key(entryRef)
+			confirmed[entryKey] = true
+
+			expectedCandidates := inventoryBySymbol[entry]
+			if len(expectedCandidates) > 0 {
+				matched := false
+				for _, expected := range expectedCandidates {
+					expectedPath, valid := safeEvidencePath153(expected.Path)
+					if valid && entryRef.Workspace == symbolid.CurrentWorkspace && entryRef.Path == expectedPath {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s exact path %q is not an expected EntryPoint path", entry, entryFact.path)
 				}
 				controller := entrypointController153(entry)
 				if controller == "" || !affectedControllerContainsEntrypoint153(a.AffectedControllers, controller, entry) {
@@ -90,13 +138,17 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 				}
 			}
 		}
-		for _, node := range c.Chain {
-			node = strings.TrimSpace(node)
+		for i, rawNode := range c.Chain {
+			node := strings.TrimSpace(rawNode)
 			if node == "" {
 				return fmt.Errorf("CALL_CHAIN_EVIDENCE_MISSING: empty node in %q", entry)
 			}
-			if _, ok := facts[node]; !ok {
-				return fmt.Errorf("CALL_CHAIN_EVIDENCE_MISSING: %s", node)
+			var exact *SymbolRef
+			if len(c.ChainRefs) > 0 {
+				exact = &c.ChainRefs[i]
+			}
+			if _, _, err := resolveFact(node, exact); err != nil {
+				return fmt.Errorf("CALL_CHAIN_EVIDENCE_AMBIGUOUS: %s: %v", node, err)
 			}
 		}
 	}
@@ -112,11 +164,20 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		}
 	}
 	for _, expected := range inventory.ExpectedEntrypoints {
-		if expected.Disposition == DispositionRemoved || confirmed[expected.Symbol] {
+		ref, ok := symbolid.FromLocation(symbolid.CurrentWorkspace, expected.Path, expected.Symbol)
+		if !ok {
+			return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: invalid expected EntryPoint identity %q/%q", expected.Symbol, expected.Path)
+		}
+		key, _ := symbolid.Key(ref)
+		if expected.Disposition == DispositionRemoved || confirmed[key] {
 			continue
 		}
-		if reason, exists := unresolvedReason[expected.Symbol]; exists && reason == "" {
-			return fmt.Errorf("UNRESOLVED_LIMITATION_REQUIRED: %s", expected.Symbol)
+		// unresolvedSymbols is a legacy symbol-only contract. It is only authority
+		// evidence when that symbol identifies exactly one expected EntryPoint.
+		if len(inventoryBySymbol[expected.Symbol]) == 1 {
+			if reason, exists := unresolvedReason[expected.Symbol]; exists && reason == "" {
+				return fmt.Errorf("UNRESOLVED_LIMITATION_REQUIRED: %s", expected.Symbol)
+			}
 		}
 	}
 
@@ -125,11 +186,17 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		if !ok || !validResourceRelation153(p, relation) {
 			return fmt.Errorf("RESOURCE_RELATION_INVALID: path=%q role=%q source=%q", relation.Path, relation.Role, relation.Source)
 		}
-		if strings.TrimSpace(relation.Evidence) == "" || strings.TrimSpace(relation.FromSymbol) == "" {
+		fromSymbol := strings.TrimSpace(relation.FromSymbol)
+		if strings.TrimSpace(relation.Evidence) == "" || fromSymbol == "" {
 			return fmt.Errorf("RESOURCE_RELATION_INVALID: missing evidence/fromSymbol for %q", relation.Path)
 		}
-		from, exists := facts[strings.TrimSpace(relation.FromSymbol)]
-		if !exists || from.workspace != "current" {
+		refs := refsBySymbol[fromSymbol]
+		if len(refs) != 1 {
+			return fmt.Errorf("RESOURCE_RELATION_INVALID: fromSymbol %q is not uniquely path-qualified", relation.FromSymbol)
+		}
+		key, _ := symbolid.Key(refs[0])
+		from := facts[key]
+		if from.workspace != symbolid.CurrentWorkspace {
 			return fmt.Errorf("RESOURCE_RELATION_INVALID: fromSymbol %q lacks current-workspace symbol evidence", relation.FromSymbol)
 		}
 	}
@@ -195,11 +262,7 @@ func affectedControllerContainsEntrypoint153(controllers []AffectedController, c
 }
 
 func normalizeWorkspace153(workspaceID string) string {
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return "current"
-	}
-	return workspaceID
+	return symbolid.NormalizeWorkspace(workspaceID)
 }
 
 func safeEvidencePath153(value string) (string, bool) {
