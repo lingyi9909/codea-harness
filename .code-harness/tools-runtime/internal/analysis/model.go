@@ -1,5 +1,7 @@
 package analysis
 
+import "codea-harness-tools/internal/symbolid"
+
 type Intent struct {
 	Mode   string `json:"mode"`
 	Target string `json:"target,omitempty"`
@@ -17,9 +19,13 @@ type AffectedController struct {
 	SourceSymbols []string `json:"sourceSymbols"`
 }
 
+type SymbolRef = symbolid.Ref
+
 type CallChain struct {
-	EntryPoint string   `json:"entryPoint"`
-	Chain      []string `json:"chain"`
+	EntryPoint    string      `json:"entryPoint"`
+	Chain         []string    `json:"chain"`
+	EntryPointRef *SymbolRef  `json:"entryPointRef,omitempty"`
+	ChainRefs     []SymbolRef `json:"chainRefs,omitempty"`
 }
 
 type SymbolLocation struct {
