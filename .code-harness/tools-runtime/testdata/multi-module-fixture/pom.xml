@@ -8,5 +8,7 @@
     <module>order-api</module>
     <module>order-service</module>
     <module>order-dao</module>
+    <module>module-a</module>
+    <module>module-b</module>
   </modules>
 </project>
