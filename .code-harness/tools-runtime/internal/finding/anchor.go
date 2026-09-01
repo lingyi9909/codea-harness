@@ -11,6 +11,7 @@ import (
 
 	"codea-harness-tools/internal/reviewrules"
 	"codea-harness-tools/internal/reviewunit"
+	"codea-harness-tools/internal/symbolid"
 )
 
 func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrules.Dispatch, anchor Anchor, evidence []EvidenceRef) (Anchor, string, error) {
@@ -33,7 +34,7 @@ func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrul
 		resolved.Path = p
 		resolved.Symbol = strings.TrimSpace(anchor.Symbol)
 		if resolved.Symbol != "" {
-			info, symbolPath, err := verifyCurrentSymbol160(ctx, unit, resolved.Symbol)
+			info, symbolPath, err := verifyCurrentSymbolAtPath160(ctx, unit, resolved.Symbol, p)
 			if err != nil {
 				return Anchor{}, "", err
 			}
@@ -43,15 +44,20 @@ func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrul
 		}
 	case AnchorSymbol:
 		symbol := strings.TrimSpace(anchor.Symbol)
-		info, symbolPath, err := verifyCurrentSymbol160(ctx, unit, symbol)
+		claimed := ""
+		if anchor.Path != "" {
+			var ok bool
+			claimed, ok = safeFindingPath160(anchor.Path)
+			if !ok {
+				return Anchor{}, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "invalid claimed path %q for symbol %s", anchor.Path, symbol)
+			}
+		}
+		info, symbolPath, err := verifyCurrentSymbolAtPath160(ctx, unit, symbol, claimed)
 		if err != nil {
 			return Anchor{}, "", err
 		}
-		if anchor.Path != "" {
-			claimed, ok := safeFindingPath160(anchor.Path)
-			if !ok || claimed != symbolPath {
-				return Anchor{}, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s does not belong to claimed path", symbol)
-			}
+		if claimed != "" && claimed != symbolPath {
+			return Anchor{}, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s does not belong to claimed path", symbol)
 		}
 		if info.LineStart < 1 || info.LineEnd < info.LineStart || !sourceLineExists160(ctx.repoRoot, symbolPath, info.LineStart) || !sourceLineExists160(ctx.repoRoot, symbolPath, info.LineEnd) {
 			return Anchor{}, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s source range is not present in current bytes", symbol)
@@ -101,11 +107,33 @@ func verifyCurrentSymbol160(ctx VerifyContext, unit reviewunit.Unit, symbol stri
 	LineStart int
 	LineEnd int
 }, symbolPath string, err error) {
+	return verifyCurrentSymbolAtPath160(ctx, unit, symbol, "")
+}
+
+func verifyCurrentSymbolAtPath160(ctx VerifyContext, unit reviewunit.Unit, symbol, claimedPath string) (info struct {
+	Symbol string
+	Path string
+	LineStart int
+	LineEnd int
+}, symbolPath string, err error) {
 	symbol = strings.TrimSpace(symbol)
 	if symbol == "" {
 		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "empty symbol")
 	}
-	currentPath := ""
+	claimed := ""
+	if strings.TrimSpace(claimedPath) != "" {
+		var ok bool
+		claimed, ok = safeFindingPath160(claimedPath)
+		if !ok {
+			return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "invalid claimed path %q for symbol %s", claimedPath, symbol)
+		}
+		if !unitCurrentPath160(unit, claimed) {
+			return info, "", findingError160("FINDING_SCOPE_VIOLATION", "symbol %s claimed path %s is outside ReviewUnit", symbol, claimed)
+		}
+	}
+
+	candidates := map[string]struct{}{}
+	currentSeen := false
 	dependency := false
 	for _, loc := range ctx.analysis.SymbolLocations {
 		if strings.TrimSpace(loc.Symbol) != symbol {
@@ -115,32 +143,51 @@ func verifyCurrentSymbol160(ctx VerifyContext, unit reviewunit.Unit, symbol stri
 		if !ok {
 			continue
 		}
-		workspace := strings.TrimSpace(loc.Workspace)
-		if workspace == "" || workspace == "current" {
-			if currentPath != "" && currentPath != p {
-				return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s has ambiguous current paths", symbol)
-			}
-			currentPath = p
-		} else {
+		if symbolid.NormalizeWorkspace(loc.Workspace) != symbolid.CurrentWorkspace {
 			dependency = true
+			continue
 		}
+		currentSeen = true
+		if claimed != "" && p != claimed {
+			continue
+		}
+		if !unitCurrentPath160(unit, p) {
+			continue
+		}
+		candidates[p] = struct{}{}
 	}
-	if currentPath == "" {
-		if dependency {
+	if len(candidates) == 0 {
+		if !currentSeen && dependency {
 			return info, "", findingError160("FINDING_DEPENDENCY_SCOPE_FORBIDDEN", "symbol %s resolves only to dependency workspace", symbol)
+		}
+		if currentSeen {
+			if claimed != "" {
+				return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s is not verified at claimed path %s", symbol, claimed)
+			}
+			return info, "", findingError160("FINDING_SCOPE_VIOLATION", "symbol %s has no current path inside ReviewUnit", symbol)
 		}
 		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s is not verified by Certified Analysis", symbol)
 	}
-	if !unitCurrentPath160(unit, currentPath) {
-		return info, "", findingError160("FINDING_SCOPE_VIOLATION", "symbol %s path %s is outside ReviewUnit", symbol, currentPath)
+	if len(candidates) != 1 {
+		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s has ambiguous current paths inside ReviewUnit", symbol)
 	}
-	rangeInfo, ok := ctx.symbolRanges[symbol]
+	currentPath := ""
+	for p := range candidates { currentPath = p }
+
+	ref := symbolid.Ref{Workspace: symbolid.CurrentWorkspace, Path: currentPath, Symbol: symbol}
+	key, _ := symbolid.Key(ref)
+	rangeInfo, ok := ctx.symbolRanges[key]
 	if !ok {
-		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s has no pinned navigation range", symbol)
+		// Backward compatibility for Runtime-owned single-path contexts and older
+		// focused unit tests. The path must still match the exact authority path.
+		rangeInfo, ok = ctx.symbolRanges[symbol]
+	}
+	if !ok {
+		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s at %s has no pinned navigation range", symbol, currentPath)
 	}
 	rangePath, ok := safeFindingPath160(rangeInfo.Path)
-	if !ok || rangePath != currentPath || rangeInfo.Symbol != symbol {
-		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s navigation evidence does not match Certified Analysis", symbol)
+	if !ok || rangePath != currentPath || strings.TrimSpace(rangeInfo.Symbol) != symbol {
+		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s navigation evidence does not match Certified Analysis identity %s", symbol, currentPath)
 	}
 	info.Symbol = rangeInfo.Symbol
 	info.Path = rangePath
@@ -174,7 +221,7 @@ func safeFindingPath160(raw string) (string, bool) {
 func unitCurrentPath160(unit reviewunit.Unit, candidate string) bool {
 	for _, file := range unit.Files {
 		p, ok := safeFindingPath160(file.Path)
-		if ok && p == candidate && strings.TrimSpace(file.Workspace) == "current" {
+		if ok && p == candidate && symbolid.NormalizeWorkspace(file.Workspace) == symbolid.CurrentWorkspace {
 			return true
 		}
 	}
@@ -184,11 +231,8 @@ func unitCurrentPath160(unit reviewunit.Unit, candidate string) bool {
 func isDependencyPath160(ctx VerifyContext, candidate string) bool {
 	for _, loc := range ctx.analysis.SymbolLocations {
 		p, ok := safeFindingPath160(loc.Path)
-		if ok && p == candidate {
-			workspace := strings.TrimSpace(loc.Workspace)
-			if workspace != "" && workspace != "current" {
-				return true
-			}
+		if ok && p == candidate && symbolid.NormalizeWorkspace(loc.Workspace) != symbolid.CurrentWorkspace {
+			return true
 		}
 	}
 	return false
