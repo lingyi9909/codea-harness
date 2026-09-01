@@ -79,7 +79,7 @@ func verifyEvidenceRef160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceR
 
 	switch v.Kind {
 	case "SYMBOL":
-		_, symbolPath, err := verifyCurrentSymbol160(ctx, unit, v.Value)
+		_, symbolPath, err := verifyCurrentSymbolAtPath160(ctx, unit, v.Value, v.Path)
 		if err != nil {
 			if strings.Contains(err.Error(), "FINDING_SCOPE_VIOLATION") {
 				return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "symbol evidence is outside ReviewUnit")
@@ -99,7 +99,7 @@ func verifyEvidenceRef160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceR
 			return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "source range is not present in current bytes")
 		}
 		if v.Value != "" {
-			info, symbolPath, err := verifyCurrentSymbol160(ctx, unit, v.Value)
+			info, symbolPath, err := verifyCurrentSymbolAtPath160(ctx, unit, v.Value, v.Path)
 			if err != nil || symbolPath != v.Path || v.StartLine < info.LineStart || v.EndLine > info.LineEnd {
 				return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "source range is outside symbol %s", v.Value)
 			}
