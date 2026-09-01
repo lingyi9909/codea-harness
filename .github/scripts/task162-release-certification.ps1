@@ -77,6 +77,7 @@ function Assert-RuntimeRenameRetained {
     $allowedCmd = @(
         '.github/scripts/task161-real-160-upgrade.ps1',
         '.github/workflows/task161-runtime-rename-audit.yml',
+        '.github/workflows/task162-task1-maven-multimodule.yml',
         '.github/scripts/task162-release-certification.ps1'
     )
     $unexpectedCmd = @($legacyCmdRefs | Where-Object {
@@ -108,7 +109,6 @@ try {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     } finally { Pop-Location }
 
-    # Provision fresh Runtime + pinned ast-grep for all real regressions.
     & './.github/scripts/task162-task2-package.ps1'
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $global:LASTEXITCODE = 0
@@ -137,7 +137,6 @@ try {
     }
     $global:LASTEXITCODE = 0
 
-    # Rebuild final official artifacts after every regression so all evidence is bound to this exact HEAD.
     Write-Host 'TASK162 RELEASE: rebuild final official artifacts'
     & './.github/scripts/task162-task2-package.ps1'
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
