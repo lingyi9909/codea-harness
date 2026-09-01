@@ -63,6 +63,10 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/task162-real-multimodule-regression.ps1
 
+      - name: Cross-module duplicate Symbol Authority E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-duplicate-symbol-authority-regression.ps1
+
       - name: Retained single-module entrypoint regression
         shell: pwsh
         run: ./.github/scripts/task153-task1-real-entrypoint-inventory.ps1
