@@ -30,7 +30,13 @@ jobs:
 
       - name: Release Package Cleanup E2E
         shell: pwsh
-        run: ./.github/scripts/task162-task2-release-package-cleanup-regression.ps1
+        run: |
+          $output = & ./.github/scripts/task162-task2-release-package-cleanup-regression.ps1 2>&1 | Tee-Object -Variable task2Output
+          $text = ($task2Output | Out-String)
+          if ($text -notmatch 'TASK162_TASK2_RELEASE_PACKAGE_CLEANUP_E2E PASS') {
+            throw "Task 2 package cleanup E2E did not reach completion marker`n$text"
+          }
+          $global:LASTEXITCODE = 0
 
       - name: Full Go regression
         working-directory: .code-harness/tools-runtime
