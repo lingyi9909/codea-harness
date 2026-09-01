@@ -28,6 +28,10 @@ jobs:
         shell: pwsh
         run: go test -count=1 ./internal/upgrade
 
+      - name: Release Package Cleanup E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-task2-release-package-cleanup-regression.ps1
+
       - name: Full Go regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
@@ -38,9 +42,19 @@ jobs:
         shell: pwsh
         run: go vet ./...
 
-      - name: Release Package Cleanup E2E
-        shell: pwsh
-        run: ./.github/scripts/task162-task2-release-package-cleanup-regression.ps1
+      - name: Upload Task 2 install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.2-task2-windows-x64-install
+          path: codea-harness-1.6.2-windows-x64-install.zip
+          if-no-files-found: error
+
+      - name: Upload Task 2 upgrade package
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.2-task2-windows-x64-upgrade
+          path: codea-harness-1.6.2-windows-x64-upgrade.zip
+          if-no-files-found: error
 
       - name: Task 2 exact-head marker
         shell: pwsh
