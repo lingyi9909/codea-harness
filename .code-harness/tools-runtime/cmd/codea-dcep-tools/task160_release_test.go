@@ -11,7 +11,10 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..")
 	version, err := os.ReadFile(filepath.Join(root, ".code-harness", "VERSION"))
 	if err != nil { t.Fatal(err) }
-	if strings.TrimSpace(string(version)) != "1.6.1" { t.Fatalf("VERSION must be 1.6.1, got %q", strings.TrimSpace(string(version))) }
+	currentVersion := strings.TrimSpace(string(version))
+	if currentVersion != "1.6.1" && currentVersion != "1.6.2" {
+		t.Fatalf("VERSION must preserve retained 1.6.1 or current 1.6.2, got %q", currentVersion)
+	}
 
 	changelog, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
 	if err != nil { t.Fatal(err) }
