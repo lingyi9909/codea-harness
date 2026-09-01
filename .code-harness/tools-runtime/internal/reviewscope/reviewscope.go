@@ -307,7 +307,7 @@ func resolveNavigationLocation(symbol string, exact *symbolid.Ref, evidence navi
 		return loc, nil
 	}
 	if _, ambiguous := evidence.ambiguousSymbols[symbol]; ambiguous {
-		return SymbolLocation{}, fmt.Errorf("symbol %q has ambiguous path-qualified Code Navigation evidence", symbol)
+		return SymbolLocation{}, fmt.Errorf("symbol %q has ambiguous Code Navigation path evidence", symbol)
 	}
 	loc, ok := evidence.bySymbol[symbol]
 	if !ok { return SymbolLocation{}, fmt.Errorf("symbol %q has no exact Code Navigation path evidence", symbol) }
