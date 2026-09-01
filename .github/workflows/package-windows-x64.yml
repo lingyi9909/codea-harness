@@ -12,7 +12,7 @@ on:
       - '.github/scripts/**'
       - '.github/workflows/package-windows-x64.yml'
   push:
-    branches: [develop, release/1.6.1-windows-tools-whitelist]
+    branches: [develop, main, release/1.6.1-windows-tools-whitelist]
     paths:
       - '.code-harness/**'
       - 'README.md'
@@ -27,6 +27,7 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,15 +39,29 @@ jobs:
           go-version: '1.23.x'
           cache-dependency-path: .code-harness/tools-runtime/go.sum
 
+      - name: Detect release version
+        id: release
+        shell: pwsh
+        run: |
+          $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
+          if ($version -notin @('1.6.1', '1.6.2')) {
+            throw "unsupported release version: $version"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Output "PACKAGE_WINDOWS_X64_VERSION $version"
+
       - name: Codea Harness 1.6.1 exact release certification
+        if: steps.release.outputs.version == '1.6.1'
         shell: pwsh
         run: ./.github/scripts/task161-release.ps1
 
       - name: Real accepted 1.6.0 to 1.6.1 Runtime upgrade
+        if: steps.release.outputs.version == '1.6.1'
         shell: pwsh
         run: ./.github/scripts/task161-real-160-upgrade.ps1
 
       - name: Upload 1.6.1 install package
+        if: steps.release.outputs.version == '1.6.1'
         uses: actions/upload-artifact@v4
         with:
           name: codea-harness-1.6.1-windows-x64-install
@@ -54,6 +69,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload 1.6.1 upgrade package
+        if: steps.release.outputs.version == '1.6.1'
         uses: actions/upload-artifact@v4
         with:
           name: codea-harness-1.6.1-windows-x64-upgrade
@@ -61,13 +77,64 @@ jobs:
           if-no-files-found: error
 
       - name: Upload 1.6.1 release checklist
+        if: steps.release.outputs.version == '1.6.1'
         uses: actions/upload-artifact@v4
         with:
           name: codea-harness-1.6.1-release-checklist
           path: codea-harness-1.6.1-release-checklist.json
           if-no-files-found: error
 
-      - name: Upload enterprise whitelist evidence
+      - name: Upload 1.6.1 enterprise whitelist evidence
+        if: steps.release.outputs.version == '1.6.1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-dcep-tools-whitelist
+          path: codea-dcep-tools-whitelist.txt
+          if-no-files-found: error
+
+      - name: Codea Harness 1.6.2 exact release certification
+        if: steps.release.outputs.version == '1.6.2'
+        shell: pwsh
+        run: ./.github/scripts/task162-release-certification.ps1
+
+      - name: Validate 1.6.2 exact-head evidence
+        if: steps.release.outputs.version == '1.6.2'
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $checklist = Get-Content 'codea-harness-1.6.2-release-checklist.json' -Raw | ConvertFrom-Json
+          if ([string]$checklist.exactHeadSha -ne $head) { throw 'release checklist exact HEAD mismatch' }
+          if ([string]$checklist.version -ne '1.6.2') { throw 'release checklist version mismatch' }
+          $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
+          if ($version -ne '1.6.2') { throw 'repository VERSION mismatch' }
+          Write-Output "PACKAGE_WINDOWS_X64_162_EXACT_HEAD PASS head=$head"
+
+      - name: Upload 1.6.2 install package
+        if: steps.release.outputs.version == '1.6.2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.2-windows-x64-install
+          path: codea-harness-1.6.2-windows-x64-install.zip
+          if-no-files-found: error
+
+      - name: Upload 1.6.2 upgrade package
+        if: steps.release.outputs.version == '1.6.2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.2-windows-x64-upgrade
+          path: codea-harness-1.6.2-windows-x64-upgrade.zip
+          if-no-files-found: error
+
+      - name: Upload 1.6.2 release checklist
+        if: steps.release.outputs.version == '1.6.2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.2-release-checklist
+          path: codea-harness-1.6.2-release-checklist.json
+          if-no-files-found: error
+
+      - name: Upload 1.6.2 Runtime whitelist
+        if: steps.release.outputs.version == '1.6.2'
         uses: actions/upload-artifact@v4
         with:
           name: codea-dcep-tools-whitelist
