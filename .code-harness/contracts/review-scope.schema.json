@@ -54,6 +54,25 @@
         "kind": { "enum": ["CLASS", "METHOD"] }
       }
     },
+    "symbolRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "symbol"],
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
+        },
+        "symbol": { "type": "string", "minLength": 1 }
+      }
+    },
     "callChain": {
       "type": "object",
       "additionalProperties": false,
@@ -63,6 +82,11 @@
         "chain": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
+        },
+        "entryPointRef": { "$ref": "#/$defs/symbolRef" },
+        "chainRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/symbolRef" }
         }
       }
     }
