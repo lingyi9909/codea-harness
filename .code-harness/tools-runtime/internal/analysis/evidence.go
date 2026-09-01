@@ -31,6 +31,11 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		if !ok {
 			return fmt.Errorf("SYMBOL_LOCATION_INVALID: symbol=%q path=%q", loc.Symbol, loc.Path)
 		}
+		for _, previousRef := range refsBySymbol[ref.Symbol] {
+			if previousRef.Workspace == ref.Workspace && previousRef.Path != ref.Path && moduleRoot153(previousRef.Path) == moduleRoot153(ref.Path) {
+				return fmt.Errorf("SYMBOL_LOCATION_CONFLICT: %s has %s/%s and %s/%s", ref.Symbol, previousRef.Workspace, previousRef.Path, ref.Workspace, ref.Path)
+			}
+		}
 		key, _ := symbolid.Key(ref)
 		candidate := fact{workspace: ref.Workspace, path: ref.Path, role: strings.TrimSpace(loc.Role)}
 		if previous, exists := facts[key]; exists && previous != candidate {
@@ -74,7 +79,9 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 	}
 
 	ids := make([]string, 0, len(workspaceIDs))
-	for id := range workspaceIDs { ids = append(ids, id) }
+	for id := range workspaceIDs {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
 	for _, id := range ids {
 		if err := verifyWorkspaceEvidence153(root, id); err != nil {
@@ -82,9 +89,6 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		}
 	}
 
-	// Changed/reviewed paths are always current-workspace paths. A dependency may
-	// legitimately contain the same relative path; workspace identity, not the
-	// bare relative path, determines whether evidence belongs to a dependency.
 	for _, f := range a.ChangedFiles {
 		if _, ok := safeEvidencePath153(f.Path); !ok {
 			return fmt.Errorf("CHANGE_SET_PATH_INVALID: %q", f.Path)
@@ -111,6 +115,9 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		if entry != "" {
 			entryFact, entryRef, err := resolveFact(entry, c.EntryPointRef)
 			if err != nil {
+				if c.EntryPointRef == nil && len(refsBySymbol[entry]) == 0 {
+					return fmt.Errorf("ENTRYPOINT_EVIDENCE_MISSING: %s requires current Controller symbolLocation", entry)
+				}
 				return fmt.Errorf("ENTRYPOINT_EVIDENCE_AMBIGUOUS: %s: %v", entry, err)
 			}
 			if entryFact.workspace != symbolid.CurrentWorkspace || entryFact.role != "Controller" {
@@ -148,6 +155,9 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 				exact = &c.ChainRefs[i]
 			}
 			if _, _, err := resolveFact(node, exact); err != nil {
+				if exact == nil && len(refsBySymbol[node]) == 0 {
+					return fmt.Errorf("CALL_CHAIN_EVIDENCE_MISSING: %s", node)
+				}
 				return fmt.Errorf("CALL_CHAIN_EVIDENCE_AMBIGUOUS: %s: %v", node, err)
 			}
 		}
@@ -172,8 +182,6 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		if expected.Disposition == DispositionRemoved || confirmed[key] {
 			continue
 		}
-		// unresolvedSymbols is a legacy symbol-only contract. It is only authority
-		// evidence when that symbol identifies exactly one expected EntryPoint.
 		if len(inventoryBySymbol[expected.Symbol]) == 1 {
 			if reason, exists := unresolvedReason[expected.Symbol]; exists && reason == "" {
 				return fmt.Errorf("UNRESOLVED_LIMITATION_REQUIRED: %s", expected.Symbol)
@@ -201,6 +209,20 @@ func validateEvidenceAtRoot153(root string, a ChangeAnalysis, inventory Entrypoi
 		}
 	}
 	return nil
+}
+
+func moduleRoot153(value string) string {
+	p, ok := safeEvidencePath153(value)
+	if !ok {
+		return ""
+	}
+	if strings.HasPrefix(p, "src/") {
+		return ""
+	}
+	if i := strings.Index(p, "/src/"); i >= 0 {
+		return p[:i]
+	}
+	return p
 }
 
 func verifyWorkspaceEvidence153(root, id string) error {
