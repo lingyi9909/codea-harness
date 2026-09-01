@@ -14,6 +14,7 @@ import (
 	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/nav"
 	"codea-harness-tools/internal/projectpath"
+	"codea-harness-tools/internal/symbolid"
 )
 
 const inventoryComplete153 = "COMPLETE"
@@ -238,22 +239,72 @@ func isProductionJava153(p string) bool {
 }
 
 func VerifyEntrypointDispositions(inventory EntrypointInventory, proposal ChangeAnalysis) error {
+	inventoryBySymbol := map[string][]ExpectedEntrypoint{}
+	for _, expected := range inventory.ExpectedEntrypoints {
+		symbol := strings.TrimSpace(expected.Symbol)
+		inventoryBySymbol[symbol] = append(inventoryBySymbol[symbol], expected)
+	}
+
+	locationsBySymbol := map[string][]symbolid.Ref{}
+	for _, loc := range proposal.SymbolLocations {
+		ref, ok := symbolid.FromLocation(loc.Workspace, loc.Path, loc.Symbol)
+		if !ok || ref.Workspace != symbolid.CurrentWorkspace {
+			continue
+		}
+		locationsBySymbol[ref.Symbol] = append(locationsBySymbol[ref.Symbol], ref)
+	}
+
 	confirmed := map[string]bool{}
 	for _, chain := range proposal.CallChains {
-		if strings.TrimSpace(chain.EntryPoint) != "" { confirmed[chain.EntryPoint] = true }
+		entry := strings.TrimSpace(chain.EntryPoint)
+		if entry == "" { continue }
+		if chain.EntryPointRef != nil {
+			ref, ok := symbolid.Normalize(*chain.EntryPointRef)
+			if ok && ref.Workspace == symbolid.CurrentWorkspace && ref.Symbol == entry {
+				if key, ok := symbolid.Key(ref); ok { confirmed[key] = true }
+			}
+			continue
+		}
+		refs := locationsBySymbol[entry]
+		if len(refs) == 1 {
+			key, _ := symbolid.Key(refs[0])
+			confirmed[key] = true
+			continue
+		}
+		// Legacy single-module analyses may omit SymbolLocation at this phase. A
+		// bare symbol is authority only when the inventory itself proves uniqueness.
+		if len(refs) == 0 && len(inventoryBySymbol[entry]) == 1 {
+			expected := inventoryBySymbol[entry][0]
+			if ref, ok := symbolid.FromLocation(symbolid.CurrentWorkspace, expected.Path, expected.Symbol); ok {
+				key, _ := symbolid.Key(ref)
+				confirmed[key] = true
+			}
+		}
 	}
-	partial := map[string]string{}
+
+	partialSymbols := map[string]string{}
 	for _, unresolved := range proposal.ReviewCoverage.UnresolvedSymbols {
 		if strings.TrimSpace(unresolved.Reason) == "" { continue }
-		if strings.TrimSpace(unresolved.Symbol) != "" { partial[unresolved.Symbol] = unresolved.Reason }
-		if strings.TrimSpace(unresolved.From) != "" { partial[unresolved.From] = unresolved.Reason }
+		if strings.TrimSpace(unresolved.Symbol) != "" { partialSymbols[strings.TrimSpace(unresolved.Symbol)] = unresolved.Reason }
+		if strings.TrimSpace(unresolved.From) != "" { partialSymbols[strings.TrimSpace(unresolved.From)] = unresolved.Reason }
 	}
+
 	var missing []string
 	for _, expected := range inventory.ExpectedEntrypoints {
 		if expected.Disposition == DispositionRemoved { continue }
-		if confirmed[expected.Symbol] { continue }
-		if partial[expected.Symbol] != "" { continue }
-		missing = append(missing, expected.Symbol)
+		ref, ok := symbolid.FromLocation(symbolid.CurrentWorkspace, expected.Path, expected.Symbol)
+		if !ok {
+			missing = append(missing, expected.Symbol+"@"+expected.Path)
+			continue
+		}
+		key, _ := symbolid.Key(ref)
+		if confirmed[key] { continue }
+		// unresolvedSymbols remains a symbol-only legacy contract. It may satisfy
+		// completeness only when that symbol maps to one exact inventory path.
+		if len(inventoryBySymbol[expected.Symbol]) == 1 && partialSymbols[expected.Symbol] != "" { continue }
+		label := expected.Symbol
+		if len(inventoryBySymbol[expected.Symbol]) > 1 { label += "@" + expected.Path }
+		missing = append(missing, label)
 	}
 	if len(missing) == 0 { return nil }
 	sort.Strings(missing)
