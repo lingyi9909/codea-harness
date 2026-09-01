@@ -73,7 +73,9 @@ jobs:
 
       - name: Retained single-module business regression
         shell: pwsh
-        run: ./.github/scripts/task152-task5-real-business-regression.ps1
+        run: |
+          Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
+          ./.github/scripts/task152-task5-real-business-regression.ps1
 
       - name: Retained Chain regression
         shell: pwsh
