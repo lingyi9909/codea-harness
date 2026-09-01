@@ -21,7 +21,7 @@
       "required": ["currentBranch", "baseRef", "baseCommit", "mergeBase", "headCommit", "includeWorkingTree"],
       "properties": {
         "currentBranch": { "type": "string", "description": "当前分支名，Detached HEAD 时为 DETACHED_HEAD" },
-        "baseRef": { "type": "string", "minLength": 1, "description": "评审基线 ref，如 origin/master" },
+        "baseRef": { "type": "string", "minLength": 1, "description": "基线 ref，如 origin/master" },
         "baseCommit": { "type": "string", "description": "基线 ref 当前指向的 commit" },
         "mergeBase": { "type": "string", "description": "merge-base(baseRef, HEAD) 的 commit" },
         "headCommit": { "type": "string", "minLength": 1, "description": "HEAD 指向的 commit" },
@@ -70,14 +70,19 @@
     },
     "callChains": {
       "type": "array",
-      "description": "与本次 Change Set 直接相关、已经确定性识别的 confirmed 调用链。链可经过 VERIFIED workspace dependency；workspace identity 由 symbolLocations 的机器证据承载。1.4 TARGETED 的 selectedCallChains 必须是这里的真实子集；candidate/unresolved 不得包装到本数组。",
+      "description": "与本次 Change Set 直接相关、已经确定性识别的 confirmed 调用链。链可经过 VERIFIED workspace dependency；symbol 唯一时可继续使用旧格式，存在跨 module/workspace 同名歧义时由 entryPointRef/chainRefs 承载 workspace + exact path + symbol Authority。1.4 TARGETED 的 selectedCallChains 必须是这里的真实子集；candidate/unresolved 不得包装到本数组。",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["entryPoint", "chain"],
         "properties": {
           "entryPoint": { "type": "string", "minLength": 1 },
-          "chain": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          "chain": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "entryPointRef": { "$ref": "#/$defs/symbolRef" },
+          "chainRefs": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/symbolRef" }
+          }
         }
       }
     },
@@ -200,6 +205,26 @@
     }
   },
   "$defs": {
+    "symbolRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "symbol"],
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "description": "workspace identity；省略时等价 current"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
+        },
+        "symbol": { "type": "string", "minLength": 1 }
+      }
+    },
     "navigationRole": {
       "enum": ["Controller", "Service", "Repository", "Mapper", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"]
     },
