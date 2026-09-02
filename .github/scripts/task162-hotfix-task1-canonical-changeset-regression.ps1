@@ -35,7 +35,7 @@ function New-Task1Repo([string]$Name) {
     New-Item -ItemType Directory -Force (Join-Path $root '.code-harness\contracts') | Out-Null
     Copy-Item $runtimeSource (Join-Path $root '.code-harness\bin\codea-dcep-tools.exe') -Force
     Copy-Item (Join-Path $repoRoot '.code-harness\VERSION') (Join-Path $root '.code-harness\VERSION') -Force
-    foreach ($name in @('change-set.schema.json','change-analysis-proposal.schema.json','change-analysis.schema.json','entrypoint-inventory.schema.json','change-analysis-cert.schema.json')) {
+    foreach ($name in @('change-set.schema.json','change-set-request.schema.json','analysis-certify-request.schema.json','change-analysis-proposal.schema.json','change-analysis.schema.json','entrypoint-inventory.schema.json','change-analysis-cert.schema.json')) {
         Copy-Item (Join-Path $repoRoot ".code-harness\contracts\$name") (Join-Path $root ".code-harness\contracts\$name") -Force
     }
     return $root
