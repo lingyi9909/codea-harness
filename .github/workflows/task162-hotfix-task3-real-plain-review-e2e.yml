@@ -66,6 +66,8 @@ jobs:
           $fixed = $source.Replace('$opencodeExit:', '${opencodeExit}:').Replace('Invoke-Git add -A', 'Invoke-Git add .')
           $fixed = $fixed.Replace('$raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)', '$ErrorActionPreference = ''Continue''; $raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)')
           $fixed = $fixed.Replace('$opencodeExit = $LASTEXITCODE', '$opencodeExit = $LASTEXITCODE; $ErrorActionPreference = ''Stop''')
+          $fixed = $fixed.Replace('Remove-Item $serverLog -Force -ErrorAction SilentlyContinue', '')
+          $fixed = $fixed.Replace('Remove-Item $transcript -Force -ErrorAction SilentlyContinue', '')
           [System.IO.File]::WriteAllText($psPath, $fixed, [System.Text.UTF8Encoding]::new($false))
           [void][scriptblock]::Create($fixed)
 
