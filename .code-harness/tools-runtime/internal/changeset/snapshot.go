@@ -42,12 +42,14 @@ func snapshotIdentitySHA256162(snapshot Snapshot) (string, error) {
 		HeadCommit         string `json:"headCommit"`
 		IncludeWorkingTree bool   `json:"includeWorkingTree"`
 		Files              []File `json:"files"`
+		GitStateSHA256     string `json:"gitStateSha256"`
 	}{
 		ResolvedBaseCommit: snapshot.ResolvedBaseCommit,
 		MergeBase:          snapshot.MergeBase,
 		HeadCommit:         snapshot.HeadCommit,
 		IncludeWorkingTree: snapshot.IncludeWorkingTree,
 		Files:              snapshot.Files,
+		GitStateSHA256:     snapshot.GitStateSHA256,
 	}
 	canonical, err := json.Marshal(identity)
 	if err != nil {
@@ -57,7 +59,7 @@ func snapshotIdentitySHA256162(snapshot Snapshot) (string, error) {
 }
 
 func validateCanonicalSnapshot162(snapshot Snapshot) error {
-	if snapshot.RequestedBaseRef == "" || snapshot.ResolvedBaseCommit == "" || snapshot.MergeBase == "" || snapshot.HeadCommit == "" || snapshot.CurrentBranch == "" {
+	if snapshot.RequestedBaseRef == "" || snapshot.ResolvedBaseCommit == "" || snapshot.MergeBase == "" || snapshot.HeadCommit == "" || snapshot.CurrentBranch == "" || len(snapshot.GitStateSHA256) != 64 {
 		return errors.New("CHANGE_SET_SNAPSHOT_IDENTITY_INCOMPLETE")
 	}
 	for i, file := range snapshot.Files {

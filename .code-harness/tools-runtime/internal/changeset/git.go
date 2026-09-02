@@ -4,8 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -22,6 +26,11 @@ var sourceOrder153 = map[Source]int{
 	SourceStaged:    1,
 	SourceUnstaged:  2,
 	SourceUntracked: 3,
+}
+
+type untrackedState162 struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
 }
 
 // Compute independently recomputes the Runtime-authoritative Review ChangeSet
@@ -56,17 +65,23 @@ func Compute(repoRoot, requestedBaseRef string, includeWorkingTree bool) (Snapsh
 
 	files := map[string]*File{}
 	committedArgs := []string{"diff", "--unified=0", "--no-ext-diff", mergeBase + ".." + head, "--"}
-	if err := collectDiff153(ctx, repoRoot, files, SourceCommitted, committedArgs...); err != nil {
+	committedPatch, err := collectDiff153(ctx, repoRoot, files, SourceCommitted, committedArgs...)
+	if err != nil {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_COMMITTED_DIFF_FAILED: %w", err)
 	}
 
+	stagedPatch := ""
+	unstagedPatch := ""
+	untrackedState := []untrackedState162{}
 	if includeWorkingTree {
 		stagedArgs := []string{"diff", "--cached", "--unified=0", "--no-ext-diff", "--"}
-		if err := collectDiff153(ctx, repoRoot, files, SourceStaged, stagedArgs...); err != nil {
+		stagedPatch, err = collectDiff153(ctx, repoRoot, files, SourceStaged, stagedArgs...)
+		if err != nil {
 			return Snapshot{}, fmt.Errorf("CHANGE_SET_STAGED_DIFF_FAILED: %w", err)
 		}
 		unstagedArgs := []string{"diff", "--unified=0", "--no-ext-diff", "--"}
-		if err := collectDiff153(ctx, repoRoot, files, SourceUnstaged, unstagedArgs...); err != nil {
+		unstagedPatch, err = collectDiff153(ctx, repoRoot, files, SourceUnstaged, unstagedArgs...)
+		if err != nil {
 			return Snapshot{}, fmt.Errorf("CHANGE_SET_UNSTAGED_DIFF_FAILED: %w", err)
 		}
 		untracked, err := runGit153(ctx, repoRoot, "ls-files", "--others", "--exclude-standard")
@@ -78,9 +93,15 @@ func Compute(repoRoot, requestedBaseRef string, includeWorkingTree bool) (Snapsh
 			if p == "" || !inHarnessScope153(p) {
 				continue
 			}
+			content, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(p)))
+			if err != nil {
+				return Snapshot{}, fmt.Errorf("CHANGE_SET_UNTRACKED_READ_FAILED: %s: %w", p, err)
+			}
+			untrackedState = append(untrackedState, untrackedState162{Path: p, SHA256: fmt.Sprintf("%x", sha256.Sum256(content))})
 			mergeFile153(files, File{Path: p, Status: "A", Sources: []Source{SourceUntracked}})
 		}
 	}
+	sort.Slice(untrackedState, func(i, j int) bool { return untrackedState[i].Path < untrackedState[j].Path })
 
 	out := make([]File, 0, len(files))
 	for _, f := range files {
@@ -98,6 +119,10 @@ func Compute(repoRoot, requestedBaseRef string, includeWorkingTree bool) (Snapsh
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 
+	gitStateSHA, err := gitStateSHA256162(committedPatch, stagedPatch, unstagedPatch, untrackedState)
+	if err != nil {
+		return Snapshot{}, err
+	}
 	resolvedBaseAfter, err := runGit153(ctx, repoRoot, "rev-parse", "--verify", requestedBaseRef+"^{commit}")
 	if err != nil || strings.TrimSpace(resolvedBaseAfter) != resolvedBase {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_CHANGED_DURING_COMPUTE: base ref moved")
@@ -119,7 +144,22 @@ func Compute(repoRoot, requestedBaseRef string, includeWorkingTree bool) (Snapsh
 		CurrentBranch:      currentBranch,
 		IncludeWorkingTree: includeWorkingTree,
 		Files:              out,
+		GitStateSHA256:     gitStateSHA,
 	})
+}
+
+func gitStateSHA256162(committedPatch, stagedPatch, unstagedPatch string, untracked []untrackedState162) (string, error) {
+	state := struct {
+		CommittedPatch string              `json:"committedPatch"`
+		StagedPatch    string              `json:"stagedPatch"`
+		UnstagedPatch  string              `json:"unstagedPatch"`
+		Untracked      []untrackedState162 `json:"untracked"`
+	}{committedPatch, stagedPatch, unstagedPatch, untracked}
+	data, err := json.Marshal(state)
+	if err != nil {
+		return "", fmt.Errorf("CHANGE_SET_STATE_CANONICALIZE_FAILED: %w", err)
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(data)), nil
 }
 
 func currentBranch153(ctx context.Context, repoRoot string) (string, error) {
@@ -144,17 +184,36 @@ func runGit153(ctx context.Context, repoRoot string, args ...string) (string, er
 	return string(out), nil
 }
 
-func collectDiff153(ctx context.Context, repoRoot string, files map[string]*File, source Source, args ...string) error {
+func collectDiff153(ctx context.Context, repoRoot string, files map[string]*File, source Source, args ...string) (string, error) {
 	out, err := runGit153(ctx, repoRoot, args...)
 	if err != nil {
-		return err
+		return "", err
 	}
-	for _, f := range parseUnifiedDiff153([]byte(out), source) {
+	scoped := reviewScopedDiff153(out, source)
+	for _, f := range parseUnifiedDiff153([]byte(scoped), source) {
 		if inHarnessScope153(f.Path) {
 			mergeFile153(files, f)
 		}
 	}
-	return nil
+	return scoped, nil
+}
+
+func reviewScopedDiff153(raw string, source Source) string {
+	const marker = "diff --git "
+	parts := strings.Split(raw, marker)
+	if len(parts) <= 1 {
+		return ""
+	}
+	var out strings.Builder
+	for _, body := range parts[1:] {
+		block := marker + body
+		parsed := parseUnifiedDiff153([]byte(block), source)
+		if len(parsed) == 0 || !inHarnessScope153(parsed[0].Path) {
+			continue
+		}
+		out.WriteString(block)
+	}
+	return out.String()
 }
 
 func parseUnifiedDiff153(data []byte, source Source) []File {

@@ -26,8 +26,8 @@ type File struct {
 
 // Snapshot is the Runtime-owned canonical Review ChangeSet fact.
 // RequestedBaseRef and CurrentBranch are provenance. SnapshotSHA256 is derived
-// from resolved Git identity + working-tree inclusion + canonical Review files,
-// so equivalent ref spellings that resolve to the same commit share identity.
+// from resolved Git identity + canonical review-scoped Git bytes, so equivalent
+// ref spellings that resolve to the same commit share identity.
 type Snapshot struct {
 	RequestedBaseRef   string `json:"requestedBaseRef"`
 	ResolvedBaseCommit string `json:"resolvedBaseCommit"`
@@ -36,6 +36,7 @@ type Snapshot struct {
 	CurrentBranch      string `json:"currentBranch"`
 	IncludeWorkingTree bool   `json:"includeWorkingTree"`
 	Files              []File `json:"files"`
+	GitStateSHA256     string `json:"gitStateSha256"`
 	SnapshotSHA256     string `json:"snapshotSha256"`
 
 	// Legacy in-process aliases retained for existing 1.5.x/1.6.x consumers.
