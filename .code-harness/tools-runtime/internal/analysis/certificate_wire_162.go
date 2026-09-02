@@ -2,12 +2,29 @@ package analysis
 
 import "encoding/json"
 
-// MarshalJSON preserves the pre-hotfix 1.6.2 certificate wire format for
-// retained/legacy certificates while requiring canonical certificates to emit
-// includeWorkingTree even when its value is false. Canonical identity fields
-// are the authority-mode discriminator; legacy certificates have none of them.
-func (c Certificate) MarshalJSON() ([]byte, error) {
-	type certificateWire162 struct {
+// isLegacyCertificateWireE737 distinguishes the real pre-hotfix 1.6.2 wire
+// format from the retained legacy Certify path that still exists in the current
+// Runtime. e737 certificates predate includeWorkingTree on Certificate; current
+// retained certificates encode the field even though they do not carry the
+// canonical Snapshot identity fields.
+func isLegacyCertificateWireE737(data []byte, cert Certificate) (bool, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return false, err
+	}
+	_, includeWorkingTreePresent := fields["includeWorkingTree"]
+	canonicalIdentityPresent := cert.ResolvedBaseCommit != "" || cert.MergeBase != "" || cert.CurrentBranch != "" || cert.SnapshotSHA256 != ""
+	return !includeWorkingTreePresent && !canonicalIdentityPresent, nil
+}
+
+// marshalCertificateForByteVerification162 keeps byte-for-byte canonical
+// verification strict while reproducing the exact e737 field set only when the
+// input bytes are positively identified as that pre-hotfix wire format.
+func marshalCertificateForByteVerification162(cert Certificate, legacyE737 bool) ([]byte, error) {
+	if !legacyE737 {
+		return json.MarshalIndent(cert, "", "  ")
+	}
+	type certificateWireE737 struct {
 		RunID                     string  `json:"runId"`
 		RuntimeVersion            string  `json:"runtimeVersion"`
 		AnalysisSHA256            string  `json:"analysisSha256"`
@@ -15,34 +32,16 @@ func (c Certificate) MarshalJSON() ([]byte, error) {
 		EntrypointInventorySHA256 string  `json:"entrypointInventorySha256"`
 		BaseRef                   string  `json:"baseRef"`
 		Head                      string  `json:"head"`
-		ResolvedBaseCommit        string  `json:"resolvedBaseCommit,omitempty"`
-		MergeBase                 string  `json:"mergeBase,omitempty"`
-		CurrentBranch             string  `json:"currentBranch,omitempty"`
-		IncludeWorkingTree        *bool   `json:"includeWorkingTree,omitempty"`
-		SnapshotSHA256            string  `json:"snapshotSha256,omitempty"`
 		Intent                    *Intent `json:"intent,omitempty"`
 	}
-
-	canonicalIdentity := c.ResolvedBaseCommit != "" || c.MergeBase != "" || c.CurrentBranch != "" || c.SnapshotSHA256 != ""
-	var includeWorkingTree *bool
-	if canonicalIdentity {
-		value := c.IncludeWorkingTree
-		includeWorkingTree = &value
-	}
-
-	return json.Marshal(certificateWire162{
-		RunID: c.RunID,
-		RuntimeVersion: c.RuntimeVersion,
-		AnalysisSHA256: c.AnalysisSHA256,
-		ChangeSetSHA256: c.ChangeSetSHA256,
-		EntrypointInventorySHA256: c.EntrypointInventorySHA256,
-		BaseRef: c.BaseRef,
-		Head: c.Head,
-		ResolvedBaseCommit: c.ResolvedBaseCommit,
-		MergeBase: c.MergeBase,
-		CurrentBranch: c.CurrentBranch,
-		IncludeWorkingTree: includeWorkingTree,
-		SnapshotSHA256: c.SnapshotSHA256,
-		Intent: c.Intent,
-	})
+	return json.MarshalIndent(certificateWireE737{
+		RunID: cert.RunID,
+		RuntimeVersion: cert.RuntimeVersion,
+		AnalysisSHA256: cert.AnalysisSHA256,
+		ChangeSetSHA256: cert.ChangeSetSHA256,
+		EntrypointInventorySHA256: cert.EntrypointInventorySHA256,
+		BaseRef: cert.BaseRef,
+		Head: cert.Head,
+		Intent: cert.Intent,
+	}, "", "  ")
 }
