@@ -56,7 +56,7 @@ func TestTask4SkillsKeepChainAsContextOnly(t *testing.T) {
 	analyze := readTask4ContractFile(t, "skills", "analyze-change", "SKILL.md")
 	for _, want := range []string{
 		"Review Chain Context（1.5 Task 4）",
-		"先完成 ChangeAnalysis",
+		"先完成 Canonical Snapshot + ChangeAnalysis certification",
 		"chain review-context --input",
 		"不得因为存在 Chain 而减少 changedFiles",
 		"不得因为存在 Chain 而减少 scopedFiles",
