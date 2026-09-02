@@ -1,0 +1,70 @@
+name: task162-hotfix-task3-real-plain-review-e2e
+
+on:
+  push:
+    branches: [hotfix/1.6.2-task3-real-plain-review-e2e]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  task3-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Build Windows x64 Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go build -trimpath -ldflags '-s -w' -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
+
+      - name: Install pinned ast-grep 0.42.1
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-162-hotfix-task3.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-162-hotfix-task3'
+          Invoke-WebRequest -Uri "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install pinned OpenCode Agent Host
+        shell: pwsh
+        run: |
+          npm install --global opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (& opencode --version | Out-String).Trim()
+          Write-Output "OpenCode $version"
+          if ($version -notmatch '1\.18\.25') { throw "unexpected OpenCode version: $version" }
+
+      - name: Real plain harness review E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
+
+      - name: Task 3 focused exact-head marker
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_HOTFIX_TASK3_FOCUSED_EXACT_HEAD PASS head=$head"
