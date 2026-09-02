@@ -10,12 +10,7 @@
     "changeSetSha256",
     "entrypointInventorySha256",
     "baseRef",
-    "head",
-    "resolvedBaseCommit",
-    "mergeBase",
-    "currentBranch",
-    "includeWorkingTree",
-    "snapshotSha256"
+    "head"
   ],
   "properties": {
     "runId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
@@ -39,5 +34,26 @@
         "target": { "type": "string", "minLength": 1 }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          { "required": ["resolvedBaseCommit"] },
+          { "required": ["mergeBase"] },
+          { "required": ["currentBranch"] },
+          { "required": ["snapshotSha256"] }
+        ]
+      },
+      "then": {
+        "required": [
+          "resolvedBaseCommit",
+          "mergeBase",
+          "currentBranch",
+          "includeWorkingTree",
+          "snapshotSha256"
+        ]
+      }
+    }
+  ]
 }
