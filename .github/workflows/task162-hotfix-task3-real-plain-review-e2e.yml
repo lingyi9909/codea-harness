@@ -109,6 +109,8 @@ jobs:
             ${{ runner.temp }}/task162-hotfix-task3-model-*.jsonl
             ${{ runner.temp }}/task162-hotfix-task3-opencode-*.jsonl
             ${{ runner.temp }}/task162-hotfix-task3-verifier.log
+            .github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
+            .github/scripts/task162-hotfix-task3/mock_openai_server.py
 
       - name: Task 3 focused exact-head marker
         shell: pwsh
