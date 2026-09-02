@@ -24,13 +24,17 @@ try {
         }
     }
 
-    # Agent-facing snapshot request contract must exactly use Runtime's strict JSON field names.
+    # The two Agent-facing contract sources that define exact request JSON must match Runtime's strict decoder.
+    $requestContractDocs = @(
+        @('AGENTS.md', $agents),
+        @('tools/README.md', $tools)
+    )
     $requiredRequestFields = @(
         '"runId": "<runId>"',
         '"baseRef": "<baseRef>"',
         '"includeWorkingTree": true'
     )
-    foreach ($pair in $activeDocs) {
+    foreach ($pair in $requestContractDocs) {
         foreach ($field in $requiredRequestFields) {
             if ($pair[1] -notmatch [regex]::Escape($field)) {
                 throw "Task1 snapshot request contract missing $field in $($pair[0])"
@@ -38,20 +42,34 @@ try {
         }
     }
 
-    # requestedBaseRef is Runtime Snapshot provenance only; these historical request forms are forbidden.
+    $requiredCertifyFields = @(
+        '"snapshotPath": ".code-harness/runs/<runId>/analysis/change-set.json"',
+        '"snapshotSha256": "<sha256>"',
+        '"proposalPath": ".code-harness/runs/<runId>/requests/change-analysis-proposal.json"',
+        '"mode": "FULL"'
+    )
+    foreach ($pair in $requestContractDocs) {
+        foreach ($field in $requiredCertifyFields) {
+            if ($pair[1] -notmatch [regex]::Escape($field)) {
+                throw "Task1 canonical certify contract missing $field in $($pair[0])"
+            }
+        }
+    }
+
+    # requestedBaseRef is Runtime Snapshot provenance only. Scan every active contract for exact legacy request forms.
     foreach ($pair in $activeDocs) {
         $text = [string]$pair[1]
         if ($text -match 'runId\s*/\s*requestedBaseRef\s*/\s*includeWorkingTree') {
             throw "Task1 Agent-facing snapshot request still uses requestedBaseRef in $($pair[0])"
-        }
-        if ($text -match '(?s)Snapshot 请求参数.{0,220}requestedBaseRef.{0,220}includeWorkingTree') {
-            throw "Task1 Snapshot request parameter prose still uses requestedBaseRef in $($pair[0])"
         }
         if ($text -match '(?s)请求只提供[:：].{0,160}requestedBaseRef.{0,160}includeWorkingTree') {
             throw "Task1 snapshot request field list still uses requestedBaseRef in $($pair[0])"
         }
         if ($text -match '(?s)请求只携带.{0,160}requestedBaseRef.{0,160}includeWorkingTree') {
             throw "Task1 snapshot request field list still uses requestedBaseRef in $($pair[0])"
+        }
+        if ($text -match '"requestedBaseRef"\s*:') {
+            throw "Task1 active Agent contract contains requestedBaseRef as a JSON request field in $($pair[0])"
         }
     }
 
