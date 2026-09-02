@@ -80,9 +80,33 @@ codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<
 
 Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/template inheritance 确定性断链时使用；候选只来自显式 `harness.yaml.workspaceDependencies`。必须先 `workspace verify --id <id>`，且只有 `VERIFIED` 才允许三个 `workspace-*` nav 子命令。不得扫描任意 sibling，不得把 dependency workspace 扩成 Change Set、Review Scope 或 Write Scope。
 
-`analysis snapshot` 是 Git ChangeSet authority boundary：请求只携带 `runId / requestedBaseRef / includeWorkingTree`。Runtime 解析本地 ref、计算 merge-base/HEAD/currentBranch、过滤 canonical Review paths、合并 committed/staged/unstaged/untracked sources，并发布同 run Runtime-owned `analysis/change-set.json`。Agent 不得自行生成替代 Snapshot。
+`analysis snapshot` 是 Git ChangeSet authority boundary。Agent → Runtime 的 request JSON 字段固定为：
 
-`analysis certify` 是 ChangeAnalysis authority boundary：canonical 请求引用 same-run `snapshotPath / snapshotSha256 / proposalPath`。Runtime 必须重新计算 live Snapshot 并验证 resolved identity/state 完全一致，再把 Runtime-owned deterministic facts 与 Agent semantic proposal 组装为 Certified ChangeAnalysis。Agent 不得直接创建/覆盖 `.code-harness/runs/<runId>/analysis/change-set.json`、`change-analysis.json`、`entrypoint-inventory.json` 或 `change-analysis.cert.json`。
+```json
+{
+  "runId": "<runId>",
+  "baseRef": "<baseRef>",
+  "includeWorkingTree": true
+}
+```
+
+这里的 `baseRef` 是请求参数；Runtime 解析该本地 ref 后，在 Runtime-owned Snapshot artifact 中以 `requestedBaseRef` 保存原始请求值作为 provenance。`requestedBaseRef` 不是 Agent-facing request 字段。Runtime 继续计算 merge-base/HEAD/currentBranch、过滤 canonical Review paths、合并 committed/staged/unstaged/untracked sources，并发布同 run Runtime-owned `analysis/change-set.json`。Agent 不得自行生成替代 Snapshot。
+
+`analysis certify` 是 ChangeAnalysis authority boundary。canonical request 固定为：
+
+```json
+{
+  "runId": "<runId>",
+  "snapshotPath": ".code-harness/runs/<runId>/analysis/change-set.json",
+  "snapshotSha256": "<sha256>",
+  "proposalPath": ".code-harness/runs/<runId>/requests/change-analysis-proposal.json",
+  "intent": {
+    "mode": "FULL"
+  }
+}
+```
+
+Runtime 必须重新计算 live Snapshot 并验证 resolved identity/state 完全一致，再把 Runtime-owned deterministic facts 与 Agent semantic proposal 组装为 Certified ChangeAnalysis。Agent 不得直接创建/覆盖 `.code-harness/runs/<runId>/analysis/change-set.json`、`change-analysis.json`、`entrypoint-inventory.json` 或 `change-analysis.cert.json`。
 
 `chain seal-persist` 只接受同 run 的 Runtime-certified candidate，重新加载 Certified ChangeAnalysis、验证 candidate provenance/bytes/code facts 与当前 existing Project State hash，并生成不可变 write plan；它本身不得修改 `.code-harness/chains/**`。
 
