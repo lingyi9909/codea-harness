@@ -19,6 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           scopes=(.code-harness .github/scripts .github/workflows README.md)
+          active_docs=(.code-harness/AGENTS.md .code-harness/tools/README.md .code-harness/agents .code-harness/skills)
           echo 'Legacy runtime references in active scopes:'
           git grep -n 'codea-harness-tools\.exe' -- "${scopes[@]}" || true
           refs=$(git grep -l 'codea-harness-tools\.exe' -- "${scopes[@]}" \
@@ -31,9 +32,10 @@ jobs:
             ':!.github/scripts/task161-real-160-upgrade.ps1' \
             ':!.github/workflows/task161-runtime-rename-audit.yml' \
             ':!.github/workflows/task161-bulk-rename.yml' || true)
-          if [ -n "$refs" ] || [ -n "$cmdrefs" ]; then
+          bare_refs=$(git grep -l -E '(^|[^A-Za-z0-9_.-])codea-harness-tools(\.exe)?[[:space:]]+(upgrade|validate|workspace|nav|db|chain|analysis|review|report|seal-apply|apply)\b' -- "${active_docs[@]}" || true)
+          if [ -n "$refs" ] || [ -n "$cmdrefs" ] || [ -n "$bare_refs" ]; then
             echo 'Unexpected production legacy references:'
-            printf '%s\n%s\n' "$refs" "$cmdrefs"
+            printf '%s\n%s\n%s\n' "$refs" "$cmdrefs" "$bare_refs"
             echo 'TASK161_RUNTIME_RENAME_AUDIT FAIL'
             exit 1
           fi
