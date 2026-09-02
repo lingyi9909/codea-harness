@@ -163,8 +163,8 @@ feature:
 
         # The only review user message is deliberately the plain product intent.
         $plainUserIntent = 'harness review'
-        $ErrorActionPreference = 'Continue'; $raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)
-        $opencodeExit = $LASTEXITCODE; $ErrorActionPreference = 'Stop'
+        $ErrorActionPreference = 'Continue'; $ErrorActionPreference = 'Continue'; $raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)
+        $opencodeExit = $LASTEXITCODE; $ErrorActionPreference = 'Stop'; $ErrorActionPreference = 'Stop'
         Write-Utf8NoBom $transcript $raw
         if ($opencodeExit -ne 0) { throw "OpenCode plain harness review failed with exit ${opencodeExit}:`n$raw" }
 
