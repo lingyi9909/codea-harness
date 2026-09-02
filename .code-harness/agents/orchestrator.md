@@ -49,7 +49,7 @@ harness review <Class.method> → direct TARGETED METHOD；自动包含该 metho
 Review/Test/API-doc changed 的 Git fact authority 固定为 Controlled Runtime：
 
 ```text
-requested baseRef + includeWorkingTree
+baseRef + includeWorkingTree
 → Runtime analysis snapshot
 → analysis/change-set.json
 → Reviewer/analyze-change consumes canonical files only
@@ -60,7 +60,17 @@ requested baseRef + includeWorkingTree
 → Certified ChangeAnalysis
 ```
 
-Orchestrator 只能把用户/配置决定的 `requestedBaseRef` 与 `includeWorkingTree` 作为 Snapshot 请求参数，不得自己 resolve Git identity、调用 Agent `git_diff` 形成第二套 Change Set，也不得要求 Reviewer 自行填写：
+Orchestrator 只能把用户/配置决定的 `baseRef` 与 `includeWorkingTree` 作为 Snapshot 请求参数，不得自己 resolve Git identity、调用 Agent `git_diff` 形成第二套 Change Set，也不得要求 Reviewer 自行填写：
+
+```json
+{
+  "runId": "<runId>",
+  "baseRef": "<baseRef>",
+  "includeWorkingTree": true
+}
+```
+
+Runtime Snapshot artifact 中的 `requestedBaseRef` 只保存该 `baseRef` 请求值作为 provenance，不是 Agent-facing request 字段。
 
 ```text
 baseCommit
@@ -264,7 +274,7 @@ committed = mergeBase → HEAD
 → projectpath.IsReviewPath filtering
 ```
 
-`effective requestedBaseRef = 用户本次 base:<ref> > harness.yaml.review.baseRef`。不执行 `git fetch`。requestedBaseRef 缺失/本地无法 resolve → `MANUAL_ACTION_REQUIRED`，不得猜。
+`effective baseRef = 用户本次 base:<ref> > harness.yaml.review.baseRef`。不执行 `git fetch`。baseRef 缺失/本地无法 resolve → `MANUAL_ACTION_REQUIRED`，不得猜。
 
 Orchestrator 必须调用 Controlled Runtime `analysis snapshot`。Runtime 输出至少包含：
 
@@ -428,7 +438,7 @@ TARGETED 报告必须保留固定免责声明：
 plain `harness review` 不再预先固定为 FULL。它必须以 same-run Runtime Canonical Snapshot + Certified ChangeAnalysis 和完整 EntrypointInventory 为事实基线，由 Controlled Runtime 决定本次 Review 模式：
 
 ```text
-1. 解析 effective requestedBaseRef / includeWorkingTree，仅形成 Snapshot request 参数
+1. 解析 effective baseRef / includeWorkingTree，仅形成 Snapshot request 参数
 2. Runtime `analysis snapshot` → same-run `analysis/change-set.json`
 3. Reviewer.analyze-change 消费 Snapshot，只形成 `requests/change-analysis-proposal.json`
 4. Runtime `analysis certify` 重新计算 live Snapshot，验证 snapshot identity，并组装/认证 Git identity + changedFiles + semantic evidence
@@ -496,7 +506,7 @@ plain `harness review` 不再预先固定为 FULL。它必须以 same-run Runtim
 固定流程：
 
 ```text
-1. 解析 effective requestedBaseRef/includeWorkingTree
+1. 解析 effective baseRef/includeWorkingTree
 2. Runtime analysis snapshot 建立完整 Canonical ChangeSet
 3. Reviewer.analyze-change 消费 Snapshot，建立 semantic proposal、confirmed callChains 与 symbolLocations exact path/role evidence
 4. Runtime analysis certify 重新验证 Snapshot identity 并生成 Certified ChangeAnalysis
@@ -561,7 +571,7 @@ harness api-doc changed
 ```text
 1. 创建 runId；全程只读分析。
 2. 显式 Controller / Controller.method：API Doc Agent 调用 discover-api，用受控 Code Navigation 唯一定位 target。
-3. changed：解析 effective requestedBaseRef/includeWorkingTree，与 review/test 使用相同参数来源。
+3. changed：解析 effective baseRef/includeWorkingTree，与 review/test 使用相同参数来源。
 4. changed：Runtime `analysis snapshot` 生成与 review/test 相同语义的 Canonical ChangeSet。
 5. changed：Reviewer.analyze-change 只消费 Snapshot 生产 `change-analysis-proposal.json`；这里只允许 semantic analyze-change，不调用 reviewer.review-code。
 6. changed：Runtime `analysis certify` 重算 Snapshot identity并发布 Certified ChangeAnalysis。失败/stale → MANUAL_ACTION_REQUIRED / STOP。
@@ -719,7 +729,7 @@ rollbackPerformed
 
 ```text
 0. 要求 initialization.status=READY，且当前宿主具备文件读取、Maven 执行、超时控制；写入型步骤还要求可调用 Controlled Runtime apply
-1. 与 harness review 完全相同地解析 requestedBaseRef/includeWorkingTree，并调用 Runtime analysis snapshot
+1. 与 harness review 完全相同地解析 baseRef/includeWorkingTree，并调用 Runtime analysis snapshot
 2. Reviewer.analyze-change 只消费 Runtime Snapshot，形成 change-analysis-proposal.json
 3. Runtime analysis certify 重新计算 live Snapshot、验证 identity，并生成 Certified ChangeAnalysis + machine Coverage
 4. 输出评审范围 + 评审覆盖（含 validated callChains[]）
@@ -901,4 +911,3 @@ User 必须没有：
 ```
 
 `chain edit` 本身不得直接写 `.code-harness/chains/**`；不得改 EntryPoint；不得用 dependency workspace、类名后缀、basename、字符串包含或 fuzzy relation 获得写 authority。candidate/analysis/plan/existing Project State 任一变化都使旧 planId 失效。
-
