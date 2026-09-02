@@ -38,15 +38,19 @@ codea-dcep-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/
 
 ### Canonical ChangeSet Snapshot
 
-`analysis snapshot` 是 Review/Test/API-doc changed 的唯一 Git ChangeSet authority。请求只提供：
+`analysis snapshot` 是 Review/Test/API-doc changed 的唯一 Git ChangeSet authority。Agent-facing request JSON 固定为：
 
-```text
-runId
-requestedBaseRef
-includeWorkingTree
+```json
+{
+  "runId": "<runId>",
+  "baseRef": "<baseRef>",
+  "includeWorkingTree": true
+}
 ```
 
-Runtime 本地解析 ref，计算并发布：
+`baseRef` 是 Agent → Runtime 请求字段。Runtime 本地解析该 ref 后，在 Snapshot output 中把原始请求值保存为 `requestedBaseRef` provenance；`requestedBaseRef` 不是 request 字段。
+
+Runtime 计算并发布：
 
 ```text
 .code-harness/runs/<runId>/analysis/change-set.json
@@ -70,7 +74,21 @@ snapshotSha256
 
 Agent/Reviewer/Orchestrator **不得**再调用 `git_diff` 独立生成另一套 Review ChangeSet，不得自行生成或修补 `baseCommit/mergeBase/headCommit/currentBranch/includeWorkingTree/changedFiles.path/changedFiles.sources`。Agent 只能消费 Runtime Snapshot 做 semantic analysis，并把 semantic proposal 写入 `requests/change-analysis-proposal.json`。
 
-`analysis certify` 的 canonical request 引用 same-run `snapshotPath / snapshotSha256 / proposalPath`。Runtime 必须重新计算 live Snapshot 并验证 `resolvedBaseCommit / mergeBase / headCommit / currentBranch / includeWorkingTree / gitStateSha256 / snapshotSha256`；Snapshot 之后 Review Scope Git bytes/state 发生变化必须 fail closed。Runtime 再从 Snapshot 组装正式 `reviewScope` 与 `changedFiles.path/sources`，验证 semantic evidence、EntryPoint Inventory 与 Coverage 后才发布 Certified ChangeAnalysis。
+`analysis certify` 的 canonical request 固定为：
+
+```json
+{
+  "runId": "<runId>",
+  "snapshotPath": ".code-harness/runs/<runId>/analysis/change-set.json",
+  "snapshotSha256": "<sha256>",
+  "proposalPath": ".code-harness/runs/<runId>/requests/change-analysis-proposal.json",
+  "intent": {
+    "mode": "FULL"
+  }
+}
+```
+
+Runtime 必须重新计算 live Snapshot 并验证 `resolvedBaseCommit / mergeBase / headCommit / currentBranch / includeWorkingTree / gitStateSha256 / snapshotSha256`；Snapshot 之后 Review Scope Git bytes/state 发生变化必须 fail closed。Runtime 再从 Snapshot 组装正式 `reviewScope` 与 `changedFiles.path/sources`，验证 semantic evidence、EntryPoint Inventory 与 Coverage 后才发布 Certified ChangeAnalysis。
 
 ### Review Report 受控入口
 
@@ -117,7 +135,6 @@ committed = mergeBase → HEAD
 不得用普通工作区 `git diff` 冒充完整 Review；不得自动 fetch/pull。即使宿主暴露该 helper，也不得用其输出覆盖或修补 Runtime Canonical Snapshot。
 
 ### `git_refs() -> GitRefsResult`
-
 仅读本地 refs：`currentBranch`、`localBranches`、`remoteBranches`、`originHead`。不联网。该工具可以用于初始化/展示，但不得覆盖 Runtime Snapshot 中的 Git identity。
 
 ### `read_code(paths, lineRanges?) -> CodeBundle`
@@ -128,7 +145,7 @@ committed = mergeBase → HEAD
 
 确定性定位 Java 类/接口/枚举/方法声明。底层当前为 ast-grep，但 Contract 不暴露 ast-grep pattern。
 
-### `find_references(symbol, scope?) -> ReferenceSearchResult`
+### `find_references(symbol, scope?) -> SymbolSearchResult`
 
 确定性定位项目内部直接引用/调用。用于 changed Service 反向寻找 Controller/Service 上游，以及调用链继续展开。
 
@@ -357,7 +374,6 @@ bin/** tools-runtime/**
 项目状态保留：`project.md`、`runs/**`；`harness.yaml` 仅 registered Config Migration 可最小修改。业务根 `AGENTS.md` 不触碰。
 
 ### `add-review-config-v1`
-
 仅当顶层 `review:` 不存在时执行，baseRef 严格按：
 
 ```text
