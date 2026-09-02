@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 
 $driverPath = '.github/scripts/task162-release-certification.ps1'
 $workflowPath = '.github/workflows/task162-final-release-certification.yml'
+$task2FinalContractPath = '.github/scripts/task162-final-task2-invocation-contract-regression.ps1'
 
 foreach ($path in @($driverPath, $workflowPath)) {
     if (-not (Test-Path $path -PathType Leaf)) { throw "Final certification contract file missing: $path" }
@@ -17,7 +18,8 @@ $requiredDriverFragments = @(
     '4a312c4a2c85a202b740d3a1f419b2812e42f866',
     'task162-hotfix-task1-agent-snapshot-request-contract.ps1',
     'task162-hotfix-task1-canonical-changeset-regression.ps1',
-    'task162-hotfix-task2-invocation-contract-regression.ps1',
+    'task162-final-task2-invocation-contract-regression.ps1',
+    "go test -count=1 -run 'Test162HotfixTask2' -v ./cmd/codea-dcep-tools",
     'task162-hotfix-task2-runtime-invocation-regression.ps1',
     'task162-hotfix-task3-real-plain-review-e2e.ps1',
     'hotfixTask1CanonicalAuthority',
@@ -28,6 +30,28 @@ $requiredDriverFragments = @(
 foreach ($fragment in $requiredDriverFragments) {
     if (-not $driver.Contains($fragment)) {
         throw "FINAL_HOTFIX_CERT_CONTRACT_MISSING driver fragment: $fragment"
+    }
+}
+
+if ($driver.Contains("Invoke-Regression './.github/scripts/task162-hotfix-task2-invocation-contract-regression.ps1'")) {
+    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID final certification still invokes fragile accepted Task 2 PowerShell audit directly'
+}
+
+if (-not (Test-Path $task2FinalContractPath -PathType Leaf)) {
+    throw "FINAL_HOTFIX_CERT_CONTRACT_MISSING certification-only Task 2 adapter: $task2FinalContractPath"
+}
+$task2FinalContract = Get-Content -Raw $task2FinalContractPath
+foreach ($fragment in @(
+    'TASK162_HOTFIX_TASK2_ACTIVE_INVOCATION_AUDIT PASS',
+    'TASK162_HOTFIX_TASK2_REQUEST_CONTRACTS PASS',
+    'TASK162_HOTFIX_TASK2_INVOCATION_CONTRACT PASS',
+    'oneOf',
+    'additionalProperties',
+    'review-options-request.schema.json',
+    '"baseRef"'
+)) {
+    if (-not $task2FinalContract.Contains($fragment)) {
+        throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID Task 2 adapter missing evidence: $fragment"
     }
 }
 
@@ -68,5 +92,6 @@ if ($workflow -match 'opencode-ai@(latest|\*)') {
     throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID unpinned OpenCode host'
 }
 
+Write-Output 'TASK162_HOTFIX_FINAL_TASK2_ADAPTER_CONTRACT PASS'
 Write-Output 'TASK162_HOTFIX_FINAL_REGRESSION_ISOLATION_CONTRACT PASS'
 Write-Output 'TASK162_HOTFIX_FINAL_CERTIFICATION_CONTRACT PASS'
