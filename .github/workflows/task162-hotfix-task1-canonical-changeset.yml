@@ -1,0 +1,47 @@
+name: task162-hotfix-task1-canonical-changeset
+
+on:
+  push:
+    branches: [hotfix/1.6.2-task1-canonical-changeset]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  task1:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Canonical ChangeSet focused tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 -v ./internal/changeset ./internal/analysis ./cmd/codea-dcep-tools
+
+      - name: Full Go regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./...
+
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
+
+      - name: Task 1 exact-head marker
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.event.pull_request.head.sha || github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_HOTFIX_TASK1_EXACT_HEAD PASS head=$head"
