@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"codea-harness-tools/internal/requestcontract"
 	"codea-harness-tools/internal/reviewselection"
 	"codea-harness-tools/internal/schema"
 )
@@ -49,6 +50,9 @@ func runReviewOptions(args []string) error {
 	requestBytes, err := os.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("read review options request: %w", err)
+	}
+	if err := requestcontract.Validate("review-options-request.schema.json", requestBytes); err != nil {
+		return fmt.Errorf("REVIEW_OPTIONS_REQUEST_SCHEMA_INVALID: %w", err)
 	}
 	var req reviewOptionsRequest
 	if err := decodeStrictChainRequest(requestBytes, &req, "review options request"); err != nil {
