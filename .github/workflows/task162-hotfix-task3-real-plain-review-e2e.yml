@@ -58,37 +58,19 @@ jobs:
           Write-Output "OpenCode $version"
           if ($version -notmatch '1\.18\.25') { throw "unexpected OpenCode version: $version" }
 
-      - name: Focused Task 3 host-protocol diagnostics
+      - name: Validate committed Task 3 test sources
         shell: pwsh
         run: |
           $psPath = '.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1'
           $source = Get-Content $psPath -Raw
-          $fixed = $source.Replace('$opencodeExit:', '${opencodeExit}:').Replace('Invoke-Git add -A', 'Invoke-Git add .')
-          $fixed = $fixed.Replace("@('schemaVersion','runId','optionsHash','mode','selectionIds')", "@('runId','optionsHash','mode','selectionIds')")
-          $fixed = $fixed.Replace("'TASK3_READ .code-harness/AGENTS.md'", "'.code-harness/AGENTS.md'")
-          $fixed = $fixed.Replace("'TASK3_READ .code-harness/agents/orchestrator.md'", "'.code-harness/agents/orchestrator.md'")
-          $fixed = $fixed.Replace("'TASK3_READ .code-harness/agents/reviewer.md'", "'.code-harness/agents/reviewer.md'")
-          $fixed = $fixed.Replace("'TASK3_READ .code-harness/contracts/change-set-request.schema.json'", "'.code-harness/contracts/change-set-request.schema.json'")
-          $fixed = $fixed.Replace("'TASK3_READ .code-harness/contracts/analysis-certify-request.schema.json'", "'.code-harness/contracts/analysis-certify-request.schema.json'")
-          $fixed = $fixed.Replace("'TASK3_READ .code-harness/contracts/review-options-request.schema.json'", "'.code-harness/contracts/review-options-request.schema.json'")
-          $fixed = $fixed.Replace('$raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)', '$ErrorActionPreference = ''Continue''; $raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)')
-          $fixed = $fixed.Replace('$opencodeExit = $LASTEXITCODE', '$opencodeExit = $LASTEXITCODE; $ErrorActionPreference = ''Stop''')
-          $fixed = $fixed.Replace('Remove-Item $serverLog -Force -ErrorAction SilentlyContinue', '')
-          $fixed = $fixed.Replace('Remove-Item $transcript -Force -ErrorAction SilentlyContinue', '')
-          [System.IO.File]::WriteAllText($psPath, $fixed, [System.Text.UTF8Encoding]::new($false))
-          [void][scriptblock]::Create($fixed)
-
+          [void][scriptblock]::Create($source)
+          foreach ($stale in @('$opencodeExit:', 'Invoke-Git add -A', "@('schemaVersion','runId','optionsHash','mode','selectionIds')")) {
+            if ($source.Contains($stale)) { throw "Task 3 source still contains pre-materialization diagnostic form: $stale" }
+          }
           $pyPath = '.github/scripts/task162-hotfix-task3/mock_openai_server.py'
-          $py = Get-Content $pyPath -Raw
-          $py = $py.Replace("schemaVersion='1.5';", '')
-          $oldLog = 'self.append_log({"event": "request", "stage": stage, "hasTools": bool(tools), "messages": messages})'
-          $newLog = 'self.append_log({"event": "request", "stage": stage, "hasTools": bool(tools), "toolNames": [str(t.get("function", {}).get("name", "")) for t in tools], "tools": tools, "messages": messages})'
-          $py = $py.Replace($oldLog, $newLog)
-          $py = $py.Replace('self.respond_text(body, "TASK3_E2E_ABORT OpenCode bash tool unavailable")', 'self.respond_text(body, "TASK3_E2E_TOOL_NAMES " + ",".join(tool_names))')
-          [System.IO.File]::WriteAllText($pyPath, $py, [System.Text.UTF8Encoding]::new($false))
           python -m py_compile $pyPath
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Output 'TASK162_HOTFIX_TASK3_HOST_PROTOCOL_DIAGNOSTICS_READY PASS'
+          Write-Output 'TASK162_HOTFIX_TASK3_COMMITTED_TEST_SOURCES PASS'
 
       - name: Real plain harness review E2E
         shell: pwsh
@@ -109,8 +91,6 @@ jobs:
             ${{ runner.temp }}/task162-hotfix-task3-model-*.jsonl
             ${{ runner.temp }}/task162-hotfix-task3-opencode-*.jsonl
             ${{ runner.temp }}/task162-hotfix-task3-verifier.log
-            .github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
-            .github/scripts/task162-hotfix-task3/mock_openai_server.py
 
       - name: Task 3 focused exact-head marker
         shell: pwsh
