@@ -24,6 +24,10 @@ jobs:
           go-version: 1.23.x
           cache-dependency-path: .code-harness/tools-runtime/go.sum
 
+      - name: Active Agent Runtime invocation contract
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task2-invocation-contract-regression.ps1
+
       - name: Task 2 invocation contract focused tests
         working-directory: .code-harness/tools-runtime
         shell: pwsh
