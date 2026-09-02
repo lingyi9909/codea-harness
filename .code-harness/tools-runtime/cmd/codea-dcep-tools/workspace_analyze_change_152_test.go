@@ -77,10 +77,10 @@ func Test152WorkspaceToolsAreGloballyAllowlisted(t *testing.T) {
 	tools := read(".code-harness/tools/README.md")
 
 	commands := []string{
-		"codea-harness-tools workspace verify --id <id>",
-		"codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>",
-		"codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>",
-		"codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]",
+		"codea-dcep-tools.exe workspace verify --id <id>",
+		"codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>",
+		"codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>",
+		"codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]",
 	}
 	for _, command := range commands {
 		if !strings.Contains(agents, command) {
