@@ -31,6 +31,23 @@ foreach ($fragment in $requiredDriverFragments) {
     }
 }
 
+$invokeRegressionMatch = [regex]::Match(
+    $driver,
+    'function Invoke-Regression\(\[string\]\$Script, \[string\]\$Label\) \{(?<body>[\s\S]*?)\r?\n\}',
+    [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+)
+if (-not $invokeRegressionMatch.Success) {
+    throw 'FINAL_HOTFIX_CERT_CONTRACT_MISSING Invoke-Regression body'
+}
+$invokeRegressionBody = $invokeRegressionMatch.Groups['body'].Value
+if ($invokeRegressionBody -match '\$LASTEXITCODE\s+-ne\s+0') {
+    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID Invoke-Regression treats stale native LASTEXITCODE as script failure'
+}
+$resetMatches = [regex]::Matches($invokeRegressionBody, '\$global:LASTEXITCODE\s*=\s*0')
+if ($resetMatches.Count -lt 2) {
+    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID Invoke-Regression must normalize native exit code before and after accepted regression'
+}
+
 $requiredWorkflowFragments = @(
     'actions/setup-python@v6',
     "python-version: '3.12'",
@@ -47,4 +64,5 @@ if ($workflow -match 'opencode-ai@(latest|\*)') {
     throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID unpinned OpenCode host'
 }
 
+Write-Output 'TASK162_HOTFIX_FINAL_REGRESSION_WRAPPER_CONTRACT PASS'
 Write-Output 'TASK162_HOTFIX_FINAL_CERTIFICATION_CONTRACT PASS'
