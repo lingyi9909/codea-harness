@@ -91,6 +91,8 @@ Runtime 必须重新计算 live Snapshot，并验证 `resolvedBaseCommit / merge
 
 Reviewer 不得直接创建、修改或“修复”上述 Runtime-owned artifacts，也不得在 certification 失败后把 semantic proposal 当成已验证 ChangeAnalysis 继续 Review/Chain 流程。
 
+对于 `harness chain discover [target]`，Reviewer 继续协调 `analyze-change → discover-chain → Controlled Runtime`；前半段仍必须先取得 Runtime Canonical Snapshot 并完成 ChangeAnalysis certification，`discover-chain` 只能消费 Certified ChangeAnalysis，不得建立第二套 Git/Java/resource authority。
+
 以下任一情况固定 fail closed：
 
 ```text
