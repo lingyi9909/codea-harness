@@ -87,11 +87,13 @@ jobs:
             ':!.code-harness/tools-runtime/internal/upgrade/task161_release_upgrade_test.go' \
             ':!.github/scripts/task161-release.ps1' \
             ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/scripts/task162-release-certification.ps1' \
             ':!.github/workflows/task161-runtime-rename-audit.yml' \
             ':!.github/workflows/task162-task1-maven-multimodule.yml' \
             ':!.github/workflows/task162-hotfix-task1-canonical-changeset.yml' || true)
           cmdrefs=$(git grep -l 'cmd/codea-harness-tools' -- "${scopes[@]}" \
             ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/scripts/task162-release-certification.ps1' \
             ':!.github/workflows/task161-runtime-rename-audit.yml' \
             ':!.github/workflows/task162-task1-maven-multimodule.yml' \
             ':!.github/workflows/task162-hotfix-task1-canonical-changeset.yml' || true)
