@@ -14,6 +14,7 @@ import (
 
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/changeset"
+	"codea-harness-tools/internal/requestcontract"
 	"codea-harness-tools/internal/schema"
 )
 
@@ -56,6 +57,9 @@ func runAnalysisSnapshot162(args []string) error {
 	if err != nil { return err }
 	data, err := os.ReadFile(cleanInput)
 	if err != nil { return fmt.Errorf("read ChangeSet snapshot request: %w", err) }
+	if err := requestcontract.Validate("change-set-request.schema.json", data); err != nil {
+		return fmt.Errorf("CHANGE_SET_REQUEST_SCHEMA_INVALID: %w", err)
+	}
 	var req analysisSnapshotRequest162
 	if err := decodeStrictAnalysisRequest153(data, &req, "ChangeSet snapshot request"); err != nil { return err }
 	if req.RunID != pathRunID {
@@ -95,6 +99,9 @@ func runAnalysisInventory(args []string) error {
 	if err != nil { return err }
 	data, err := os.ReadFile(cleanInput)
 	if err != nil { return fmt.Errorf("read entrypoint inventory request: %w", err) }
+	if err := requestcontract.Validate("analysis-inventory-request.schema.json", data); err != nil {
+		return fmt.Errorf("ANALYSIS_INVENTORY_REQUEST_SCHEMA_INVALID: %w", err)
+	}
 	var req analysisInventoryRequest153
 	if err := decodeStrictAnalysisRequest153(data, &req, "entrypoint inventory request"); err != nil { return err }
 	if req.RunID != pathRunID {
@@ -137,6 +144,9 @@ func runAnalysisCertify(args []string) error {
 	if err != nil { return err }
 	data, err := os.ReadFile(cleanInput)
 	if err != nil { return fmt.Errorf("read analysis certify request: %w", err) }
+	if err := requestcontract.Validate("analysis-certify-request.schema.json", data); err != nil {
+		return fmt.Errorf("ANALYSIS_CERTIFY_REQUEST_SCHEMA_INVALID: %w", err)
+	}
 	var req analysisruntime.CertifyRequest
 	if err := decodeStrictAnalysisRequest153(data, &req, "analysis certify request"); err != nil { return err }
 	if req.RunID != pathRunID {
