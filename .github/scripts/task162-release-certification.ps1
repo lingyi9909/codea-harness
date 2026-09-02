@@ -44,6 +44,7 @@ function Assert-PostTask3CertificationScope {
     $allowed = @(
         '.github/scripts/task162-release-certification.ps1',
         '.github/scripts/task162-hotfix-final-certification-contract-regression.ps1',
+        '.github/scripts/task162-final-task2-invocation-contract-regression.ps1',
         '.github/workflows/task162-final-release-certification.yml',
         '.github/workflows/task162-hotfix-final-certification-contract.yml',
         'docs/superpowers/plans/2026-09-02-codea-harness-1.6.2-post-hotfix-final-release-certification-plan.md'
@@ -168,7 +169,17 @@ try {
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-authority-regression.ps1' 'Hotfix Task 1 Agent authority'
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-snapshot-request-contract.ps1' 'Hotfix Task 1 Agent Snapshot request contract'
     Invoke-Regression './.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1' 'Hotfix Task 1 Canonical ChangeSet authority'
-    Invoke-Regression './.github/scripts/task162-hotfix-task2-invocation-contract-regression.ps1' 'Hotfix Task 2 Active Agent invocation contract'
+    Invoke-Regression './.github/scripts/task162-final-task2-invocation-contract-regression.ps1' 'Hotfix Task 2 Active Agent invocation contract (final adapter)'
+
+    Write-Host 'TASK162 RELEASE: Task 2 invocation contract focused tests'
+    Push-Location '.code-harness/tools-runtime'
+    try {
+        go test -count=1 -run 'Test162HotfixTask2' -v ./cmd/codea-dcep-tools
+        if ($LASTEXITCODE -ne 0) { throw "Task 2 invocation contract focused tests failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $global:LASTEXITCODE = 0
+    Write-Output 'TASK162_FINAL_TASK2_FOCUSED_GO_CONTRACT PASS'
+
     Invoke-Regression './.github/scripts/task162-hotfix-task2-runtime-invocation-regression.ps1' 'Hotfix Task 2 Runtime invocation contract'
     Invoke-Regression './.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1' 'Hotfix Task 3 Real plain harness review E2E'
     Write-Output 'NO_RUNTIME_ZERO_ARG_USAGE PASS'
