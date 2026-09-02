@@ -5,6 +5,11 @@ if (-not (Test-Path $exe)) {
     throw "built Runtime not found: $exe"
 }
 
+function Get-RepoRelativePath {
+    param([string]$Path)
+    return [System.IO.Path]::GetRelativePath((Get-Location).Path, (Resolve-Path $Path).Path).Replace('\','/')
+}
+
 function Invoke-ExpectedFailure {
     param(
         [string[]]$Arguments,
@@ -40,27 +45,27 @@ New-Item -ItemType Directory -Path $requestsDir -Force | Out-Null
 try {
     $snapshotPath = Join-Path $requestsDir 'snapshot-invalid.json'
     [System.IO.File]::WriteAllText($snapshotPath, "{`"runId`":`"$runId`",`"requestedBaseRef`":`"HEAD`",`"includeWorkingTree`":true}")
-    Invoke-ExpectedFailure @('analysis','snapshot','--input',(Resolve-Path -Relative $snapshotPath).TrimStart('.','\')) 'CHANGE_SET_REQUEST_SCHEMA_INVALID' | Out-Null
+    Invoke-ExpectedFailure @('analysis','snapshot','--input',(Get-RepoRelativePath $snapshotPath)) 'CHANGE_SET_REQUEST_SCHEMA_INVALID' | Out-Null
     Write-Output 'TASK162_HOTFIX_TASK2_SNAPSHOT_UNKNOWN_FIELD_REJECTED PASS'
 
     $inventoryPath = Join-Path $requestsDir 'inventory-invalid.json'
     [System.IO.File]::WriteAllText($inventoryPath, "{`"runId`":`"$runId`",`"baseRef`":`"HEAD`",`"includeWorkingTree`":true,`"intent`":{`"mode`":`"FULL`"},`"unexpected`":true}")
-    Invoke-ExpectedFailure @('analysis','inventory','--input',(Resolve-Path -Relative $inventoryPath).TrimStart('.','\')) 'ANALYSIS_INVENTORY_REQUEST_SCHEMA_INVALID' | Out-Null
+    Invoke-ExpectedFailure @('analysis','inventory','--input',(Get-RepoRelativePath $inventoryPath)) 'ANALYSIS_INVENTORY_REQUEST_SCHEMA_INVALID' | Out-Null
     Write-Output 'TASK162_HOTFIX_TASK2_INVENTORY_UNKNOWN_FIELD_REJECTED PASS'
 
     $certifyPath = Join-Path $requestsDir 'certify-invalid.json'
     [System.IO.File]::WriteAllText($certifyPath, "{`"runId`":`"$runId`",`"snapshotPath`":`".code-harness/runs/$runId/analysis/change-set.json`",`"snapshotSha256`":`"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`",`"proposalPath`":`".code-harness/runs/$runId/requests/change-analysis-proposal.json`",`"intent`":{`"mode`":`"FULL`"},`"unexpected`":true}")
-    Invoke-ExpectedFailure @('analysis','certify','--input',(Resolve-Path -Relative $certifyPath).TrimStart('.','\')) 'ANALYSIS_CERTIFY_REQUEST_SCHEMA_INVALID' | Out-Null
+    Invoke-ExpectedFailure @('analysis','certify','--input',(Get-RepoRelativePath $certifyPath)) 'ANALYSIS_CERTIFY_REQUEST_SCHEMA_INVALID' | Out-Null
     Write-Output 'TASK162_HOTFIX_TASK2_CERTIFY_UNKNOWN_FIELD_REJECTED PASS'
 
     $reviewInvalidPath = Join-Path $requestsDir 'review-options-invalid.json'
     [System.IO.File]::WriteAllText($reviewInvalidPath, "{`"runId`":`"$runId`",`"changeAnalysisPath`":`".code-harness/runs/$runId/analysis/change-analysis.json`",`"baseRef`":`"HEAD`"}")
-    Invoke-ExpectedFailure @('review','options','--input',(Resolve-Path -Relative $reviewInvalidPath).TrimStart('.','\')) 'REVIEW_OPTIONS_REQUEST_SCHEMA_INVALID' | Out-Null
+    Invoke-ExpectedFailure @('review','options','--input',(Get-RepoRelativePath $reviewInvalidPath)) 'REVIEW_OPTIONS_REQUEST_SCHEMA_INVALID' | Out-Null
     Write-Output 'TASK162_HOTFIX_TASK2_REVIEW_OPTIONS_BASEREF_REJECTED PASS'
 
     $reviewValidPath = Join-Path $requestsDir 'review-options-valid.json'
     [System.IO.File]::WriteAllText($reviewValidPath, "{`"runId`":`"$runId`",`"changeAnalysisPath`":`".code-harness/runs/$runId/analysis/change-analysis.json`"}")
-    $validOutput = (& $exe review options --input (Resolve-Path -Relative $reviewValidPath).TrimStart('.','\') 2>&1 | Out-String)
+    $validOutput = (& $exe review options --input (Get-RepoRelativePath $reviewValidPath) 2>&1 | Out-String)
     $validExit = $LASTEXITCODE
     $global:LASTEXITCODE = 0
     if ($validExit -eq 0) {
