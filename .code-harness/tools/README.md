@@ -135,6 +135,7 @@ committed = mergeBase → HEAD
 不得用普通工作区 `git diff` 冒充完整 Review；不得自动 fetch/pull。即使宿主暴露该 helper，也不得用其输出覆盖或修补 Runtime Canonical Snapshot。
 
 ### `git_refs() -> GitRefsResult`
+
 仅读本地 refs：`currentBranch`、`localBranches`、`remoteBranches`、`originHead`。不联网。该工具可以用于初始化/展示，但不得覆盖 Runtime Snapshot 中的 Git identity。
 
 ### `read_code(paths, lineRanges?) -> CodeBundle`
@@ -145,7 +146,7 @@ committed = mergeBase → HEAD
 
 确定性定位 Java 类/接口/枚举/方法声明。底层当前为 ast-grep，但 Contract 不暴露 ast-grep pattern。
 
-### `find_references(symbol, scope?) -> SymbolSearchResult`
+### `find_references(symbol, scope?) -> ReferenceSearchResult`
 
 确定性定位项目内部直接引用/调用。用于 changed Service 反向寻找 Controller/Service 上游，以及调用链继续展开。
 
@@ -374,6 +375,7 @@ bin/** tools-runtime/**
 项目状态保留：`project.md`、`runs/**`；`harness.yaml` 仅 registered Config Migration 可最小修改。业务根 `AGENTS.md` 不触碰。
 
 ### `add-review-config-v1`
+
 仅当顶层 `review:` 不存在时执行，baseRef 严格按：
 
 ```text
