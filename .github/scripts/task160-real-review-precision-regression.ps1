@@ -88,6 +88,7 @@ spring:
         Copy-Item $versionSource '.code-harness\VERSION' -Force
         Copy-Item $catalogSource '.code-harness\review-rules\spring-v1.yaml' -Force
         foreach ($contract in @(
+            'analysis-certify-request.schema.json',
             'change-analysis.schema.json',
             'entrypoint-inventory.schema.json',
             'change-analysis-cert.schema.json',
