@@ -11,7 +11,7 @@ permissions:
 jobs:
   release-certification:
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,6 +22,23 @@ jobs:
         with:
           go-version: 1.23.x
           cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned OpenCode Agent Host
+        shell: pwsh
+        run: |
+          npm install --global opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (& opencode --version | Out-String).Trim()
+          Write-Output "OpenCode $version"
+          if ($version -notmatch '1\.18\.25') { throw "unexpected OpenCode version: $version" }
+
+      - name: Hotfix Final Certification contract
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-final-certification-contract-regression.ps1
 
       - name: Codea Harness 1.6.2 Final Release Certification
         shell: pwsh
@@ -35,6 +52,10 @@ jobs:
           $checklist = Get-Content 'codea-harness-1.6.2-release-checklist.json' -Raw | ConvertFrom-Json
           if ([string]$checklist.exactHeadSha -ne $head) { throw 'release checklist exact HEAD mismatch' }
           if ([string]$checklist.version -ne '1.6.2') { throw 'release checklist version mismatch' }
+          if ([string]$checklist.acceptedHotfix.task3 -ne '4a312c4a2c85a202b740d3a1f419b2812e42f866') { throw 'release checklist accepted Task 3 mismatch' }
+          foreach ($gate in @('hotfixTask1CanonicalAuthority','hotfixTask2InvocationContract','hotfixTask3RealPlainReview','postTask3CertificationScope')) {
+            if ([string]$checklist.gates.$gate -ne 'PASS') { throw "release checklist hotfix gate not PASS: $gate" }
+          }
           $manifest = Get-Content '.code-harness/VERSION' -Raw
           if ($manifest.Trim() -ne '1.6.2') { throw 'repository VERSION mismatch' }
           Write-Output "TASK162_FINAL_EXACT_HEAD PASS head=$head"
