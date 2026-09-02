@@ -40,12 +40,16 @@ if (-not $invokeRegressionMatch.Success) {
     throw 'FINAL_HOTFIX_CERT_CONTRACT_MISSING Invoke-Regression body'
 }
 $invokeRegressionBody = $invokeRegressionMatch.Groups['body'].Value
-if ($invokeRegressionBody -match '\$LASTEXITCODE\s+-ne\s+0') {
-    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID Invoke-Regression treats stale native LASTEXITCODE as script failure'
+if ($invokeRegressionBody -match '&\s+\$Script\b') {
+    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID accepted regression executes in parent PowerShell scope'
 }
-$resetMatches = [regex]::Matches($invokeRegressionBody, '\$global:LASTEXITCODE\s*=\s*0')
-if ($resetMatches.Count -lt 2) {
-    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID Invoke-Regression must normalize native exit code before and after accepted regression'
+foreach ($fragment in @('pwsh', '-NoProfile', '-File', '$childExit')) {
+    if (-not $invokeRegressionBody.Contains($fragment)) {
+        throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID isolated regression wrapper missing: $fragment"
+    }
+}
+if ($invokeRegressionBody -notmatch '\$childExit\s+-ne\s+0') {
+    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID isolated regression wrapper does not fail on child process exit code'
 }
 
 $requiredWorkflowFragments = @(
@@ -64,5 +68,5 @@ if ($workflow -match 'opencode-ai@(latest|\*)') {
     throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID unpinned OpenCode host'
 }
 
-Write-Output 'TASK162_HOTFIX_FINAL_REGRESSION_WRAPPER_CONTRACT PASS'
+Write-Output 'TASK162_HOTFIX_FINAL_REGRESSION_ISOLATION_CONTRACT PASS'
 Write-Output 'TASK162_HOTFIX_FINAL_CERTIFICATION_CONTRACT PASS'
