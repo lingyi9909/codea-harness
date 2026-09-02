@@ -186,7 +186,11 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 		if err != nil {
 			return ChangeAnalysis{}, Certificate{}, err
 		}
-		if snapshot.SHA256 != cert.ChangeSetSHA256 || snapshot.Head != cert.Head || snapshot.BaseRef != cert.BaseRef {
+		legacyChangeSetSHA, err := legacyChangeSetSHA256E737(snapshot)
+		if err != nil {
+			return ChangeAnalysis{}, Certificate{}, err
+		}
+		if legacyChangeSetSHA != cert.ChangeSetSHA256 || snapshot.HeadCommit != cert.Head || snapshot.RequestedBaseRef != cert.BaseRef {
 			return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFIED_CHANGE_SET_STALE")
 		}
 		if err := compareDraftChangeSet153(meta.ChangedFiles, snapshot.Files); err != nil {
