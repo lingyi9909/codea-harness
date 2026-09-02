@@ -53,6 +53,12 @@ jobs:
         shell: pwsh
         run: go build -trimpath -ldflags '-s -w' -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
 
+      - name: Real Runtime invocation contract
+        shell: pwsh
+        run: |
+          ./.github/scripts/task162-hotfix-task2-runtime-invocation-regression.ps1
+          $global:LASTEXITCODE = 0
+
       - name: Agent snapshot request Runtime contract
         shell: pwsh
         run: |
