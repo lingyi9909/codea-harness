@@ -11,7 +11,11 @@
     "entrypointInventorySha256",
     "baseRef",
     "head",
-    "includeWorkingTree"
+    "resolvedBaseCommit",
+    "mergeBase",
+    "currentBranch",
+    "includeWorkingTree",
+    "snapshotSha256"
   ],
   "properties": {
     "runId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
