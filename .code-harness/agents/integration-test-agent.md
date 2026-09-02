@@ -121,7 +121,7 @@ files[].path/baseSha256=<exact identity>
 并调用：
 
 ```text
-.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe seal-apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 只有 Runtime 成功生成：
@@ -163,7 +163,7 @@ ALL
 然后调用：
 
 ```text
-.code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 Runtime 必须先逐字段比对 sealed snapshot。即使替换后的 Patch B 自己的 diff/hash/base 全部自洽，只要不同于用户批准的 Patch A，必须 `APPROVAL_IDENTITY_MISMATCH` / STOP / 0 写入。
@@ -271,5 +271,5 @@ Runtime 固定拒绝：
 - 不得自动修改 REUSED_EXISTING 失败方法。
 - 不得在审批后重新生成不同 request 并沿用旧批准。
 - 不得使用 `write_test` / direct host write 作为正式成功路径。
-- 正式写入只能 `planType=TEST` → 审批前 `codea-harness-tools seal-apply --input` → 精确批准 → 同一 request `codea-harness-tools apply --input` → apply evidence。
+- 正式写入只能 `planType=TEST` → 审批前 `codea-dcep-tools.exe seal-apply --input` → 精确批准 → 同一 request `codea-dcep-tools.exe apply --input` → apply evidence。
 - 不得执行测试、Diagnosis、Shell、commit/push/PR。

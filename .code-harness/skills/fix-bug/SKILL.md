@@ -52,7 +52,7 @@ files[].path/baseSha256=<exact file identity>
 7. 在提示用户批准之前调用：
 
 ```text
-.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe seal-apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 只有生成：
@@ -66,7 +66,7 @@ files[].path/baseSha256=<exact file identity>
 9. 批准后**不得重新生成 request**。只能使用审批前 sealed 的同一份 `.code-harness/runs/<runId>/requests/apply.json` 调用：
 
 ```text
-.code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 10. Runtime 必须先逐字段比对 sealed snapshot。即使 Patch B 的 `diffSha256` 与 Patch B 自己完全自洽，只要它不同于用户批准前 sealed 的 Patch A，就必须 `APPROVAL_IDENTITY_MISMATCH` / STOP / 0 写入。

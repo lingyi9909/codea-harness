@@ -33,7 +33,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: codea-harness-tools <upgrade|validate|workspace|nav|db|chain|analysis|review|report|seal-apply|apply>")
+		return errors.New("usage: codea-dcep-tools <upgrade|validate|workspace|nav|db|chain|analysis|review|report|seal-apply|apply>")
 	}
 	switch args[0] {
 	case "upgrade":

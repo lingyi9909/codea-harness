@@ -73,7 +73,7 @@ show 必须展示：名称、状态、全部 entryPoints、按 YAML 保存顺序
 对每条待验证 Chain，Orchestrator 先建立最新 Certified ChangeAnalysis，再调用 Controlled Runtime：
 
 ```text
-codea-harness-tools chain validate \
+codea-dcep-tools.exe chain validate \
   --id <chainId> \
   --change-analysis .code-harness/runs/<runId>/analysis/change-analysis.json
 ```
@@ -156,7 +156,7 @@ Runtime 只允许读取同 run、带有效 Runtime provenance 的：
 ```text
 Runtime candidate
 ↓
-codea-harness-tools chain seal-persist
+codea-dcep-tools.exe chain seal-persist
 ↓
 analysis/chain-write-plans/<planId>.json
 ↓
@@ -164,7 +164,7 @@ analysis/chain-write-plans/<planId>.json
 ↓
 用户明确确认该 planId
 ↓
-codea-harness-tools chain persist
+codea-dcep-tools.exe chain persist
 ```
 
 Orchestrator 创建 sealing request：
@@ -180,7 +180,7 @@ Orchestrator 创建 sealing request：
 然后调用：
 
 ```text
-codea-harness-tools chain seal-persist --input .code-harness/runs/<runId>/requests/chain-seal-persist.json
+codea-dcep-tools.exe chain seal-persist --input .code-harness/runs/<runId>/requests/chain-seal-persist.json
 ```
 
 Runtime write plan 必须绑定：
@@ -208,7 +208,7 @@ previewSha256
 并调用：
 
 ```text
-codea-harness-tools chain persist --input .code-harness/runs/<runId>/requests/chain-persist.json
+codea-dcep-tools.exe chain persist --input .code-harness/runs/<runId>/requests/chain-persist.json
 ```
 
 Runtime 在写 Project State 前必须重新读取并验证：

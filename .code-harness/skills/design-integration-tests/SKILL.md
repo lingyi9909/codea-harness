@@ -48,7 +48,7 @@ files[].baseSha256
 - `list_project_tree`
 - `read_code`
 
-本 Skill **不写测试业务文件**。正式测试代码写入只允许审批前 Runtime seal + 批准后同一 request 的 `codea-harness-tools apply --input ...`。
+本 Skill **不写测试业务文件**。正式测试代码写入只允许审批前 Runtime seal + 批准后同一 request 的 `codea-dcep-tools.exe apply --input ...`。
 
 ## 执行步骤
 
@@ -209,7 +209,7 @@ files[].path/baseSha256=<exact identity>
 通过 `apply-request.schema.json` 后调用：
 
 ```text
-.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe seal-apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 Runtime 必须生成：
@@ -243,7 +243,7 @@ Runtime 必须生成：
 批准后 Generate Skill 只能消费同一份 sealed request，再调用：
 
 ```text
-.code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 Runtime 会逐字段比对 sealed snapshot；自洽 Patch B 不得替换用户批准的 Patch A。
@@ -300,7 +300,7 @@ EXTEND/CREATE：输出通过 `test-plan.schema.json` 的计划，包含：
 
 - 不得分析未选择 Controller。
 - 不得在审批前写测试业务文件。
-- 不得在审批前跳过 `codea-harness-tools seal-apply --input`。
+- 不得在审批前跳过 `codea-dcep-tools.exe seal-apply --input`。
 - 不得在审批后重新生成不同补丁/request 并沿用旧 planId。
 - 不得默认 Mock 内部 Service/Repository Bean。
 - 不得弱化 Existing Test 断言、删除测试或添加 `@Disabled`。

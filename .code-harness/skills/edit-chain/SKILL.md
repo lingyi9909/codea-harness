@@ -44,7 +44,7 @@ UPDATE_NOTES
 现有 ACCEPTED Project State Chain
 → same-run Certified ChangeAnalysis
 → requests/chain-edit.json
-→ codea-harness-tools chain edit --input ...
+→ codea-dcep-tools.exe chain edit --input ...
 → Runtime 验证六类 operation + 最终完整 Chain
 → analysis/chain-edit-candidates/<id>.yaml + provenance(kind=EDIT)
 → 展示 deterministic diff

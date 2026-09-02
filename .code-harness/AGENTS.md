@@ -51,31 +51,31 @@
 `.code-harness/bin/codea-dcep-tools.exe` 是 Harness 背后的确定性工具实现，不是新的产品 CLI。Agent 只可调用固定子命令：
 
 ```text
-codea-harness-tools upgrade
-codea-harness-tools validate ...
-codea-harness-tools nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools nav find-references --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
-codea-harness-tools nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
-codea-harness-tools nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
-codea-harness-tools workspace verify --id <id>
-codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
-codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
-codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
-codea-harness-tools analysis snapshot --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools chain list
-codea-harness-tools chain show --target <id|Controller|Controller.method>
-codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools chain validate --id <chainId> --change-analysis .code-harness/runs/<runId>/analysis/change-analysis.json
-codea-harness-tools chain refresh --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools chain edit --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools chain seal-persist --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools chain persist --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools report review --input .code-harness/runs/<runId>/requests/<file>.json
-codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe upgrade
+codea-dcep-tools.exe validate ...
+codea-dcep-tools.exe nav find-symbol --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-references --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-implementations --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav get-symbol-info --symbol <symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-by-annotation --annotation <annotation-name> --scope <repo-relative-scope>
+codea-dcep-tools.exe nav find-callers --symbol <method-symbol> --scope <repo-relative-scope>
+codea-dcep-tools.exe workspace verify --id <id>
+codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-dcep-tools.exe analysis snapshot --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe chain list
+codea-dcep-tools.exe chain show --target <id|Controller|Controller.method>
+codea-dcep-tools.exe chain discover --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe chain validate --id <chainId> --change-analysis .code-harness/runs/<runId>/analysis/change-analysis.json
+codea-dcep-tools.exe chain refresh --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe chain edit --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe chain seal-persist --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe chain persist --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/<file>.json
 ```
 
 Workspace 依赖导航只允许 `analyze-change` 在 current-project superclass/template inheritance 确定性断链时使用；候选只来自显式 `harness.yaml.workspaceDependencies`。必须先 `workspace verify --id <id>`，且只有 `VERIFIED` 才允许三个 `workspace-*` nav 子命令。不得扫描任意 sibling，不得把 dependency workspace 扩成 Change Set、Review Scope 或 Write Scope。
@@ -133,4 +133,27 @@ Runtime 必须重新计算 live Snapshot 并验证 resolved identity/state 完�
 
 ### Chain edit authority（1.5.3 Task 5）
 
-`harness chain edit` 只能生成 same-run `requests/**` proposal。Controlled Runtime `codea-harness-tools chain edit --input ...` 基于 Certified ChangeAnalysis 验证后，只能生成 `analysis/chain-edit-candidates/<id>.yaml` + `kind=EDIT` provenance；不得直接修改 `.code-harness/chains/**`。EDIT candidate 的最终保存继续走 `chain seal-persist → exact planId confirmation → chain persist`。
+`harness chain edit` 只能生成 same-run `requests/**` proposal。Controlled Runtime `codea-dcep-tools.exe chain edit --input ...` 基于 Certified ChangeAnalysis 验证后，只能生成 `analysis/chain-edit-candidates/<id>.yaml` + `kind=EDIT` provenance；不得直接修改 `.code-harness/chains/**`。EDIT candidate 的最终保存继续走 `chain seal-persist → exact planId confirmation → chain persist`。
+## 1.6.2 Task 2 Agent → Runtime Invocation Contract
+
+Agent/Orchestrator 写入 `requests/**` 后，Controlled Runtime 必须先按对应 machine-readable request contract 校验，再进入 strict decode 与业务处理：
+
+- `analysis snapshot` → `change-set-request.schema.json`
+- `analysis inventory` → `analysis-inventory-request.schema.json`
+- `analysis certify` → `analysis-certify-request.schema.json`
+- `review options` → `review-options-request.schema.json`
+
+Active Agent 只能调用 `.code-harness/bin/codea-dcep-tools.exe`；`codea-harness-tools` 仅可作为 Go module/import 的历史内部名称存在，不是可执行文件调用名。
+
+`review options` 的 Agent-facing request 固定为：
+
+```json
+{
+  "runId": "<runId>",
+  "changeAnalysisPath": ".code-harness/runs/<runId>/analysis/change-analysis.json"
+}
+```
+
+需要显式 target 时只允许额外加入可选 `target`。`baseRef`、`requestedBaseRef`、Snapshot identity 以及其他 Git fact 均不是 `review options` request 字段；`baseRef` 只在 `analysis snapshot` / retained legacy analysis request 的既定 Contract 中出现。Unknown field 必须由 request schema fail closed。
+
+`analysis certify` 的 Active Agent 形态仍固定为 canonical request：`runId / snapshotPath / snapshotSha256 / proposalPath / intent`。Schema 中保留的 legacy certify shape 仅用于 Runtime upgrade compatibility，Active Agent 不得生成 legacy `draftPath/baseRef` 形态。

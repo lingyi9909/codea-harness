@@ -121,7 +121,7 @@ Direct Service Method 只允许作为一层业务证据。Error code 仅接受�
 3. 调用：
 
 ```text
-codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json
+codea-dcep-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json
 ```
 
 4. Runtime 成功后 transport 删除；唯一正式 Artifact：`.code-harness/runs/<runId>/api-doc.md`。

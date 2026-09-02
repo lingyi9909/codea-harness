@@ -25,7 +25,7 @@ files[].path/baseSha256
 并调用：
 
 ```text
-.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe seal-apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 用户批准 `planId` 后，本 Skill 只能把**同一份 sealed exact request**交给 Controlled Runtime。
@@ -46,7 +46,7 @@ files[].path/baseSha256
 
 1. `REUSE_EXISTING` target 不进入写入流程。
 2. 只有存在 EXTEND_EXISTING / CREATE_NEW 才允许 apply。
-3. `apply.json` 必须在用户批准前已经通过 `apply-request.schema.json` 和 `codea-harness-tools seal-apply --input`。
+3. `apply.json` 必须在用户批准前已经通过 `apply-request.schema.json` 和 `codea-dcep-tools.exe seal-apply --input`。
 4. 对应 `.code-harness/runs/<runId>/sealed-plans/<planId>.json` 必须存在。
 5. 用户必须精确回复 `批准 <planId>`。
 6. 批准后禁止重新生成、改写或 rebase `apply.json`。变化必须回到设计阶段产生新 planId、新 request、新 seal、新批准。
@@ -94,7 +94,7 @@ files[].baseSha256
 调用：
 
 ```text
-.code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 Runtime 独立验证：
@@ -169,7 +169,7 @@ new unifiedDiff
 → new files[].baseSha256
 → new planId
 → new apply request
-→ 审批前 codea-harness-tools seal-apply --input
+→ 审批前 codea-dcep-tools.exe seal-apply --input
 → 新的精确批准
 → 同一 sealed request 的 planType=TEST Runtime apply
 ```

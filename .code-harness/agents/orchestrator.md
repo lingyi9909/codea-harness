@@ -198,7 +198,7 @@ Chain = 业务上下文边界
 4. 调用 Controlled Runtime：
 
 ```text
-codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+codea-dcep-tools.exe chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
 ```
 
 5. Runtime 只接受同 run 路径，并重新验证 ChangeAnalysis Schema、ReviewScope Schema、selectedCallChains/scopedFiles 与对应 coverage，然后解析 Chain context。
@@ -643,11 +643,11 @@ Agent 设计 exact patch
 → planId/fixPlanId + unifiedDiff + diffSha256 + files[].baseSha256
 → .code-harness/runs/<runId>/requests/apply.json
 → apply-request.schema.json
-→ .code-harness/bin/codea-harness-tools seal-apply --input <request>
+→ .code-harness/bin/codea-dcep-tools.exe seal-apply --input <request>
 → .code-harness/runs/<runId>/sealed-plans/<planId>.json
 → 用户精确批准该 planId
 → 保持同一份 requests/apply.json，不得重新生成
-→ .code-harness/bin/codea-harness-tools apply --input <same request>
+→ .code-harness/bin/codea-dcep-tools.exe apply --input <same request>
 → Runtime 对照 sealed snapshot 验证 approval identity
 → Runtime 原子应用
 → apply-result.schema.json
@@ -743,7 +743,7 @@ rollbackPerformed
 12. 只有 `TEST_TARGETS_SELECTED` 且 selection artifact 机器验证通过，才把 **selected affectedControllers** 交给 Integration Test Agent
 13. Integration Test Agent 只对 selected targets 做 Existing Test Coverage Analysis
 14. 每个 selected target 独立采用 REUSE_EXISTING / EXTEND_EXISTING / CREATE_NEW；未选择 target 不得生成计划
-15. REUSE_EXISTING 直接执行、无审批、零写入；EXTEND/CREATE 必须在审批前产出最终 `unifiedDiff/diffSha256/files[].baseSha256`，生成 `planType=TEST` apply request 并通过 `codea-harness-tools seal-apply --input` 形成 `sealed-plans/<planId>.json`；seal 成功后才允许精确 `批准 <planId>`，批准后只能让同一 request Runtime apply，只有 `APPLIED + evidence/apply/<planId>.json` 才算写入完成
+15. REUSE_EXISTING 直接执行、无审批、零写入；EXTEND/CREATE 必须在审批前产出最终 `unifiedDiff/diffSha256/files[].baseSha256`，生成 `planType=TEST` apply request 并通过 `codea-dcep-tools.exe seal-apply --input` 形成 `sealed-plans/<planId>.json`；seal 成功后才允许精确 `批准 <planId>`，批准后只能让同一 request Runtime apply，只有 `APPLIED + evidence/apply/<planId>.json` 才算写入完成
 16. Integration Test Agent 返回 method/scenario 级 provenance；Orchestrator 形成 `TestExecutionTarget(testClass,testMethods[],selector,controllerId,origin,planId?)`
 17. selected-only execution gate：整类 selector 仅允许该 class 本次相关 methods 全部属于 selected targets；混合 selected+unselected class 必须收窄到 selected method selector；无法安全表达 method selector → `MANUAL_ACTION_REQUIRED`，不得整类执行
 18. Runtime Debugger 独占测试执行、日志和 Diagnosis；Surefire `failedTests.testClass + testMethod` 必须回查具体 TestExecutionTarget 判定 method-level origin
@@ -759,7 +759,7 @@ rollbackPerformed
 
 - `harness init`：Project Adapter 识别 Maven/模块/Profile/测试规范/baseRef，生成 `harness.yaml`/`project.md`；不确定项保持 `NEEDS_CONFIRMATION`。
 - `harness debug-service`：Runtime Debugger 启动服务，等待人工触发请求，采集日志，诊断，停止本次 processGroup。
-- `harness fix finding:<id>` / `fix diagnosis:<runId>`：Fix Agent 先生成带 `unifiedDiff/diffSha256/files[].baseSha256` 的最小 Fix Plan；审批前生成 apply request 并调用 `codea-harness-tools seal-apply --input` 形成 `sealed-plans/<fixPlanId>.json`；只有 seal 成功后才请求精确 `批准 <fixPlanId>`，批准后只允许同一 request 通过 Runtime Apply Safety Gate 正式写入；成功 Apply evidence 后再由 Runtime Debugger 验证。
+- `harness fix finding:<id>` / `fix diagnosis:<runId>`：Fix Agent 先生成带 `unifiedDiff/diffSha256/files[].baseSha256` 的最小 Fix Plan；审批前生成 apply request 并调用 `codea-dcep-tools.exe seal-apply --input` 形成 `sealed-plans/<fixPlanId>.json`；只有 seal 成功后才请求精确 `批准 <fixPlanId>`，批准后只允许同一 request 通过 Runtime Apply Safety Gate 正式写入；成功 Apply evidence 后再由 Runtime Debugger 验证。
 - `harness verify test/fix/service`：由 Runtime Debugger 执行既有验证路径，不改变审批状态。
 
 ## Test Origin / Repair Gate
@@ -885,7 +885,7 @@ User 必须没有：
 - 不得让 Reviewer/Orchestrator/API Doc Agent 自由写 `review.md` 或 `api-doc.md`；只能调用 Controlled Runtime Renderer。
 - 不得把 TARGETED 结果表述成整个 Change Set 已完整评审。
 - 不得把任何 direct host write / `write_test` / `apply_approved_patch` / arbitrary write_file 作为生产或测试代码正式写入成功。
-- 不得跳过审批前 `codea-harness-tools seal-apply --input` 或修改 sealed request 后复用旧批准。
+- 不得跳过审批前 `codea-dcep-tools.exe seal-apply --input` 或修改 sealed request 后复用旧批准。
 - 不得把手工写入 Runtime-owned ChangeSet/Chain candidate/certificate/write-plan path 的内容视为 authority；最终 Chain Project State 写入必须经过 Runtime provenance、Certified Analysis、immutable write plan 与 exact planId confirmation。
 - 不得超过 2 轮 GENERATED_BY_PLAN repair 计数。
 - 不得直接执行任意 Shell。
@@ -911,3 +911,26 @@ User 必须没有：
 ```
 
 `chain edit` 本身不得直接写 `.code-harness/chains/**`；不得改 EntryPoint；不得用 dependency workspace、类名后缀、basename、字符串包含或 fuzzy relation 获得写 authority。candidate/analysis/plan/existing Project State 任一变化都使旧 planId 失效。
+## 1.6.2 Task 2 Agent → Runtime Invocation Contract
+
+Agent/Orchestrator 写入 `requests/**` 后，Controlled Runtime 必须先按对应 machine-readable request contract 校验，再进入 strict decode 与业务处理：
+
+- `analysis snapshot` → `change-set-request.schema.json`
+- `analysis inventory` → `analysis-inventory-request.schema.json`
+- `analysis certify` → `analysis-certify-request.schema.json`
+- `review options` → `review-options-request.schema.json`
+
+Active Agent 只能调用 `.code-harness/bin/codea-dcep-tools.exe`；`codea-harness-tools` 仅可作为 Go module/import 的历史内部名称存在，不是可执行文件调用名。
+
+`review options` 的 Agent-facing request 固定为：
+
+```json
+{
+  "runId": "<runId>",
+  "changeAnalysisPath": ".code-harness/runs/<runId>/analysis/change-analysis.json"
+}
+```
+
+需要显式 target 时只允许额外加入可选 `target`。`baseRef`、`requestedBaseRef`、Snapshot identity 以及其他 Git fact 均不是 `review options` request 字段；`baseRef` 只在 `analysis snapshot` / retained legacy analysis request 的既定 Contract 中出现。Unknown field 必须由 request schema fail closed。
+
+`analysis certify` 的 Active Agent 形态仍固定为 canonical request：`runId / snapshotPath / snapshotSha256 / proposalPath / intent`。Schema 中保留的 legacy certify shape 仅用于 Runtime upgrade compatibility，Active Agent 不得生成 legacy `draftPath/baseRef` 形态。

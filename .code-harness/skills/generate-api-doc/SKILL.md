@@ -130,7 +130,7 @@ example value 可以合理生成，但 field name/type/location/enum/required/re
 随后只调用：
 
 ```text
-codea-harness-tools report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json
+codea-dcep-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/api-doc.json
 ```
 
 最终 Artifact 固定：`.code-harness/runs/<runId>/api-doc.md`。

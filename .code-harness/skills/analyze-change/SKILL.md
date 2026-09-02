@@ -162,9 +162,9 @@ src/main/resources/**/*.yml         -> YamlConfig
 3. VERIFIED 后只允许调用 Controlled Runtime 的三类确定性导航（对应 tools=`workspace_inherited` / `workspace_superclass_call` / `workspace_template_dispatch`）：
 
 ```text
-codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
-codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
-codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
 ```
 
 4. Runtime 返回 COMPLETE fact 时只做事实拷贝，不补猜、不改写；写入 semantic proposal 的 `symbolLocations[]`：
@@ -323,7 +323,7 @@ Proposal Contract 为：
 由 Controlled Runtime 执行：
 
 ```text
-codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests/<certify-request>.json
+codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<certify-request>.json
 ```
 
 Runtime 固定执行：读取 canonical Snapshot → 重新计算 live Snapshot → 验证 `resolvedBaseCommit/mergeBase/headCommit/currentBranch/includeWorkingTree/gitStateSha256/snapshotSha256` → 重新生成 EntryPoint Inventory → 把 Runtime canonical path/source 与 Agent roles/semantic evidence 组装为 ChangeAnalysis → EntryPoint completeness → symbol/resource evidence invariants → Coverage → canonical hash/certificate → 原子发布。
@@ -417,7 +417,7 @@ Review 使用 Chain 时仍必须**先完成 Canonical Snapshot + ChangeAnalysis 
 6. 由 Orchestrator 调用：
 
 ```text
-codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
+codea-dcep-tools.exe chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
 ```
 
 7. Runtime 才能决定复用 `ACCEPTED + VALID`、缺失时 lazy discover `DISCOVERED + TEMPORARY`，或返回 STALE/partial 决策状态。

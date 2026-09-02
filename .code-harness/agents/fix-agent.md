@@ -60,7 +60,7 @@ files[].baseSha256
 7. 在向用户请求批准之前调用 Controlled Runtime：
 
 ```text
-.code-harness/bin/codea-harness-tools seal-apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe seal-apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 只有 Runtime 成功生成不可由 Apply Plan 修改的审批基线：
@@ -75,7 +75,7 @@ files[].baseSha256
 10. 精确批准后只允许使用步骤 6 已经 sealed 的**同一份 request 文件**调用：
 
 ```text
-.code-harness/bin/codea-harness-tools apply --input .code-harness/runs/<runId>/requests/apply.json
+.code-harness/bin/codea-dcep-tools.exe apply --input .code-harness/runs/<runId>/requests/apply.json
 ```
 
 11. 只有 Runtime 返回 `APPLIED`，并生成经 `apply-result.schema.json` 校验的：

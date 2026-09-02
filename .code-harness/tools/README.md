@@ -182,7 +182,7 @@ arbitrary query language
 映射到固定命令：
 
 ```text
-codea-harness-tools workspace verify --id <id>
+codea-dcep-tools.exe workspace verify --id <id>
 ```
 
 `id` 必须来自显式 `harness.yaml.workspaceDependencies`。Runtime 只验证配置中的 direct Maven sibling workspace dependency；不得扫描任意 sibling。只有机器结果 `VERIFIED` 才允许后续 workspace navigation；`VERSION_UNRESOLVED / COORDINATE_MISMATCH / VERSION_MISMATCH / SOURCE_NOT_FOUND` 均不得读取 dependency 源码作为 confirmed evidence。
@@ -192,7 +192,7 @@ codea-harness-tools workspace verify --id <id>
 映射到：
 
 ```text
-codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
 ```
 
 只允许已通过 `workspace_verify` 的 `VERIFIED` workspace。用于 current-project symbol 因继承方法断链时解析 dependency superclass method；返回的 workspace/symbol/path/role/source/from 只能原样作为 `WORKSPACE_INHERITANCE` evidence。
@@ -202,7 +202,7 @@ codea-harness-tools nav workspace-inherited --workspace <id> --from <symbol> --m
 映射到：
 
 ```text
-codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 ```
 
 只允许在 VERIFIED dependency source 内继续解析 superclass/template method 的确定性内部调用。PARTIAL/ambiguity 必须停止 confirmed chain，不得猜测。
@@ -212,7 +212,7 @@ codea-harness-tools nav workspace-superclass-call --workspace <id> --from <symbo
 映射到：
 
 ```text
-codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
 ```
 
 只允许 VERIFIED dependency template dispatch。唯一 concrete override 可返回 `workspace=current` 并继续 current-project confirmed callChain；多 override 必须 `PARTIAL / AMBIGUOUS_TEMPLATE_DISPATCH`。Workspace dependency 始终只属于 Navigation / Chain Context，不得进入 Change Set、Review Scope、Finding Scope 或 Write Scope。
@@ -427,3 +427,26 @@ review:
 Windows 下禁止向运行中的 `.code-harness/bin/codea-dcep-tools.exe` 原地写入/覆盖。Runtime 必须先把新 exe 完整写到 staged 文件，再将运行中的旧 exe rename 到 **`.code-harness` 同级、同卷**的临时路径，最后把 staged 新 exe rename 到规范路径。旧 exe 的停放路径必须在 Harness 树外且不能跨卷；旧进程退出后对该临时文件做 best-effort 清理。
 
 禁止 AI 猜配置、自动 re-init、绕过 Runtime 复制/删除升级文件。
+## 1.6.2 Task 2 Agent → Runtime Invocation Contract
+
+Agent/Orchestrator 写入 `requests/**` 后，Controlled Runtime 必须先按对应 machine-readable request contract 校验，再进入 strict decode 与业务处理：
+
+- `analysis snapshot` → `change-set-request.schema.json`
+- `analysis inventory` → `analysis-inventory-request.schema.json`
+- `analysis certify` → `analysis-certify-request.schema.json`
+- `review options` → `review-options-request.schema.json`
+
+Active Agent 只能调用 `.code-harness/bin/codea-dcep-tools.exe`；`codea-harness-tools` 仅可作为 Go module/import 的历史内部名称存在，不是可执行文件调用名。
+
+`review options` 的 Agent-facing request 固定为：
+
+```json
+{
+  "runId": "<runId>",
+  "changeAnalysisPath": ".code-harness/runs/<runId>/analysis/change-analysis.json"
+}
+```
+
+需要显式 target 时只允许额外加入可选 `target`。`baseRef`、`requestedBaseRef`、Snapshot identity 以及其他 Git fact 均不是 `review options` request 字段；`baseRef` 只在 `analysis snapshot` / retained legacy analysis request 的既定 Contract 中出现。Unknown field 必须由 request schema fail closed。
+
+`analysis certify` 的 Active Agent 形态仍固定为 canonical request：`runId / snapshotPath / snapshotSha256 / proposalPath / intent`。Schema 中保留的 legacy certify shape 仅用于 Runtime upgrade compatibility，Active Agent 不得生成 legacy `draftPath/baseRef` 形态。

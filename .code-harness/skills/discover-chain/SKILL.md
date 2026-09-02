@@ -124,7 +124,7 @@ request：
 然后调用：
 
 ```text
-codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/chain-discover.json
+codea-dcep-tools.exe chain discover --input .code-harness/runs/<runId>/requests/chain-discover.json
 ```
 
 不得暴露 raw ast-grep pattern、任意 source scope、任意 output path 或 shell 参数。

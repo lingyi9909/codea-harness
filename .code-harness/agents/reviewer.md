@@ -68,7 +68,7 @@ Proposal 只允许表达 semantic 部分，例如 changed file role 引用、aff
 然后必须由 Orchestrator/Controlled Runtime 执行同 run 的：
 
 ```text
-codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests/<certify-request>.json
+codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<certify-request>.json
 ```
 
 Canonical certify request 必须引用 same-run：
@@ -297,7 +297,7 @@ Lazy Scope 固定为当前 Change Set/target：无 target 只看 affectedControl
 Reviewer 创建同 run 的 controlled request 后，只调用：
 
 ```text
-codea-harness-tools chain discover --input .code-harness/runs/<runId>/requests/chain-discover.json
+codea-dcep-tools.exe chain discover --input .code-harness/runs/<runId>/requests/chain-discover.json
 ```
 
 Runtime 输出只允许：
