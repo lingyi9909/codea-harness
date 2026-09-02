@@ -13,11 +13,11 @@ $whitelistFile = 'codea-dcep-tools-whitelist.txt'
 
 function Invoke-Regression([string]$Script, [string]$Label) {
     Write-Host "TASK162 RELEASE: $Label"
-    # Accepted regression scripts fail via PowerShell terminating error/exit. Some
-    # intentionally execute native Git probes whose handled non-zero status remains
-    # in LASTEXITCODE after the script has otherwise completed successfully.
-    $global:LASTEXITCODE = 0
-    & $Script
+    $resolvedScript = (Resolve-Path $Script).Path
+    $lines = @(& pwsh -NoProfile -File $resolvedScript 2>&1)
+    $childExit = $LASTEXITCODE
+    $lines | ForEach-Object { Write-Output $_ }
+    if ($childExit -ne 0) { throw "$Label failed with child exit code $childExit" }
     $global:LASTEXITCODE = 0
 }
 
@@ -187,7 +187,11 @@ try {
     Assert-RuntimeRenameRetained
 
     Write-Host 'TASK162 RELEASE: Task 2 package/no-Go/upgrade regression'
-    $task2Output = & './.github/scripts/task162-task2-release-package-cleanup-regression.ps1' 2>&1 | Tee-Object -Variable task2Lines
+    $task2Script = (Resolve-Path './.github/scripts/task162-task2-release-package-cleanup-regression.ps1').Path
+    $task2Lines = @(& pwsh -NoProfile -File $task2Script 2>&1)
+    $task2Exit = $LASTEXITCODE
+    $task2Lines | ForEach-Object { Write-Output $_ }
+    if ($task2Exit -ne 0) { throw "Task 2 package/no-Go/upgrade regression failed with child exit code $task2Exit" }
     $task2Text = ($task2Lines | Out-String)
     foreach ($marker in @(
         'TASK162_TASK2_ARTIFACT_CLEAN PASS',
