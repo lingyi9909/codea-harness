@@ -16,6 +16,7 @@ func Test162HotfixAnalysisSnapshotPublishesRuntimeOwnedCanonicalArtifact(t *test
 	git153Cmd(t, root, "add", ".")
 	git153Cmd(t, root, "commit", "-m", "base")
 
+	copyTask153CommandContract(t, root, "change-set.schema.json")
 	req := map[string]any{"runId": "r162hotfix", "baseRef": "HEAD", "includeWorkingTree": true}
 	b, err := json.Marshal(req)
 	if err != nil { t.Fatal(err) }

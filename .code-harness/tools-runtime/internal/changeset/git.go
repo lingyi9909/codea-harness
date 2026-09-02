@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -26,27 +24,38 @@ var sourceOrder153 = map[Source]int{
 	SourceUntracked: 3,
 }
 
-// Compute independently recomputes the Harness Review Change Set from local Git state.
-// It never fetches or substitutes a missing baseRef.
-func Compute(repoRoot, baseRef string, includeWorkingTree bool) (Snapshot, error) {
-	baseRef = strings.TrimSpace(baseRef)
-	if baseRef == "" {
+// Compute independently recomputes the Runtime-authoritative Review ChangeSet
+// from local Git state. It never fetches or substitutes a missing base ref.
+func Compute(repoRoot, requestedBaseRef string, includeWorkingTree bool) (Snapshot, error) {
+	requestedBaseRef = strings.TrimSpace(requestedBaseRef)
+	if requestedBaseRef == "" {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_BASE_REF_REQUIRED")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	mergeBase, err := runGit153(ctx, repoRoot, "merge-base", baseRef, "HEAD")
+	resolvedBase, err := runGit153(ctx, repoRoot, "rev-parse", "--verify", requestedBaseRef+"^{commit}")
 	if err != nil {
-		return Snapshot{}, fmt.Errorf("CHANGE_SET_BASE_REF_NOT_FOUND: %s: %w", baseRef, err)
+		return Snapshot{}, fmt.Errorf("CHANGE_SET_BASE_REF_NOT_FOUND: %s: %w", requestedBaseRef, err)
 	}
-	head, err := runGit153(ctx, repoRoot, "rev-parse", "HEAD")
+	resolvedBase = strings.TrimSpace(resolvedBase)
+	head, err := runGit153(ctx, repoRoot, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_HEAD_UNAVAILABLE: %w", err)
 	}
+	head = strings.TrimSpace(head)
+	mergeBase, err := runGit153(ctx, repoRoot, "merge-base", resolvedBase, head)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("CHANGE_SET_MERGE_BASE_UNAVAILABLE: %w", err)
+	}
+	mergeBase = strings.TrimSpace(mergeBase)
+	currentBranch, err := currentBranch153(ctx, repoRoot)
+	if err != nil {
+		return Snapshot{}, err
+	}
 
 	files := map[string]*File{}
-	committedArgs := []string{"diff", "--unified=0", "--no-ext-diff", strings.TrimSpace(mergeBase) + "..HEAD", "--"}
+	committedArgs := []string{"diff", "--unified=0", "--no-ext-diff", mergeBase + ".." + head, "--"}
 	if err := collectDiff153(ctx, repoRoot, files, SourceCommitted, committedArgs...); err != nil {
 		return Snapshot{}, fmt.Errorf("CHANGE_SET_COMMITTED_DIFF_FAILED: %w", err)
 	}
@@ -89,17 +98,40 @@ func Compute(repoRoot, baseRef string, includeWorkingTree bool) (Snapshot, error
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 
-	snap := Snapshot{BaseRef: baseRef, Head: strings.TrimSpace(head), Files: out}
-	canonical, err := json.Marshal(struct {
-		BaseRef string `json:"baseRef"`
-		Head    string `json:"head"`
-		Files   []File `json:"files"`
-	}{BaseRef: snap.BaseRef, Head: snap.Head, Files: snap.Files})
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("CHANGE_SET_CANONICALIZE_FAILED: %w", err)
+	resolvedBaseAfter, err := runGit153(ctx, repoRoot, "rev-parse", "--verify", requestedBaseRef+"^{commit}")
+	if err != nil || strings.TrimSpace(resolvedBaseAfter) != resolvedBase {
+		return Snapshot{}, fmt.Errorf("CHANGE_SET_CHANGED_DURING_COMPUTE: base ref moved")
 	}
-	snap.SHA256 = fmt.Sprintf("%x", sha256.Sum256(canonical))
-	return snap, nil
+	headAfter, err := runGit153(ctx, repoRoot, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil || strings.TrimSpace(headAfter) != head {
+		return Snapshot{}, fmt.Errorf("CHANGE_SET_CHANGED_DURING_COMPUTE: HEAD moved")
+	}
+	branchAfter, err := currentBranch153(ctx, repoRoot)
+	if err != nil || branchAfter != currentBranch {
+		return Snapshot{}, fmt.Errorf("CHANGE_SET_CHANGED_DURING_COMPUTE: current branch changed")
+	}
+
+	return finalizeSnapshot162(Snapshot{
+		RequestedBaseRef:   requestedBaseRef,
+		ResolvedBaseCommit: resolvedBase,
+		MergeBase:          mergeBase,
+		HeadCommit:         head,
+		CurrentBranch:      currentBranch,
+		IncludeWorkingTree: includeWorkingTree,
+		Files:              out,
+	})
+}
+
+func currentBranch153(ctx context.Context, repoRoot string) (string, error) {
+	branch, err := runGit153(ctx, repoRoot, "branch", "--show-current")
+	if err != nil {
+		return "", fmt.Errorf("CHANGE_SET_CURRENT_BRANCH_UNAVAILABLE: %w", err)
+	}
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return "DETACHED_HEAD", nil
+	}
+	return branch, nil
 }
 
 func runGit153(ctx context.Context, repoRoot string, args ...string) (string, error) {

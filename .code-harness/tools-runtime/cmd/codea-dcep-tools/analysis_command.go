@@ -19,6 +19,12 @@ import (
 
 var analysisArtifactID153 = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
+type analysisSnapshotRequest162 struct {
+	RunID              string `json:"runId"`
+	BaseRef            string `json:"baseRef"`
+	IncludeWorkingTree bool   `json:"includeWorkingTree"`
+}
+
 type analysisInventoryRequest153 struct {
 	RunID              string                 `json:"runId"`
 	BaseRef            string                 `json:"baseRef"`
@@ -27,8 +33,10 @@ type analysisInventoryRequest153 struct {
 }
 
 func runAnalysis(args []string) error {
-	if len(args) == 0 { return errors.New("analysis requires inventory or certify") }
+	if len(args) == 0 { return errors.New("analysis requires snapshot, inventory or certify") }
 	switch args[0] {
+	case "snapshot":
+		return runAnalysisSnapshot162(args[1:])
 	case "inventory":
 		return runAnalysisInventory(args[1:])
 	case "certify":
@@ -36,6 +44,45 @@ func runAnalysis(args []string) error {
 	default:
 		return fmt.Errorf("unknown analysis action %q", args[0])
 	}
+}
+
+func runAnalysisSnapshot162(args []string) error {
+	fs := flag.NewFlagSet("analysis snapshot", flag.ContinueOnError)
+	inputPath := fs.String("input", "", "canonical ChangeSet request under .code-harness/runs/<runId>/requests/*.json")
+	if err := fs.Parse(args); err != nil { return err }
+	if fs.NArg() != 0 || strings.TrimSpace(*inputPath) == "" { return errors.New("analysis snapshot requires --input") }
+
+	pathRunID, cleanInput, err := validateAnalysisRequestPath153(*inputPath)
+	if err != nil { return err }
+	data, err := os.ReadFile(cleanInput)
+	if err != nil { return fmt.Errorf("read ChangeSet snapshot request: %w", err) }
+	var req analysisSnapshotRequest162
+	if err := decodeStrictAnalysisRequest153(data, &req, "ChangeSet snapshot request"); err != nil { return err }
+	if req.RunID != pathRunID {
+		return fmt.Errorf("RUN_ID_PATH_MISMATCH: body runId %q does not match request path runId %q", req.RunID, pathRunID)
+	}
+	if !analysisArtifactID153.MatchString(req.RunID) { return errors.New("ChangeSet snapshot request contains invalid runId") }
+	if strings.TrimSpace(req.BaseRef) == "" { return errors.New("ChangeSet snapshot request requires baseRef") }
+
+	snapshot, err := changeset.Compute(".", req.BaseRef, req.IncludeWorkingTree)
+	if err != nil { return err }
+	artifactBytes, err := changeset.CanonicalBytes(snapshot)
+	if err != nil { return err }
+	schemaBytes, err := os.ReadFile(filepath.Join(".code-harness", "contracts", "change-set.schema.json"))
+	if err != nil { return fmt.Errorf("read ChangeSet snapshot schema: %w", err) }
+	if err := schema.ValidateJSON(schemaBytes, artifactBytes); err != nil { return fmt.Errorf("validate ChangeSet snapshot: %w", err) }
+
+	artifactPath := filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-set.json")
+	if err := atomicWriteAnalysis153(artifactPath, artifactBytes); err != nil { return err }
+	return writeJSONAndStatus(map[string]any{
+		"status": "SNAPSHOT_READY",
+		"runId": req.RunID,
+		"artifactPath": filepath.ToSlash(artifactPath),
+		"snapshotSha256": snapshot.SnapshotSHA256,
+		"resolvedBaseCommit": snapshot.ResolvedBaseCommit,
+		"mergeBase": snapshot.MergeBase,
+		"headCommit": snapshot.HeadCommit,
+	}, true)
 }
 
 func runAnalysisInventory(args []string) error {
@@ -140,13 +187,13 @@ func decodeStrictAnalysisRequest153(data []byte, out any, label string) error {
 
 func atomicWriteAnalysis153(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { return fmt.Errorf("create analysis directory: %w", err) }
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".entrypoint-inventory-*.tmp")
-	if err != nil { return fmt.Errorf("create entrypoint inventory temp file: %w", err) }
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".analysis-artifact-*.tmp")
+	if err != nil { return fmt.Errorf("create analysis artifact temp file: %w", err) }
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
-	if _, err := tmp.Write(data); err != nil { _ = tmp.Close(); return fmt.Errorf("write entrypoint inventory temp file: %w", err) }
+	if _, err := tmp.Write(data); err != nil { _ = tmp.Close(); return fmt.Errorf("write analysis artifact temp file: %w", err) }
 	if err := tmp.Chmod(0o644); err != nil { _ = tmp.Close(); return err }
 	if err := tmp.Close(); err != nil { return err }
-	if err := os.Rename(tmpName, path); err != nil { return fmt.Errorf("publish entrypoint inventory: %w", err) }
+	if err := os.Rename(tmpName, path); err != nil { return fmt.Errorf("publish analysis artifact: %w", err) }
 	return nil
 }
