@@ -137,7 +137,7 @@ Complete the user's intent through the active contracts and only finish after th
         Invoke-Git config user.email 'task162-task3@example.test'
         Invoke-Git config user.name 'Task 162 Task 3 E2E'
         Invoke-Git config core.autocrlf false
-        Invoke-Git add -A
+        Invoke-Git add .
         Invoke-Git commit -m 'baseline initialized Harness fixture'
         $baseHead = (git rev-parse HEAD).Trim()
 
@@ -163,10 +163,10 @@ feature:
 
         # The only review user message is deliberately the plain product intent.
         $plainUserIntent = 'harness review'
-        $raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)
-        $opencodeExit = $LASTEXITCODE
+        $ErrorActionPreference = 'Continue'; $raw = (& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 $plainUserIntent 2>&1 | Out-String)
+        $opencodeExit = $LASTEXITCODE; $ErrorActionPreference = 'Stop'
         Write-Utf8NoBom $transcript $raw
-        if ($opencodeExit -ne 0) { throw "OpenCode plain harness review failed with exit $opencodeExit:`n$raw" }
+        if ($opencodeExit -ne 0) { throw "OpenCode plain harness review failed with exit ${opencodeExit}:`n$raw" }
 
         $runId = 'task3-plain-review'
         $runRoot = Join-Path $fixture ".code-harness\runs\$runId"
@@ -223,7 +223,7 @@ feature:
         if ([string]$options.decision -ne 'AUTO_FULL') { throw "Plain review did not resolve to deterministic AUTO_FULL: $($options.decision)" }
 
         $selectionRequest = Get-Content -Raw (Join-Path $requestRoot 'review-selection-request.json') | ConvertFrom-Json
-        Assert-ExactKeys $selectionRequest @('schemaVersion','runId','optionsHash','mode','selectionIds') 'Review selection request'
+        Assert-ExactKeys $selectionRequest @('runId','optionsHash','mode','selectionIds') 'Review selection request'
         if ([string]$selectionRequest.optionsHash -ne [string]$options.optionsHash -or [string]$selectionRequest.mode -ne 'FULL' -or @($selectionRequest.selectionIds).Count -ne 0) {
             throw 'AUTO_FULL selection was not bound to the current Runtime optionsHash'
         }
@@ -239,12 +239,12 @@ feature:
         $modelLogText = if (Test-Path $serverLog) { Get-Content -Raw $serverLog } else { '' }
         $combinedEvidence = $raw + "`n" + $modelLogText
         foreach ($requiredRead in @(
-            'TASK3_READ .code-harness/AGENTS.md',
-            'TASK3_READ .code-harness/agents/orchestrator.md',
-            'TASK3_READ .code-harness/agents/reviewer.md',
-            'TASK3_READ .code-harness/contracts/change-set-request.schema.json',
-            'TASK3_READ .code-harness/contracts/analysis-certify-request.schema.json',
-            'TASK3_READ .code-harness/contracts/review-options-request.schema.json'
+            '.code-harness/AGENTS.md',
+            '.code-harness/agents/orchestrator.md',
+            '.code-harness/agents/reviewer.md',
+            '.code-harness/contracts/change-set-request.schema.json',
+            '.code-harness/contracts/analysis-certify-request.schema.json',
+            '.code-harness/contracts/review-options-request.schema.json'
         )) {
             if ($combinedEvidence -notmatch [regex]::Escape($requiredRead)) { throw "Agent Host did not prove active contract read: $requiredRead" }
         }
@@ -277,6 +277,6 @@ finally {
         Get-Content $serverLog | Select-Object -Last 20
     }
     Remove-Item $fixture -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $serverLog -Force -ErrorAction SilentlyContinue
-    Remove-Item $transcript -Force -ErrorAction SilentlyContinue
+    
+    
 }

@@ -107,7 +107,7 @@ STAGES: list[tuple[str, str]] = [
         "$run='task3-plain-review'; $o=Get-Content -Raw .code-harness/runs/$run/analysis/review-options.json | ConvertFrom-Json; "
         + ps_json_write(
             ".code-harness/runs/task3-plain-review/requests/review-selection-request.json",
-            "[ordered]@{schemaVersion='1.5';runId=$run;optionsHash=[string]$o.optionsHash;mode='FULL';selectionIds=@()}",
+            "[ordered]@{runId=$run;optionsHash=[string]$o.optionsHash;mode='FULL';selectionIds=@()}",
         )
         + "; Write-Output 'TASK3_STAGE_11 PASS'",
     ),
@@ -244,7 +244,7 @@ class Handler(BaseHTTPRequestHandler):
         tools = body.get("tools") or []
         text = flatten(messages)
         stage = next_stage(messages)
-        self.append_log({"event": "request", "stage": stage, "hasTools": bool(tools), "messages": messages})
+        self.append_log({"event": "request", "stage": stage, "hasTools": bool(tools), "toolNames": [str(t.get("function", {}).get("name", "")) for t in tools], "tools": tools, "messages": messages})
 
         # Hidden title/summary/model-maintenance calls must not advance the E2E state.
         if not tools or "harness review" not in text:
@@ -262,7 +262,7 @@ class Handler(BaseHTTPRequestHandler):
         description, command = STAGES[stage]
         tool_names = [str(t.get("function", {}).get("name", "")) for t in tools]
         if "bash" not in tool_names:
-            self.respond_text(body, "TASK3_E2E_ABORT OpenCode bash tool unavailable")
+            self.respond_text(body, "TASK3_E2E_TOOL_NAMES " + ",".join(tool_names))
             return
         self.append_log({"event": "tool_call", "stage": stage, "tool": "bash", "description": description, "command": command})
         self.respond_tool(body, "bash", {"command": command, "description": description})
