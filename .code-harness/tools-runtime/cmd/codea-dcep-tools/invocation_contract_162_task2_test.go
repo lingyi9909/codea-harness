@@ -1,13 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/schema"
 )
 
@@ -75,38 +73,71 @@ func Test162HotfixTask2InvocationRequestSchemas(t *testing.T) {
 	}
 }
 
-func Test162HotfixTask2RuntimeRequestTypesRejectSchemaUnknownFields(t *testing.T) {
+func Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields(t *testing.T) {
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	requestDir := filepath.Join(".code-harness", "runs", "r1", "requests")
+	if err := os.MkdirAll(requestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
-		name string
-		data string
-		newTarget func() any
+		name       string
+		file       string
+		body       string
+		invoke     func(string) error
+		wantPrefix string
 	}{
 		{
 			name: "snapshot requestedBaseRef",
-			data: `{"runId":"r1","requestedBaseRef":"HEAD","includeWorkingTree":true}`,
-			newTarget: func() any { return &analysisSnapshotRequest162{} },
+			file: "snapshot.json",
+			body: `{"runId":"r1","requestedBaseRef":"HEAD","includeWorkingTree":true}`,
+			invoke: func(path string) error { return runAnalysisSnapshot162([]string{"--input", path}) },
+			wantPrefix: "CHANGE_SET_REQUEST_SCHEMA_INVALID",
 		},
 		{
-			name: "inventory unexpected",
-			data: `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true,"intent":{"mode":"FULL"},"unexpected":true}`,
-			newTarget: func() any { return &analysisInventoryRequest153{} },
+			name: "inventory unknown field",
+			file: "inventory.json",
+			body: `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true,"intent":{"mode":"FULL"},"unexpected":true}`,
+			invoke: func(path string) error { return runAnalysisInventory([]string{"--input", path}) },
+			wantPrefix: "ANALYSIS_INVENTORY_REQUEST_SCHEMA_INVALID",
 		},
 		{
-			name: "certify unexpected",
-			data: `{"runId":"r1","snapshotPath":".code-harness/runs/r1/analysis/change-set.json","snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","proposalPath":".code-harness/runs/r1/requests/change-analysis-proposal.json","intent":{"mode":"FULL"},"unexpected":true}`,
-			newTarget: func() any { return &analysisruntime.CertifyRequest{} },
+			name: "certify unknown field",
+			file: "certify.json",
+			body: `{"runId":"r1","snapshotPath":".code-harness/runs/r1/analysis/change-set.json","snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","proposalPath":".code-harness/runs/r1/requests/change-analysis-proposal.json","intent":{"mode":"FULL"},"unexpected":true}`,
+			invoke: func(path string) error { return runAnalysisCertify([]string{"--input", path}) },
+			wantPrefix: "ANALYSIS_CERTIFY_REQUEST_SCHEMA_INVALID",
 		},
 		{
 			name: "review options baseRef",
-			data: `{"runId":"r1","changeAnalysisPath":".code-harness/runs/r1/analysis/change-analysis.json","baseRef":"HEAD"}`,
-			newTarget: func() any { return &reviewOptionsRequest{} },
+			file: "review-options.json",
+			body: `{"runId":"r1","changeAnalysisPath":".code-harness/runs/r1/analysis/change-analysis.json","baseRef":"HEAD"}`,
+			invoke: func(path string) error { return runReviewOptions([]string{"--input", path}) },
+			wantPrefix: "REVIEW_OPTIONS_REQUEST_SCHEMA_INVALID",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := json.Unmarshal([]byte(tc.data), tc.newTarget()); err == nil {
-				t.Fatalf("request type silently accepted schema-invalid JSON: %s", tc.data)
+			path := filepath.Join(requestDir, tc.file)
+			if err := os.WriteFile(path, []byte(tc.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			err := tc.invoke(filepath.ToSlash(path))
+			if err == nil {
+				t.Fatalf("schema-invalid request unexpectedly reached command logic: %s", tc.body)
+			}
+			if !strings.Contains(err.Error(), tc.wantPrefix) {
+				t.Fatalf("expected %s, got %v", tc.wantPrefix, err)
 			}
 		})
 	}
