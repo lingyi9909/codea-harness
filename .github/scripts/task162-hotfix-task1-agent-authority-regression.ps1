@@ -24,9 +24,11 @@ try {
         }
     }
 
-    # The two Agent-facing contract sources that define exact request JSON must match Runtime's strict decoder.
-    $requestContractDocs = @(
+    # Every active source that defines or constructs the snapshot request must match Runtime's strict decoder.
+    $snapshotRequestContractDocs = @(
         @('AGENTS.md', $agents),
+        @('orchestrator.md', $orchestrator),
+        @('analyze-change/SKILL.md', $analyze),
         @('tools/README.md', $tools)
     )
     $requiredRequestFields = @(
@@ -34,7 +36,7 @@ try {
         '"baseRef": "<baseRef>"',
         '"includeWorkingTree": true'
     )
-    foreach ($pair in $requestContractDocs) {
+    foreach ($pair in $snapshotRequestContractDocs) {
         foreach ($field in $requiredRequestFields) {
             if ($pair[1] -notmatch [regex]::Escape($field)) {
                 throw "Task1 snapshot request contract missing $field in $($pair[0])"
@@ -42,13 +44,18 @@ try {
         }
     }
 
+    # Canonical certify request is fixed in the authoritative Agent/Tool contract sources.
+    $certifyContractDocs = @(
+        @('AGENTS.md', $agents),
+        @('tools/README.md', $tools)
+    )
     $requiredCertifyFields = @(
         '"snapshotPath": ".code-harness/runs/<runId>/analysis/change-set.json"',
         '"snapshotSha256": "<sha256>"',
         '"proposalPath": ".code-harness/runs/<runId>/requests/change-analysis-proposal.json"',
         '"mode": "FULL"'
     )
-    foreach ($pair in $requestContractDocs) {
+    foreach ($pair in $certifyContractDocs) {
         foreach ($field in $requiredCertifyFields) {
             if ($pair[1] -notmatch [regex]::Escape($field)) {
                 throw "Task1 canonical certify contract missing $field in $($pair[0])"
@@ -56,7 +63,7 @@ try {
         }
     }
 
-    # requestedBaseRef is Runtime Snapshot provenance only. Scan every active contract for exact legacy request forms.
+    # requestedBaseRef is Runtime Snapshot provenance only. Scan every active contract for legacy request-side forms.
     foreach ($pair in $activeDocs) {
         $text = [string]$pair[1]
         if ($text -match 'runId\s*/\s*requestedBaseRef\s*/\s*includeWorkingTree') {
@@ -67,6 +74,15 @@ try {
         }
         if ($text -match '(?s)请求只携带.{0,160}requestedBaseRef.{0,160}includeWorkingTree') {
             throw "Task1 snapshot request field list still uses requestedBaseRef in $($pair[0])"
+        }
+        if ($text -match 'effective\s+requestedBaseRef') {
+            throw "Task1 request-side effective ref still uses requestedBaseRef in $($pair[0])"
+        }
+        if ($text -match '(?s)`?requestedBaseRef`?.{0,80}(作为|是).{0,40}(Snapshot\s*)?(请求参数|request 参数)') {
+            throw "Task1 request parameter prose still uses requestedBaseRef in $($pair[0])"
+        }
+        if ($text -match '(?s)requested\s+baseRef.{0,80}请求参数') {
+            throw "Task1 request parameter prose still uses requested baseRef in $($pair[0])"
         }
         if ($text -match '"requestedBaseRef"\s*:') {
             throw "Task1 active Agent contract contains requestedBaseRef as a JSON request field in $($pair[0])"
