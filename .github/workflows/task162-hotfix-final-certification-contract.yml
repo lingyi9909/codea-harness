@@ -1,0 +1,29 @@
+name: task162-hotfix-final-certification-contract
+
+on:
+  push:
+    branches: [release/1.6.2-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Hotfix Final Certification contract
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-final-certification-contract-regression.ps1
+
+      - name: Contract exact-head marker
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_HOTFIX_FINAL_CERT_CONTRACT_EXACT_HEAD PASS head=$head"
