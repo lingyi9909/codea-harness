@@ -61,7 +61,7 @@ func Test153ChainEditAgentContract(t *testing.T) {
 	agents := task153ReadContractFile(t, root, ".code-harness", "AGENTS.md")
 	requireTask153Markers(t, agents,
 		"harness chain edit",
-		"codea-harness-tools chain edit --input",
+		"codea-dcep-tools.exe chain edit --input",
 		"chain-edit-candidates",
 		"chain seal-persist",
 		"chain persist",
