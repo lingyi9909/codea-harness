@@ -31,7 +31,7 @@ jobs:
       - name: Canonical ChangeSet focused tests
         working-directory: .code-harness/tools-runtime
         shell: pwsh
-        run: go test -count=1 -run 'Test162Hotfix' -v ./internal/changeset ./cmd/codea-dcep-tools
+        run: go test -count=1 -run 'Test162Hotfix' -v ./internal/changeset ./internal/analysis ./cmd/codea-dcep-tools
 
       - name: Full Go regression
         working-directory: .code-harness/tools-runtime
@@ -42,6 +42,70 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: go vet ./...
+
+      - name: Build Windows x64 Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go build -trimpath -ldflags '-s -w' -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
+
+      - name: Canonical ChangeSet authority scenarios
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1
+
+      - name: Install pinned ast-grep 0.42.1
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-162-hotfix.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-162-hotfix'
+          Invoke-WebRequest -Uri "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retained 1.6 Review Precision regression
+        shell: pwsh
+        run: ./.github/scripts/task160-real-review-precision-regression.ps1
+
+      - name: Retained 1.6.1 Runtime rename regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d .code-harness/tools-runtime/cmd/codea-dcep-tools
+          test ! -d .code-harness/tools-runtime/cmd/codea-harness-tools
+          test -f .code-harness/bin/codea-dcep-tools.exe
+          test ! -f .code-harness/bin/codea-harness-tools.exe
+          scopes=(.code-harness .github/scripts .github/workflows README.md)
+          refs=$(git grep -l 'codea-harness-tools\.exe' -- "${scopes[@]}" \
+            ':!.code-harness/tools-runtime/internal/upgrade/task161_release_upgrade_test.go' \
+            ':!.github/scripts/task161-release.ps1' \
+            ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/workflows/task161-runtime-rename-audit.yml' \
+            ':!.github/workflows/task162-task1-maven-multimodule.yml' \
+            ':!.github/workflows/task162-hotfix-task1-canonical-changeset.yml' || true)
+          cmdrefs=$(git grep -l 'cmd/codea-harness-tools' -- "${scopes[@]}" \
+            ':!.github/scripts/task161-real-160-upgrade.ps1' \
+            ':!.github/workflows/task161-runtime-rename-audit.yml' \
+            ':!.github/workflows/task162-task1-maven-multimodule.yml' \
+            ':!.github/workflows/task162-hotfix-task1-canonical-changeset.yml' || true)
+          if [ -n "$refs" ] || [ -n "$cmdrefs" ]; then
+            printf 'Unexpected legacy Runtime refs:\n%s\n%s\n' "$refs" "$cmdrefs"
+            exit 1
+          fi
+          echo 'TASK161_RUNTIME_RENAME_AUDIT PASS'
+
+      - name: Retained 1.6.2 Maven multi-module regression
+        shell: pwsh
+        run: ./.github/scripts/task162-real-multimodule-regression.ps1
+
+      - name: Retained 1.6.2 duplicate-symbol authority regression
+        shell: pwsh
+        run: ./.github/scripts/task162-duplicate-symbol-authority-regression.ps1
 
       - name: Task 1 exact-head marker
         shell: pwsh
