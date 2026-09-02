@@ -58,6 +58,17 @@ jobs:
           Write-Output "OpenCode $version"
           if ($version -notmatch '1\.18\.25') { throw "unexpected OpenCode version: $version" }
 
+      - name: Focused parser repair for root-cause verification
+        shell: pwsh
+        run: |
+          $path = '.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1'
+          $source = Get-Content $path -Raw
+          $fixed = $source.Replace('$opencodeExit:', '${opencodeExit}:')
+          if ($fixed -eq $source) { throw 'expected Task 3 parser reproduction was not present' }
+          [System.IO.File]::WriteAllText($path, $fixed, [System.Text.UTF8Encoding]::new($false))
+          [void][scriptblock]::Create($fixed)
+          Write-Output 'TASK162_HOTFIX_TASK3_PARSER_ROOT_CAUSE_VERIFIED PASS'
+
       - name: Real plain harness review E2E
         shell: pwsh
         run: ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
