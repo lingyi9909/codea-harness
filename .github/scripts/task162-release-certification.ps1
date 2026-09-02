@@ -3,6 +3,9 @@ Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $accepted161 = '87ed05c5bbc56f4fdf904dfbb239d9125b8136e0'
+$acceptedHotfixTask1 = '119c87057718f3d1f6f0286622d32b350f21d64e'
+$acceptedHotfixTask2 = '2503678e347dc0ba2bc2f0357cefd9306d199480'
+$acceptedHotfixTask3 = '4a312c4a2c85a202b740d3a1f419b2812e42f866'
 $installZip = 'codea-harness-1.6.2-windows-x64-install.zip'
 $upgradeZip = 'codea-harness-1.6.2-windows-x64-upgrade.zip'
 $checklistFile = 'codea-harness-1.6.2-release-checklist.json'
@@ -13,6 +16,42 @@ function Invoke-Regression([string]$Script, [string]$Label) {
     & $Script
     if ($LASTEXITCODE -ne 0) { throw "$Label failed with exit code $LASTEXITCODE" }
     $global:LASTEXITCODE = 0
+}
+
+function Assert-AcceptedHotfixBaselines {
+    $accepted = [ordered]@{
+        task1 = $acceptedHotfixTask1
+        task2 = $acceptedHotfixTask2
+        task3 = $acceptedHotfixTask3
+    }
+    foreach ($entry in $accepted.GetEnumerator()) {
+        git cat-file -e "$($entry.Value)^{commit}"
+        if ($LASTEXITCODE -ne 0) { throw "accepted Hotfix $($entry.Key) commit unavailable: $($entry.Value)" }
+        git merge-base --is-ancestor $entry.Value HEAD
+        $ancestorExit = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+        if ($ancestorExit -ne 0) { throw "accepted Hotfix $($entry.Key) is not an ancestor of release HEAD: $($entry.Value)" }
+    }
+    Write-Output "TASK162_FINAL_ACCEPTED_TASK1_BASELINE PASS head=$acceptedHotfixTask1"
+    Write-Output "TASK162_FINAL_ACCEPTED_TASK2_BASELINE PASS head=$acceptedHotfixTask2"
+    Write-Output "TASK162_FINAL_ACCEPTED_TASK3_BASELINE PASS head=$acceptedHotfixTask3"
+}
+
+function Assert-PostTask3CertificationScope {
+    $allowed = @(
+        '.github/scripts/task162-release-certification.ps1',
+        '.github/scripts/task162-hotfix-final-certification-contract-regression.ps1',
+        '.github/workflows/task162-final-release-certification.yml',
+        '.github/workflows/task162-hotfix-final-certification-contract.yml',
+        'docs/superpowers/plans/2026-09-02-codea-harness-1.6.2-post-hotfix-final-release-certification-plan.md'
+    )
+    $changed = @(& git diff --name-only "$acceptedHotfixTask3..HEAD")
+    if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-Task3 certification scope' }
+    $unexpected = @($changed | Where-Object { $_ -and ($_ -notin $allowed) })
+    if ($unexpected.Count -gt 0) {
+        throw "post-Task3 release scope contains non-certification changes:`n$($unexpected -join "`n")"
+    }
+    Write-Output 'TASK162_FINAL_POST_TASK3_CERTIFICATION_SCOPE PASS'
 }
 
 function Assert-NoRuntimeSource([string]$Root, [string]$Label) {
@@ -62,9 +101,14 @@ function Assert-RuntimeRenameRetained {
         '.code-harness/tools-runtime/internal/upgrade/task161_release_upgrade_test.go',
         '.github/scripts/task161-release.ps1',
         '.github/scripts/task161-real-160-upgrade.ps1',
+        '.github/scripts/task162-release-certification.ps1',
+        '.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1',
         '.github/workflows/task161-runtime-rename-audit.yml',
         '.github/workflows/task162-task1-maven-multimodule.yml',
-        '.github/scripts/task162-release-certification.ps1'
+        '.github/workflows/task162-hotfix-task1-canonical-changeset.yml',
+        '.github/workflows/task162-hotfix-task2-invocation-contract.yml',
+        '.github/workflows/task162-hotfix-task3-certification.yml',
+        '.github/workflows/task162-hotfix-task3-real-plain-review-e2e.yml'
     )
     $unexpected = @($legacyRefs | Where-Object {
         $line = [string]$_
@@ -76,9 +120,12 @@ function Assert-RuntimeRenameRetained {
     if ($LASTEXITCODE -gt 1) { throw 'git grep legacy Runtime command references failed' }
     $allowedCmd = @(
         '.github/scripts/task161-real-160-upgrade.ps1',
+        '.github/scripts/task162-release-certification.ps1',
         '.github/workflows/task161-runtime-rename-audit.yml',
         '.github/workflows/task162-task1-maven-multimodule.yml',
-        '.github/scripts/task162-release-certification.ps1'
+        '.github/workflows/task162-hotfix-task1-canonical-changeset.yml',
+        '.github/workflows/task162-hotfix-task2-invocation-contract.yml',
+        '.github/workflows/task162-hotfix-task3-certification.yml'
     )
     $unexpectedCmd = @($legacyCmdRefs | Where-Object {
         $line = [string]$_
@@ -97,6 +144,8 @@ try {
     if ($LASTEXITCODE -ne 0 -or $exactHead -notmatch '^[0-9a-f]{40}$') { throw 'cannot resolve exact HEAD' }
     git cat-file -e "$accepted161^{commit}"
     if ($LASTEXITCODE -ne 0) { throw "accepted 1.6.1 baseline unavailable: $accepted161" }
+    Assert-AcceptedHotfixBaselines
+    Assert-PostTask3CertificationScope
     $goVersion = (go env GOVERSION).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($goVersion)) { throw 'cannot resolve Go version' }
 
@@ -112,6 +161,17 @@ try {
     & './.github/scripts/task162-task2-package.ps1'
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $global:LASTEXITCODE = 0
+
+    Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-authority-regression.ps1' 'Hotfix Task 1 Agent authority'
+    Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-snapshot-request-contract.ps1' 'Hotfix Task 1 Agent Snapshot request contract'
+    Invoke-Regression './.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1' 'Hotfix Task 1 Canonical ChangeSet authority'
+    Invoke-Regression './.github/scripts/task162-hotfix-task2-invocation-contract-regression.ps1' 'Hotfix Task 2 Active Agent invocation contract'
+    Invoke-Regression './.github/scripts/task162-hotfix-task2-runtime-invocation-regression.ps1' 'Hotfix Task 2 Runtime invocation contract'
+    Invoke-Regression './.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1' 'Hotfix Task 3 Real plain harness review E2E'
+    Write-Output 'NO_RUNTIME_ZERO_ARG_USAGE PASS'
+    Write-Output 'NO_LEGACY_RUNTIME_INVOCATION PASS'
+    Write-Output 'NO_UNKNOWN_REQUEST_FIELD PASS'
+    Write-Output 'NO_CHANGE_SET_MISMATCH PASS'
 
     Invoke-Regression './.github/scripts/task162-real-multimodule-regression.ps1' 'Task 1 Maven multi-module Review Authority E2E'
     Invoke-Regression './.github/scripts/task162-duplicate-symbol-authority-regression.ps1' 'Task 1 duplicate Symbol Authority E2E'
@@ -173,6 +233,11 @@ try {
         version = '1.6.2'
         exactHeadSha = $exactHead
         acceptedBaseline161 = $accepted161
+        acceptedHotfix = [ordered]@{
+            task1 = $acceptedHotfixTask1
+            task2 = $acceptedHotfixTask2
+            task3 = $acceptedHotfixTask3
+        }
         runtime = [ordered]@{
             binary = 'codea-dcep-tools.exe'
             sha256 = $runtimeHash
@@ -191,6 +256,10 @@ try {
             upgrade = [ordered]@{ file=$upgradeZip; sha256=$upgradeHash; size=(Get-Item $upgradeZip).Length }
         }
         gates = [ordered]@{
+            hotfixTask1CanonicalAuthority = 'PASS'
+            hotfixTask2InvocationContract = 'PASS'
+            hotfixTask3RealPlainReview = 'PASS'
+            postTask3CertificationScope = 'PASS'
             task1MavenMultiModule = 'PASS'
             task1DuplicateSymbolAuthority = 'PASS'
             task2PackageCleanup = 'PASS'
@@ -213,6 +282,7 @@ try {
     } | ConvertTo-Json -Depth 10
     [IO.File]::WriteAllText($checklistFile, $checklist, [Text.UTF8Encoding]::new($false))
 
+    Write-Output "TASK162_POST_HOTFIX_RELEASE_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
     Write-Output "TASK162_RELEASE_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
 } finally {
     Pop-Location
