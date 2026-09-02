@@ -86,7 +86,11 @@ jobs:
 
       - name: Real plain harness review E2E
         shell: pwsh
-        run: ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
+        run: |
+          $verifierLog = Join-Path $env:RUNNER_TEMP 'task162-hotfix-task3-verifier.log'
+          pwsh -NoProfile -File ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1 *>&1 | Tee-Object -FilePath $verifierLog
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Persist host protocol evidence
         if: always()
@@ -98,6 +102,7 @@ jobs:
           path: |
             ${{ runner.temp }}/task162-hotfix-task3-model-*.jsonl
             ${{ runner.temp }}/task162-hotfix-task3-opencode-*.jsonl
+            ${{ runner.temp }}/task162-hotfix-task3-verifier.log
 
       - name: Task 3 focused exact-head marker
         shell: pwsh
