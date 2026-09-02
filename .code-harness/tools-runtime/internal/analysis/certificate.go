@@ -61,7 +61,11 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 	if err := json.Unmarshal(certBytes, &cert); err != nil {
 		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_DECODE_FAILED: %w", err)
 	}
-	canonicalCert, err := json.MarshalIndent(cert, "", "  ")
+	legacyWireE737, err := isLegacyCertificateWireE737(certBytes, cert)
+	if err != nil {
+		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_DECODE_FAILED: %w", err)
+	}
+	canonicalCert, err := marshalCertificateForByteVerification162(cert, legacyWireE737)
 	if err != nil {
 		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_CANONICALIZE_FAILED: %w", err)
 	}
@@ -186,11 +190,15 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 		if err != nil {
 			return ChangeAnalysis{}, Certificate{}, err
 		}
-		legacyChangeSetSHA, err := legacyChangeSetSHA256E737(snapshot)
-		if err != nil {
-			return ChangeAnalysis{}, Certificate{}, err
-		}
-		if legacyChangeSetSHA != cert.ChangeSetSHA256 || snapshot.HeadCommit != cert.Head || snapshot.RequestedBaseRef != cert.BaseRef {
+		if legacyWireE737 {
+			legacyChangeSetSHA, err := legacyChangeSetSHA256E737(snapshot)
+			if err != nil {
+				return ChangeAnalysis{}, Certificate{}, err
+			}
+			if legacyChangeSetSHA != cert.ChangeSetSHA256 || snapshot.HeadCommit != cert.Head || snapshot.RequestedBaseRef != cert.BaseRef {
+				return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFIED_CHANGE_SET_STALE")
+			}
+		} else if snapshot.SHA256 != cert.ChangeSetSHA256 || snapshot.Head != cert.Head || snapshot.BaseRef != cert.BaseRef {
 			return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFIED_CHANGE_SET_STALE")
 		}
 		if err := compareDraftChangeSet153(meta.ChangedFiles, snapshot.Files); err != nil {
