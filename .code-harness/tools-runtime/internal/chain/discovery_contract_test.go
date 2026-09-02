@@ -22,7 +22,7 @@ func TestDiscoverChainSkillLocksLazyRuntimeContract(t *testing.T) {
 		"harness chain discover",
 		"harness chain discover OrderController",
 		"harness chain discover OrderController.approve",
-		"codea-harness-tools chain discover --input",
+		"codea-dcep-tools.exe chain discover --input",
 		".code-harness/runs/<runId>/analysis/discovered-chains/",
 		"不得写入 `.code-harness/chains/**`",
 		"PARTIAL",
