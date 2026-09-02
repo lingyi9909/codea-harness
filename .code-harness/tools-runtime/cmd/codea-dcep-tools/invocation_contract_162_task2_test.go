@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/schema"
 )
 
@@ -32,27 +34,27 @@ func Test162HotfixTask2InvocationRequestSchemas(t *testing.T) {
 		invalidJSON string
 	}{
 		{
-			name:       "snapshot",
-			schemaName: "change-set-request.schema.json",
-			validJSON:  `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true}`,
+			name:        "snapshot",
+			schemaName:  "change-set-request.schema.json",
+			validJSON:   `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true}`,
 			invalidJSON: `{"runId":"r1","requestedBaseRef":"HEAD","includeWorkingTree":true}`,
 		},
 		{
-			name:       "inventory",
-			schemaName: "analysis-inventory-request.schema.json",
-			validJSON:  `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true,"intent":{"mode":"FULL"}}`,
+			name:        "inventory",
+			schemaName:  "analysis-inventory-request.schema.json",
+			validJSON:   `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true,"intent":{"mode":"FULL"}}`,
 			invalidJSON: `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true,"intent":{"mode":"FULL"},"unexpected":true}`,
 		},
 		{
-			name:       "canonical certify",
-			schemaName: "analysis-certify-request.schema.json",
-			validJSON: `{"runId":"r1","snapshotPath":".code-harness/runs/r1/analysis/change-set.json","snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","proposalPath":".code-harness/runs/r1/requests/change-analysis-proposal.json","intent":{"mode":"FULL"}}`,
+			name:        "canonical certify",
+			schemaName:  "analysis-certify-request.schema.json",
+			validJSON:   `{"runId":"r1","snapshotPath":".code-harness/runs/r1/analysis/change-set.json","snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","proposalPath":".code-harness/runs/r1/requests/change-analysis-proposal.json","intent":{"mode":"FULL"}}`,
 			invalidJSON: `{"runId":"r1","snapshotPath":".code-harness/runs/r1/analysis/change-set.json","snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","proposalPath":".code-harness/runs/r1/requests/change-analysis-proposal.json","intent":{"mode":"FULL"},"unexpected":true}`,
 		},
 		{
-			name:       "review options",
-			schemaName: "review-options-request.schema.json",
-			validJSON:  `{"runId":"r1","changeAnalysisPath":".code-harness/runs/r1/analysis/change-analysis.json"}`,
+			name:        "review options",
+			schemaName:  "review-options-request.schema.json",
+			validJSON:   `{"runId":"r1","changeAnalysisPath":".code-harness/runs/r1/analysis/change-analysis.json"}`,
 			invalidJSON: `{"runId":"r1","changeAnalysisPath":".code-harness/runs/r1/analysis/change-analysis.json","baseRef":"HEAD"}`,
 		},
 	}
@@ -68,6 +70,43 @@ func Test162HotfixTask2InvocationRequestSchemas(t *testing.T) {
 			}
 			if err := schema.ValidateJSON(schemaBytes, []byte(tc.invalidJSON)); err == nil {
 				t.Fatalf("invalid request unexpectedly accepted by %s", tc.schemaName)
+			}
+		})
+	}
+}
+
+func Test162HotfixTask2RuntimeRequestTypesRejectSchemaUnknownFields(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		newTarget func() any
+	}{
+		{
+			name: "snapshot requestedBaseRef",
+			data: `{"runId":"r1","requestedBaseRef":"HEAD","includeWorkingTree":true}`,
+			newTarget: func() any { return &analysisSnapshotRequest162{} },
+		},
+		{
+			name: "inventory unexpected",
+			data: `{"runId":"r1","baseRef":"HEAD","includeWorkingTree":true,"intent":{"mode":"FULL"},"unexpected":true}`,
+			newTarget: func() any { return &analysisInventoryRequest153{} },
+		},
+		{
+			name: "certify unexpected",
+			data: `{"runId":"r1","snapshotPath":".code-harness/runs/r1/analysis/change-set.json","snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","proposalPath":".code-harness/runs/r1/requests/change-analysis-proposal.json","intent":{"mode":"FULL"},"unexpected":true}`,
+			newTarget: func() any { return &analysisruntime.CertifyRequest{} },
+		},
+		{
+			name: "review options baseRef",
+			data: `{"runId":"r1","changeAnalysisPath":".code-harness/runs/r1/analysis/change-analysis.json","baseRef":"HEAD"}`,
+			newTarget: func() any { return &reviewOptionsRequest{} },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := json.Unmarshal([]byte(tc.data), tc.newTarget()); err == nil {
+				t.Fatalf("request type silently accepted schema-invalid JSON: %s", tc.data)
 			}
 		})
 	}
