@@ -37,6 +37,7 @@ try {
     Copy-Item $runtimeSource (Join-Path $root '.code-harness\bin\codea-dcep-tools.exe') -Force
     Copy-Item (Join-Path $repoRoot '.code-harness\VERSION') (Join-Path $root '.code-harness\VERSION') -Force
     Copy-Item (Join-Path $repoRoot '.code-harness\contracts\change-set.schema.json') (Join-Path $root '.code-harness\contracts\change-set.schema.json') -Force
+    Copy-Item (Join-Path $repoRoot '.code-harness\contracts\change-set-request.schema.json') (Join-Path $root '.code-harness\contracts\change-set-request.schema.json') -Force
 
     $requestPath = Join-Path $root '.code-harness\runs\contract-test\requests\change-set-request.json'
     Write-Utf8NoBom $requestPath '{"runId":"contract-test","baseRef":"HEAD","includeWorkingTree":true}'
