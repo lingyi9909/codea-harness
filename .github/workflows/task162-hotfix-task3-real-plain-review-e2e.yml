@@ -84,6 +84,17 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
 
+      - name: Persist host protocol evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task162-hotfix-task3-host-protocol-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 3
+          path: |
+            ${{ runner.temp }}/task162-hotfix-task3-model-*.jsonl
+            ${{ runner.temp }}/task162-hotfix-task3-opencode-*.jsonl
+
       - name: Task 3 focused exact-head marker
         shell: pwsh
         run: |
