@@ -23,6 +23,9 @@ codea-dcep-tools.exe workspace verify --id <id>
 codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-dcep-tools.exe analysis snapshot --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe db ping --run-id <id>
 codea-dcep-tools.exe db list-tables --schema <schema> --run-id <id>
 codea-dcep-tools.exe db describe-table --schema <schema> --table <table> --run-id <id>
@@ -32,6 +35,42 @@ codea-dcep-tools.exe report api-doc --input .code-harness/runs/<runId>/requests/
 ```
 
 未知子命令、目录逃逸、非法 symbol/identifier/annotation name 必须拒绝。`nav` 由 Runtime 以固定参数调用 `.code-harness/bin/ast-grep.exe`；Agent/Skill 不得直接调用或生成 ast-grep 命令。`db query` 不接受 raw SQL CLI 参数。
+
+### Canonical ChangeSet Snapshot
+
+`analysis snapshot` 是 Review/Test/API-doc changed 的唯一 Git ChangeSet authority。请求只提供：
+
+```text
+runId
+requestedBaseRef
+includeWorkingTree
+```
+
+Runtime 本地解析 ref，计算并发布：
+
+```text
+.code-harness/runs/<runId>/analysis/change-set.json
+```
+
+Snapshot 至少包含：
+
+```text
+requestedBaseRef       # provenance only
+resolvedBaseCommit
+mergeBase
+headCommit
+currentBranch
+includeWorkingTree
+files[].path/status/sources/hunks
+gitStateSha256
+snapshotSha256
+```
+
+`requestedBaseRef` 的字符串形式不构成 Git identity；`main / origin/main / refs/heads/main` 只有在本地实际 resolve 到同一 commit 且 canonical Git state 相同时才等价。`files[]` 由 Runtime 按 Harness Review Scope 过滤并合并 committed/staged/unstaged/untracked，同路径多 source 由 Runtime 合并去重。
+
+Agent/Reviewer/Orchestrator **不得**再调用 `git_diff` 独立生成另一套 Review ChangeSet，不得自行生成或修补 `baseCommit/mergeBase/headCommit/currentBranch/includeWorkingTree/changedFiles.path/changedFiles.sources`。Agent 只能消费 Runtime Snapshot 做 semantic analysis，并把 semantic proposal 写入 `requests/change-analysis-proposal.json`。
+
+`analysis certify` 的 canonical request 引用 same-run `snapshotPath / snapshotSha256 / proposalPath`。Runtime 必须重新计算 live Snapshot 并验证 `resolvedBaseCommit / mergeBase / headCommit / currentBranch / includeWorkingTree / gitStateSha256 / snapshotSha256`；Snapshot 之后 Review Scope Git bytes/state 发生变化必须 fail closed。Runtime 再从 Snapshot 组装正式 `reviewScope` 与 `changedFiles.path/sources`，验证 semantic evidence、EntryPoint Inventory 与 Coverage 后才发布 Certified ChangeAnalysis。
 
 ### Review Report 受控入口
 
@@ -63,7 +102,9 @@ API Doc Agent / Orchestrator 不得自由生成最终 Markdown；必须调用 de
 
 ### `git_diff(baseRef, headRef?, includeWorkingTree?) -> DiffResult`
 
-完整 Review Change Set：
+这是历史/低层只读 Diff helper，不再是正常 Review/Test/API-doc changed 的 Authority。正常流程必须使用 Runtime `analysis snapshot`；Reviewer/Orchestrator 不得用 `git_diff` 构造第二套 deterministic changedFiles。
+
+其低层语义仍是：
 
 ```text
 mergeBase = merge-base(baseRef, HEAD)
@@ -73,15 +114,15 @@ committed = mergeBase → HEAD
 + untracked
 ```
 
-同一文件多来源必须合并去重，并记录 `sources`。不得用普通工作区 `git diff` 冒充完整 Review；不得自动 fetch/pull。
+不得用普通工作区 `git diff` 冒充完整 Review；不得自动 fetch/pull。即使宿主暴露该 helper，也不得用其输出覆盖或修补 Runtime Canonical Snapshot。
 
 ### `git_refs() -> GitRefsResult`
 
-仅读本地 refs：`currentBranch`、`localBranches`、`remoteBranches`、`originHead`。不联网。
+仅读本地 refs：`currentBranch`、`localBranches`、`remoteBranches`、`originHead`。不联网。该工具可以用于初始化/展示，但不得覆盖 Runtime Snapshot 中的 Git identity。
 
 ### `read_code(paths, lineRanges?) -> CodeBundle`
 
-只读 `scope.sourceIncludes` / `scope.testIncludes` 允许的仓库文本，路径不能逃出仓库。Review 时所有 changed source/test files 必须读取。
+只读 `scope.sourceIncludes` / `scope.testIncludes` 允许的仓库文本，路径不能逃出仓库。Review 时所有 Canonical Snapshot required changed source/test files 必须读取。
 
 ### `find_symbol(symbol, scope?) -> SymbolSearchResult`
 
@@ -116,7 +157,7 @@ arbitrary query language
 
 定位项目源码中 method symbol 的直接调用位置，返回 `callerSymbol / path / line`。V1.3 仅保证现有 ast-grep 可确定识别的静态源码范围，不承诺运行时多态、反射、复杂泛型语义或 Spring Proxy 解析。
 
-六个 current-project 导航 Contract 的 scope 都必须是仓库内相对路径；第一版只支持 Java。目录逃逸必须拒绝。不得无界扫描整个仓库，调用方应从与 Change Set / API target 直接相关的 module/source scope 开始。所有导航都只能通过 Controlled Runtime 的固定 ast-grep pattern 执行，Agent/Skill 不得直接调用 ast-grep 或传入 rule/pattern/regex/query language。
+六个 current-project 导航 Contract 的 scope 都必须是仓库内相对路径；第一版只支持 Java。目录逃逸必须拒绝。不得无界扫描整个仓库，调用方应从与 Canonical ChangeSet / API target 直接相关的 module/source scope 开始。所有导航都只能通过 Controlled Runtime 的固定 ast-grep pattern 执行，Agent/Skill 不得直接调用 ast-grep 或传入 rule/pattern/regex/query language。
 
 ### `workspace_verify(id) -> WorkspaceVerificationResult`
 
@@ -181,6 +222,8 @@ codea-harness-tools nav workspace-template-dispatch --workspace <id> --from <sym
 - JSON Schema 使用成熟的 Draft 2020-12 Validator 实现，不在 Harness 内自维护 Schema 语义子集。
 - YAML 输入先由标准 YAML parser 解析，再以 JSON-compatible instance 进入同一 JSON Schema Validator。
 - JSON 输入直接执行完整 JSON Contract 校验。
+- `change-analysis-proposal.schema.json` 只校验 Agent semantic proposal；它不授权 Agent 写 deterministic Git facts。
+- `change-set.schema.json` 校验 Runtime-owned Canonical Snapshot；Schema 通过仍不能替代 certify 时的 live snapshot identity revalidation。
 - 当 Schema 为 `change-analysis.schema.json` 时，Schema PASS 后 Runtime 必须再次执行机器 Review Coverage 校验：
   - 所有 `changedFiles[].path` 必须出现在 `reviewCoverage.reviewedFiles[].path`；
   - `unresolvedSymbols` 必须为空；

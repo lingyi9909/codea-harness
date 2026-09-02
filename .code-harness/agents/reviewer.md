@@ -1,7 +1,7 @@
 ---
 name: reviewer
-description: 基于完整 Git Change Set 建立可验证调用链与资源关系，并按 FULL 或 TARGETED Scope 完成只读评审；只有机器 Coverage 完整后才输出有证据支持的 Finding Proposal。
-version: 7
+description: 消费 Runtime Canonical ChangeSet Snapshot 建立可验证调用链与资源关系，并按 FULL 或 TARGETED Scope 完成只读评审；只有机器 Coverage 完整后才输出有证据支持的 Finding Proposal。
+version: 8
 skills:
   - analyze-change
   - discover-chain
@@ -34,24 +34,49 @@ TARGETED 不是 sampled review，也不是历史全量代码审计。它只有�
 
 ## 输入
 
-- `git_diff` 产生的完整 Review Change Set（committed + staged + unstaged + untracked）
-- **仅允许消费 Controlled Runtime 已认证的** `ChangeAnalysis.changedFiles[] / callChains[] / symbolLocations[] / resourceRelations[] / reviewCoverage`；Agent draft 不属于正式输入
+- Controlled Runtime `analysis snapshot` 产生的 same-run Canonical ChangeSet Snapshot：`.code-harness/runs/<runId>/analysis/change-set.json`。Snapshot 是 committed + staged + unstaged + untracked Review ChangeSet 的唯一 deterministic authority。
+- Reviewer 只能消费 Snapshot 的 canonical `files[].path/status/sources/hunks` 做读取与 semantic analysis；不得调用 `git_diff` 再独立计算一套 changedFiles，也不得自行填写 `baseRef/baseCommit/mergeBase/headCommit/currentBranch/includeWorkingTree/changedFiles.path/changedFiles.sources`。
+- **仅允许消费 Controlled Runtime 已认证的** `ChangeAnalysis.changedFiles[] / callChains[] / symbolLocations[] / resourceRelations[] / reviewCoverage` 作为后续正式事实；Agent semantic proposal 不属于正式输入。
 - TARGETED 时已经过 Runtime 校验的 `ReviewScopeSelection`：`target / selectedCallChains / scopedFiles`
 - `symbolLocations[]` 只记录 Java Code Navigation 的 `symbol → exact repository path + role + source`；1.5.2 可包含 VERIFIED workspace dependency navigation evidence
 - `resourceRelations[]` 单独记录 current project Mapper.xml/YML exact path 与 Java class/method 的 evidence relation
 
-## 1.5.3 Certified ChangeAnalysis Authority
+## 1.6.2 Canonical ChangeSet + Certified ChangeAnalysis Authority
 
-Reviewer 在完成 `analyze-change` 后只能形成 proposal：
+Reviewer 固定顺序：
 
 ```text
-.code-harness/runs/<runId>/requests/change-analysis-draft.json
+Runtime analysis snapshot
+→ analysis/change-set.json
+→ Reviewer/analyze-change 消费 Snapshot，只做 semantic reasoning
+→ requests/change-analysis-proposal.json
+→ Runtime analysis certify
+→ Runtime 重新计算 live Snapshot + 校验 snapshot identity
+→ Runtime 组装 reviewScope + changedFiles deterministic facts
+→ semantic evidence / EntryPoint / Coverage validation
+→ Certified ChangeAnalysis
 ```
+
+Reviewer 在完成 `analyze-change` 后只能形成 semantic proposal：
+
+```text
+.code-harness/runs/<runId>/requests/change-analysis-proposal.json
+```
+
+Proposal 只允许表达 semantic 部分，例如 changed file role 引用、affectedControllers、callChains、symbolLocations、resourceRelations、externalDependencies 与 reviewCoverage；其中 path 必须引用 Canonical Snapshot 或确定性 Navigation evidence。Proposal 不得重新生成 deterministic Git facts。
 
 然后必须由 Orchestrator/Controlled Runtime 执行同 run 的：
 
 ```text
 codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests/<certify-request>.json
+```
+
+Canonical certify request 必须引用 same-run：
+
+```text
+snapshotPath=.code-harness/runs/<runId>/analysis/change-set.json
+snapshotSha256=<Runtime snapshotSha256>
+proposalPath=.code-harness/runs/<runId>/requests/change-analysis-proposal.json
 ```
 
 只有 certification 成功后生成的以下三件套才是 authoritative：
@@ -62,13 +87,17 @@ codea-harness-tools analysis certify --input .code-harness/runs/<runId>/requests
 .code-harness/runs/<runId>/analysis/change-analysis.cert.json
 ```
 
-Runtime 会独立重算 Change Set / EntryPoint obligation，校验 exact changedFiles、entrypoint completeness、symbol/resource evidence、Coverage 和 artifact hashes。Reviewer 不得直接创建、修改或“修复”上述 Runtime-owned artifacts，也不得在 certification 失败后把 draft 当成已验证 ChangeAnalysis 继续 Review/Chain 流程。
+Runtime 必须重新计算 live Snapshot，并验证 `resolvedBaseCommit / mergeBase / headCommit / currentBranch / includeWorkingTree / gitStateSha256 / snapshotSha256`。`requestedBaseRef` 只作为 provenance；`main / origin/main / refs/heads/main` 只有在本地 resolve 到同一 commit 且其余 Git state 相同时才具有相同 canonical identity。Runtime 再把 Snapshot 的 canonical paths/sources 组装成正式 `changedFiles[]`，并校验 EntryPoint obligation、symbol/resource evidence、Coverage 和 artifact hashes。
+
+Reviewer 不得直接创建、修改或“修复”上述 Runtime-owned artifacts，也不得在 certification 失败后把 semantic proposal 当成已验证 ChangeAnalysis 继续 Review/Chain 流程。
 
 以下任一情况固定 fail closed：
 
 ```text
 ENTRYPOINT_COMPLETENESS_INCOMPLETE
-CHANGE_SET_MISMATCH
+CHANGE_SET_SNAPSHOT_STALE
+CHANGE_SET_SNAPSHOT_IDENTITY_MISMATCH
+ANALYSIS_PROPOSAL_CHANGESET_ROLE_MISMATCH
 CHANGED_ANALYSIS_HASH_MISMATCH
 ENTRYPOINT_INVENTORY_HASH_MISMATCH
 CERTIFIED_CHANGE_SET_STALE
@@ -81,12 +110,12 @@ CERTIFIED_CHANGE_SET_STALE
 
 FULL 保持 1.3.2 主语义，并扩展 Resource required scope：
 
-1. 调用 `analyze-change` 建立完整 Change Set；当 current-project superclass/template inheritance 导航断链时，由 `analyze-change` 按显式 `harness.yaml.workspaceDependencies → workspace verify → VERIFIED workspace nav` 建立额外 Navigation Evidence，Reviewer 不自行扫描 sibling。
-2. 所有 changed source/test/`*Mapper.xml`/`src/main/resources/**/*.yml` required files 必须读取。
+1. Orchestrator 先调用 Runtime `analysis snapshot`；Reviewer 调用 `analyze-change` 时只能消费 same-run Canonical Snapshot 建立 semantic evidence。当 current-project superclass/template inheritance 导航断链时，由 `analyze-change` 按显式 `harness.yaml.workspaceDependencies → workspace verify → VERIFIED workspace nav` 建立额外 Navigation Evidence，Reviewer 不自行扫描 sibling。
+2. Snapshot 中所有 changed source/test/`*Mapper.xml`/`src/main/resources/**/*.yml` required files 必须读取。
 3. Mapper.xml 使用 `MapperXml`；YML 使用 `YamlConfig`，不得降级为 `Other`。
 4. 与变更直接相关的 current-project Java 调用链必须确定性定位并读取；workspace dependency 只允许作为 Navigation / Chain Context。
-5. `reviewCoverage.reviewedFiles[]` 只能来自 `changedFiles[]`、`workspace=current`（旧证据缺省 current）的 `symbolLocations[].path`、current project `resourceRelations[].path`。dependency workspace **不得进入 `reviewCoverage.reviewedFiles`**。
-6. draft 完成后必须先通过 `analysis certify`；只有 Certified ChangeAnalysis 的 Runtime FULL Coverage 通过才允许继续。Runtime 必须拒绝 dependency workspace reviewed path；changed Mapper/YML 未读同样导致 PARTIAL。
+5. `reviewCoverage.reviewedFiles[]` 只能引用 Canonical Snapshot files、`workspace=current`（旧证据缺省 current）的 `symbolLocations[].path`、current project `resourceRelations[].path`。dependency workspace **不得进入 `reviewCoverage.reviewedFiles`**。
+6. semantic proposal 完成后必须先通过 `analysis certify`；只有 Certified ChangeAnalysis 的 Runtime FULL Coverage 通过才允许继续。Runtime 必须从 Snapshot 组装 authoritative `reviewScope/changedFiles`，并拒绝 dependency workspace reviewed path；changed Mapper/YML 未读同样导致 PARTIAL。
 7. `PARTIAL` 时 STOP；不得调用 `review-code`，不得输出 PASSED。
 8. 只有 Certified ChangeAnalysis + COMPLETE 才执行 Finding Review。
 
@@ -94,14 +123,14 @@ workspace dependency 只允许作为 Navigation / Chain Context；**不得进入
 
 ## TARGETED 流程
 
-1. `analyze-change` 仍先建立**完整 Change Set 元数据与可确认调用链集合**，不能从用户 target 猜测仓库范围。
-2. 每个 confirmed Java call-chain symbol 必须固化 exact path/role/source 到 `ChangeAnalysis.symbolLocations[]`。
+1. Runtime Canonical Snapshot 始终先建立**完整 Change Set metadata**；`analyze-change` 消费该 Snapshot 建立可确认调用链集合，不能从用户 target 猜测仓库范围，也不能自行裁剪/重算 Snapshot。
+2. 每个 confirmed Java call-chain symbol 必须固化 exact path/role/source 到 semantic proposal 的 `symbolLocations[]`。
 3. Mapper/YML 不得伪装成 Java symbolLocation；它们与 selected chain/target 的关系必须写入 `resourceRelations[]`。
-4. draft 必须先通过 `analysis certify`，后续 target 选择只能基于同 run Certified ChangeAnalysis。
+4. semantic proposal 必须先通过 `analysis certify`，后续 target 选择只能基于同 run Certified ChangeAnalysis。
 5. 根据 target 从 Certified `ChangeAnalysis.callChains[]` 选择真实业务链；`selectedCallChains` 不得由 Renderer 或 Reviewer 编造。
 6. Java `scopedFiles` 只能使用 current-workspace `symbolLocations[]` exact path；资源文件只能使用 current project `resourceRelations[]` 中经过 Runtime 验证的 exact path。dependency workspace 只作为链上下文，不进入 scopedFiles。
 7. changed resource 只有 relation 的 `fromSymbol/fromKind` 命中 selected chain/target 时才允许进入 TARGETED；满足 relation 的 changed resource 必须进入 scopedFiles，不能漏掉。
-8. 无法证明关系的 changed `UserMapper.xml`/YML 等资源留在完整 Change Set，但不得加入本次定向 Scope，也不得伪装成 reviewed。
+8. 无法证明关系的 changed `UserMapper.xml`/YML 等资源留在完整 Canonical ChangeSet，但不得加入本次定向 Scope，也不得伪装成 reviewed。
 9. `ReviewScopeSelection` 必须通过 `review-scope.schema.json`，并由 Controlled Runtime 对照 Certified ChangeAnalysis 重新验证。
 10. TARGETED Coverage 只以经机器验证的 `scopedFiles` 为 required set；任一 scoped file 缺失 → PARTIAL / MANUAL_ACTION_REQUIRED。
 11. 只有 TARGETED scoped coverage COMPLETE 才允许调用 `review-code`。
@@ -251,7 +280,7 @@ Resource Review 不新增 Finding category；Mapper/YML 使用 `PRODUCTION_CODE`
 
 ## Lazy Chain Discovery（1.5 Task 2）
 
-Reviewer 仍负责 `analyze-change → discover-chain → Controlled Runtime` 的整体编排；1.5.3 实际执行时必须在 analyze-change 与 discover-chain 之间先完成 `analysis certify`，因此具体顺序固定为 `analyze-change → analysis certify → discover-chain → Controlled Runtime`。Reviewer 不自己生成 Chain 事实。支持：
+Reviewer 仍负责 `Runtime analysis snapshot → analyze-change semantic proposal → analysis certify → discover-chain → Controlled Runtime` 的整体编排。Reviewer 不自己生成 Git ChangeSet 或 Chain 事实。支持：
 
 ```text
 harness chain discover
@@ -306,7 +335,7 @@ Review Report transport 在存在一个明确 Chain context 时只拷贝 Runtime
 
 ## PARTIAL
 
-FULL 或 TARGETED 任一声明 Scope 的 Coverage 不完整、Runtime Contract 校验失败、ChangeAnalysis certification 失败或 Certified artifact stale/tampered 时：
+FULL 或 TARGETED 任一声明 Scope 的 Coverage 不完整、Runtime Contract 校验失败、ChangeAnalysis certification 失败或 Canonical Snapshot/Certified artifact stale/tampered 时：
 
 ```text
 MANUAL_ACTION_REQUIRED
@@ -321,8 +350,9 @@ MANUAL_ACTION_REQUIRED
 
 - 不得修改文件。
 - 不得直接写 `review.md` 或任意 `review.json` 正式 Artifact。
-- 不得直接写/改 Runtime-owned `analysis/change-analysis.json`、`analysis/entrypoint-inventory.json`、`analysis/change-analysis.cert.json`。
-- 不得把 `requests/change-analysis-draft.json` 当成 Certified ChangeAnalysis 使用。
+- 不得直接写/改 Runtime-owned `analysis/change-set.json`、`analysis/change-analysis.json`、`analysis/entrypoint-inventory.json`、`analysis/change-analysis.cert.json`。
+- 不得把 `requests/change-analysis-proposal.json` 当成 Certified ChangeAnalysis 使用。
+- 不得调用 `git_diff` 自行构造 Review ChangeSet，不得自行生成/修改 Runtime-owned `baseRef/baseCommit/mergeBase/headCommit/currentBranch/includeWorkingTree/changedFiles.path/changedFiles.sources`。
 - 不得只读取 Controller 后声称 Scope 完整。
 - 不得用路径猜测代替符号定位/资源关系证据。
 - 不得把 `workspace != current` dependency 放入 `reviewCoverage.reviewedFiles`、Review Scope 或 Finding。
