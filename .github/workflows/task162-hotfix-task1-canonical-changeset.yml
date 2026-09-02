@@ -27,7 +27,7 @@ jobs:
       - name: Canonical ChangeSet focused tests
         working-directory: .code-harness/tools-runtime
         shell: pwsh
-        run: go test -count=1 -v ./internal/changeset ./internal/analysis ./cmd/codea-dcep-tools
+        run: go test -count=1 -run 'Test162Hotfix' -v ./internal/changeset ./cmd/codea-dcep-tools
 
       - name: Full Go regression
         working-directory: .code-harness/tools-runtime
