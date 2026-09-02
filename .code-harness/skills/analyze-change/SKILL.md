@@ -24,7 +24,8 @@ output_schema: .code-harness/contracts/change-analysis-proposal.schema.json
 
 ```text
 analysis snapshot request
-→ Runtime resolve requestedBaseRef
+→ Runtime resolve baseRef
+→ Snapshot requestedBaseRef provenance
 → resolvedBaseCommit / mergeBase / headCommit / currentBranch
 → committed + staged + unstaged + untracked
 → Runtime Review Scope filtering
@@ -84,7 +85,17 @@ TARGETED 不是 sampled review。只有它声明的全部 scopedFiles 与 select
 
 ## A. 消费 Runtime Canonical ChangeSet Snapshot
 
-1. Orchestrator 先解析用户/配置中的 requested baseRef 与 `includeWorkingTree`，只把这两个请求参数交给 Controlled Runtime `analysis snapshot`；本 Skill 不负责 Git ref resolution。
+1. Orchestrator 先解析用户/配置中的 `baseRef` 与 `includeWorkingTree`，只把这两个请求参数连同 `runId` 交给 Controlled Runtime `analysis snapshot`；本 Skill 不负责 Git ref resolution。Agent-facing request JSON 固定为：
+
+```json
+{
+  "runId": "<runId>",
+  "baseRef": "<baseRef>",
+  "includeWorkingTree": true
+}
+```
+
+Runtime Snapshot artifact 中的 `requestedBaseRef` 只保存上述 `baseRef` 请求值作为 provenance，不是 Agent-facing request 字段。
 2. Runtime Snapshot 必须位于：
 
 ```text
