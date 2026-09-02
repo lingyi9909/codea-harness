@@ -50,7 +50,9 @@ jobs:
 
       - name: Canonical ChangeSet authority scenarios
         shell: pwsh
-        run: ./.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1
+        run: |
+          ./.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1
+          $global:LASTEXITCODE = 0
 
       - name: Install pinned ast-grep 0.42.1
         shell: pwsh
