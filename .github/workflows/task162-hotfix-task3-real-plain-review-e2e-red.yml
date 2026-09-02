@@ -1,0 +1,15 @@
+name: task162-hotfix-task3-real-plain-review-e2e-red
+
+on:
+  push:
+    branches:
+      - hotfix/1.6.2-task3-real-plain-review-e2e-red
+
+jobs:
+  red:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real plain harness review must not be scripted
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
