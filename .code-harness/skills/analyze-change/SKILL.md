@@ -412,6 +412,7 @@ codea-harness-tools chain review-context --input .code-harness/runs/<runId>/requ
 7. Runtime 才能决定复用 `ACCEPTED + VALID`、缺失时 lazy discover `DISCOVERED + TEMPORARY`，或返回 STALE/partial 决策状态。
 
 **不得因为存在 Chain 而减少 Canonical Change Set**；FULL 的 required coverage 完全不变。
+**不得因为存在 Chain 而减少 changedFiles**；`changedFiles` 只能由 Runtime Canonical Snapshot 组装，Chain 不得删减或重写。
 **不得因为存在 Chain 而减少 scopedFiles**；TARGETED 的 scopedFiles 仍只能由 Certified ChangeAnalysis + ReviewScopeSelection 决定。
 
 Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 symbol/path/role/resource relation，不得用 `.code-harness/chains/*.yaml` 替代 Code Navigation evidence。
