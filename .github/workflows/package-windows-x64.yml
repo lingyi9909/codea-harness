@@ -50,6 +50,21 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Output "PACKAGE_WINDOWS_X64_VERSION $version"
 
+      - uses: actions/setup-python@v6
+        if: steps.release.outputs.version == '1.6.2'
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned OpenCode Agent Host for 1.6.2
+        if: steps.release.outputs.version == '1.6.2'
+        shell: pwsh
+        run: |
+          npm install --global opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (& opencode --version | Out-String).Trim()
+          Write-Output "OpenCode $version"
+          if ($version -notmatch '1\.18\.25') { throw "unexpected OpenCode version: $version" }
+
       - name: Codea Harness 1.6.1 exact release certification
         if: steps.release.outputs.version == '1.6.1'
         shell: pwsh
