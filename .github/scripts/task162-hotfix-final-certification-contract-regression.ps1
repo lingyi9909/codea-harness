@@ -45,7 +45,7 @@ foreach ($legacyDirect in @(
     "Invoke-Regression './.github/scripts/task162-hotfix-task2-invocation-contract-regression.ps1'",
     "Invoke-Regression './.github/scripts/task153-task1-real-entrypoint-inventory.ps1'",
     "Invoke-Regression './.github/scripts/task153-real-review-chain-regression.ps1'",
-    "$task2Script = (Resolve-Path './.github/scripts/task162-task2-release-package-cleanup-regression.ps1').Path"
+    '$task2Script = (Resolve-Path ''./.github/scripts/task162-task2-release-package-cleanup-regression.ps1'').Path'
 )) {
     if ($driver.Contains($legacyDirect)) {
         throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID final certification still invokes fragile retained gate directly: $legacyDirect"
