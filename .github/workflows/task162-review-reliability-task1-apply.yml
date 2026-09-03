@@ -29,7 +29,7 @@ jobs:
 
       - name: Apply minimal Task 1 implementation
         shell: pwsh
-        run: python ./.github/scripts/task162-review-reliability-task1-apply.py
+        run: python ./.github/scripts/task162-review-reliability-task1-apply-v2.py
 
       - name: Format Runtime sources
         shell: pwsh
