@@ -9,13 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  tail-gate:
+  standalone-entrypoint:
     runs-on: windows-latest
     timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        gate: [workspace, business, chain, precision, package]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,27 +27,15 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/task162-task2-package.ps1
 
-      - name: Run isolated tail gate
+      - name: Run standalone EntryPoint inventory
         shell: pwsh
         run: |
-          $gate = '${{ matrix.gate }}'
-          switch ($gate) {
-            'workspace' { & './.github/scripts/task152-workspace-smoke.ps1' }
-            'business' {
-              Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
-              & './.github/scripts/task152-task5-real-business-regression.ps1'
-            }
-            'chain' { & './.github/scripts/task153-real-review-chain-regression.ps1' }
-            'precision' { & './.github/scripts/task160-real-review-precision-regression.ps1' }
-            'package' { & './.github/scripts/task162-task2-release-package-cleanup-regression.ps1' }
-            default { throw "unknown diagnostic gate: $gate" }
-          }
+          & './.github/scripts/task153-task1-real-entrypoint-inventory.ps1'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Output "TASK162_FINAL_TAIL_DIAGNOSTIC PASS gate=$gate"
 
       - name: Diagnostic exact-head marker
         shell: pwsh
         run: |
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
-          Write-Output "TASK162_FINAL_TAIL_EXACT_HEAD PASS gate=${{ matrix.gate }} head=$head"
+          Write-Output "TASK162_FINAL_ENTRYPOINT_EXACT_HEAD PASS head=$head"
