@@ -59,6 +59,7 @@ function Assert-PostTask3CertificationScope {
         '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
         '.github/workflows/task162-final-release-certification.yml',
         '.github/workflows/task162-hotfix-final-certification-contract.yml',
+        '.github/workflows/package-windows-x64.yml',
         'docs/superpowers/plans/2026-09-02-codea-harness-1.6.2-post-hotfix-final-release-certification-plan.md'
     )
     $changed = @(& git diff --name-only "$acceptedHotfixTask3..HEAD")
