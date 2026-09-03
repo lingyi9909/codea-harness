@@ -1,13 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Replace-Once([string]$Path, [string]$Old, [string]$New) {
-    $text = Get-Content -Raw $Path
-    $count = ([regex]::Matches($text, [regex]::Escape($Old))).Count
-    if ($count -ne 1) { throw "Expected exactly one anchor in $Path, found $count: $Old" }
-    [IO.File]::WriteAllText($Path, $text.Replace($Old, $New), [Text.UTF8Encoding]::new($false))
-}
-
 $runtime = '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_precision_command.go'
 $text = Get-Content -Raw $runtime
 if ($text -notmatch 'func runReviewBegin162') {
