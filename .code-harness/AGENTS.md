@@ -63,6 +63,7 @@ codea-dcep-tools.exe workspace verify --id <id>
 codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-dcep-tools.exe review begin
 codea-dcep-tools.exe analysis snapshot --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
@@ -182,3 +183,18 @@ report-review.json           → .code-harness/contracts/report-review-request.s
 正式 `report review` 的 Agent-facing request contract 只能是 `report-review-request.schema.json`。正式 report request 的 `findings` 固定为 `[]`；Agent raw Finding 只能进入 `requests/finding-proposals.json`，正式 Finding 必须由 Runtime `review certify-findings` 生成 same-run `analysis/certified-findings.json` + `certified-findings.cert.json` 后再由 `report review` 加载。
 
 `changedFiles=[]` 不是提前成功返回条件。0 Change 仍必须执行 `review units → review dispatch → finding-proposals.json=[] → review certify-findings → report review`，并生成 0 Change / 0 Finding 的正式 `review.md`。
+
+
+## 1.6.2 Reliability Hotfix — Fresh Review Lifecycle
+
+每一次新的顶层 `harness review` 都是独立 Review invocation，必须先调用：
+
+```text
+codea-dcep-tools.exe review begin
+```
+
+固定生命周期是：`review begin` → fresh runId → `analysis snapshot` → 当前 run 的正常 Review Authority Chain。
+
+`review begin` 只负责由 Runtime 生成唯一 fresh runId 并创建 `.code-harness/runs/<runId>/`；它不得读取 Git、不得计算 ChangeSet、不得生成 `analysis/change-set.json`。`analysis snapshot` 仍是唯一 Git ChangeSet Authority。
+
+`same-run` 只约束单次 Review invocation 内部；下一次用户再次输入 `harness review` 时，上一轮 runId、上一轮 Snapshot、上一轮 ChangeAnalysis、上一轮 0 Change 结论和上一轮 `review.md` 对新 invocation 不具备 Authority。Agent session memory 不得替代本次 `review begin` + `analysis snapshot`。

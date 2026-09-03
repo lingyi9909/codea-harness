@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -22,6 +24,8 @@ import (
 func runReview160(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
+		case "begin":
+			return runReviewBegin162(args[1:])
 		case "units":
 			return runReviewUnits160(args[1:])
 		case "dispatch":
@@ -31,6 +35,36 @@ func runReview160(args []string) error {
 		}
 	}
 	return runReview(args)
+}
+
+func runReviewBegin162(args []string) error {
+	if len(args) != 0 {
+		return errors.New("review begin takes no arguments")
+	}
+	runsRoot := filepath.Join(".code-harness", "runs")
+	if err := os.MkdirAll(runsRoot, 0o755); err != nil {
+		return fmt.Errorf("REVIEW_BEGIN_RUNS_DIR_FAILED: %w", err)
+	}
+	for attempt := 0; attempt < 32; attempt++ {
+		entropy := make([]byte, 16)
+		if _, err := rand.Read(entropy); err != nil {
+			return fmt.Errorf("REVIEW_BEGIN_RANDOM_FAILED: %w", err)
+		}
+		runID := "review-" + hex.EncodeToString(entropy)
+		runPath := filepath.Join(runsRoot, runID)
+		if err := os.Mkdir(runPath, 0o755); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return fmt.Errorf("REVIEW_BEGIN_RUN_DIR_FAILED: %w", err)
+		}
+		return writeJSONAndStatus(map[string]any{
+			"status":  "READY",
+			"runId":   runID,
+			"runPath": filepath.ToSlash(runPath),
+		}, true)
+	}
+	return errors.New("REVIEW_BEGIN_RUN_ID_EXHAUSTED")
 }
 
 func runReviewUnits160(args []string) error {

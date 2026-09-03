@@ -23,6 +23,7 @@ codea-dcep-tools.exe workspace verify --id <id>
 codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+codea-dcep-tools.exe review begin
 codea-dcep-tools.exe analysis snapshot --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
@@ -542,3 +543,10 @@ TARGETED：
 ```
 
 `harnessVersion / baseRef / head / reviewScope / reviewCoverage` 的最终正式值仍由 Runtime 根据 same-run Certified ChangeAnalysis/verified scope 重建；上述 transport 不能覆盖 Runtime Authority。`findings` 只能为空，正式问题清单只来自 same-run Certified Findings。
+
+
+### Fresh Review Lifecycle
+
+每一次新的顶层 `harness review` 都必须先执行 `codea-dcep-tools.exe review begin` 获取 Runtime-owned fresh runId，再用该 runId 创建 Snapshot request 并执行 `analysis snapshot`。旧 run 的 runId、Snapshot、ChangeAnalysis、0 Change 结论和 `review.md` 不能作为新 invocation 的输入事实。
+
+`review begin` 只创建 `.code-harness/runs/<runId>/` 并返回 runId；不读取 Git、不计算 ChangeSet、不创建任何 Authority artifact。Git ChangeSet 仍只能由随后执行的 `analysis snapshot` 计算。

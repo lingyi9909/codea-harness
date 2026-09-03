@@ -433,13 +433,26 @@ TARGETED 报告必须保留固定免责声明：
 - TARGETED 正式报告中 `Finding.file` 必须属于 Runtime verified `scopedFiles`；Controlled Runtime Renderer 必须拒绝 scope 外 Finding。
 - OpenCode 最终摘要必须同时展示中文 Review 结果和 `review.md` 路径，不得泄漏 machine enum。
 
+## 1.6.2 Reliability Hotfix Fresh Review Lifecycle
+
+每一次新的顶层 `harness review` 必须视为新的 Review invocation，并先执行 `codea-dcep-tools.exe review begin`。固定入口顺序：`review begin` → fresh runId → `analysis snapshot`。
+
+硬规则：
+
+- `review begin` 只生成 Runtime-owned fresh runId 并创建对应 run directory；不得读取 Git 或生成 ChangeSet。
+- `analysis snapshot` 是本流程唯一 Git ChangeSet Authority；每一个 fresh run 都必须重新执行，不能由会话记忆推断“代码没变”。
+- `same-run` 只约束单次 Review invocation 内部；Snapshot、Certified ChangeAnalysis、Review Scope、Review Units、Certified Findings 与 `review.md` 必须绑定当前 fresh runId。
+- 用户再次输入 `harness review` 时，上一轮 runId、上一轮 Snapshot、上一轮 ChangeAnalysis、上一轮 0 Change 结论、上一轮 `review.md` 对新 invocation 不具备 Authority。
+- 不需要用户补充“代码已经变化”；当前代码是否变化只由新 run 的 Runtime `analysis snapshot` 判断。
+
 ## `harness review`（1.5.3 ReviewOptions）
 
 plain `harness review` 不再预先固定为 FULL。它必须以 same-run Runtime Canonical Snapshot + Certified ChangeAnalysis 和完整 EntrypointInventory 为事实基线，由 Controlled Runtime 决定本次 Review 模式：
 
 ```text
-1. 解析 effective baseRef / includeWorkingTree，仅形成 Snapshot request 参数
-2. Runtime `analysis snapshot` → same-run `analysis/change-set.json`
+1. 每一次新的顶层 `harness review` 先调用 Runtime `review begin`，创建 fresh runId；不得复用任何 previous run
+2. 解析 effective baseRef / includeWorkingTree，仅形成当前 fresh run 的 Snapshot request 参数
+3. Runtime `analysis snapshot` → 当前 fresh run 的 `analysis/change-set.json`
 3. Reviewer.analyze-change 消费 Snapshot，只形成 `requests/change-analysis-proposal.json`
 4. Runtime `analysis certify` 重新计算 live Snapshot，验证 snapshot identity，并组装/认证 Git identity + changedFiles + semantic evidence
 5. EntrypointInventory 必须 COMPLETE；不完整或 Snapshot stale → MANUAL_ACTION_REQUIRED / STOP
@@ -506,8 +519,8 @@ plain `harness review` 不再预先固定为 FULL。它必须以 same-run Runtim
 固定流程：
 
 ```text
-1. 解析 effective baseRef/includeWorkingTree
-2. Runtime analysis snapshot 建立完整 Canonical ChangeSet
+1. 新的顶层 `harness review <Class|Class.method>` 先调用 Runtime `review begin` 创建 fresh runId
+2. 解析 effective baseRef/includeWorkingTree，并用 fresh runId 调用 Runtime analysis snapshot 建立完整 Canonical ChangeSet
 3. Reviewer.analyze-change 消费 Snapshot，建立 semantic proposal、confirmed callChains 与 symbolLocations exact path/role evidence
 4. Runtime analysis certify 重新验证 Snapshot identity 并生成 Certified ChangeAnalysis
 5. Class → target.kind=CLASS；Class.method → target.kind=METHOD
