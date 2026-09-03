@@ -9,9 +9,12 @@ $oldUnknown = "                'unknown field',"
 $newUnknown = "                'decode review report request: json: unknown field',"
 $oldArray = "                'cannot unmarshal array',"
 $newArray = "                'json: cannot unmarshal array',"
+$oldScenarioInterpolation = '${($Scenario.ToUpper())}'
+$newScenarioInterpolation = '$($Scenario.ToUpper())'
 if (-not $text.Contains($oldUnknown)) { throw 'Task 1 E2E unknown-field assertion anchor missing' }
 if (-not $text.Contains($oldArray)) { throw 'Task 1 E2E array assertion anchor missing' }
-$text = $text.Replace($oldUnknown, $newUnknown).Replace($oldArray, $newArray)
+if (-not $text.Contains($oldScenarioInterpolation)) { throw 'Task 1 E2E scenario interpolation anchor missing' }
+$text = $text.Replace($oldUnknown, $newUnknown).Replace($oldArray, $newArray).Replace($oldScenarioInterpolation, $newScenarioInterpolation)
 
 $temp = Join-Path $PSScriptRoot '.task162-review-reliability-task1-real-agent-e2e-v2.tmp.ps1'
 try {
