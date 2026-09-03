@@ -4,8 +4,13 @@ Set-StrictMode -Version Latest
 $driverPath = '.github/scripts/task162-release-certification.ps1'
 $workflowPath = '.github/workflows/task162-final-release-certification.yml'
 $task2FinalContractPath = '.github/scripts/task162-final-task2-invocation-contract-regression.ps1'
+$tailAdapterPaths = @(
+    '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
+    '.github/scripts/task162-hotfix-final-chain-regression.ps1',
+    '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1'
+)
 
-foreach ($path in @($driverPath, $workflowPath)) {
+foreach ($path in @($driverPath, $workflowPath, $task2FinalContractPath) + $tailAdapterPaths) {
     if (-not (Test-Path $path -PathType Leaf)) { throw "Final certification contract file missing: $path" }
 }
 
@@ -22,6 +27,9 @@ $requiredDriverFragments = @(
     "go test -count=1 -run 'Test162HotfixTask2' -v ./cmd/codea-dcep-tools",
     'task162-hotfix-task2-runtime-invocation-regression.ps1',
     'task162-hotfix-task3-real-plain-review-e2e.ps1',
+    'task162-hotfix-final-entrypoint-inventory-regression.ps1',
+    'task162-hotfix-final-chain-regression.ps1',
+    'task162-hotfix-final-package-cleanup-regression.ps1',
     'hotfixTask1CanonicalAuthority',
     'hotfixTask2InvocationContract',
     'hotfixTask3RealPlainReview',
@@ -33,13 +41,17 @@ foreach ($fragment in $requiredDriverFragments) {
     }
 }
 
-if ($driver.Contains("Invoke-Regression './.github/scripts/task162-hotfix-task2-invocation-contract-regression.ps1'")) {
-    throw 'FINAL_HOTFIX_CERT_CONTRACT_INVALID final certification still invokes fragile accepted Task 2 PowerShell audit directly'
+foreach ($legacyDirect in @(
+    "Invoke-Regression './.github/scripts/task162-hotfix-task2-invocation-contract-regression.ps1'",
+    "Invoke-Regression './.github/scripts/task153-task1-real-entrypoint-inventory.ps1'",
+    "Invoke-Regression './.github/scripts/task153-real-review-chain-regression.ps1'",
+    "$task2Script = (Resolve-Path './.github/scripts/task162-task2-release-package-cleanup-regression.ps1').Path"
+)) {
+    if ($driver.Contains($legacyDirect)) {
+        throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID final certification still invokes fragile retained gate directly: $legacyDirect"
+    }
 }
 
-if (-not (Test-Path $task2FinalContractPath -PathType Leaf)) {
-    throw "FINAL_HOTFIX_CERT_CONTRACT_MISSING certification-only Task 2 adapter: $task2FinalContractPath"
-}
 $task2FinalContract = Get-Content -Raw $task2FinalContractPath
 foreach ($fragment in @(
     'TASK162_HOTFIX_TASK2_ACTIVE_INVOCATION_AUDIT PASS',
@@ -53,6 +65,19 @@ foreach ($fragment in @(
     if (-not $task2FinalContract.Contains($fragment)) {
         throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID Task 2 adapter missing evidence: $fragment"
     }
+}
+
+$entrypointAdapter = Get-Content -Raw $tailAdapterPaths[0]
+foreach ($fragment in @('analysis-inventory-request.schema.json','TASK153_TASK1_REAL_ENTRYPOINT_INVENTORY PASS','TASK162_FINAL_ENTRYPOINT_TASK2_REQUEST_CONTRACT_COMPAT PASS')) {
+    if (-not $entrypointAdapter.Contains($fragment)) { throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID EntryPoint adapter missing evidence: $fragment" }
+}
+$chainAdapter = Get-Content -Raw $tailAdapterPaths[1]
+foreach ($fragment in @('task162-hotfix-final-entrypoint-inventory-regression.ps1','TASK153_REAL_REVIEW_CHAIN_RELIABILITY PASS','TASK162_FINAL_RETAINED_CHAIN_TASK2_CONTRACT_COMPAT PASS')) {
+    if (-not $chainAdapter.Contains($fragment)) { throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID Chain adapter missing evidence: $fragment" }
+}
+$packageAdapter = Get-Content -Raw $tailAdapterPaths[2]
+foreach ($fragment in @('task162-task2-release-package-cleanup-regression.ps1','TASK162_TASK2_RELEASE_PACKAGE_CLEANUP_E2E PASS','TASK162_FINAL_PACKAGE_CLEANUP_EXIT_NORMALIZED PASS')) {
+    if (-not $packageAdapter.Contains($fragment)) { throw "FINAL_HOTFIX_CERT_CONTRACT_INVALID package adapter missing evidence: $fragment" }
 }
 
 $invokeRegressionMatch = [regex]::Match(
@@ -93,5 +118,6 @@ if ($workflow -match 'opencode-ai@(latest|\*)') {
 }
 
 Write-Output 'TASK162_HOTFIX_FINAL_TASK2_ADAPTER_CONTRACT PASS'
+Write-Output 'TASK162_HOTFIX_FINAL_TAIL_ADAPTER_CONTRACT PASS'
 Write-Output 'TASK162_HOTFIX_FINAL_REGRESSION_ISOLATION_CONTRACT PASS'
 Write-Output 'TASK162_HOTFIX_FINAL_CERTIFICATION_CONTRACT PASS'
