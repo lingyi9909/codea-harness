@@ -23,7 +23,7 @@ jobs:
           cache-dependency-path: .code-harness/tools-runtime/go.sum
       - name: Apply and verify Task 2 minimal GREEN
         shell: pwsh
-        run: ./.github/scripts/task162-review-reliability-task2-apply.ps1
+        run: python ./.github/scripts/task162-review-reliability-task2-apply.py
       - name: Commit verified implementation
         shell: pwsh
         run: |
