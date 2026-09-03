@@ -1,0 +1,57 @@
+name: task162-final-tail-diagnostic
+
+on:
+  push:
+    branches: [release/1.6.2-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tail-gate:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [workspace, business, chain, precision, package]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Prepare exact release Runtime and ast-grep
+        shell: pwsh
+        run: ./.github/scripts/task162-task2-package.ps1
+
+      - name: Run isolated tail gate
+        shell: pwsh
+        run: |
+          $gate = '${{ matrix.gate }}'
+          switch ($gate) {
+            'workspace' { & './.github/scripts/task152-workspace-smoke.ps1' }
+            'business' {
+              Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
+              & './.github/scripts/task152-task5-real-business-regression.ps1'
+            }
+            'chain' { & './.github/scripts/task153-real-review-chain-regression.ps1' }
+            'precision' { & './.github/scripts/task160-real-review-precision-regression.ps1' }
+            'package' { & './.github/scripts/task162-task2-release-package-cleanup-regression.ps1' }
+            default { throw "unknown diagnostic gate: $gate" }
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output "TASK162_FINAL_TAIL_DIAGNOSTIC PASS gate=$gate"
+
+      - name: Diagnostic exact-head marker
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_FINAL_TAIL_EXACT_HEAD PASS gate=${{ matrix.gate }} head=$head"
