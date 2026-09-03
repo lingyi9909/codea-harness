@@ -157,3 +157,28 @@ Active Agent 只能调用 `.code-harness/bin/codea-dcep-tools.exe`；`codea-harn
 需要显式 target 时只允许额外加入可选 `target`。`baseRef`、`requestedBaseRef`、Snapshot identity 以及其他 Git fact 均不是 `review options` request 字段；`baseRef` 只在 `analysis snapshot` / retained legacy analysis request 的既定 Contract 中出现。Unknown field 必须由 request schema fail closed。
 
 `analysis certify` 的 Active Agent 形态仍固定为 canonical request：`runId / snapshotPath / snapshotSha256 / proposalPath / intent`。Schema 中保留的 legacy certify shape 仅用于 Runtime upgrade compatibility，Active Agent 不得生成 legacy `draftPath/baseRef` 形态。
+
+## 1.6.2 Reliability Hotfix — Complete Review Invocation Contract
+
+正式 `harness review` 的 Active Runtime command set 是一个整体，Agent/Orchestrator 不得因为旧白名单遗漏而声称 Runtime 缺少 Finding Certification 或 Report 接口：
+
+```text
+codea-dcep-tools.exe review options --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe review select --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe review units --run-id <runId>
+codea-dcep-tools.exe review dispatch --run-id <runId>
+codea-dcep-tools.exe review certify-findings --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
+```
+
+在 Agent 创建正式 request 之前必须先读取对应 machine-readable contract：
+
+```text
+finding-certify-request.json → .code-harness/contracts/finding-certify-request.schema.json
+report-review.json           → .code-harness/contracts/report-review-request.schema.json
+```
+
+`review-output.schema.json` 只描述既有 Review 输出结构，不能作为本请求 schema。
+正式 `report review` 的 Agent-facing request contract 只能是 `report-review-request.schema.json`。正式 report request 的 `findings` 固定为 `[]`；Agent raw Finding 只能进入 `requests/finding-proposals.json`，正式 Finding 必须由 Runtime `review certify-findings` 生成 same-run `analysis/certified-findings.json` + `certified-findings.cert.json` 后再由 `report review` 加载。
+
+`changedFiles=[]` 不是提前成功返回条件。0 Change 仍必须执行 `review units → review dispatch → finding-proposals.json=[] → review certify-findings → report review`，并生成 0 Change / 0 Finding 的正式 `review.md`。

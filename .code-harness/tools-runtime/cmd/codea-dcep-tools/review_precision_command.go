@@ -14,6 +14,7 @@ import (
 
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/finding"
+	"codea-harness-tools/internal/requestcontract"
 	"codea-harness-tools/internal/reviewrules"
 	"codea-harness-tools/internal/reviewunit"
 )
@@ -134,6 +135,9 @@ func runReviewCertifyFindings160(args []string) error {
 	requestBytes, err := os.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("FINDING_CERTIFY_REQUEST_READ_FAILED: %w", err)
+	}
+	if err := requestcontract.Validate("finding-certify-request.schema.json", requestBytes); err != nil {
+		return fmt.Errorf("FINDING_CERTIFY_REQUEST_SCHEMA_INVALID: %w", err)
 	}
 	var req findingCertifyRequest160
 	dec := json.NewDecoder(bytes.NewReader(requestBytes))
