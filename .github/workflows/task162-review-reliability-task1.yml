@@ -88,7 +88,7 @@ jobs:
 
       - name: Real OpenCode Agent Host changed and zero-change E2E
         shell: pwsh
-        run: ./.github/scripts/task162-review-reliability-task1-real-agent-e2e.ps1
+        run: ./.github/scripts/task162-review-reliability-task1-real-agent-e2e-v2.ps1
 
       - name: Retained Task 3 real plain review E2E
         shell: pwsh
@@ -108,3 +108,4 @@ jobs:
           name: task162-review-reliability-task1-agent-evidence
           path: .task1-e2e-artifacts
           if-no-files-found: warn
+          include-hidden-files: true
