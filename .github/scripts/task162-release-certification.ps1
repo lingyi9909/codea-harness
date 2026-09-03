@@ -45,6 +45,9 @@ function Assert-PostTask3CertificationScope {
         '.github/scripts/task162-release-certification.ps1',
         '.github/scripts/task162-hotfix-final-certification-contract-regression.ps1',
         '.github/scripts/task162-final-task2-invocation-contract-regression.ps1',
+        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
+        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
+        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
         '.github/workflows/task162-final-release-certification.yml',
         '.github/workflows/task162-hotfix-final-certification-contract.yml',
         'docs/superpowers/plans/2026-09-02-codea-harness-1.6.2-post-hotfix-final-release-certification-plan.md'
@@ -189,16 +192,16 @@ try {
 
     Invoke-Regression './.github/scripts/task162-real-multimodule-regression.ps1' 'Task 1 Maven multi-module Review Authority E2E'
     Invoke-Regression './.github/scripts/task162-duplicate-symbol-authority-regression.ps1' 'Task 1 duplicate Symbol Authority E2E'
-    Invoke-Regression './.github/scripts/task153-task1-real-entrypoint-inventory.ps1' 'retained single-module EntryPoint regression'
+    Invoke-Regression './.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1' 'retained single-module EntryPoint regression (final Task 2 contract adapter)'
     Invoke-Regression './.github/scripts/task152-workspace-smoke.ps1' 'retained Workspace regression'
     Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
     Invoke-Regression './.github/scripts/task152-task5-real-business-regression.ps1' 'retained single-module business regression'
-    Invoke-Regression './.github/scripts/task153-real-review-chain-regression.ps1' 'retained Chain regression'
+    Invoke-Regression './.github/scripts/task162-hotfix-final-chain-regression.ps1' 'retained Chain regression (final Task 2 contract adapter)'
     Invoke-Regression './.github/scripts/task160-real-review-precision-regression.ps1' 'retained 1.6 Review Precision regression'
     Assert-RuntimeRenameRetained
 
     Write-Host 'TASK162 RELEASE: Task 2 package/no-Go/upgrade regression'
-    $task2Script = (Resolve-Path './.github/scripts/task162-task2-release-package-cleanup-regression.ps1').Path
+    $task2Script = (Resolve-Path './.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1').Path
     $task2Lines = @(& pwsh -NoProfile -File $task2Script 2>&1)
     $task2Exit = $LASTEXITCODE
     $task2Lines | ForEach-Object { Write-Output $_ }
