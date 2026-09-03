@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-minimal-green:
-    if: ${{ !startsWith(github.event.head_commit.message, 'fix: implement Task 2 fresh review lifecycle') }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
