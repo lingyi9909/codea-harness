@@ -1,0 +1,62 @@
+name: task162-final-materialize-adapters
+
+on:
+  push:
+    branches: [release/1.6.2-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/1.6.2-final-certification
+          fetch-depth: 0
+
+      - name: Materialize certification-only adapter wiring
+        shell: pwsh
+        run: |
+          $path = '.github/scripts/task162-release-certification.ps1'
+          $text = Get-Content -Raw $path
+          $replacements = [ordered]@{
+            "        '.github/scripts/task162-final-task2-invocation-contract-regression.ps1'," = "        '.github/scripts/task162-final-task2-invocation-contract-regression.ps1',`n        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',`n        '.github/scripts/task162-hotfix-final-chain-regression.ps1',`n        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',"
+            "Invoke-Regression './.github/scripts/task153-task1-real-entrypoint-inventory.ps1' 'retained single-module EntryPoint regression'" = "Invoke-Regression './.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1' 'retained single-module EntryPoint regression (final Task 2 contract adapter)'"
+            "Invoke-Regression './.github/scripts/task153-real-review-chain-regression.ps1' 'retained Chain regression'" = "Invoke-Regression './.github/scripts/task162-hotfix-final-chain-regression.ps1' 'retained Chain regression (final Task 2 contract adapter)'"
+            "$task2Script = (Resolve-Path './.github/scripts/task162-task2-release-package-cleanup-regression.ps1').Path" = "$task2Script = (Resolve-Path './.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1').Path"
+          }
+          $changed = $false
+          foreach ($entry in $replacements.GetEnumerator()) {
+            if ($text.Contains($entry.Key)) {
+              $text = $text.Replace($entry.Key, $entry.Value)
+              $changed = $true
+            }
+          }
+          foreach ($required in @(
+            'task162-hotfix-final-entrypoint-inventory-regression.ps1',
+            'task162-hotfix-final-chain-regression.ps1',
+            'task162-hotfix-final-package-cleanup-regression.ps1'
+          )) {
+            if (-not $text.Contains($required)) { throw "adapter wiring missing after materialization: $required" }
+          }
+          if ($changed) {
+            [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
+          } else {
+            Write-Output 'TASK162_FINAL_ADAPTER_WIRING_ALREADY_MATERIALIZED'
+          }
+
+      - name: Commit materialized driver
+        shell: bash
+        run: |
+          if git diff --quiet -- .github/scripts/task162-release-certification.ps1; then
+            echo 'TASK162_FINAL_ADAPTER_WIRING_NO_CHANGE'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/scripts/task162-release-certification.ps1
+          git commit -m 'release: wire final compatibility adapters'
+          git push origin HEAD:release/1.6.2-final-certification
