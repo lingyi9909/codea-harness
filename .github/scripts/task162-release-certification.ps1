@@ -51,6 +51,9 @@ function Assert-PostTask3CertificationScope {
         '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
         '.github/scripts/task162-hotfix-final-chain-regression.ps1',
         '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
+        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
+        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
+        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
         '.github/workflows/task162-final-release-certification.yml',
         '.github/workflows/task162-hotfix-final-certification-contract.yml',
         'docs/superpowers/plans/2026-09-02-codea-harness-1.6.2-post-hotfix-final-release-certification-plan.md'
