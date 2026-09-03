@@ -9,9 +9,13 @@ permissions:
   contents: read
 
 jobs:
-  standalone-entrypoint:
+  adapter-gate:
     runs-on: windows-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [entrypoint, chain, package]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,15 +31,22 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/task162-task2-package.ps1
 
-      - name: Run standalone EntryPoint inventory
+      - name: Run final compatibility adapter
         shell: pwsh
         run: |
-          & './.github/scripts/task153-task1-real-entrypoint-inventory.ps1'
+          $gate = '${{ matrix.gate }}'
+          switch ($gate) {
+            'entrypoint' { & './.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1' }
+            'chain' { & './.github/scripts/task162-hotfix-final-chain-regression.ps1' }
+            'package' { & './.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1' }
+            default { throw "unknown adapter gate: $gate" }
+          }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output "TASK162_FINAL_ADAPTER_DIAGNOSTIC PASS gate=$gate"
 
       - name: Diagnostic exact-head marker
         shell: pwsh
         run: |
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
-          Write-Output "TASK162_FINAL_ENTRYPOINT_EXACT_HEAD PASS head=$head"
+          Write-Output "TASK162_FINAL_ADAPTER_EXACT_HEAD PASS gate=${{ matrix.gate }} head=$head"
