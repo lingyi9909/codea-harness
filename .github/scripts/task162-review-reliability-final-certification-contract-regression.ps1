@@ -47,11 +47,14 @@ $requiredReviewReliabilityFragments = @(
     "go test -count=1 -run 'Test162ReviewReliabilityTask(1|2)' -v ./cmd/codea-dcep-tools",
     'task162-review-reliability-task2-real-agent-e2e.ps1',
     'task162-review-reliability-task3-run-readme-regression.ps1',
+    "go test -count=1 -run 'Test162ReviewReliability' -v ./internal/upgrade",
+    'TASK162_FINAL_REVIEW_RELIABILITY_UPGRADE_README PASS',
     'reviewReliabilityTask1InvocationContract',
     'reviewReliabilityTask1RealAgent',
     'reviewReliabilityTask2FreshLifecycle',
     'reviewReliabilityTask2SameSession',
     'reviewReliabilityTask3RunReadme',
+    'reviewReliabilityTask3UpgradeReadme',
     'postReviewReliabilityTask3CertificationScope'
 )
 foreach ($fragment in $requiredReviewReliabilityFragments) {
