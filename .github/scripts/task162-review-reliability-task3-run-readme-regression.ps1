@@ -78,3 +78,4 @@ finally {
 }
 
 Write-Output 'TASK162_REVIEW_RELIABILITY_TASK3_RUN_README PASS'
+exit 0
