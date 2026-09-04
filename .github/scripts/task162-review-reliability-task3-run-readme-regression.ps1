@@ -13,7 +13,7 @@ if (!(Test-Path $gitignorePath -PathType Leaf)) {
 }
 
 $readme = Get-Content -Raw -Encoding UTF8 $readmePath
-$gitignore = Get-Content -Raw -Encoding UTF8 $gitignorePath
+$gitignore = (Get-Content -Raw -Encoding UTF8 $gitignorePath) -replace "`r`n", "`n"
 
 function Assert-Contains([string]$Text, [string]$Pattern, [string]$Message) {
     if ($Text -notmatch $Pattern) { throw $Message }
