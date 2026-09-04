@@ -1,0 +1,142 @@
+name: task162-review-reliability-final-release-certification
+
+on:
+  push:
+    branches: [release/1.6.2-review-reliability-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  final-release-certification:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Provision pinned OpenCode 1.18.25
+        shell: pwsh
+        run: |
+          npm install -g opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $out = (& opencode --version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch '1\.18\.25') { throw "OpenCode version mismatch: $out" }
+
+      - name: Compile retained model servers
+        shell: pwsh
+        run: |
+          python -m py_compile ./.github/scripts/task162-review-reliability-task1/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m py_compile ./.github/scripts/task162-review-reliability-task2/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m py_compile ./.github/scripts/task162-hotfix-task3/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Final Certification contract
+        shell: pwsh
+        run: ./.github/scripts/task162-review-reliability-final-certification-contract-regression.ps1
+
+      - name: Review Reliability Final Release Certification
+        shell: pwsh
+        run: ./.github/scripts/task162-release-certification.ps1
+
+      - name: Verify final checklist and exact head
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
+
+          $path = 'codea-harness-1.6.2-release-checklist.json'
+          if (-not (Test-Path $path -PathType Leaf)) { throw 'release checklist missing' }
+          $c = Get-Content $path -Raw | ConvertFrom-Json
+          if ([string]$c.version -ne '1.6.2') { throw 'checklist version mismatch' }
+          if ([string]$c.exactHeadSha -ne $head) { throw "checklist exactHeadSha mismatch: $($c.exactHeadSha)" }
+          if ([string]$c.acceptedReviewReliability.base -ne 'e23023481edef9f95cdc59938efe5de4840093b8') { throw 'Review Reliability base mismatch' }
+          if ([string]$c.acceptedReviewReliability.task1 -ne '1141a240529ea3fedcc8df0d3750db31f9fb1104') { throw 'Review Reliability Task 1 baseline mismatch' }
+          if ([string]$c.acceptedReviewReliability.task2 -ne 'ab2f42f53f472aebf2b18b11a1c9166feee2a20c') { throw 'Review Reliability Task 2 baseline mismatch' }
+          if ([string]$c.acceptedReviewReliability.task3 -ne '6c5af8908edf73a5fb772069e9bc2d91d2ebe289') { throw 'Review Reliability Task 3 baseline mismatch' }
+
+          foreach ($gate in @(
+            'reviewReliabilityTask1InvocationContract',
+            'reviewReliabilityTask1RealAgent',
+            'reviewReliabilityTask2FreshLifecycle',
+            'reviewReliabilityTask2SameSession',
+            'reviewReliabilityTask3RunReadme',
+            'reviewReliabilityTask3PackageReadme',
+            'reviewReliabilityTask3UpgradeReadme',
+            'postReviewReliabilityTask3CertificationScope',
+            'hotfixTask1CanonicalAuthority',
+            'hotfixTask2InvocationContract',
+            'hotfixTask3RealPlainReview',
+            'task1MavenMultiModule',
+            'task1DuplicateSymbolAuthority',
+            'task2PackageCleanup',
+            'newInstallNoGoRuntime',
+            'real161To162Upgrade',
+            'projectStatePreservation',
+            'singleModuleEntrypoint',
+            'workspaceRetained',
+            'singleModuleBusinessRetained',
+            'chainRetained',
+            'reviewPrecision160Retained',
+            'runtimeRename161Retained',
+            'fullGoRegression',
+            'goVet',
+            'installZipClean',
+            'upgradeZipClean',
+            'whitelistEvidence',
+            'exactHead'
+          )) {
+            if ([string]$c.gates.$gate -ne 'PASS') { throw "final checklist gate is not PASS: $gate" }
+          }
+
+          foreach ($artifact in @(
+            'codea-harness-1.6.2-windows-x64-install.zip',
+            'codea-harness-1.6.2-windows-x64-upgrade.zip',
+            'codea-harness-1.6.2-release-checklist.json',
+            'codea-dcep-tools-whitelist.txt'
+          )) {
+            if (-not (Test-Path $artifact -PathType Leaf)) { throw "official artifact missing: $artifact" }
+          }
+          Write-Output "TASK162_REVIEW_RELIABILITY_FINAL_RELEASE_EXACT_HEAD PASS head=$head"
+
+      - name: Upload official 1.6.2 artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.2-review-reliability-final
+          path: |
+            codea-harness-1.6.2-windows-x64-install.zip
+            codea-harness-1.6.2-windows-x64-upgrade.zip
+            codea-harness-1.6.2-release-checklist.json
+            codea-dcep-tools-whitelist.txt
+          if-no-files-found: error
+
+      - name: Upload retained Agent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task162-review-reliability-final-agent-evidence
+          path: |
+            .task1-e2e-artifacts
+            .task2-e2e-artifacts
+            .task3-e2e-artifacts
+          if-no-files-found: warn
+          include-hidden-files: true
