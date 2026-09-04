@@ -324,7 +324,7 @@ class Handler(BaseHTTPRequestHandler):
             "toolNames": [str(t.get("function", {}).get("name", "")) for t in tools],
         })
 
-        if invocation >= 1 and run_id and invocation not in self.seen_runs:
+        if stage >= 2 and run_id and invocation not in self.seen_runs:
             self.seen_runs[invocation] = run_id
             self.append_log({"event": "invocation_run", "invocation": invocation, "runId": run_id})
 
