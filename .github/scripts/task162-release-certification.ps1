@@ -220,6 +220,15 @@ try {
     Invoke-Regression './.github/scripts/task162-review-reliability-task2-real-agent-e2e.ps1' 'Review Reliability Task 2 same-session fresh lifecycle E2E'
     Invoke-Regression './.github/scripts/task162-review-reliability-task3-run-readme-regression.ps1' 'Review Reliability Task 3 Run README contract'
 
+    Write-Host 'TASK162 RELEASE: Review Reliability Task 3 upgrade README boundary'
+    Push-Location '.code-harness/tools-runtime'
+    try {
+        go test -count=1 -run 'Test162ReviewReliability' -v ./internal/upgrade
+        if ($LASTEXITCODE -ne 0) { throw "Review Reliability Task 3 upgrade README boundary failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $global:LASTEXITCODE = 0
+    Write-Output 'TASK162_FINAL_REVIEW_RELIABILITY_UPGRADE_README PASS'
+
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-authority-regression.ps1' 'Hotfix Task 1 Agent authority'
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-snapshot-request-contract.ps1' 'Hotfix Task 1 Agent Snapshot request contract'
     Invoke-Regression './.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1' 'Hotfix Task 1 Canonical ChangeSet authority'
@@ -340,6 +349,7 @@ try {
             reviewReliabilityTask2SameSession = 'PASS'
             reviewReliabilityTask3RunReadme = 'PASS'
             reviewReliabilityTask3PackageReadme = 'PASS'
+            reviewReliabilityTask3UpgradeReadme = 'PASS'
             postReviewReliabilityTask3CertificationScope = 'PASS'
             hotfixTask1CanonicalAuthority = 'PASS'
             hotfixTask2InvocationContract = 'PASS'
