@@ -1,0 +1,44 @@
+name: task162-review-reliability-task2-e2e-fix
+
+on:
+  push:
+    branches: [hotfix/1.6.2-review-reliability-task2]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-model-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/1.6.2-review-reliability-task2
+          fetch-depth: 0
+      - name: Patch invocation run capture after current begin
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/task162-review-reliability-task2/mock_openai_server.py')
+          text = p.read_text(encoding='utf-8')
+          old = '        if invocation >= 1 and run_id and invocation not in self.seen_runs:\n'
+          new = '        if stage >= 2 and run_id and invocation not in self.seen_runs:\n'
+          if old in text:
+              text = text.replace(old, new, 1)
+              p.write_text(text, encoding='utf-8', newline='\n')
+          elif new not in text:
+              raise SystemExit('Task 2 model invocation-run anchor missing')
+          PY
+          python -m py_compile .github/scripts/task162-review-reliability-task2/mock_openai_server.py
+      - name: Commit model evidence fix
+        shell: bash
+        run: |
+          git config user.name 'lingyi9909'
+          git config user.email 'zhanhui9909@gmail.com'
+          git add .github/scripts/task162-review-reliability-task2/mock_openai_server.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'test: bind Task 2 run evidence after fresh begin'
+            git push origin HEAD:hotfix/1.6.2-review-reliability-task2
+          fi
