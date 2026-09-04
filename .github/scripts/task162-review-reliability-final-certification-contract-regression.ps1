@@ -2,15 +2,17 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $driverPath = '.github/scripts/task162-release-certification.ps1'
+$packagePath = '.github/scripts/task162-task2-package.ps1'
 $workflowPath = '.github/workflows/task162-review-reliability-final-certification-contract.yml'
 
-foreach ($path in @($driverPath, $workflowPath)) {
+foreach ($path in @($driverPath, $packagePath, $workflowPath)) {
     if (-not (Test-Path $path -PathType Leaf)) {
         throw "REVIEW_RELIABILITY_FINAL_CERT_CONTRACT_MISSING file: $path"
     }
 }
 
 $driver = Get-Content -Raw $driverPath
+$package = Get-Content -Raw $packagePath
 $workflow = Get-Content -Raw $workflowPath
 
 # The previous 1.6.2 release/hotfix certification remains retained evidence.
@@ -60,6 +62,25 @@ foreach ($fragment in $requiredReviewReliabilityFragments) {
 
 if (-not $driver.Contains('git diff --name-only "$acceptedReviewReliabilityTask3..HEAD"')) {
     throw 'REVIEW_RELIABILITY_FINAL_CERT_CONTRACT_RED post-Task3 scope is not bound to the accepted Review Reliability Task 3 head'
+}
+
+# Task 3 explicitly requires the Chinese Run README to ship with Harness. Real run state must still be excluded.
+foreach ($fragment in @(
+    'runs/README.md',
+    'TASK162_REVIEW_RELIABILITY_TASK3_PACKAGE_README PASS'
+)) {
+    if (-not $package.Contains($fragment)) {
+        throw "REVIEW_RELIABILITY_FINAL_CERT_PACKAGE_RED package fragment missing: $fragment"
+    }
+}
+foreach ($fragment in @(
+    'Assert-RunReadmeOnly',
+    'runs/README.md',
+    'reviewReliabilityTask3PackageReadme'
+)) {
+    if (-not $driver.Contains($fragment)) {
+        throw "REVIEW_RELIABILITY_FINAL_CERT_PACKAGE_RED release driver package assertion missing: $fragment"
+    }
 }
 
 foreach ($fragment in @(
