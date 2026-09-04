@@ -12,8 +12,10 @@ try {
 
     $runtime = '.code-harness/bin/codea-dcep-tools.exe'
     $ast = '.code-harness/bin/ast-grep.exe'
+    $runReadmeSource = Join-Path $repoRoot '.code-harness/runs/README.md'
     $installZip = 'codea-harness-1.6.2-windows-x64-install.zip'
     $upgradeZip = 'codea-harness-1.6.2-windows-x64-upgrade.zip'
+    if (-not (Test-Path $runReadmeSource -PathType Leaf)) { throw 'Review Run README missing from source Harness' }
 
     Write-Host 'TASK162 Task 2: build Windows x64 Runtime'
     Push-Location '.code-harness/tools-runtime'
@@ -61,19 +63,27 @@ try {
         if ($goSource.Count -gt 0) { throw "$Label contains Go Runtime source: $($goSource.FullName -join ', ')" }
         foreach ($required in @(
             'VERSION','AGENTS.md','bootstrap.md','upgrade.md','harness.template.yaml','project.template.md',
-            'agents','skills','contracts','tools','bin/codea-dcep-tools.exe','bin/ast-grep.exe'
+            'agents','skills','contracts','tools','bin/codea-dcep-tools.exe','bin/ast-grep.exe','runs/README.md'
         )) {
             if (-not (Test-Path (Join-Path $Root $required))) { throw "$Label missing required $required" }
         }
-        foreach ($state in @('harness.yaml','project.md','database.yaml','runs','chains')) {
+        foreach ($state in @('harness.yaml','project.md','database.yaml','chains')) {
             if (Test-Path (Join-Path $Root $state)) { throw "$Label contains Project State $state" }
         }
+        $runsRoot = Join-Path $Root 'runs'
+        $unexpectedRuns = @(Get-ChildItem -Path $runsRoot -Force | Where-Object { $_.Name -ne 'README.md' })
+        if ($unexpectedRuns.Count -gt 0) { throw "$Label contains forbidden Run state: $($unexpectedRuns.FullName -join ', ')" }
     }
 
     foreach ($releaseRoot in @((Join-Path $installStage '.code-harness'), (Join-Path $upgradeStage '.code-harness-upgrade'))) {
-        foreach ($state in @('harness.yaml','project.md','database.yaml','runs','chains')) {
+        foreach ($state in @('harness.yaml','project.md','database.yaml','chains')) {
             Remove-Item -Recurse -Force (Join-Path $releaseRoot $state) -ErrorAction SilentlyContinue
         }
+        # Review Reliability Task 3: runs/README.md is framework documentation; every other runs/** entry is Project State.
+        $releaseRuns = Join-Path $releaseRoot 'runs'
+        Remove-Item -Recurse -Force $releaseRuns -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force $releaseRuns | Out-Null
+        Copy-Item $runReadmeSource (Join-Path $releaseRuns 'README.md') -Force
         # Task 2 product boundary: Go Runtime source is development-only and must never ship.
         Remove-Item -Recurse -Force (Join-Path $releaseRoot 'tools-runtime') -ErrorAction SilentlyContinue
         Remove-Item -Force (Join-Path $releaseRoot 'RELEASE-MANIFEST.json') -ErrorAction SilentlyContinue
@@ -103,6 +113,7 @@ try {
 
     Write-Output "TASK162_TASK2_PACKAGE_BUILD PASS head=$exactHead"
     Write-Output 'TASK162_TASK2_PACKAGE_SOURCE_CLEAN PASS'
+    Write-Output 'TASK162_REVIEW_RELIABILITY_TASK3_PACKAGE_README PASS'
 } finally {
     Pop-Location
 }
