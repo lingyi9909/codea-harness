@@ -106,6 +106,7 @@ var requiredSource = []string{
 var managedFiles = map[string]bool{
 	"AGENTS.md": true, "bootstrap.md": true, "upgrade.md": true, "VERSION": true, ".gitignore": true,
 	"harness.template.yaml": true, "project.template.md": true, "database.template.yaml": true,
+	"runs/README.md": true,
 }
 var managedDirs = []string{"agents", "skills", "contracts", "tools", "bin", "tools-runtime"}
 
@@ -292,6 +293,9 @@ func hasTopLevelReview(b []byte) bool {
 
 func isProjectState(rel string) bool {
 	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
+	if rel == "runs/README.md" {
+		return false
+	}
 	return projectStateFiles[rel] || rel == "chains" || strings.HasPrefix(rel, "chains/") || rel == "runs" || strings.HasPrefix(rel, "runs/")
 }
 
@@ -372,6 +376,12 @@ func copyManaged(src, dst string) error {
 		rel = filepath.ToSlash(rel)
 		if !isManaged(rel) {
 			if d.IsDir() {
+				// runs/ is normally Project State, but Task 3's runs/README.md is
+				// framework-managed documentation. Descend only so the managed file
+				// can be reached; nested run directories remain non-managed.
+				if rel == "runs" {
+					return nil
+				}
 				first := strings.Split(rel, "/")[0]
 				if !managedFiles[first] {
 					ok := false
