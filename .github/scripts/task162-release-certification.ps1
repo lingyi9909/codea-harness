@@ -6,6 +6,10 @@ $accepted161 = '87ed05c5bbc56f4fdf904dfbb239d9125b8136e0'
 $acceptedHotfixTask1 = '119c87057718f3d1f6f0286622d32b350f21d64e'
 $acceptedHotfixTask2 = '2503678e347dc0ba2bc2f0357cefd9306d199480'
 $acceptedHotfixTask3 = '4a312c4a2c85a202b740d3a1f419b2812e42f866'
+$acceptedReviewReliabilityBase = 'e23023481edef9f95cdc59938efe5de4840093b8'
+$acceptedReviewReliabilityTask1 = '1141a240529ea3fedcc8df0d3750db31f9fb1104'
+$acceptedReviewReliabilityTask2 = 'ab2f42f53f472aebf2b18b11a1c9166feee2a20c'
+$acceptedReviewReliabilityTask3 = '6c5af8908edf73a5fb772069e9bc2d91d2ebe289'
 $installZip = 'codea-harness-1.6.2-windows-x64-install.zip'
 $upgradeZip = 'codea-harness-1.6.2-windows-x64-upgrade.zip'
 $checklistFile = 'codea-harness-1.6.2-release-checklist.json'
@@ -40,34 +44,42 @@ function Assert-AcceptedHotfixBaselines {
     Write-Output "TASK162_FINAL_ACCEPTED_TASK3_BASELINE PASS head=$acceptedHotfixTask3"
 }
 
-function Assert-PostTask3CertificationScope {
+function Assert-AcceptedReviewReliabilityBaselines {
+    $accepted = [ordered]@{
+        base = $acceptedReviewReliabilityBase
+        task1 = $acceptedReviewReliabilityTask1
+        task2 = $acceptedReviewReliabilityTask2
+        task3 = $acceptedReviewReliabilityTask3
+    }
+    foreach ($entry in $accepted.GetEnumerator()) {
+        git cat-file -e "$($entry.Value)^{commit}"
+        if ($LASTEXITCODE -ne 0) { throw "accepted Review Reliability $($entry.Key) commit unavailable: $($entry.Value)" }
+        git merge-base --is-ancestor $entry.Value HEAD
+        $ancestorExit = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+        if ($ancestorExit -ne 0) { throw "accepted Review Reliability $($entry.Key) is not an ancestor of release HEAD: $($entry.Value)" }
+    }
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_BASE PASS head=$acceptedReviewReliabilityBase"
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_TASK1 PASS head=$acceptedReviewReliabilityTask1"
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_TASK2 PASS head=$acceptedReviewReliabilityTask2"
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_TASK3 PASS head=$acceptedReviewReliabilityTask3"
+}
+
+function Assert-PostReviewReliabilityTask3CertificationScope {
     $allowed = @(
         '.github/scripts/task162-release-certification.ps1',
-        '.github/scripts/task162-hotfix-final-certification-contract-regression.ps1',
-        '.github/scripts/task162-final-task2-invocation-contract-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/workflows/task162-final-release-certification.yml',
-        '.github/workflows/task162-hotfix-final-certification-contract.yml',
-        'docs/superpowers/plans/2026-09-02-codea-harness-1.6.2-post-hotfix-final-release-certification-plan.md'
+        '.github/scripts/task162-review-reliability-final-certification-contract-regression.ps1',
+        '.github/scripts/task162-task2-package.ps1',
+        '.github/workflows/task162-review-reliability-final-certification-contract.yml',
+        '.github/workflows/task162-review-reliability-final-release-certification.yml'
     )
-    $changed = @(& git diff --name-only "$acceptedHotfixTask3..HEAD")
-    if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-Task3 certification scope' }
+    $changed = @(& git diff --name-only "$acceptedReviewReliabilityTask3..HEAD")
+    if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-Review-Reliability-Task3 certification scope' }
     $unexpected = @($changed | Where-Object { $_ -and ($_ -notin $allowed) })
     if ($unexpected.Count -gt 0) {
-        throw "post-Task3 release scope contains non-certification changes:`n$($unexpected -join "`n")"
+        throw "post-Review-Reliability-Task3 release scope contains non-certification changes:`n$($unexpected -join "`n")"
     }
-    Write-Output 'TASK162_FINAL_POST_TASK3_CERTIFICATION_SCOPE PASS'
+    Write-Output 'TASK162_FINAL_POST_REVIEW_RELIABILITY_TASK3_CERTIFICATION_SCOPE PASS'
 }
 
 function Assert-NoRuntimeSource([string]$Root, [string]$Label) {
@@ -161,7 +173,8 @@ try {
     git cat-file -e "$accepted161^{commit}"
     if ($LASTEXITCODE -ne 0) { throw "accepted 1.6.1 baseline unavailable: $accepted161" }
     Assert-AcceptedHotfixBaselines
-    Assert-PostTask3CertificationScope
+    Assert-AcceptedReviewReliabilityBaselines
+    Assert-PostReviewReliabilityTask3CertificationScope
     $goVersion = (go env GOVERSION).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($goVersion)) { throw 'cannot resolve Go version' }
 
@@ -177,6 +190,22 @@ try {
     & './.github/scripts/task162-task2-package.ps1'
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $global:LASTEXITCODE = 0
+
+    Invoke-Regression './.github/scripts/task162-review-reliability-task1-contract-regression.ps1' 'Review Reliability Task 1 invocation contract'
+    Invoke-Regression './.github/scripts/task162-review-reliability-task2-contract-regression.ps1' 'Review Reliability Task 2 fresh lifecycle contract'
+
+    Write-Host 'TASK162 RELEASE: Review Reliability focused Go contracts'
+    Push-Location '.code-harness/tools-runtime'
+    try {
+        go test -count=1 -run 'Test162ReviewReliabilityTask(1|2)' -v ./cmd/codea-dcep-tools
+        if ($LASTEXITCODE -ne 0) { throw "Review Reliability focused Go contracts failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $global:LASTEXITCODE = 0
+    Write-Output 'TASK162_FINAL_REVIEW_RELIABILITY_FOCUSED_GO_CONTRACT PASS'
+
+    Invoke-Regression './.github/scripts/task162-review-reliability-task1-real-agent-e2e-v2.ps1' 'Review Reliability Task 1 real Agent changed/zero-change E2E'
+    Invoke-Regression './.github/scripts/task162-review-reliability-task2-real-agent-e2e.ps1' 'Review Reliability Task 2 same-session fresh lifecycle E2E'
+    Invoke-Regression './.github/scripts/task162-review-reliability-task3-run-readme-regression.ps1' 'Review Reliability Task 3 Run README contract'
 
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-authority-regression.ps1' 'Hotfix Task 1 Agent authority'
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-snapshot-request-contract.ps1' 'Hotfix Task 1 Agent Snapshot request contract'
@@ -268,6 +297,12 @@ try {
             task2 = $acceptedHotfixTask2
             task3 = $acceptedHotfixTask3
         }
+        acceptedReviewReliability = [ordered]@{
+            base = $acceptedReviewReliabilityBase
+            task1 = $acceptedReviewReliabilityTask1
+            task2 = $acceptedReviewReliabilityTask2
+            task3 = $acceptedReviewReliabilityTask3
+        }
         runtime = [ordered]@{
             binary = 'codea-dcep-tools.exe'
             sha256 = $runtimeHash
@@ -286,10 +321,15 @@ try {
             upgrade = [ordered]@{ file=$upgradeZip; sha256=$upgradeHash; size=(Get-Item $upgradeZip).Length }
         }
         gates = [ordered]@{
+            reviewReliabilityTask1InvocationContract = 'PASS'
+            reviewReliabilityTask1RealAgent = 'PASS'
+            reviewReliabilityTask2FreshLifecycle = 'PASS'
+            reviewReliabilityTask2SameSession = 'PASS'
+            reviewReliabilityTask3RunReadme = 'PASS'
+            postReviewReliabilityTask3CertificationScope = 'PASS'
             hotfixTask1CanonicalAuthority = 'PASS'
             hotfixTask2InvocationContract = 'PASS'
             hotfixTask3RealPlainReview = 'PASS'
-            postTask3CertificationScope = 'PASS'
             task1MavenMultiModule = 'PASS'
             task1DuplicateSymbolAuthority = 'PASS'
             task2PackageCleanup = 'PASS'
@@ -313,6 +353,7 @@ try {
     [IO.File]::WriteAllText($checklistFile, $checklist, [Text.UTF8Encoding]::new($false))
 
     Write-Output "TASK162_POST_HOTFIX_RELEASE_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
+    Write-Output "TASK162_REVIEW_RELIABILITY_FINAL_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
     Write-Output "TASK162_RELEASE_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
 } finally {
     Pop-Location
