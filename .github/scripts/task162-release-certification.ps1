@@ -67,11 +67,15 @@ function Assert-AcceptedReviewReliabilityBaselines {
 
 function Assert-PostReviewReliabilityTask3CertificationScope {
     $allowed = @(
+        '.code-harness/tools-runtime/internal/upgrade/upgrade.go',
+        '.code-harness/tools-runtime/internal/upgrade/task162_review_reliability_run_readme_test.go',
         '.github/scripts/task162-release-certification.ps1',
         '.github/scripts/task162-review-reliability-final-certification-contract-regression.ps1',
         '.github/scripts/task162-task2-package.ps1',
+        '.github/scripts/task162-task2-release-package-cleanup-regression.ps1',
         '.github/workflows/task162-review-reliability-final-certification-contract.yml',
-        '.github/workflows/task162-review-reliability-final-release-certification.yml'
+        '.github/workflows/task162-review-reliability-final-release-certification.yml',
+        '.github/workflows/task162-review-reliability-final-upgrade-readme.yml'
     )
     $changed = @(& git diff --name-only "$acceptedReviewReliabilityTask3..HEAD")
     if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-Review-Reliability-Task3 certification scope' }
@@ -90,6 +94,14 @@ function Assert-NoRuntimeSource([string]$Root, [string]$Label) {
     if ($forbidden.Count -gt 0) { throw "$Label contains Go Runtime source: $($forbidden.FullName -join ', ')" }
 }
 
+function Assert-RunReadmeOnly([string]$Root, [string]$Label) {
+    $runsRoot = Join-Path $Root 'runs'
+    $readme = Join-Path $runsRoot 'README.md'
+    if (-not (Test-Path $readme -PathType Leaf)) { throw "$Label missing runs/README.md" }
+    $unexpected = @(Get-ChildItem -Path $runsRoot -Force | Where-Object { $_.Name -ne 'README.md' })
+    if ($unexpected.Count -gt 0) { throw "$Label contains forbidden Run state: $($unexpected.FullName -join ', ')" }
+}
+
 function Assert-ReleaseZip([string]$Zip, [string]$TopDir, [string]$Label, [string]$ExactHead, [string]$RuntimeHash) {
     if (-not (Test-Path $Zip -PathType Leaf)) { throw "$Label ZIP missing: $Zip" }
     $extract = Join-Path $env:RUNNER_TEMP ("task162-final-" + $Label.Replace(' ','-') + '-' + [guid]::NewGuid().ToString('N'))
@@ -98,13 +110,14 @@ function Assert-ReleaseZip([string]$Zip, [string]$TopDir, [string]$Label, [strin
     if (-not (Test-Path $root -PathType Container)) { throw "$Label missing top-level $TopDir" }
     foreach ($required in @(
         'VERSION','RELEASE-MANIFEST.json','AGENTS.md','bootstrap.md','upgrade.md','harness.template.yaml','project.template.md',
-        'agents','skills','contracts','tools','bin/codea-dcep-tools.exe','bin/ast-grep.exe'
+        'agents','skills','contracts','tools','bin/codea-dcep-tools.exe','bin/ast-grep.exe','runs/README.md'
     )) {
         if (-not (Test-Path (Join-Path $root $required))) { throw "$Label missing required $required" }
     }
-    foreach ($state in @('harness.yaml','project.md','database.yaml','runs','chains')) {
+    foreach ($state in @('harness.yaml','project.md','database.yaml','chains')) {
         if (Test-Path (Join-Path $root $state)) { throw "$Label contains Project State $state" }
     }
+    Assert-RunReadmeOnly $root $Label
     Assert-NoRuntimeSource $root $Label
     $manifest = Get-Content (Join-Path $root 'RELEASE-MANIFEST.json') -Raw | ConvertFrom-Json
     if ([string]$manifest.version -ne '1.6.2') { throw "$Label manifest version mismatch" }
@@ -326,6 +339,7 @@ try {
             reviewReliabilityTask2FreshLifecycle = 'PASS'
             reviewReliabilityTask2SameSession = 'PASS'
             reviewReliabilityTask3RunReadme = 'PASS'
+            reviewReliabilityTask3PackageReadme = 'PASS'
             postReviewReliabilityTask3CertificationScope = 'PASS'
             hotfixTask1CanonicalAuthority = 'PASS'
             hotfixTask2InvocationContract = 'PASS'
