@@ -55,7 +55,15 @@ jobs:
 
       - name: Review Reliability Final Release Certification
         shell: pwsh
-        run: ./.github/scripts/task162-release-certification.ps1
+        run: |
+          $log = 'task162-final-release-certification.log'
+          try {
+            & ./.github/scripts/task162-release-certification.ps1 *>&1 | Tee-Object -FilePath $log
+            if ($LASTEXITCODE -ne 0) { throw "Final Release Certification exited with code $LASTEXITCODE" }
+          } catch {
+            ($_ | Out-String) | Tee-Object -FilePath $log -Append
+            throw
+          }
 
       - name: Verify final checklist and exact head
         shell: pwsh
@@ -135,6 +143,7 @@ jobs:
         with:
           name: task162-review-reliability-final-agent-evidence
           path: |
+            task162-final-release-certification.log
             .task1-e2e-artifacts
             .task2-e2e-artifacts
             .task3-e2e-artifacts
