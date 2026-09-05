@@ -48,6 +48,34 @@ function Invoke-RetainedCanonicalChangeSetRegression {
     Write-Output 'TASK162_FINAL_HOTFIX_TASK1_CANONICAL_EXIT_NORMALIZED PASS'
 }
 
+function Invoke-RetainedReviewAuthorityRegression([string]$Script, [string]$Label) {
+    $resolvedScript = (Resolve-Path $Script).Path
+    $text = Get-Content $resolvedScript -Raw
+    $anchor = "            'finding-proposals.schema.json',"
+    $anchorCount = [regex]::Matches($text, [regex]::Escape($anchor)).Count
+    if ($anchorCount -ne 1) { throw "$Label retained request-contract adapter expected one anchor, found $anchorCount" }
+
+    foreach ($contract in @('finding-certify-request.schema.json', 'report-review-request.schema.json')) {
+        $contractPath = Join-Path $repoRoot ('.code-harness/contracts/' + $contract)
+        if (-not (Test-Path $contractPath -PathType Leaf)) { throw "$Label current request contract missing: $contract" }
+        if ($text.Contains("'$contract'")) { throw "$Label retained script unexpectedly already includes current request contract: $contract" }
+    }
+
+    $replacement = "            'finding-certify-request.schema.json'," + [Environment]::NewLine +
+        "            'report-review-request.schema.json'," + [Environment]::NewLine + $anchor
+    $patched = $text.Replace($anchor, $replacement)
+    $temp = Join-Path (Split-Path -Parent $resolvedScript) ('.task162-final-retained-review-authority-' + [guid]::NewGuid().ToString('N') + '.tmp.ps1')
+    try {
+        [IO.File]::WriteAllText($temp, $patched, [Text.UTF8Encoding]::new($false))
+        Invoke-Regression $temp $Label
+    }
+    finally {
+        Remove-Item $temp -Force -ErrorAction SilentlyContinue
+        $global:LASTEXITCODE = 0
+    }
+    Write-Output "TASK162_FINAL_RETAINED_REVIEW_REQUEST_CONTRACT_ADAPTER PASS script=$(Split-Path -Leaf $resolvedScript)"
+}
+
 function Assert-AcceptedHotfixBaselines {
     $accepted = [ordered]@{
         task1 = $acceptedHotfixTask1
@@ -273,8 +301,8 @@ try {
     Write-Output 'NO_UNKNOWN_REQUEST_FIELD PASS'
     Write-Output 'NO_CHANGE_SET_MISMATCH PASS'
 
-    Invoke-Regression './.github/scripts/task162-real-multimodule-regression.ps1' 'Task 1 Maven multi-module Review Authority E2E'
-    Invoke-Regression './.github/scripts/task162-duplicate-symbol-authority-regression.ps1' 'Task 1 duplicate Symbol Authority E2E'
+    Invoke-RetainedReviewAuthorityRegression './.github/scripts/task162-real-multimodule-regression.ps1' 'Task 1 Maven multi-module Review Authority E2E'
+    Invoke-RetainedReviewAuthorityRegression './.github/scripts/task162-duplicate-symbol-authority-regression.ps1' 'Task 1 duplicate Symbol Authority E2E'
     Invoke-Regression './.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1' 'retained single-module EntryPoint regression (final Task 2 contract adapter)'
     Invoke-Regression './.github/scripts/task152-workspace-smoke.ps1' 'retained Workspace regression'
     Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
