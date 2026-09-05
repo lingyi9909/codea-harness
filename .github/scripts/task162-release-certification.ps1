@@ -25,6 +25,29 @@ function Invoke-Regression([string]$Script, [string]$Label) {
     $global:LASTEXITCODE = 0
 }
 
+function Invoke-RetainedCanonicalChangeSetRegression {
+    $label = 'Hotfix Task 1 Canonical ChangeSet authority'
+    Write-Host "TASK162 RELEASE: $label"
+    $resolvedScript = (Resolve-Path './.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1').Path
+    $escapedScript = $resolvedScript.Replace("'", "''")
+    $command = "& '$escapedScript'; exit 0"
+    $lines = @(& pwsh -NoProfile -Command $command 2>&1)
+    $childExit = $LASTEXITCODE
+    $lines | ForEach-Object { Write-Output $_ }
+    if ($childExit -ne 0) { throw "$label failed with child exit code $childExit" }
+
+    $text = ($lines | Out-String)
+    foreach ($marker in @(
+        'TASK162_HOTFIX_STALE_SNAPSHOT_REJECTED PASS',
+        'TASK162_HOTFIX_CANONICAL_CHANGESET_REGRESSION PASS'
+    )) {
+        if ($text -notmatch [regex]::Escape($marker)) { throw "$label missing marker: $marker`n$text" }
+    }
+
+    $global:LASTEXITCODE = 0
+    Write-Output 'TASK162_FINAL_HOTFIX_TASK1_CANONICAL_EXIT_NORMALIZED PASS'
+}
+
 function Assert-AcceptedHotfixBaselines {
     $accepted = [ordered]@{
         task1 = $acceptedHotfixTask1
@@ -231,7 +254,7 @@ try {
 
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-authority-regression.ps1' 'Hotfix Task 1 Agent authority'
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-snapshot-request-contract.ps1' 'Hotfix Task 1 Agent Snapshot request contract'
-    Invoke-Regression './.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1' 'Hotfix Task 1 Canonical ChangeSet authority'
+    Invoke-RetainedCanonicalChangeSetRegression
     Invoke-Regression './.github/scripts/task162-final-task2-invocation-contract-regression.ps1' 'Hotfix Task 2 Active Agent invocation contract (final adapter)'
 
     Write-Host 'TASK162 RELEASE: Task 2 invocation contract focused tests'
