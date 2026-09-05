@@ -1,0 +1,131 @@
+name: task162-review-reliability-step9-diagnostic
+
+on:
+  push:
+    branches: [diag/1.6.2-review-reliability-final-step9]
+
+permissions:
+  contents: read
+
+jobs:
+  isolate-step9-blocker:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Provision pinned OpenCode 1.18.25
+        shell: pwsh
+        run: |
+          npm install -g opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $out = (& opencode --version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch '1\.18\.25') { throw "OpenCode version mismatch: $out" }
+
+      - name: Compile retained model servers
+        shell: pwsh
+        run: |
+          python -m py_compile ./.github/scripts/task162-review-reliability-task1/mock_openai_server.py
+          python -m py_compile ./.github/scripts/task162-review-reliability-task2/mock_openai_server.py
+          python -m py_compile ./.github/scripts/task162-hotfix-task3/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare official package state
+        shell: pwsh
+        run: ./.github/scripts/task162-task2-package.ps1
+
+      - name: RR Task3 README source contract
+        shell: pwsh
+        run: ./.github/scripts/task162-review-reliability-task3-run-readme-regression.ps1
+
+      - name: RR Task3 upgrade README boundary
+        shell: pwsh
+        run: |
+          Push-Location .code-harness/tools-runtime
+          try {
+            go test -count=1 -run 'Test162ReviewReliability' -v ./internal/upgrade
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Pop-Location }
+
+      - name: Legacy Hotfix Task1 Agent authority
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task1-agent-authority-regression.ps1
+
+      - name: Legacy Hotfix Task1 Snapshot request
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task1-agent-snapshot-request-contract.ps1
+
+      - name: Legacy Hotfix Task1 Canonical ChangeSet
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1
+
+      - name: Legacy Hotfix Task2 final invocation contract
+        shell: pwsh
+        run: ./.github/scripts/task162-final-task2-invocation-contract-regression.ps1
+
+      - name: Legacy Hotfix Task2 focused Go
+        shell: pwsh
+        run: |
+          Push-Location .code-harness/tools-runtime
+          try {
+            go test -count=1 -run 'Test162HotfixTask2' -v ./cmd/codea-dcep-tools
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Pop-Location }
+
+      - name: Legacy Hotfix Task2 Runtime invocation
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task2-runtime-invocation-regression.ps1
+
+      - name: Legacy Hotfix Task3 real plain review E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
+
+      - name: Maven multi-module authority
+        shell: pwsh
+        run: ./.github/scripts/task162-real-multimodule-regression.ps1
+
+      - name: Duplicate symbol authority
+        shell: pwsh
+        run: ./.github/scripts/task162-duplicate-symbol-authority-regression.ps1
+
+      - name: Retained single-module entrypoint
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1
+
+      - name: Retained workspace
+        shell: pwsh
+        run: ./.github/scripts/task152-workspace-smoke.ps1
+
+      - name: Retained business
+        shell: pwsh
+        run: |
+          Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
+          ./.github/scripts/task152-task5-real-business-regression.ps1
+
+      - name: Retained chain
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-final-chain-regression.ps1
+
+      - name: Retained review precision
+        shell: pwsh
+        run: ./.github/scripts/task160-real-review-precision-regression.ps1
+
+      - name: Final package cleanup and upgrade E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1
