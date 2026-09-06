@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "finding-certify-request.schema.json",
+  "title": "Finding Certification Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "runId",
+    "proposalsPath"
+  ],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "proposalsPath": {
+      "type": "string",
+      "pattern": "^\\.code-harness/runs/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/requests/finding-proposals\\.json$"
+    }
+  }
+}

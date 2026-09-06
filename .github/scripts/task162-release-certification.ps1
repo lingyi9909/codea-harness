@@ -6,6 +6,10 @@ $accepted161 = '87ed05c5bbc56f4fdf904dfbb239d9125b8136e0'
 $acceptedHotfixTask1 = '119c87057718f3d1f6f0286622d32b350f21d64e'
 $acceptedHotfixTask2 = '2503678e347dc0ba2bc2f0357cefd9306d199480'
 $acceptedHotfixTask3 = '4a312c4a2c85a202b740d3a1f419b2812e42f866'
+$acceptedReviewReliabilityBase = 'e23023481edef9f95cdc59938efe5de4840093b8'
+$acceptedReviewReliabilityTask1 = '1141a240529ea3fedcc8df0d3750db31f9fb1104'
+$acceptedReviewReliabilityTask2 = 'ab2f42f53f472aebf2b18b11a1c9166feee2a20c'
+$acceptedReviewReliabilityTask3 = '6c5af8908edf73a5fb772069e9bc2d91d2ebe289'
 $installZip = 'codea-harness-1.6.2-windows-x64-install.zip'
 $upgradeZip = 'codea-harness-1.6.2-windows-x64-upgrade.zip'
 $checklistFile = 'codea-harness-1.6.2-release-checklist.json'
@@ -19,6 +23,76 @@ function Invoke-Regression([string]$Script, [string]$Label) {
     $lines | ForEach-Object { Write-Output $_ }
     if ($childExit -ne 0) { throw "$Label failed with child exit code $childExit" }
     $global:LASTEXITCODE = 0
+}
+
+function Invoke-RetainedCanonicalChangeSetRegression {
+    $label = 'Hotfix Task 1 Canonical ChangeSet authority'
+    Write-Host "TASK162 RELEASE: $label"
+    $resolvedScript = (Resolve-Path './.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1').Path
+    $escapedScript = $resolvedScript.Replace("'", "''")
+    $command = "& '$escapedScript'; exit 0"
+    $lines = @(& pwsh -NoProfile -Command $command 2>&1)
+    $childExit = $LASTEXITCODE
+    $lines | ForEach-Object { Write-Output $_ }
+    if ($childExit -ne 0) { throw "$label failed with child exit code $childExit" }
+
+    $text = ($lines | Out-String)
+    foreach ($marker in @(
+        'TASK162_HOTFIX_STALE_SNAPSHOT_REJECTED PASS',
+        'TASK162_HOTFIX_CANONICAL_CHANGESET_REGRESSION PASS'
+    )) {
+        if ($text -notmatch [regex]::Escape($marker)) { throw "$label missing marker: $marker`n$text" }
+    }
+
+    $global:LASTEXITCODE = 0
+    Write-Output 'TASK162_FINAL_HOTFIX_TASK1_CANONICAL_EXIT_NORMALIZED PASS'
+}
+
+function Invoke-RetainedReviewAuthorityRegression([string]$Script, [string]$Label) {
+    $resolvedScript = (Resolve-Path $Script).Path
+    $text = Get-Content $resolvedScript -Raw
+    $anchor = "            'finding-proposals.schema.json',"
+    $anchorCount = [regex]::Matches($text, [regex]::Escape($anchor)).Count
+    if ($anchorCount -ne 1) { throw "$Label retained request-contract adapter expected one anchor, found $anchorCount" }
+
+    foreach ($contract in @('finding-certify-request.schema.json', 'report-review-request.schema.json')) {
+        $contractPath = Join-Path $repoRoot ('.code-harness/contracts/' + $contract)
+        if (-not (Test-Path $contractPath -PathType Leaf)) { throw "$Label current request contract missing: $contract" }
+        if ($text.Contains("'$contract'")) { throw "$Label retained script unexpectedly already includes current request contract: $contract" }
+    }
+
+    $replacement = "            'finding-certify-request.schema.json'," + [Environment]::NewLine +
+        "            'report-review-request.schema.json'," + [Environment]::NewLine + $anchor
+    $patched = $text.Replace($anchor, $replacement)
+    $temp = Join-Path (Split-Path -Parent $resolvedScript) ('.task162-final-retained-review-authority-' + [guid]::NewGuid().ToString('N') + '.tmp.ps1')
+    try {
+        [IO.File]::WriteAllText($temp, $patched, [Text.UTF8Encoding]::new($false))
+        Invoke-Regression $temp $Label
+    }
+    finally {
+        Remove-Item $temp -Force -ErrorAction SilentlyContinue
+        $global:LASTEXITCODE = 0
+    }
+    Write-Output "TASK162_FINAL_RETAINED_REVIEW_REQUEST_CONTRACT_ADAPTER PASS script=$(Split-Path -Leaf $resolvedScript)"
+}
+
+function Invoke-RetainedBusinessRegression {
+    $label = 'retained single-module business regression'
+    $runsRoot = Join-Path $repoRoot '.code-harness/runs'
+    if (-not (Test-Path $runsRoot -PathType Container)) { throw "$label current runs directory missing" }
+    $backupRoot = Join-Path $env:RUNNER_TEMP ('task162-final-runs-backup-' + [guid]::NewGuid().ToString('N'))
+
+    try {
+        Move-Item $runsRoot $backupRoot
+        New-Item -ItemType Directory -Force $runsRoot | Out-Null
+        Invoke-Regression './.github/scripts/task152-task5-real-business-regression.ps1' $label
+    }
+    finally {
+        Remove-Item $runsRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $backupRoot -PathType Container) { Move-Item $backupRoot $runsRoot }
+        $global:LASTEXITCODE = 0
+    }
+    Write-Output 'TASK162_FINAL_RETAINED_BUSINESS_RUN_STATE_ADAPTER PASS'
 }
 
 function Assert-AcceptedHotfixBaselines {
@@ -40,35 +114,46 @@ function Assert-AcceptedHotfixBaselines {
     Write-Output "TASK162_FINAL_ACCEPTED_TASK3_BASELINE PASS head=$acceptedHotfixTask3"
 }
 
-function Assert-PostTask3CertificationScope {
+function Assert-AcceptedReviewReliabilityBaselines {
+    $accepted = [ordered]@{
+        base = $acceptedReviewReliabilityBase
+        task1 = $acceptedReviewReliabilityTask1
+        task2 = $acceptedReviewReliabilityTask2
+        task3 = $acceptedReviewReliabilityTask3
+    }
+    foreach ($entry in $accepted.GetEnumerator()) {
+        git cat-file -e "$($entry.Value)^{commit}"
+        if ($LASTEXITCODE -ne 0) { throw "accepted Review Reliability $($entry.Key) commit unavailable: $($entry.Value)" }
+        git merge-base --is-ancestor $entry.Value HEAD
+        $ancestorExit = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+        if ($ancestorExit -ne 0) { throw "accepted Review Reliability $($entry.Key) is not an ancestor of release HEAD: $($entry.Value)" }
+    }
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_BASE PASS head=$acceptedReviewReliabilityBase"
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_TASK1 PASS head=$acceptedReviewReliabilityTask1"
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_TASK2 PASS head=$acceptedReviewReliabilityTask2"
+    Write-Output "TASK162_FINAL_ACCEPTED_REVIEW_RELIABILITY_TASK3 PASS head=$acceptedReviewReliabilityTask3"
+}
+
+function Assert-PostReviewReliabilityTask3CertificationScope {
     $allowed = @(
+        '.code-harness/tools-runtime/internal/upgrade/upgrade.go',
+        '.code-harness/tools-runtime/internal/upgrade/task162_review_reliability_run_readme_test.go',
         '.github/scripts/task162-release-certification.ps1',
-        '.github/scripts/task162-hotfix-final-certification-contract-regression.ps1',
-        '.github/scripts/task162-final-task2-invocation-contract-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1',
-        '.github/scripts/task162-hotfix-final-chain-regression.ps1',
-        '.github/scripts/task162-hotfix-final-package-cleanup-regression.ps1',
-        '.github/workflows/task162-final-release-certification.yml',
-        '.github/workflows/task162-hotfix-final-certification-contract.yml',
-        '.github/workflows/package-windows-x64.yml',
-        'docs/superpowers/plans/2026-09-02-codea-harness-1.6.2-post-hotfix-final-release-certification-plan.md'
+        '.github/scripts/task162-review-reliability-final-certification-contract-regression.ps1',
+        '.github/scripts/task162-task2-package.ps1',
+        '.github/scripts/task162-task2-release-package-cleanup-regression.ps1',
+        '.github/workflows/task162-review-reliability-final-certification-contract.yml',
+        '.github/workflows/task162-review-reliability-final-release-certification.yml',
+        '.github/workflows/task162-review-reliability-final-upgrade-readme.yml'
     )
-    $changed = @(& git diff --name-only "$acceptedHotfixTask3..HEAD")
-    if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-Task3 certification scope' }
+    $changed = @(& git diff --name-only "$acceptedReviewReliabilityTask3..HEAD")
+    if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-Review-Reliability-Task3 certification scope' }
     $unexpected = @($changed | Where-Object { $_ -and ($_ -notin $allowed) })
     if ($unexpected.Count -gt 0) {
-        throw "post-Task3 release scope contains non-certification changes:`n$($unexpected -join "`n")"
+        throw "post-Review-Reliability-Task3 release scope contains non-certification changes:`n$($unexpected -join "`n")"
     }
-    Write-Output 'TASK162_FINAL_POST_TASK3_CERTIFICATION_SCOPE PASS'
+    Write-Output 'TASK162_FINAL_POST_REVIEW_RELIABILITY_TASK3_CERTIFICATION_SCOPE PASS'
 }
 
 function Assert-NoRuntimeSource([string]$Root, [string]$Label) {
@@ -79,6 +164,14 @@ function Assert-NoRuntimeSource([string]$Root, [string]$Label) {
     if ($forbidden.Count -gt 0) { throw "$Label contains Go Runtime source: $($forbidden.FullName -join ', ')" }
 }
 
+function Assert-RunReadmeOnly([string]$Root, [string]$Label) {
+    $runsRoot = Join-Path $Root 'runs'
+    $readme = Join-Path $runsRoot 'README.md'
+    if (-not (Test-Path $readme -PathType Leaf)) { throw "$Label missing runs/README.md" }
+    $unexpected = @(Get-ChildItem -Path $runsRoot -Force | Where-Object { $_.Name -ne 'README.md' })
+    if ($unexpected.Count -gt 0) { throw "$Label contains forbidden Run state: $($unexpected.FullName -join ', ')" }
+}
+
 function Assert-ReleaseZip([string]$Zip, [string]$TopDir, [string]$Label, [string]$ExactHead, [string]$RuntimeHash) {
     if (-not (Test-Path $Zip -PathType Leaf)) { throw "$Label ZIP missing: $Zip" }
     $extract = Join-Path $env:RUNNER_TEMP ("task162-final-" + $Label.Replace(' ','-') + '-' + [guid]::NewGuid().ToString('N'))
@@ -87,13 +180,14 @@ function Assert-ReleaseZip([string]$Zip, [string]$TopDir, [string]$Label, [strin
     if (-not (Test-Path $root -PathType Container)) { throw "$Label missing top-level $TopDir" }
     foreach ($required in @(
         'VERSION','RELEASE-MANIFEST.json','AGENTS.md','bootstrap.md','upgrade.md','harness.template.yaml','project.template.md',
-        'agents','skills','contracts','tools','bin/codea-dcep-tools.exe','bin/ast-grep.exe'
+        'agents','skills','contracts','tools','bin/codea-dcep-tools.exe','bin/ast-grep.exe','runs/README.md'
     )) {
         if (-not (Test-Path (Join-Path $root $required))) { throw "$Label missing required $required" }
     }
-    foreach ($state in @('harness.yaml','project.md','database.yaml','runs','chains')) {
+    foreach ($state in @('harness.yaml','project.md','database.yaml','chains')) {
         if (Test-Path (Join-Path $root $state)) { throw "$Label contains Project State $state" }
     }
+    Assert-RunReadmeOnly $root $Label
     Assert-NoRuntimeSource $root $Label
     $manifest = Get-Content (Join-Path $root 'RELEASE-MANIFEST.json') -Raw | ConvertFrom-Json
     if ([string]$manifest.version -ne '1.6.2') { throw "$Label manifest version mismatch" }
@@ -162,7 +256,8 @@ try {
     git cat-file -e "$accepted161^{commit}"
     if ($LASTEXITCODE -ne 0) { throw "accepted 1.6.1 baseline unavailable: $accepted161" }
     Assert-AcceptedHotfixBaselines
-    Assert-PostTask3CertificationScope
+    Assert-AcceptedReviewReliabilityBaselines
+    Assert-PostReviewReliabilityTask3CertificationScope
     $goVersion = (go env GOVERSION).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($goVersion)) { throw 'cannot resolve Go version' }
 
@@ -179,9 +274,34 @@ try {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $global:LASTEXITCODE = 0
 
+    Invoke-Regression './.github/scripts/task162-review-reliability-task1-contract-regression.ps1' 'Review Reliability Task 1 invocation contract'
+    Invoke-Regression './.github/scripts/task162-review-reliability-task2-contract-regression.ps1' 'Review Reliability Task 2 fresh lifecycle contract'
+
+    Write-Host 'TASK162 RELEASE: Review Reliability focused Go contracts'
+    Push-Location '.code-harness/tools-runtime'
+    try {
+        go test -count=1 -run 'Test162ReviewReliabilityTask(1|2)' -v ./cmd/codea-dcep-tools
+        if ($LASTEXITCODE -ne 0) { throw "Review Reliability focused Go contracts failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $global:LASTEXITCODE = 0
+    Write-Output 'TASK162_FINAL_REVIEW_RELIABILITY_FOCUSED_GO_CONTRACT PASS'
+
+    Invoke-Regression './.github/scripts/task162-review-reliability-task1-real-agent-e2e-v2.ps1' 'Review Reliability Task 1 real Agent changed/zero-change E2E'
+    Invoke-Regression './.github/scripts/task162-review-reliability-task2-real-agent-e2e.ps1' 'Review Reliability Task 2 same-session fresh lifecycle E2E'
+    Invoke-Regression './.github/scripts/task162-review-reliability-task3-run-readme-regression.ps1' 'Review Reliability Task 3 Run README contract'
+
+    Write-Host 'TASK162 RELEASE: Review Reliability Task 3 upgrade README boundary'
+    Push-Location '.code-harness/tools-runtime'
+    try {
+        go test -count=1 -run 'Test162ReviewReliability' -v ./internal/upgrade
+        if ($LASTEXITCODE -ne 0) { throw "Review Reliability Task 3 upgrade README boundary failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $global:LASTEXITCODE = 0
+    Write-Output 'TASK162_FINAL_REVIEW_RELIABILITY_UPGRADE_README PASS'
+
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-authority-regression.ps1' 'Hotfix Task 1 Agent authority'
     Invoke-Regression './.github/scripts/task162-hotfix-task1-agent-snapshot-request-contract.ps1' 'Hotfix Task 1 Agent Snapshot request contract'
-    Invoke-Regression './.github/scripts/task162-hotfix-task1-canonical-changeset-regression.ps1' 'Hotfix Task 1 Canonical ChangeSet authority'
+    Invoke-RetainedCanonicalChangeSetRegression
     Invoke-Regression './.github/scripts/task162-final-task2-invocation-contract-regression.ps1' 'Hotfix Task 2 Active Agent invocation contract (final adapter)'
 
     Write-Host 'TASK162 RELEASE: Task 2 invocation contract focused tests'
@@ -200,14 +320,13 @@ try {
     Write-Output 'NO_UNKNOWN_REQUEST_FIELD PASS'
     Write-Output 'NO_CHANGE_SET_MISMATCH PASS'
 
-    Invoke-Regression './.github/scripts/task162-real-multimodule-regression.ps1' 'Task 1 Maven multi-module Review Authority E2E'
-    Invoke-Regression './.github/scripts/task162-duplicate-symbol-authority-regression.ps1' 'Task 1 duplicate Symbol Authority E2E'
+    Invoke-RetainedReviewAuthorityRegression './.github/scripts/task162-real-multimodule-regression.ps1' 'Task 1 Maven multi-module Review Authority E2E'
+    Invoke-RetainedReviewAuthorityRegression './.github/scripts/task162-duplicate-symbol-authority-regression.ps1' 'Task 1 duplicate Symbol Authority E2E'
     Invoke-Regression './.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1' 'retained single-module EntryPoint regression (final Task 2 contract adapter)'
     Invoke-Regression './.github/scripts/task152-workspace-smoke.ps1' 'retained Workspace regression'
-    Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
-    Invoke-Regression './.github/scripts/task152-task5-real-business-regression.ps1' 'retained single-module business regression'
+    Invoke-RetainedBusinessRegression
     Invoke-Regression './.github/scripts/task162-hotfix-final-chain-regression.ps1' 'retained Chain regression (final Task 2 contract adapter)'
-    Invoke-Regression './.github/scripts/task160-real-review-precision-regression.ps1' 'retained 1.6 Review Precision regression'
+    Invoke-RetainedReviewAuthorityRegression './.github/scripts/task160-real-review-precision-regression.ps1' 'retained 1.6 Review Precision regression'
     Assert-RuntimeRenameRetained
 
     Write-Host 'TASK162 RELEASE: Task 2 package/no-Go/upgrade regression'
@@ -269,6 +388,12 @@ try {
             task2 = $acceptedHotfixTask2
             task3 = $acceptedHotfixTask3
         }
+        acceptedReviewReliability = [ordered]@{
+            base = $acceptedReviewReliabilityBase
+            task1 = $acceptedReviewReliabilityTask1
+            task2 = $acceptedReviewReliabilityTask2
+            task3 = $acceptedReviewReliabilityTask3
+        }
         runtime = [ordered]@{
             binary = 'codea-dcep-tools.exe'
             sha256 = $runtimeHash
@@ -287,10 +412,17 @@ try {
             upgrade = [ordered]@{ file=$upgradeZip; sha256=$upgradeHash; size=(Get-Item $upgradeZip).Length }
         }
         gates = [ordered]@{
+            reviewReliabilityTask1InvocationContract = 'PASS'
+            reviewReliabilityTask1RealAgent = 'PASS'
+            reviewReliabilityTask2FreshLifecycle = 'PASS'
+            reviewReliabilityTask2SameSession = 'PASS'
+            reviewReliabilityTask3RunReadme = 'PASS'
+            reviewReliabilityTask3PackageReadme = 'PASS'
+            reviewReliabilityTask3UpgradeReadme = 'PASS'
+            postReviewReliabilityTask3CertificationScope = 'PASS'
             hotfixTask1CanonicalAuthority = 'PASS'
             hotfixTask2InvocationContract = 'PASS'
             hotfixTask3RealPlainReview = 'PASS'
-            postTask3CertificationScope = 'PASS'
             task1MavenMultiModule = 'PASS'
             task1DuplicateSymbolAuthority = 'PASS'
             task2PackageCleanup = 'PASS'
@@ -314,6 +446,7 @@ try {
     [IO.File]::WriteAllText($checklistFile, $checklist, [Text.UTF8Encoding]::new($false))
 
     Write-Output "TASK162_POST_HOTFIX_RELEASE_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
+    Write-Output "TASK162_REVIEW_RELIABILITY_FINAL_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
     Write-Output "TASK162_RELEASE_CERTIFICATION PASS exactHead=$exactHead runtimeSha256=$runtimeHash"
 } finally {
     Pop-Location

@@ -404,3 +404,28 @@ workspace dependency finding
 
 既有 FULL/TARGETED scope、workspace dependency 隔离和 `TEST_VALIDITY` 边界保持不变；Task 5 只深化已分发 Spring/MyBatis 规则的证据要求，不新增 Finding 权威。
 
+
+## 1.6.2 Reliability Hotfix — Complete Review Invocation Contract
+
+正式 `harness review` 的 Active Runtime command set 是一个整体，Agent/Orchestrator 不得因为旧白名单遗漏而声称 Runtime 缺少 Finding Certification 或 Report 接口：
+
+```text
+codea-dcep-tools.exe review options --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe review select --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe review units --run-id <runId>
+codea-dcep-tools.exe review dispatch --run-id <runId>
+codea-dcep-tools.exe review certify-findings --input .code-harness/runs/<runId>/requests/<file>.json
+codea-dcep-tools.exe report review --input .code-harness/runs/<runId>/requests/<file>.json
+```
+
+在 Agent 创建正式 request 之前必须先读取对应 machine-readable contract：
+
+```text
+finding-certify-request.json → .code-harness/contracts/finding-certify-request.schema.json
+report-review.json           → .code-harness/contracts/report-review-request.schema.json
+```
+
+`review-output.schema.json` 只描述既有 Review 输出结构，不能作为本请求 schema。
+正式 `report review` 的 Agent-facing request contract 只能是 `report-review-request.schema.json`。正式 report request 的 `findings` 固定为 `[]`；Agent raw Finding 只能进入 `requests/finding-proposals.json`，正式 Finding 必须由 Runtime `review certify-findings` 生成 same-run `analysis/certified-findings.json` + `certified-findings.cert.json` 后再由 `report review` 加载。
+
+`changedFiles=[]` 不是提前成功返回条件。0 Change 仍必须执行 `review units → review dispatch → finding-proposals.json=[] → review certify-findings → report review`，并生成 0 Change / 0 Finding 的正式 `review.md`。

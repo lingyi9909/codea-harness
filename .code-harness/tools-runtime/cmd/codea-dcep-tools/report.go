@@ -13,6 +13,7 @@ import (
 
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/report"
+	"codea-harness-tools/internal/requestcontract"
 	"codea-harness-tools/internal/reviewscope"
 )
 
@@ -50,6 +51,9 @@ func runReviewReport(args []string) error {
 	data, err := os.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("read review report request: %w", err)
+	}
+	if err := requestcontract.Validate("report-review-request.schema.json", data); err != nil {
+		return fmt.Errorf("REPORT_REVIEW_REQUEST_SCHEMA_INVALID: %w", err)
 	}
 	proposal, err := decodeReviewTransport153(data)
 	if err != nil {
@@ -111,18 +115,26 @@ func decodeReviewTransport153(data []byte) (report.ReviewRequest, error) {
 
 func verifyReviewTransportPath153(runID, input string) error {
 	root, err := filepath.Abs(".")
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	inputAbs, err := filepath.Abs(input)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	requestRoot := filepath.Join(root, ".code-harness", "runs", runID, "requests")
 	rel, err := filepath.Rel(requestRoot, inputAbs)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return errors.New("review report input must be under .code-harness/runs/<runId>/requests")
 	}
 	realRoot, err := filepath.EvalSymlinks(requestRoot)
-	if err != nil { return fmt.Errorf("resolve review report request directory: %w", err) }
+	if err != nil {
+		return fmt.Errorf("resolve review report request directory: %w", err)
+	}
 	realInput, err := filepath.EvalSymlinks(inputAbs)
-	if err != nil { return fmt.Errorf("resolve review report input: %w", err) }
+	if err != nil {
+		return fmt.Errorf("resolve review report input: %w", err)
+	}
 	realRel, err := filepath.Rel(realRoot, realInput)
 	if err != nil || realRel == "." || realRel == ".." || strings.HasPrefix(realRel, ".."+string(filepath.Separator)) {
 		return errors.New("review report input must be under .code-harness/runs/<runId>/requests")
@@ -132,7 +144,9 @@ func verifyReviewTransportPath153(runID, input string) error {
 
 func reviewSelectionProposal153(req report.ReviewRequest) ([]byte, error) {
 	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
-	if mode == "" { mode = "FULL" }
+	if mode == "" {
+		mode = "FULL"
+	}
 	selection := reviewscope.Selection{Mode: mode, ScopedFiles: append([]string(nil), req.Scope.ScopedFiles...)}
 	for _, c := range req.Coverage.CallChains {
 		selection.SelectedCallChains = append(selection.SelectedCallChains, reviewscope.CallChain{EntryPoint: c.EntryPoint, Chain: append([]string(nil), c.Chain...)})
@@ -141,7 +155,9 @@ func reviewSelectionProposal153(req report.ReviewRequest) ([]byte, error) {
 		selection.Target = &reviewscope.Target{Symbol: req.Target.Symbol, Kind: req.Target.Kind}
 	}
 	b, err := json.Marshal(selection)
-	if err != nil { return nil, fmt.Errorf("encode review scope proposal: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("encode review scope proposal: %w", err)
+	}
 	return b, nil
 }
 
@@ -161,15 +177,15 @@ func buildCertifiedReviewRequest153(proposal report.ReviewRequest, certified ana
 		out.Scope.ScopedFiles = append([]string(nil), scope.ScopedFiles...)
 	}
 	out.Coverage = report.ReviewCoverage{
-		ReviewedFiles: reviewedPathsForScope153(certified, scope),
-		CallChains: reportCallChains153(certified, scope),
-		SymbolRoleEvidence: reportSymbolEvidence153(certified),
+		ReviewedFiles:        reviewedPathsForScope153(certified, scope),
+		CallChains:           reportCallChains153(certified, scope),
+		SymbolRoleEvidence:   reportSymbolEvidence153(certified),
 		ResourceRoleEvidence: reportResourceEvidence153(certified),
 		ExternalDependencies: append([]string(nil), certified.ExternalDependencies...),
-		Unresolved: reportUnresolved153(certified),
+		Unresolved:           reportUnresolved153(certified),
 		MissingReviewedFiles: append([]string(nil), machine.MissingFiles...),
-		RuntimeErrors: []string{},
-		Status: machine.Status,
+		RuntimeErrors:        []string{},
+		Status:               machine.Status,
 	}
 	if machine.Status != "COMPLETE" {
 		out.Result = report.ResultManualActionRequired
@@ -179,19 +195,25 @@ func buildCertifiedReviewRequest153(proposal report.ReviewRequest, certified ana
 
 func certifiedChangedPaths153(a analysisruntime.ChangeAnalysis) []string {
 	out := make([]string, 0, len(a.ChangedFiles))
-	for _, f := range a.ChangedFiles { out = append(out, filepath.ToSlash(filepath.Clean(f.Path))) }
+	for _, f := range a.ChangedFiles {
+		out = append(out, filepath.ToSlash(filepath.Clean(f.Path)))
+	}
 	return uniqueStrings153(out)
 }
 
 func reviewedPathsForScope153(a analysisruntime.ChangeAnalysis, scope reviewscope.Selection) []string {
 	allowed := map[string]bool{}
 	if scope.Mode == "TARGETED" {
-		for _, p := range scope.ScopedFiles { allowed[filepath.ToSlash(filepath.Clean(p))] = true }
+		for _, p := range scope.ScopedFiles {
+			allowed[filepath.ToSlash(filepath.Clean(p))] = true
+		}
 	}
 	out := []string{}
 	for _, f := range a.ReviewCoverage.ReviewedFiles {
 		p := filepath.ToSlash(filepath.Clean(f.Path))
-		if scope.Mode == "TARGETED" && !allowed[p] { continue }
+		if scope.Mode == "TARGETED" && !allowed[p] {
+			continue
+		}
 		out = append(out, p)
 	}
 	return uniqueStrings153(out)
@@ -216,13 +238,17 @@ func reportSymbolEvidence153(a analysisruntime.ChangeAnalysis) []report.SymbolRo
 	seen := map[string]bool{}
 	for _, loc := range a.SymbolLocations {
 		workspaceID := strings.TrimSpace(loc.Workspace)
-		if workspaceID != "" && workspaceID != "current" { continue }
+		if workspaceID != "" && workspaceID != "current" {
+			continue
+		}
 		switch loc.Source {
 		case "FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS":
 		default:
 			continue
 		}
-		if seen[loc.Symbol] { continue }
+		if seen[loc.Symbol] {
+			continue
+		}
 		seen[loc.Symbol] = true
 		out = append(out, report.SymbolRoleEvidence{Symbol: loc.Symbol, Role: loc.Role, Source: loc.Source})
 	}
@@ -241,9 +267,15 @@ func reportUnresolved153(a analysisruntime.ChangeAnalysis) []string {
 	out := []string{}
 	for _, u := range a.ReviewCoverage.UnresolvedSymbols {
 		item := strings.TrimSpace(u.Symbol)
-		if strings.TrimSpace(u.From) != "" { item += " <- " + strings.TrimSpace(u.From) }
-		if strings.TrimSpace(u.Reason) != "" { item += ": " + strings.TrimSpace(u.Reason) }
-		if item != "" { out = append(out, item) }
+		if strings.TrimSpace(u.From) != "" {
+			item += " <- " + strings.TrimSpace(u.From)
+		}
+		if strings.TrimSpace(u.Reason) != "" {
+			item += ": " + strings.TrimSpace(u.Reason)
+		}
+		if item != "" {
+			out = append(out, item)
+		}
 	}
 	return uniqueStrings153(out)
 }
@@ -253,7 +285,9 @@ func uniqueStrings153(in []string) []string {
 	out := []string{}
 	for _, value := range in {
 		value = strings.TrimSpace(value)
-		if value == "" || seen[value] { continue }
+		if value == "" || seen[value] {
+			continue
+		}
 		seen[value] = true
 		out = append(out, value)
 	}

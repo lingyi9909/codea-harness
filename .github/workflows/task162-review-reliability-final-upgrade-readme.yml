@@ -1,0 +1,40 @@
+name: task162-review-reliability-final-upgrade-readme
+
+on:
+  push:
+    branches: [release/1.6.2-review-reliability-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade-readme:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Review Run README upgrade boundary
+        shell: pwsh
+        run: |
+          Push-Location .code-harness/tools-runtime
+          try {
+            go test -count=1 -run 'Test162ReviewReliability' -v ./internal/upgrade
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Upgrade README exact-head marker
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_REVIEW_RELIABILITY_FINAL_UPGRADE_README_EXACT_HEAD PASS head=$head"

@@ -1,0 +1,132 @@
+name: task162-review-reliability-task3
+
+on:
+  push:
+    branches: [hotfix/1.6.2-review-reliability-task3]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  task3-certification:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Review Run Chinese README contract
+        shell: pwsh
+        run: ./.github/scripts/task162-review-reliability-task3-run-readme-regression.ps1
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Focused Review Reliability Task 1 and Task 2 tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 -run 'Test162ReviewReliabilityTask(1|2)' -v ./cmd/codea-dcep-tools
+
+      - name: Full Go regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./...
+
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
+
+      - name: Task 1 invocation contract regression
+        shell: pwsh
+        run: ./.github/scripts/task162-review-reliability-task1-contract-regression.ps1
+
+      - name: Task 2 fresh lifecycle contract regression
+        shell: pwsh
+        run: ./.github/scripts/task162-review-reliability-task2-contract-regression.ps1
+
+      - name: Build exact-head Windows Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:GOOS = 'windows'
+          $env:GOARCH = 'amd64'
+          go build -trimpath -ldflags '-s -w' -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Provision pinned ast-grep 0.42.1
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-task3.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-task3'
+          Invoke-WebRequest -Uri "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          $out = (& ./.code-harness/bin/ast-grep.exe --version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch '0\.42\.1') { throw "ast-grep smoke failed: $out" }
+
+      - name: Provision pinned OpenCode 1.18.25
+        shell: pwsh
+        run: |
+          npm install -g opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $out = (& opencode --version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch '1\.18\.25') { throw "OpenCode version mismatch: $out" }
+
+      - name: Compile retained model servers
+        shell: pwsh
+        run: |
+          python -m py_compile ./.github/scripts/task162-review-reliability-task1/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m py_compile ./.github/scripts/task162-review-reliability-task2/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m py_compile ./.github/scripts/task162-hotfix-task3/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retained Task 1 real Review invocation E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-review-reliability-task1-real-agent-e2e-v2.ps1
+
+      - name: Retained Task 2 same-session fresh lifecycle E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-review-reliability-task2-real-agent-e2e.ps1
+
+      - name: Retained real plain harness review E2E
+        shell: pwsh
+        run: ./.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1
+
+      - name: Exact-head verification
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout is not exact head: $head" }
+          Write-Output "TASK162_REVIEW_RELIABILITY_TASK3_EXACT_HEAD PASS head=$head"
+
+      - name: Upload retained Agent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task162-review-reliability-task3-agent-evidence
+          path: |
+            .task1-e2e-artifacts
+            .task2-e2e-artifacts
+            .task3-e2e-artifacts
+          if-no-files-found: warn
+          include-hidden-files: true
