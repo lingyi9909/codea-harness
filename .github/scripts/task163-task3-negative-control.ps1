@@ -41,6 +41,9 @@ finally {
 if ($exitCode -eq 0) {
     throw "TASK163_NEGATIVE_CONTROL_INVALID: same E2E still GREEN without Task 3 hard-stop contract. The mock/test is implementing the stop itself.`n$output"
 }
+if ($output -notmatch 'TASK163_CONTRACT_GATE_MISSING: Turn 1 illegally produced review select request') {
+    throw "TASK163_NEGATIVE_CONTROL_INVALID: E2E failed without Task 3 contract, but not because it crossed USER_SELECTION in the same Assistant Turn.`n$output"
+}
 
 Write-Output 'TASK163_TASK3_NEGATIVE_CONTROL_RED PASS'
 Write-Output 'TASK163_TASK3_CONTRACT_DRIVEN_HARD_STOP PROVEN'
