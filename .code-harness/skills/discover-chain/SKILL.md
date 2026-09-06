@@ -37,7 +37,7 @@ PROJECT DISCOVERY 不得：
 - 创建 `analysis/change-analysis.json` 或 ChangeAnalysis certification；
 - 修改 Review Snapshot / Canonical ChangeSet 算法；
 - 创建 `review.md`；
-- 自动写入 `.code-harness/chains/**`；
+- 不得写入 `.code-harness/chains/**`；
 - 根据 `ServiceImpl`、`Mapper` 等类名后缀猜测语义关系。
 
 公开 discover 的 Controlled Runtime request 固定为 run-scoped request：
