@@ -21,65 +21,24 @@ jobs:
 
       - name: Append Task 3 hard-stop contracts
         shell: pwsh
+        env:
+          S_AGENTS: CiMjIDEuNi4zIE11bHRpLUNoYWluIFJldmlldyBBc3Npc3RhbnQgVHVybiBHYXRlCgpgVEFTSzE2M19VU0VSX1NFTEVDVElPTl9UVVJOX0hBUkRfU1RPUGAKCuW9kyBwbGFpbiBgaGFybmVzcyByZXZpZXdgIOeahCBSdW50aW1lIGByZXZpZXcgb3B0aW9uc2Ag6L+U5ZueIGBkZWNpc2lvbj1VU0VSX1NFTEVDVElPTmDvvIgyKyB2YWxpZCBDaGFpbnPvvInml7bvvIzlvZPliY0gQXNzaXN0YW50IFR1cm4g5b+F6aG75Y+q5bGV56S6IFJ1bnRpbWUg55Sf5oiQ55qE6YCJ5oup5bm26K+i6Zeu55So5oi377yM54S25ZCO56uL5Y2z57uT5p2f77yb5Y+q5pyJKirkuIvkuIDmnaHnlKjmiLfmtojmga8qKuaPkOS+m+aYjuehrumAieaLqeWQjuaJjeWFgeiuuOe7p+e7rSBzYW1lLXJ1biBSZXZpZXfjgIIKCuWcqOS4i+S4gOadoeeUqOaIt+a2iOaBr+WIsOi+vuWJje+8jOemgeatouiwg+eUqCBgcmV2aWV3IHNlbGVjdGDjgIFgcmV2aWV3IHVuaXRzYOOAgWByZXZpZXcgZGlzcGF0Y2hg44CB5Yib5bu6IGBmaW5kaW5nLXByb3Bvc2Fscy5qc29uYOOAgeaJp+ihjCBGaW5kaW5nIENlcnRpZmljYXRpb24g5oiWIGByZXBvcnQgcmV2aWV3YOOAguS4jeW+l+aKiiBBZ2VudCDoh6rlt7HpgInmi6nnmoQgRlVMTCAvIFRBUkdFVEVEIC8gTElTVCDlhpLlhYXnlKjmiLfpgInmi6nvvIzkuZ/kuI3lvpfpu5jorqQgQUxM44CCQVVUT19GVUxMIOS4jiBBVVRPX1NJTkdMRSDnmoTml6LmnInmnLrlmajnm7TpgJrop4TliJnkv53mjIHkuI3lj5jjgIIK
+          S_ORCH: CiMjIDEuNi4zIE11bHRpLUNoYWluIFJldmlldyBUdXJuIEhhcmQgU3RvcAoKYFRBU0sxNjNfVVNFUl9TRUxFQ1RJT05fVFVSTl9IQVJEX1NUT1BgCgrlvZMgUnVudGltZSBgcmV2aWV3IG9wdGlvbnNgIOi/lOWbniBgZGVjaXNpb249VVNFUl9TRUxFQ1RJT05gIOaXtu+8jE9yY2hlc3RyYXRvciDlv4XpobvmiorlvZPliY0gUnVudGltZSDnlJ/miJDnmoQgRlVMTCAvIExJU1Qg5YWl5Y+j5ZKMIEMxLi5DbiBDaGFpbiDpgInpobnlsZXnpLrnu5nnlKjmiLflubbopoHmsYLmmI7noa7pgInmi6nvvIzpmo/lkI4qKueri+WNs+e7k+adn+W9k+WJjSBBc3Npc3RhbnQgVHVybioq44CC5Y+q5pyJKirkuIvkuIDmnaHnlKjmiLfmtojmga8qKuaYjuehruihqOi+vuKAnOWFqOmDqOivhOWuoeKAneOAgeWFt+S9kyBSdW50aW1lIHNlbGVjdGlvbklkcy/nvJblj7fvvIzmiJbigJzku4Xmn6XnnIvosIPnlKjpk77igJ3lkI7vvIzmiY3lhYHorrjnu6fnu63lvZPliY0gc2FtZS1ydW4gYXV0aG9yaXR5IGNoYWlu44CCCgrlnKggVVNFUl9TRUxFQ1RJT04g55qE5ZCM5LiAIEFzc2lzdGFudCBUdXJuIOWGheS4gOW+i+emgeatou+8mgoKYGBgdGV4dApyZXZpZXcgc2VsZWN0CnJldmlldyB1bml0cwpyZXZpZXcgZGlzcGF0Y2gKZmluZGluZy1wcm9wb3NhbHMKcmV2aWV3IGNlcnRpZnktZmluZGluZ3MKcmVwb3J0IHJldmlldwpgYGAKCuS4jeW+l+iHquWKqOaehOmAoCBGVUxM77yM5LiN5b6X6Ieq5Yqo5p6E6YCgIFRBUkdFVEVE77yM5Lmf5LiN5b6X6buY6K6kIExJU1QvQUxM44CC55So5oi35LiL5LiA5p2h5raI5oGv6YCJ5oup4oCc5YWo6YOo6K+E5a6h4oCd5pe25omN5p6E6YCg5b2T5YmNIGBvcHRpb25zSGFzaGAg57uR5a6a55qEIEZVTEwgc2VsZWN0aW9u77yb6YCJ5oup5LiA5Liq5oiW5aSa5LiqIEMxLi5DbiDml7bmiY3mnoTpgKAgVEFSR0VURUQgc2VsZWN0aW9u77yb5piO56Gu6YCJ5oup5LuF5p+l55yL6LCD55So6ZO+5pe25omN5p6E6YCgIExJU1TjgILnqbrpgInmi6kv5Y+W5raI5b+F6aG7IFNUT1DjgILoi6XkuIvkuIDmnaHnlKjmiLfmtojmga/liLDovr7ml7YgY3VycmVudCBvcHRpb25zSGFzaCAvIHNhbWUtcnVuIGF1dGhvcml0eSDlt7Igc3RhbGXvvIzlv4XpobsgZmFpbCBjbG9zZWQg5oiW6YeN5bu6IG9wdGlvbnPvvIznpoHmraLlpI3nlKjml6fpgInmi6njgIIKCuivpSBHYXRlIOaYryBBZ2VudC9PcmNoZXN0cmF0b3IgdHVybiDooYzkuLrnuqbmnZ/vvJvkuI3lvpflo7Dnp7AgQ29udHJvbGxlZCBSdW50aW1lIOiDveWvhueggeWtpuivgeaYjuafkOS4qiBzZWxlY3Rpb24g5piv55yf5a6e55So5oi36L6T5YWl44CCUnVudGltZSDljp/mnIkgb3B0aW9uc0hhc2jjgIFzZWxlY3Rpb25JZOOAgXNjb3BlIHZlcmlmaWNhdGlvbiDku43otJ/otKPmnLrlmaggYXV0aG9yaXR544CCCg==
+          S_REVIEWER: CiMjIDEuNi4zIE11bHRpLUNoYWluIFJldmlldyBUdXJuIEdhdGUKCmBUQVNLMTYzX1VTRVJfU0VMRUNUSU9OX1RVUk5fSEFSRF9TVE9QYAoK5b2TIHNhbWUtcnVuIFJ1bnRpbWUgYHJldmlldyBvcHRpb25zYCDov5Tlm54gYFVTRVJfU0VMRUNUSU9OYCDml7bvvIxSZXZpZXdlciDlv4XpobvmiormjqfliLbmnYPkuqTlm54gT3JjaGVzdHJhdG9yIOi/m+ihjOeUqOaIt+mAieaLqe+8jOW5tueri+WNs+WBnOatouW9k+WJjSBBc3Npc3RhbnQgVHVybiDnmoQgUmV2aWV3IOaJp+ihjOOAguWcqOaUtuWIsCoq5LiL5LiA5p2h55So5oi35raI5oGvKirlubbnlLEgUnVudGltZSBgcmV2aWV3IHNlbGVjdGAg5b2i5oiQIHZlcmlmaWVkIEZVTEwvVEFSR0VURUQvTElTVCBzY29wZSDkuYvliY3vvIzkuI3lvpfosIPnlKggYHJldmlldy1jb2RlYO+8jCoq5LiN5b6X6L+b5YWlIEZpbmRpbmcgUHJvcG9zYWwqKu+8jOS4jeW+l+WIm+W7uiBgZmluZGluZy1wcm9wb3NhbHMuanNvbmDvvIzkuZ/kuI3lvpfop6blj5EgRmluZGluZyBDZXJ0aWZpY2F0aW9uIOaIliBSZXZpZXcgUmVwb3J044CCCgpBVVRPX0ZVTEwgLyBBVVRPX1NJTkdMRSDkv53mjIHml6LmnInoh6rliqjnu6fnu63or63kuYnvvJvmnKwgR2F0ZSDlj6rnuqbmnZ8gVVNFUl9TRUxFQ1RJT04g5ZKM5pi+5byP5LiL5ri4IHRhcmdldCDnmoTlpJrkuIrmuLjpgInmi6nlnLrmma/jgIIK
+          S_SKILL: CiMjIDEuNi4zIFVTRVJfU0VMRUNUSU9OIOWJjee9rumXqOemgQoKYFRBU0sxNjNfVVNFUl9TRUxFQ1RJT05fVFVSTl9IQVJEX1NUT1BgCgrlpoLmnpzlvZPliY0gc2FtZS1ydW4gYHJldmlldy1vcHRpb25zLmpzb25gIOeahCBkZWNpc2lvbiDku43kuLogYFVTRVJfU0VMRUNUSU9OYO+8jOS4lOWwmuacquWcqCoq5LiL5LiA5p2h55So5oi35raI5oGvKirkuYvlkI7pgJrov4cgUnVudGltZSBgcmV2aWV3IHNlbGVjdGAg55Sf5oiQIHZlcmlmaWVkIEZVTEwvVEFSR0VURUQgc2NvcGXvvIzliJkqKuS4jeW+l+aJp+ihjOacrCBTa2lsbCoq77yM5LiN5b6X6K+75Y+WIFJldmlld1VuaXQg5YGaIEZpbmRpbmcgUmV2aWV377yM5Lmf5LiN5b6X55Sf5oiQIGBmaW5kaW5nLXByb3Bvc2Fscy5qc29uYOOAgkFnZW50IOiHquihjOaOqOaWrSBGVUxML1RBUkdFVEVEL0xJU1Qg5oiW6buY6K6kIEFMTCDkuI3og73op6PpmaTmnKzpl6jnpoHjgIIK
         run: |
-          $targets = @{
-            '.code-harness/AGENTS.md' = @'
-
-## 1.6.3 Multi-Chain Review Assistant Turn Gate
-
-`TASK163_USER_SELECTION_TURN_HARD_STOP`
-
-当 plain `harness review` 的 Runtime `review options` 返回 `decision=USER_SELECTION`（2+ valid Chains）时，当前 Assistant Turn 必须只展示 Runtime 生成的选择并询问用户，然后立即结束；只有**下一条用户消息**提供明确选择后才允许继续 same-run Review。
-
-在下一条用户消息到达前，禁止调用 `review select`、`review units`、`review dispatch`、创建 `finding-proposals.json`、执行 Finding Certification 或 `report review`。不得把 Agent 自己选择的 FULL / TARGETED / LIST 冒充用户选择，也不得默认 ALL。AUTO_FULL 与 AUTO_SINGLE 的既有机器直通规则保持不变。
-'@
-            '.code-harness/agents/orchestrator.md' = @'
-
-## 1.6.3 Multi-Chain Review Turn Hard Stop
-
-`TASK163_USER_SELECTION_TURN_HARD_STOP`
-
-当 Runtime `review options` 返回 `decision=USER_SELECTION` 时，Orchestrator 必须把当前 Runtime 生成的 FULL / LIST 入口和 C1..Cn Chain 选项展示给用户并要求明确选择，随后**立即结束当前 Assistant Turn**。只有**下一条用户消息**明确表达“全部评审”、具体 Runtime selectionIds/编号，或“仅查看调用链”后，才允许继续当前 same-run authority chain。
-
-在 USER_SELECTION 的同一 Assistant Turn 内一律禁止：
-
-```text
-review select
-review units
-review dispatch
-finding-proposals
-review certify-findings
-report review
-```
-
-不得自动构造 FULL，不得自动构造 TARGETED，也不得默认 LIST/ALL。用户下一条消息选择“全部评审”时才构造当前 `optionsHash` 绑定的 FULL selection；选择一个或多个 C1..Cn 时才构造 TARGETED selection；明确选择仅查看调用链时才构造 LIST。空选择/取消必须 STOP。若下一条用户消息到达时 current optionsHash / same-run authority 已 stale，必须 fail closed 或重建 options，禁止复用旧选择。
-
-该 Gate 是 Agent/Orchestrator turn 行为约束；不得声称 Controlled Runtime 能密码学证明某个 selection 是真实用户输入。Runtime 原有 optionsHash、selectionId、scope verification 仍负责机器 authority。
-'@
-            '.code-harness/agents/reviewer.md' = @'
-
-## 1.6.3 Multi-Chain Review Turn Gate
-
-`TASK163_USER_SELECTION_TURN_HARD_STOP`
-
-当 same-run Runtime `review options` 返回 `USER_SELECTION` 时，Reviewer 必须把控制权交回 Orchestrator 进行用户选择，并立即停止当前 Assistant Turn 的 Review 执行。在收到**下一条用户消息**并由 Runtime `review select` 形成 verified FULL/TARGETED/LIST scope 之前，不得调用 `review-code`，**不得进入 Finding Proposal**，不得创建 `finding-proposals.json`，也不得触发 Finding Certification 或 Review Report。
-
-AUTO_FULL / AUTO_SINGLE 保持既有自动继续语义；本 Gate 只约束 USER_SELECTION 和显式下游 target 的多上游选择场景。
-'@
-            '.code-harness/skills/review-code/SKILL.md' = @'
-
-## 1.6.3 USER_SELECTION 前置门禁
-
-`TASK163_USER_SELECTION_TURN_HARD_STOP`
-
-如果当前 same-run `review-options.json` 的 decision 仍为 `USER_SELECTION`，且尚未在**下一条用户消息**之后通过 Runtime `review select` 生成 verified FULL/TARGETED scope，则**不得执行本 Skill**，不得读取 ReviewUnit 做 Finding Review，也不得生成 `finding-proposals.json`。Agent 自行推断 FULL/TARGETED/LIST 或默认 ALL 不能解除本门禁。
-'@
-          }
-          foreach ($path in $targets.Keys) {
+          $pairs = @(
+            @('.code-harness/AGENTS.md', $env:S_AGENTS),
+            @('.code-harness/agents/orchestrator.md', $env:S_ORCH),
+            @('.code-harness/agents/reviewer.md', $env:S_REVIEWER),
+            @('.code-harness/skills/review-code/SKILL.md', $env:S_SKILL)
+          )
+          foreach ($pair in $pairs) {
+            $path = $pair[0]
             $text = Get-Content -Raw $path
-            if (-not $text.Contains('TASK163_USER_SELECTION_TURN_HARD_STOP')) {
-              Add-Content -Path $path -Value $targets[$path] -Encoding utf8
-            }
+            if ($text.Contains('TASK163_USER_SELECTION_TURN_HARD_STOP')) { continue }
+            $section = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($pair[1]))
+            [System.IO.File]::AppendAllText($path, $section, [System.Text.UTF8Encoding]::new($false))
           }
 
       - name: Commit active contract changes
