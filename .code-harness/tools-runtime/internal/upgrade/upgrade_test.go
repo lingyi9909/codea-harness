@@ -99,6 +99,8 @@ func make12Pair(t *testing.T, config string) (string, string) {
 
 func TestUpgradeReplacesManagedTreeAndReportsStaleFiles(t *testing.T) {
 	source, target := makePair(t, validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n"))
+	writeInventory(t, target)
+	writeInventory(t, source)
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
 	if result.Status != StatusUpgraded {
 		t.Fatalf("result=%+v", result)

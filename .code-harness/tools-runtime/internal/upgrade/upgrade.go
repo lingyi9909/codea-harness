@@ -108,7 +108,7 @@ var requiredSource = []string{
 var managedFiles = map[string]bool{
 	"AGENTS.md": true, "bootstrap.md": true, "upgrade.md": true, "VERSION": true, ".gitignore": true,
 	"harness.template.yaml": true, "project.template.md": true, "database.template.yaml": true,
-	"runs/README.md": true,
+	"runs/README.md": true, "RELEASE-MANIFEST.json": true,
 }
 var managedDirs = []string{"agents", "skills", "contracts", "tools", "bin", "tools-runtime"}
 
@@ -149,6 +149,22 @@ func Run(o Options) Result {
 		if _, err := os.Stat(filepath.Join(o.SourceDir, rel)); err != nil {
 			return failManual(r, fmt.Errorf("incomplete upgrade package: %s", rel))
 		}
+	}
+
+	sourceInventory, err := readInventory(o.SourceDir, true)
+	if err != nil {
+		return failManual(r, err)
+	}
+	installedInventory, err := readInventory(o.TargetDir, false)
+	if err != nil {
+		return failManual(r, err)
+	}
+	if installedInventory != nil && sourceInventory == nil {
+		return failManual(r, fmt.Errorf("upgrade package missing %s ownership inventory", manifestPath))
+	}
+
+	if err := validateInventoryCollisions(o.SourceDir, o.TargetDir, installedInventory); err != nil {
+		return failManual(r, err)
 	}
 
 	cfgPath := filepath.Join(o.TargetDir, "harness.yaml")
@@ -193,9 +209,9 @@ func Run(o Options) Result {
 		return failManual(r, fmt.Errorf("stage target: %w", err))
 	}
 
-	// True replace semantics happen in stage first: remove every framework-owned path,
-	// then copy only the new package's framework-owned paths.
-	if err := removeManaged(stage); err != nil {
+	// Only explicit installed inventory establishes ownership for removals.
+	// Unknown files, including legacy installations without inventory, survive.
+	if err := removeInventory(stage, installedInventory); err != nil {
 		cleanup(stage, backup)
 		return failManual(r, fmt.Errorf("stage remove managed: %w", err))
 	}
@@ -232,15 +248,7 @@ func Run(o Options) Result {
 	// Windows executable is replaced last using rename-to-temp + staged rename,
 	// never by writing over the live image.
 	if err := applyStagedDelta(stage, o.TargetDir, o.RunningExecutable, updated, removed); err != nil {
-		rbErr := restoreFromBackup(backup, o.TargetDir, o.RunningExecutable)
-		r.Status = StatusUpgradeFailed
-		r.RollbackPerformed = rbErr == nil
-		r.Errors = []string{err.Error()}
-		if rbErr != nil {
-			r.Errors = append(r.Errors, "rollback: "+rbErr.Error())
-		}
-		cleanup(stage, backup)
-		return r
+		return failAndRollback(r, err, stage, backup, o.TargetDir, o.RunningExecutable, updated, removed)
 	}
 
 	// When the 1.4 upgrade package runtime executes the transaction itself on Windows,
@@ -248,15 +256,7 @@ func Run(o Options) Result {
 	// source tree. Installed-runtime upgrades do not need this step.
 	parkedRuntime, err := parkRunningExecutableOutsideSource(o.SourceDir, o.RunningExecutable)
 	if err != nil {
-		rbErr := restoreFromBackup(backup, o.TargetDir, o.RunningExecutable)
-		r.Status = StatusUpgradeFailed
-		r.RollbackPerformed = rbErr == nil
-		r.Errors = []string{err.Error()}
-		if rbErr != nil {
-			r.Errors = append(r.Errors, "rollback: "+rbErr.Error())
-		}
-		cleanup(stage, backup)
-		return r
+		return failAndRollback(r, err, stage, backup, o.TargetDir, o.RunningExecutable, updated, removed)
 	}
 
 	// Success cleanup semantics: stage + backup + consumed source package are removed.
@@ -271,6 +271,21 @@ func Run(o Options) Result {
 		_ = os.Remove(parkedRuntime)
 	}
 	r.Status = StatusUpgraded
+	return r
+}
+
+func failAndRollback(r Result, cause error, stage, backup, target, running string, delta ...[]string) Result {
+	r.Status = StatusUpgradeFailed
+	r.Errors = []string{cause.Error()}
+	if err := restoreFromBackup(backup, target, running, delta...); err != nil {
+		r.Errors = append(r.Errors,
+			"rollback: "+err.Error(),
+			fmt.Sprintf("recovery artifacts retained: backup=%s stage=%s", backup, stage),
+		)
+		return r
+	}
+	r.RollbackPerformed = true
+	cleanup(stage, backup)
 	return r
 }
 
@@ -349,11 +364,15 @@ func difference(old, next []string) []string {
 }
 
 func managedDelta(stage, target string) (updated, removed []string, err error) {
-	newFiles, err := listManagedFiles(stage)
+	return treeDelta(stage, target, listManagedFiles)
+}
+
+func treeDelta(stage, target string, listFiles func(string) ([]string, error)) (updated, removed []string, err error) {
+	newFiles, err := listFiles(stage)
 	if err != nil {
 		return nil, nil, err
 	}
-	oldFiles, err := listManagedFiles(target)
+	oldFiles, err := listFiles(target)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -485,8 +504,8 @@ func applyStagedDelta(stage, target, running string, updated, removed []string) 
 		if err := os.Remove(filepath.Join(target, filepath.FromSlash(rel))); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove stale %s: %w", rel, err)
 		}
+		removeEmptyParents(target, rel)
 	}
-	removeEmptyManagedDirs(target)
 
 	selfRel := "bin/codea-dcep-tools.exe"
 	selfChanged := false
@@ -531,12 +550,24 @@ func applyStagedDelta(stage, target, running string, updated, removed []string) 
 }
 
 func stagedReplaceFile(src, dst string, mode fs.FileMode, self bool, running string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	dir := filepath.Dir(dst)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp := dst + ".codea-new"
-	_ = os.Remove(tmp)
+	tmpFile, err := os.CreateTemp(dir, ".codea-new-*")
+	if err != nil {
+		return err
+	}
+	tmp := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	defer os.Remove(tmp)
 	if err := copyFile(src, tmp, mode); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, mode.Perm()); err != nil {
 		return err
 	}
 	if !self {
@@ -599,31 +630,40 @@ func samePath(a, b string) bool {
 	return filepath.Clean(aa) == filepath.Clean(bb)
 }
 
-func restoreFromBackup(backup, target, running string) error {
+func restoreFromBackup(backup, target, running string, delta ...[]string) error {
 	if _, err := os.Stat(backup); err != nil {
 		return err
 	}
-	return applyStaged(backup, target, running)
-}
-
-func removeEmptyManagedDirs(root string) {
-	for _, rel := range managedDirs {
-		removeEmpty(filepath.Join(root, rel))
-	}
-}
-func removeEmpty(p string) {
-	entries, err := os.ReadDir(p)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			removeEmpty(filepath.Join(p, e.Name()))
+	listFiles := listManagedFiles
+	if len(delta) != 0 {
+		if len(delta) != 2 {
+			return fmt.Errorf("rollback requires updated and removed transaction paths")
+		}
+		listFiles = func(root string) ([]string, error) {
+			return listAffectedSnapshotFiles(root, delta[0], delta[1])
 		}
 	}
-	entries, _ = os.ReadDir(p)
-	if len(entries) == 0 {
-		_ = os.Remove(p)
+	updated, removed, err := treeDelta(backup, target, listFiles)
+	if err != nil {
+		return err
+	}
+	if err := applyStagedDelta(backup, target, running, updated, removed); err != nil {
+		return err
+	}
+	if len(delta) != 0 {
+		return restoreAffectedDirectoryModes(backup, target, delta[0], delta[1])
+	}
+	return nil
+}
+
+func removeEmptyParents(root, rel string) {
+	root = filepath.Clean(root)
+	dir := filepath.Dir(filepath.Join(root, filepath.FromSlash(rel)))
+	for dir != root && dir != filepath.Dir(dir) {
+		if err := os.Remove(dir); err != nil {
+			return
+		}
+		dir = filepath.Dir(dir)
 	}
 }
 
@@ -634,7 +674,14 @@ func copyTree(src, dst string, allow func(string, fs.DirEntry) bool) error {
 		}
 		rel, _ := filepath.Rel(src, p)
 		if rel == "." {
-			return os.MkdirAll(dst, 0o755)
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
+				return err
+			}
+			return os.Chmod(dst, info.Mode().Perm())
 		}
 		rel = filepath.ToSlash(rel)
 		if allow != nil && !allow(rel, d) {
@@ -645,7 +692,14 @@ func copyTree(src, dst string, allow func(string, fs.DirEntry) bool) error {
 		}
 		to := filepath.Join(dst, filepath.FromSlash(rel))
 		if d.IsDir() {
-			return os.MkdirAll(to, 0o755)
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(to, info.Mode().Perm()); err != nil {
+				return err
+			}
+			return os.Chmod(to, info.Mode().Perm())
 		}
 		info, err := d.Info()
 		if err != nil {

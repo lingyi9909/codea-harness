@@ -99,6 +99,8 @@ func Test163Task4UpgradeDeltaAddsUpdatesAndRemovesOnlyChangedManagedFiles(t *tes
 	write(t, target, "tools/removed.txt", "obsolete\n")
 	unchangedPath := filepath.Join(target, "AGENTS.md")
 	unchangedBefore := snapshotIdentity(t, unchangedPath)
+	writeInventory(t, target)
+	writeInventory(t, source)
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
 	if result.Status != StatusUpgraded {
@@ -106,7 +108,7 @@ func Test163Task4UpgradeDeltaAddsUpdatesAndRemovesOnlyChangedManagedFiles(t *tes
 	}
 	updated := append([]string(nil), result.UpdatedFiles...)
 	sort.Strings(updated)
-	wantUpdated := []string{"VERSION", "contracts/added.schema.json", "skills/x/SKILL.md"}
+	wantUpdated := []string{"RELEASE-MANIFEST.json", "VERSION", "contracts/added.schema.json", "skills/x/SKILL.md"}
 	if !reflect.DeepEqual(updated, wantUpdated) {
 		t.Fatalf("updatedFiles=%v want=%v", updated, wantUpdated)
 	}
@@ -151,6 +153,8 @@ func Test163Task4UpgradeDeltaSupportsManagedDirectoryToFileTransition(t *testing
 	source, target := makeDeltaPair(t)
 	write(t, target, "tools/shape/old.txt", "old\n")
 	write(t, source, "tools/shape", "new file\n")
+	writeInventory(t, target)
+	writeInventory(t, source)
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
 	if result.Status != StatusUpgraded {
@@ -165,6 +169,8 @@ func Test163Task4UpgradeDeltaSupportsManagedFileToDirectoryTransition(t *testing
 	source, target := makeDeltaPair(t)
 	write(t, target, "tools/shape", "old file\n")
 	write(t, source, "tools/shape/new.txt", "new\n")
+	writeInventory(t, target)
+	writeInventory(t, source)
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
 	if result.Status != StatusUpgraded {

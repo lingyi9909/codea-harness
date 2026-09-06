@@ -45,7 +45,9 @@ jobs:
           git archive --format=zip --output $archive $base .code-harness
           if ($LASTEXITCODE -ne 0) { throw 'cannot archive accepted baseline' }
           Expand-Archive $archive $redRoot -Force
-          Copy-Item '.code-harness/tools-runtime/internal/upgrade/task163_delta_apply_test.go' (Join-Path $redRoot '.code-harness/tools-runtime/internal/upgrade/')
+          $probe = git show '87aa5db763a39425d2f567a6c807a6bd2fda44a8:.code-harness/tools-runtime/internal/upgrade/task163_delta_apply_test.go'
+          if ($LASTEXITCODE -ne 0) { throw 'cannot read accepted Task 4 delta RED probe' }
+          $probe | Set-Content (Join-Path $redRoot '.code-harness/tools-runtime/internal/upgrade/task163_delta_apply_test.go') -Encoding utf8
           Push-Location (Join-Path $redRoot '.code-harness/tools-runtime')
           try {
             $lines = @(& go test -count=1 -v ./internal/upgrade -run '^Test163Task4' 2>&1)
@@ -60,11 +62,36 @@ jobs:
           } finally { Pop-Location }
           $global:LASTEXITCODE = 0
 
+      - name: Replay acceptance-blocker RED on rejected Task 4 HEAD
+        shell: pwsh
+        run: |
+          $rejected = '87aa5db763a39425d2f567a6c807a6bd2fda44a8'
+          $redRoot = Join-Path $env:RUNNER_TEMP 'task163-task4-blocker-red'
+          $archive = Join-Path $env:RUNNER_TEMP 'task163-task4-blocker-red.zip'
+          git archive --format=zip --output $archive $rejected .code-harness
+          if ($LASTEXITCODE -ne 0) { throw 'cannot archive rejected Task 4 HEAD' }
+          Expand-Archive $archive $redRoot -Force
+          Copy-Item '.github/scripts/task163-task4-acceptance-red-probe_test.go' (Join-Path $redRoot '.code-harness/tools-runtime/internal/upgrade/')
+          Push-Location (Join-Path $redRoot '.code-harness/tools-runtime')
+          try {
+            $lines = @(& go test -count=1 -v ./internal/upgrade -run '^Test163AcceptanceRED' 2>&1)
+            $redExit = $LASTEXITCODE
+            $text = $lines | Out-String
+            $lines | ForEach-Object { Write-Output $_ }
+            if ($redExit -eq 0) { throw 'RED invalid: rejected Task 4 HEAD passed acceptance-blocker probes' }
+            if ($text -match 'build failed|undefined:|syntax error') { throw 'RED invalid: compilation error' }
+            foreach ($expected in @('long filename:','unknown user file lost','installed manifest not updated','invalid inventory accepted')) {
+              if ($text -notmatch [regex]::Escape($expected)) { throw "RED missing expected failure: $expected" }
+            }
+            Write-Output "TASK163_TASK4_BLOCKER_RED PASS baseline=$rejected testsFrom=$env:GITHUB_SHA"
+          } finally { Pop-Location }
+          $global:LASTEXITCODE = 0
+
       - name: Focused delta and real Windows executable tests
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 -v ./internal/upgrade -run '^Test163Task4'
+          go test -count=1 -v ./internal/upgrade -run '^Test163Task4|^Test163Blocker1'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Full upgrade regression
@@ -136,7 +163,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'cannot audit scope' }
           foreach ($path in $changed) {
             if ($path -notmatch '^\.code-harness/tools-runtime/internal/upgrade/' -and
-                $path -notin @('.code-harness/contracts/upgrade-result.schema.json', '.code-harness/upgrade.md', '.github/scripts/task163-task4-package-regression.ps1', '.github/workflows/task163-task4-delta-upgrade.yml') -and
+                $path -notin @('.code-harness/contracts/upgrade-result.schema.json', '.code-harness/upgrade.md', '.github/scripts/task162-task2-package.ps1', '.github/scripts/task163-task4-acceptance-red-probe_test.go', '.github/scripts/task163-task4-package-regression.ps1', '.github/workflows/task163-task4-delta-upgrade.yml') -and
                 $path -notmatch '^docs/superpowers/(plans|evidence)/2026-09-06-codea-harness-1\.6\.3-task4-') {
               throw "Task 4 scope violation: $path"
             }

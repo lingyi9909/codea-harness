@@ -95,12 +95,16 @@ func Test163Task4WindowsApplyFailureAfterRuntimeUpdateRollsBackAllBytes(t *testi
 	write(t, source, "VERSION", "1.6.3\n")
 	write(t, target, "AGENTS.md", "installed agents\n")
 	write(t, target, "bin/codea-dcep-tools.exe", "installed runtime\n")
+	writeInventory(t, target)
+	writeInventory(t, source)
 	agentPath := filepath.Join(target, "AGENTS.md")
 	runtimePath := filepath.Join(target, "bin", "codea-dcep-tools.exe")
 	configPath := filepath.Join(target, "harness.yaml")
+	manifestPath := filepath.Join(target, "RELEASE-MANIFEST.json")
 	wantAgent, _ := os.ReadFile(agentPath)
 	wantRuntime, _ := os.ReadFile(runtimePath)
 	wantConfig, _ := os.ReadFile(configPath)
+	wantManifest, _ := os.ReadFile(manifestPath)
 	runtimeBefore := snapshotIdentity(t, runtimePath)
 
 	configPath16, err := syscall.UTF16PtrFromString(configPath)
@@ -141,9 +145,10 @@ func Test163Task4WindowsApplyFailureAfterRuntimeUpdateRollsBackAllBytes(t *testi
 		t.Fatal("Runtime identity unchanged: failure did not occur after Runtime update and rollback")
 	}
 	for path, want := range map[string][]byte{
-		agentPath:   wantAgent,
-		runtimePath: wantRuntime,
-		configPath:  wantConfig,
+		agentPath:    wantAgent,
+		runtimePath:  wantRuntime,
+		configPath:   wantConfig,
+		manifestPath: wantManifest,
 	} {
 		got, err := os.ReadFile(path)
 		if err != nil {
@@ -155,5 +160,21 @@ func Test163Task4WindowsApplyFailureAfterRuntimeUpdateRollsBackAllBytes(t *testi
 	}
 	if _, err := os.Stat(source); err != nil {
 		t.Fatalf("failed upgrade consumed source: %v", err)
+	}
+}
+
+func Test163Task4WindowsInventoryCollisionIsCaseInsensitive(t *testing.T) {
+	source, target := makeDeltaPair(t)
+	writeInventory(t, target)
+	write(t, target, "tools/user.txt", "user-owned")
+	write(t, source, "tools/User.txt", "package-owned")
+	writeInventory(t, source)
+
+	result := Run(Options{SourceDir: source, TargetDir: target})
+	if result.Status != StatusManualActionRequired {
+		t.Fatalf("case-insensitive unowned collision accepted: %+v", result)
+	}
+	if got, err := os.ReadFile(filepath.Join(target, "tools", "user.txt")); err != nil || string(got) != "user-owned" {
+		t.Fatalf("unowned Windows path changed: %q %v", got, err)
 	}
 }

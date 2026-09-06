@@ -124,7 +124,13 @@ Runtime 保留 backup、stage、新版 Schema 校验与失败回滚。实际 App
 - `updatedFiles`：本次新增或内容变化的 managed files；不再列出内容相同的文件。
 - `removedFiles`：旧安装中存在、目标包中已移除的 managed files。
 - 内容相同的目标文件保持原位，不覆盖、不 touch；已安装的 `bin/codea-dcep-tools.exe` 相同时也不 rename 或 park，只有内容变化才进入 Windows executable replacement。
+- `RELEASE-MANIFEST.json` 的 `managedFiles` 保存发行包中每个 Framework 文件的 SHA-256，并作为下一次升级判断旧版本文件归属的明确清单；目录前缀本身不构成删除权限。
+- 只有旧安装清单明确拥有且新版清单不再包含的文件可以进入 REMOVE。同目录内无归属记录的文件保留；如果新版文件与无归属的现有文件冲突，升级在修改目标前 fail-closed。
+- `RELEASE-MANIFEST.json` 自身参与 delta 与 rollback。新版清单必须与 `VERSION`、实际 Runtime SHA-256 及全部发行文件哈希一致，升级后安装目录保留新版清单。
+- 已安装版本一旦具有 ownership manifest，后续升级包缺失 manifest 时必须在创建 backup 前停止，不能用无清单包覆盖后继续保留旧 manifest。
 - `harness.yaml` 没有 registered migration 导致的字节变化时不重写。`project.md`、`database.yaml`、`chains/**` 与用户 `runs/**` 继续保留；`runs/README.md` 属于 managed documentation。
+
+回滚只恢复本次 Apply 清单涉及的文件及配置 migration。回滚成功后清理 stage/backup；如果回滚失败，Runtime 会在错误结果中报告并保留 backup 与 stage 的实际路径，供人工恢复。
 
 Agent 应展示 Runtime 返回的实际变化文件和保留状态，不自行推导或执行升级差量。成功时清理升级包中正在运行的 source Runtime，仍遵循上述第 6 步；这与替换已安装 Runtime 是两个独立动作。
 
