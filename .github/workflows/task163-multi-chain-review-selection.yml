@@ -24,6 +24,10 @@ jobs:
           go-version: '1.23.x'
           cache-dependency-path: .code-harness/tools-runtime/go.sum
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Exact HEAD guard
         shell: pwsh
         run: |
@@ -48,6 +52,48 @@ jobs:
         run: |
           go test -count=1 ./cmd/codea-dcep-tools -run 'Review|Selection|ReviewOptions'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build real Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go build -o ../bin/codea-dcep-tools.exe ./cmd/codea-dcep-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Vendor pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-163-task3.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-163-task3'
+          Invoke-WebRequest -Uri "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install pinned OpenCode Agent Host
+        shell: pwsh
+        run: |
+          npm install -g opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          opencode --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate Task 3 E2E scripts
+        shell: pwsh
+        run: |
+          python -m py_compile .github/scripts/task163-task3/mock_openai_server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $null = [scriptblock]::Create((Get-Content -Raw .github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1))
+          Write-Output 'TASK163_TASK3_E2E_SCRIPT_PARSE PASS'
+
+      - name: Real OpenCode two-turn same-session multi-chain E2E
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1
 
       - name: Static verification
         working-directory: .code-harness/tools-runtime
