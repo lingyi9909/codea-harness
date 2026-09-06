@@ -21,7 +21,7 @@ function Invoke-Git([Parameter(ValueFromRemainingArguments=$true)][string[]]$Arg
     if($LASTEXITCODE-ne 0){throw "git $($Arguments -join ' ') failed"}
 }
 function Assert-Absent([string]$Path,[string]$Label) {
-    if(Test-Path $Path){throw "Turn 1 illegally produced $Label at $Path"}
+    if(Test-Path $Path){throw "TASK163_CONTRACT_GATE_MISSING: Turn 1 illegally produced $Label at $Path"}
 }
 
 $fixture=Join-Path $env:RUNNER_TEMP ("task163-task3-multichain-"+[guid]::NewGuid().ToString('N'))
@@ -100,7 +100,7 @@ runs:
 description: Executes Codea Harness intents only through active repository contracts
 mode: primary
 model: task3-local/task3
-steps: 80
+steps: 90
 permission:
   read: allow
   edit: allow
@@ -125,6 +125,10 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         (Get-Content -Raw 'src/main/java/com/acme/order/OrderController.java').Replace('return service.approve();','return service.approve() + 0;') | Set-Content -NoNewline -Encoding utf8 'src/main/java/com/acme/order/OrderController.java'
         (Get-Content -Raw 'src/main/java/com/acme/payment/PaymentController.java').Replace('return service.pay();','return service.pay() + 0;') | Set-Content -NoNewline -Encoding utf8 'src/main/java/com/acme/payment/PaymentController.java'
 
+        $runsDir='.code-harness/runs'
+        $preReviewRunIds=@()
+        if(Test-Path $runsDir){$preReviewRunIds=@(Get-ChildItem $runsDir -Directory -ErrorAction SilentlyContinue|ForEach-Object{$_.Name})}
+
         $serverProcess=Start-Process -FilePath 'python' -ArgumentList @($modelServer,'--port',"$port",'--log',$serverLog) -PassThru -WindowStyle Hidden
         $healthy=$false
         for($i=0;$i-lt 40;$i++){
@@ -132,7 +136,7 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         }
         if(-not $healthy){throw 'Task 3 model server did not become healthy'}
 
-        # Turn 1: exact product intent. It MUST stop after USER_SELECTION.
+        # Turn 1: exact product intent. Active contracts must drive review begin and stop after USER_SELECTION.
         $ErrorActionPreference='Continue'
         $turn1=(& opencode run --format json --auto --agent codea-harness-e2e --model task3-local/task3 'harness review' 2>&1 | Out-String)
         $turn1Exit=$LASTEXITCODE
@@ -140,14 +144,28 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         Write-Utf8NoBom $turn1Transcript $turn1
         if($turn1Exit-ne 0){throw "Turn 1 OpenCode failed ${turn1Exit}:`n$turn1"}
 
-        $run='.code-harness/runs/task3-multi-chain-review'
+        $runIds=@([regex]::Matches($turn1,'\breview-[0-9a-f]{32}\b')|ForEach-Object{$_.Value}|Select-Object -Unique)
+        if($runIds.Count-ne 1){throw "Turn 1 must use exactly one Runtime-created fresh review runId, found=$($runIds -join ',')"}
+        $runId=[string]$runIds[0]
+        if($preReviewRunIds -contains $runId){throw "review begin reused an existing runId: $runId"}
+        $run=Join-Path '.code-harness/runs' $runId
+        if(!(Test-Path $run -PathType Container)){throw "Runtime fresh review directory missing: $run"}
+
+        $events=@(Get-Content $serverLog|Where-Object{$_.Trim()}|ForEach-Object{$_|ConvertFrom-Json})
+        $beginCalls=@($events|Where-Object{$_.event-eq'tool_call' -and [string]$_.command-match'codea-dcep-tools\.exe review begin'})
+        if($beginCalls.Count-ne 1){throw "exact harness review must invoke Runtime review begin exactly once, count=$($beginCalls.Count)"}
+        Write-Output "TASK163_TASK3_REVIEW_BEGIN_FRESH_RUN PASS runId=$runId"
+
         $optionsPath=Join-Path $run 'analysis/review-options.json'
         if(!(Test-Path $optionsPath)){throw 'Turn 1 did not produce review-options.json'}
         $options=Get-Content -Raw $optionsPath|ConvertFrom-Json
+        if([string]$options.runId-ne$runId){throw "review-options runId mismatch: $($options.runId) != $runId"}
         if([string]$options.decision-ne'USER_SELECTION'){throw "Turn 1 decision=$($options.decision), expected USER_SELECTION"}
         if(@($options.chains).Count-lt 2){throw 'Turn 1 must expose 2+ Runtime chain options'}
         if($turn1-notmatch 'TURN1_SELECTION_REQUIRED'){throw "Turn 1 did not ask the user:`n$turn1"}
 
+        # This assertion is deliberately before display checks so the negative control proves
+        # that removing Task 3 contracts advances into selection in the same Assistant Turn.
         Assert-Absent (Join-Path $run 'requests/review-selection-request.json') 'review select request'
         Assert-Absent (Join-Path $run 'analysis/review-scope.json') 'review scope'
         Assert-Absent (Join-Path $run 'analysis/review-units.json') 'review units'
@@ -155,6 +173,16 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         Assert-Absent (Join-Path $run 'requests/finding-proposals.json') 'finding proposals'
         Assert-Absent (Join-Path $run 'analysis/certified-findings.json') 'certified findings'
         Assert-Absent (Join-Path $run 'review.md') 'review report'
+
+        foreach($chain in @($options.chains)){
+            $entrySummary=(@($chain.entryPoints)-join ' -> ')
+            $visible=("{0} - {1}" -f [string]$chain.selectionId,$entrySummary)
+            if(-not $turn1.Contains($visible)){
+                throw "Turn 1 did not display Runtime chain option '$visible'"
+            }
+        }
+        if($turn1.Contains('C1..Cn')){throw 'Turn 1 used placeholder C1..Cn instead of Runtime chain details'}
+        Write-Output 'TASK163_TASK3_RUNTIME_CHAIN_OPTIONS_VISIBLE PASS'
         Write-Output 'MULTI_CHAIN_REVIEW_REQUIRES_USER_SELECTION PASS'
         Write-Output 'MULTI_CHAIN_NO_SELECTION_NO_REVIEW_UNITS PASS'
         Write-Output 'TASK163_TASK3_TURN1_HARD_STOP PASS'
@@ -178,15 +206,23 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         )){if(!(Test-Path $artifact)){throw "Turn 2 missing artifact: $artifact"}}
 
         $selection=Get-Content -Raw (Join-Path $run 'requests/review-selection-request.json')|ConvertFrom-Json
+        if([string]$selection.runId-ne$runId){throw 'Turn 2 selection did not continue the fresh Turn 1 run'}
         if([string]$selection.mode-ne'FULL' -or [string]$selection.optionsHash-ne[string]$options.optionsHash -or @($selection.selectionIds).Count-ne 0){throw 'Turn 2 FULL selection not bound to Turn 1 optionsHash'}
         $scope=Get-Content -Raw (Join-Path $run 'analysis/review-scope.json')|ConvertFrom-Json
         if([string]$scope.mode-ne'FULL'){throw 'Turn 2 Runtime scope was not FULL'}
         $report=Get-Content -Raw (Join-Path $run 'review.md')
         if($report-notmatch '评审结果' -or $report-notmatch '通过'){throw "Turn 2 final review report invalid:`n$report"}
 
-        $modelLog=Get-Content -Raw $serverLog
-        if($modelLog-notmatch '"event": "turn2_resume"' -or $modelLog-notmatch '"sameSession": true'){throw 'Model did not prove same-session Turn 2 context'}
-        if(($turn1+"`n"+$turn2+"`n"+$modelLog)-notmatch 'TASK163_STAGE_21 PASS'){throw 'Turn 2 did not complete full Runtime authority chain'}
+        $events=@(Get-Content $serverLog|Where-Object{$_.Trim()}|ForEach-Object{$_|ConvertFrom-Json})
+        $beginCalls=@($events|Where-Object{$_.event-eq'tool_call' -and [string]$_.command-match'codea-dcep-tools\.exe review begin'})
+        if($beginCalls.Count-ne 1){throw "same review invocation called review begin more than once: $($beginCalls.Count)"}
+        $resume=@($events|Where-Object{$_.event-eq'turn2_resume' -and [string]$_.runId-eq$runId -and $_.sameSession-eq$true})
+        if($resume.Count-ne 1){throw 'Model did not prove same-session Turn 2 context on the same fresh run'}
+        $allReviewRuns=@()
+        if(Test-Path $runsDir){$allReviewRuns=@(Get-ChildItem $runsDir -Directory|Where-Object{$_.Name-match'^review-[0-9a-f]{32}$'}|ForEach-Object{$_.Name})}
+        $newReviewRuns=@($allReviewRuns|Where-Object{$preReviewRunIds -notcontains $_})
+        if($newReviewRuns.Count-ne 1 -or [string]$newReviewRuns[0]-ne$runId){throw "Review invocation did not stay on one fresh run: $($newReviewRuns -join ',')"}
+        if(($turn1+"`n"+$turn2+"`n"+(Get-Content -Raw $serverLog))-notmatch 'TASK163_STAGE_22 PASS'){throw 'Turn 2 did not complete full Runtime authority chain'}
         Write-Output 'TASK163_TASK3_SAME_SESSION_CONTEXT PASS'
         Write-Output 'TASK163_TASK3_TURN2_USER_FULL_SELECTION PASS'
         Write-Output 'TASK163_TASK3_RUNTIME_AUTHORITY_CHAIN PASS'
