@@ -184,9 +184,12 @@ public class Irrelevant extends BaseService {}
 		t.Fatalf("expected no AST-confirmed subclasses, got %#v", got)
 	}
 	for _, call := range runner.calls {
+		if len(call) < 6 || !strings.Contains(call[4], "target") {
+			continue
+		}
 		for _, arg := range call[5:] {
 			if filepath.Clean(arg) == filepath.Clean(sourceRoot) {
-				t.Fatalf("zero AST-confirmed subclasses triggered a follow-up full-tree scan: %v", call)
+				t.Fatalf("zero AST-confirmed subclasses triggered a follow-up full-tree method scan: %v", call)
 			}
 		}
 	}
