@@ -23,12 +23,28 @@ _SPEC.loader.exec_module(engine)
 _EXPLICIT_TERMINAL_INTENTS = {"harness review", "全部", "全部评审"}
 
 
+def explicit_text_content(content: Any) -> str:
+    """Read only genuine text blocks; never flatten tool-result transport into user input."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = [explicit_text_content(item) for item in content]
+        return "\n".join(part for part in parts if part).strip()
+    if isinstance(content, dict):
+        if content.get("type") == "text" and isinstance(content.get("text"), str):
+            return content["text"].strip()
+        # Some OpenAI-compatible clients wrap the terminal text in a content field.
+        if set(content).issubset({"type", "content"}) and "content" in content:
+            return explicit_text_content(content["content"])
+    return ""
+
+
 def latest_explicit_user_intent(messages: list[dict[str, Any]]) -> str:
-    """Return only an actual terminal-user intent, ignoring tool-result transport."""
+    """Return only an actual terminal-user intent, ignoring tool-result role=user messages."""
     for message in reversed(messages):
         if message.get("role") != "user":
             continue
-        text = engine.flatten(message.get("content", "")).strip()
+        text = explicit_text_content(message.get("content", ""))
         if text in _EXPLICIT_TERMINAL_INTENTS:
             return text
     return ""
