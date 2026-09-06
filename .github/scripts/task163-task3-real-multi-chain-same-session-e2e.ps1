@@ -23,6 +23,17 @@ function Invoke-Git([Parameter(ValueFromRemainingArguments=$true)][string[]]$Arg
 function Assert-Absent([string]$Path,[string]$Label) {
     if(Test-Path $Path){throw "TASK163_CONTRACT_GATE_MISSING: Turn 1 illegally produced $Label at $Path"}
 }
+function Get-AssistantVisibleText([string]$Transcript) {
+    $parts=New-Object System.Collections.Generic.List[string]
+    foreach($line in ($Transcript -split "`r?`n")) {
+        if([string]::IsNullOrWhiteSpace($line)){continue}
+        try{$event=$line|ConvertFrom-Json -ErrorAction Stop}catch{continue}
+        if(([string]$event.type)-eq'text' -and $null-ne$event.part -and ([string]$event.part.type)-eq'text'){
+            $parts.Add([string]$event.part.text)
+        }
+    }
+    return ($parts -join "`n")
+}
 
 $fixture=Join-Path $env:RUNNER_TEMP ("task163-task3-multichain-"+[guid]::NewGuid().ToString('N'))
 $serverLog=Join-Path $env:RUNNER_TEMP ("task163-task3-model-"+[guid]::NewGuid().ToString('N')+'.jsonl')
@@ -143,6 +154,7 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         $ErrorActionPreference='Stop'
         Write-Utf8NoBom $turn1Transcript $turn1
         if($turn1Exit-ne 0){throw "Turn 1 OpenCode failed ${turn1Exit}:`n$turn1"}
+        $turn1Visible=Get-AssistantVisibleText $turn1
 
         $runIds=@([regex]::Matches($turn1,'\breview-[0-9a-f]{32}\b')|ForEach-Object{$_.Value}|Select-Object -Unique)
         if($runIds.Count-ne 1){throw "Turn 1 must use exactly one Runtime-created fresh review runId, found=$($runIds -join ',')"}
@@ -174,15 +186,15 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         Assert-Absent (Join-Path $run 'analysis/certified-findings.json') 'certified findings'
         Assert-Absent (Join-Path $run 'review.md') 'review report'
 
-        if($turn1-notmatch 'TURN1_SELECTION_REQUIRED'){throw "Turn 1 did not ask the user:`n$turn1"}
+        if($turn1Visible-notmatch 'TURN1_SELECTION_REQUIRED'){throw "Turn 1 did not ask the user in Assistant-visible text:`n$turn1Visible"}
         foreach($chain in @($options.chains)){
             $entrySummary=(@($chain.entryPoints)-join ' -> ')
             $visible=("{0} - {1}" -f [string]$chain.selectionId,$entrySummary)
-            if(-not $turn1.Contains($visible)){
+            if(-not $turn1Visible.Contains($visible)){
                 throw "Turn 1 did not display Runtime chain option '$visible'"
             }
         }
-        if($turn1.Contains('C1..Cn')){throw 'Turn 1 used placeholder C1..Cn instead of Runtime chain details'}
+        if($turn1Visible.Contains('C1..Cn')){throw 'Turn 1 Assistant output used placeholder C1..Cn instead of Runtime chain details'}
         Write-Output 'TASK163_TASK3_RUNTIME_CHAIN_OPTIONS_VISIBLE PASS'
         Write-Output 'MULTI_CHAIN_REVIEW_REQUIRES_USER_SELECTION PASS'
         Write-Output 'MULTI_CHAIN_NO_SELECTION_NO_REVIEW_UNITS PASS'
