@@ -89,7 +89,12 @@ jobs:
           python -m py_compile .github/scripts/task163-task3/mock_openai_server.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $null = [scriptblock]::Create((Get-Content -Raw .github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw .github/scripts/task163-task3-negative-control.ps1))
           Write-Output 'TASK163_TASK3_E2E_SCRIPT_PARSE PASS'
+
+      - name: Negative control without Task 3 hard-stop contracts
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-task3-negative-control.ps1
 
       - name: Real OpenCode two-turn same-session multi-chain E2E
         shell: pwsh
