@@ -104,6 +104,10 @@ AFFECTED DISCOVERY 的正式事实仍只来自 Certified ChangeAnalysis。`revie
 
 Role 只允许来自机器证据：Controller annotation / endpoint inventory、AST interface/implementation relation、`@Service` / `@Repository` / `@Mapper`、以及 Mapper.xml exact namespace + statement id。文本预筛选可以帮助缩小候选，但不能升级成 semantic authority。
 
+## Exact Canonicalization
+
+PROJECT 与 AFFECTED discovery 都保留既有 canonicalization 不变量：多个入口只有在 **verified core path 完全一致** 时才允许 canonicalize。core facts 包括 `nodes[]` 的 exact workspace/symbol/path/role/order、`resources[]` 的 exact path/symbol/role，以及 `boundaries[]` 的 exact symbol/path/role。任一 verified fact 不一致都必须保留为不同 Chain，不得用名称相似度或模糊规则合并。
+
 ## Output
 
 成功时只说明发现了多少条 `DISCOVERED Chain` 以及 Runtime candidate path。不要把 candidate 表述成已保存 Project State Chain；保存/更新仍属于后续明确确认和 write-plan authority。
