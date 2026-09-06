@@ -76,6 +76,28 @@ function Invoke-RetainedReviewAuthorityRegression([string]$Script, [string]$Labe
     Write-Output "TASK162_FINAL_RETAINED_REVIEW_REQUEST_CONTRACT_ADAPTER PASS script=$(Split-Path -Leaf $resolvedScript)"
 }
 
+function Invoke-RetainedBusinessRegression {
+    $label = 'retained single-module business regression'
+    $runReadme = Join-Path $repoRoot '.code-harness/runs/README.md'
+    if (-not (Test-Path $runReadme -PathType Leaf)) { throw "$label current runs/README.md missing" }
+    $runReadmeBytes = [IO.File]::ReadAllBytes($runReadme)
+    $gitkeep = Join-Path $repoRoot '.code-harness/runs/.gitkeep'
+    $hadGitkeep = Test-Path $gitkeep -PathType Leaf
+    $gitkeepBytes = if ($hadGitkeep) { [IO.File]::ReadAllBytes($gitkeep) } else { $null }
+
+    try {
+        Remove-Item $runReadme -Force
+        Remove-Item $gitkeep -Force -ErrorAction SilentlyContinue
+        Invoke-Regression './.github/scripts/task152-task5-real-business-regression.ps1' $label
+    }
+    finally {
+        [IO.File]::WriteAllBytes($runReadme, $runReadmeBytes)
+        if ($hadGitkeep) { [IO.File]::WriteAllBytes($gitkeep, $gitkeepBytes) }
+        $global:LASTEXITCODE = 0
+    }
+    Write-Output 'TASK162_FINAL_RETAINED_BUSINESS_RUN_README_ADAPTER PASS'
+}
+
 function Assert-AcceptedHotfixBaselines {
     $accepted = [ordered]@{
         task1 = $acceptedHotfixTask1
@@ -305,8 +327,7 @@ try {
     Invoke-RetainedReviewAuthorityRegression './.github/scripts/task162-duplicate-symbol-authority-regression.ps1' 'Task 1 duplicate Symbol Authority E2E'
     Invoke-Regression './.github/scripts/task162-hotfix-final-entrypoint-inventory-regression.ps1' 'retained single-module EntryPoint regression (final Task 2 contract adapter)'
     Invoke-Regression './.github/scripts/task152-workspace-smoke.ps1' 'retained Workspace regression'
-    Remove-Item '.code-harness/runs/.gitkeep' -ErrorAction SilentlyContinue
-    Invoke-Regression './.github/scripts/task152-task5-real-business-regression.ps1' 'retained single-module business regression'
+    Invoke-RetainedBusinessRegression
     Invoke-Regression './.github/scripts/task162-hotfix-final-chain-regression.ps1' 'retained Chain regression (final Task 2 contract adapter)'
     Invoke-Regression './.github/scripts/task160-real-review-precision-regression.ps1' 'retained 1.6 Review Precision regression'
     Assert-RuntimeRenameRetained
