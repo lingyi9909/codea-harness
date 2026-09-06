@@ -108,21 +108,40 @@ jobs:
           if-no-files-found: error
 
       - name: Codea Harness 1.6.2 exact release certification
-        if: steps.release.outputs.version == '1.6.2'
+        if: steps.release.outputs.version == '1.6.2' && github.ref != 'refs/heads/main'
         shell: pwsh
         run: ./.github/scripts/task162-release-certification.ps1
+
+      - name: Codea Harness 1.6.2 certified main release package
+        if: steps.release.outputs.version == '1.6.2' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $integrationHead = (git rev-parse HEAD).Trim()
+          $certifiedHead = 'd801d390f17d19f89dd25303583f8da2298d3f75'
+          git merge-base --is-ancestor $certifiedHead $integrationHead
+          $ancestorExit = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($ancestorExit -ne 0) {
+            throw "accepted 1.6.2 certified head is not an ancestor of main integration head: certified=$certifiedHead integration=$integrationHead"
+          }
+          git checkout --force --detach $certifiedHead
+          if ($LASTEXITCODE -ne 0) { throw "cannot checkout accepted 1.6.2 certified head: $certifiedHead" }
+          Write-Output "PACKAGE_WINDOWS_X64_162_MAIN_CERTIFIED_HEAD PASS certified=$certifiedHead integration=$integrationHead"
+          ./.github/scripts/task162-release-certification.ps1
 
       - name: Validate 1.6.2 exact-head evidence
         if: steps.release.outputs.version == '1.6.2'
         shell: pwsh
         run: |
           $head = (git rev-parse HEAD).Trim()
+          $expectedHead = if ($env:GITHUB_REF -eq 'refs/heads/main') { 'd801d390f17d19f89dd25303583f8da2298d3f75' } else { $head }
+          if ($head -ne $expectedHead) { throw "release checkout HEAD mismatch: expected=$expectedHead actual=$head" }
           $checklist = Get-Content 'codea-harness-1.6.2-release-checklist.json' -Raw | ConvertFrom-Json
-          if ([string]$checklist.exactHeadSha -ne $head) { throw 'release checklist exact HEAD mismatch' }
+          if ([string]$checklist.exactHeadSha -ne $expectedHead) { throw 'release checklist exact HEAD mismatch' }
           if ([string]$checklist.version -ne '1.6.2') { throw 'release checklist version mismatch' }
           $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
           if ($version -ne '1.6.2') { throw 'repository VERSION mismatch' }
-          Write-Output "PACKAGE_WINDOWS_X64_162_EXACT_HEAD PASS head=$head"
+          Write-Output "PACKAGE_WINDOWS_X64_162_EXACT_HEAD PASS head=$expectedHead"
 
       - name: Upload 1.6.2 install package
         if: steps.release.outputs.version == '1.6.2'
