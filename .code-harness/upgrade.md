@@ -117,6 +117,17 @@ STOP
 6. Windows 下如果正在执行的新版 Runtime 位于 `.code-harness-upgrade/bin/`，Runtime 会在成功应用 Framework 后先把自身可执行文件移动到同卷、升级目录外的临时位置，再消费 `.code-harness-upgrade/`；Agent 不参与文件事务。
 7. 根据 `UpgradeResult` 输出结果。
 
+### 差量升级结果
+
+Runtime 保留 backup、stage、新版 Schema 校验与失败回滚。实际 Apply 前比较已安装文件与已校验 stage 的 SHA-256，只新增、更新或删除发生变化的 Framework Managed 文件：
+
+- `updatedFiles`：本次新增或内容变化的 managed files；不再列出内容相同的文件。
+- `removedFiles`：旧安装中存在、目标包中已移除的 managed files。
+- 内容相同的目标文件保持原位，不覆盖、不 touch；已安装的 `bin/codea-dcep-tools.exe` 相同时也不 rename 或 park，只有内容变化才进入 Windows executable replacement。
+- `harness.yaml` 没有 registered migration 导致的字节变化时不重写。`project.md`、`database.yaml`、`chains/**` 与用户 `runs/**` 继续保留；`runs/README.md` 属于 managed documentation。
+
+Agent 应展示 Runtime 返回的实际变化文件和保留状态，不自行推导或执行升级差量。成功时清理升级包中正在运行的 source Runtime，仍遵循上述第 6 步；这与替换已安装 Runtime 是两个独立动作。
+
 必须使用新版升级包 Runtime 的原因是：registered migration 属于目标版本 Runtime。旧版本 Runtime 不会预先拥有未来版本新增的确定性 migration；正式升级必须由目标版本 Runtime 负责 migration + transaction，才能保证 Framework 与配置版本一起升级。
 
 ## 1.4.0 → 1.5.0 Project State 契约
