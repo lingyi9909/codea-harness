@@ -14,6 +14,7 @@ func runProjectChainDiscover163(req chainDiscoverRequest) error {
 	navigator := nav.Navigator{
 		RepoRoot:    ".",
 		AstGrepPath: filepath.Join(".code-harness", "bin", "ast-grep.exe"),
+		Runner:      nav.ProjectExecRunner{},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
