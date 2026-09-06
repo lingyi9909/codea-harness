@@ -7,38 +7,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   task2-clean-project-discovery:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Apply Task 2 reviewer authority split once
-        shell: pwsh
-        run: |
-          $path = '.code-harness/agents/reviewer.md'
-          $text = Get-Content -Raw -Encoding UTF8 $path
-          $old = '对于 `harness chain discover [target]`，Reviewer 继续协调 `analyze-change → discover-chain → Controlled Runtime`；前半段仍必须先取得 Runtime Canonical Snapshot 并完成 ChangeAnalysis certification，`discover-chain` 只能消费 Certified ChangeAnalysis，不得建立第二套 Git/Java/resource authority。'
-          $new = @'
-          公开 `harness chain discover [target]` 固定走 **PROJECT DISCOVERY**：Reviewer 直接协调 `discover-chain → Controlled Runtime`，不执行 `analysis snapshot` / `analyze-change` / ChangeAnalysis certification，也不得为了复用 Review 流程伪造 Change Set。PROJECT discovery 的正式 authority 来自 Runtime current-source inventory、AST navigation、`project-source.json` 与 Runtime-owned candidate provenance。
-
-          Review 内部 **AFFECTED DISCOVERY** 保持既有 Review authority：`Canonical ChangeSet → Certified ChangeAnalysis → affectedControllers/callChains → chain discover mode=AFFECTED`。Review 的 FULL/TARGETED、zero-change lifecycle、Snapshot 与 ChangeAnalysis certification 规则均不因公开 PROJECT discovery 改变。
-          '@
-          if (-not $text.Contains($old)) { throw 'expected legacy public-discovery reviewer paragraph not found' }
-          $text = $text.Replace($old, $new.Trim())
-          $text = $text.Replace("version: 8`n", "version: 9`n", 1)
-          [System.IO.File]::WriteAllText((Resolve-Path $path), $text, [System.Text.UTF8Encoding]::new($false))
-          git diff --check -- $path
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git config user.name 'codea-harness-ci'
-          git config user.email 'codea-harness-ci@users.noreply.github.com'
-          git add -- $path
-          git commit -m 'docs: split project and affected discovery contracts'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git push origin HEAD:hotfix/1.6.3-runtime-usability-task2
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/setup-go@v7
         with:
@@ -47,7 +22,9 @@ jobs:
       - name: Exact HEAD guard
         shell: pwsh
         run: |
-          Write-Host "PATCH RUN original=$env:GITHUB_SHA local=$((git rev-parse HEAD).Trim())"
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) { throw "exact-head mismatch: actual=$actual expected=$env:GITHUB_SHA" }
+          Write-Host "TASK163_TASK2_EXACT_HEAD $actual"
 
       - name: Vendor pinned ast-grep Windows x64
         shell: pwsh
@@ -73,3 +50,40 @@ jobs:
           $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
           go test -count=1 -v ./cmd/codea-dcep-tools -run '^Test163Task2'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Full navigation regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/nav
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Full chain regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/chain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Public and AFFECTED chain-discover command regressions
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./cmd/codea-dcep-tools -run '^(Test163Task2ActiveContractsSplitProjectFromAffectedDiscovery|Test163Task2CleanProjectDiscoveryFindsExistingChain|TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState|TestChainDiscoverRejectsOutsideInputAndRunIDMismatch|TestChainDiscoverRejectsRawTargetOrOutputCLIArguments)$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Static verification
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exact HEAD evidence
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) { throw "exact-head mismatch: actual=$actual expected=$env:GITHUB_SHA" }
+          Write-Host "TASK163_TASK2_EXACT_HEAD PASS head=$actual"
