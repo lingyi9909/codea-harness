@@ -221,3 +221,9 @@ workspace dependency finding
 
 既有 FULL/TARGETED scope、workspace dependency 隔离和 `TEST_VALIDITY` 边界保持不变；Task 5 只深化已分发 Spring/MyBatis 规则的证据要求，不新增 Finding 权威。
 
+
+## 1.6.3 USER_SELECTION 前置门禁
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+如果当前 same-run `review-options.json` 的 decision 仍为 `USER_SELECTION`，且尚未在**下一条用户消息**之后通过 Runtime `review select` 生成 verified FULL/TARGETED scope，则**不得执行本 Skill**，不得读取 ReviewUnit 做 Finding Review，也不得生成 `finding-proposals.json`。Agent 自行推断 FULL/TARGETED/LIST 或默认 ALL 不能解除本门禁。

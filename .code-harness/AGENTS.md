@@ -198,3 +198,11 @@ codea-dcep-tools.exe review begin
 `review begin` 只负责由 Runtime 生成唯一 fresh runId 并创建 `.code-harness/runs/<runId>/`；它不得读取 Git、不得计算 ChangeSet、不得生成 `analysis/change-set.json`。`analysis snapshot` 仍是唯一 Git ChangeSet Authority。
 
 `same-run` 只约束单次 Review invocation 内部；下一次用户再次输入 `harness review` 时，上一轮 runId、上一轮 Snapshot、上一轮 ChangeAnalysis、上一轮 0 Change 结论和上一轮 `review.md` 对新 invocation 不具备 Authority。Agent session memory 不得替代本次 `review begin` + `analysis snapshot`。
+
+## 1.6.3 Multi-Chain Review Assistant Turn Gate
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+当 plain `harness review` 的 Runtime `review options` 返回 `decision=USER_SELECTION`（2+ valid Chains）时，当前 Assistant Turn 必须只展示 Runtime 生成的选择并询问用户，然后立即结束；只有**下一条用户消息**提供明确选择后才允许继续 same-run Review。
+
+在下一条用户消息到达前，禁止调用 `review select`、`review units`、`review dispatch`、创建 `finding-proposals.json`、执行 Finding Certification 或 `report review`。不得把 Agent 自己选择的 FULL / TARGETED / LIST 冒充用户选择，也不得默认 ALL。AUTO_FULL 与 AUTO_SINGLE 的既有机器直通规则保持不变。

@@ -972,3 +972,24 @@ report-review.json           → .code-harness/contracts/report-review-request.s
 正式 `report review` 的 Agent-facing request contract 只能是 `report-review-request.schema.json`。正式 report request 的 `findings` 固定为 `[]`；Agent raw Finding 只能进入 `requests/finding-proposals.json`，正式 Finding 必须由 Runtime `review certify-findings` 生成 same-run `analysis/certified-findings.json` + `certified-findings.cert.json` 后再由 `report review` 加载。
 
 `changedFiles=[]` 不是提前成功返回条件。0 Change 仍必须执行 `review units → review dispatch → finding-proposals.json=[] → review certify-findings → report review`，并生成 0 Change / 0 Finding 的正式 `review.md`。
+
+## 1.6.3 Multi-Chain Review Turn Hard Stop
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+当 Runtime `review options` 返回 `decision=USER_SELECTION` 时，Orchestrator 必须把当前 Runtime 生成的 FULL / LIST 入口和 C1..Cn Chain 选项展示给用户并要求明确选择，随后**立即结束当前 Assistant Turn**。只有**下一条用户消息**明确表达“全部评审”、具体 Runtime selectionIds/编号，或“仅查看调用链”后，才允许继续当前 same-run authority chain。
+
+在 USER_SELECTION 的同一 Assistant Turn 内一律禁止：
+
+```text
+review select
+review units
+review dispatch
+finding-proposals
+review certify-findings
+report review
+```
+
+不得自动构造 FULL，不得自动构造 TARGETED，也不得默认 LIST/ALL。用户下一条消息选择“全部评审”时才构造当前 `optionsHash` 绑定的 FULL selection；选择一个或多个 C1..Cn 时才构造 TARGETED selection；明确选择仅查看调用链时才构造 LIST。空选择/取消必须 STOP。若下一条用户消息到达时 current optionsHash / same-run authority 已 stale，必须 fail closed 或重建 options，禁止复用旧选择。
+
+该 Gate 是 Agent/Orchestrator turn 行为约束；不得声称 Controlled Runtime 能密码学证明某个 selection 是真实用户输入。Runtime 原有 optionsHash、selectionId、scope verification 仍负责机器 authority。
