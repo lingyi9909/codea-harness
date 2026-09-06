@@ -10,14 +10,14 @@ import (
 	"codea-harness-tools/internal/nav"
 )
 
-func setupTask163ProjectPersistenceCandidate(t *testing.T, runID string) (string, Chain) {
+func setupTask163ProjectPersistenceCandidate(t *testing.T, root, runID string) (string, Chain) {
 	t.Helper()
-	root := "."
 	installTask153WritePlanContracts(t, root)
-	for path, body := range map[string]string{
+	for rel, body := range map[string]string{
 		"src/main/java/com/example/order/OrderController.java": "package com.example.order; class OrderController { void approve() {} }\n",
 		"src/main/java/com/example/order/OrderService.java":    "package com.example.order; class OrderService { void approve() {} }\n",
 	} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -42,22 +42,13 @@ func setupTask163ProjectPersistenceCandidate(t *testing.T, runID string) (string
 
 func Test163Task2ProjectDiscoverSealPersist(t *testing.T) {
 	root := t.TempDir()
-	old, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(old) })
-
 	runID := "run-163-project-persist"
-	candidatePath, _ := setupTask163ProjectPersistenceCandidate(t, runID)
-	plan, err := SealWritePlan(".", runID, candidatePath, "")
+	candidatePath, _ := setupTask163ProjectPersistenceCandidate(t, root, runID)
+	plan, err := SealWritePlan(root, runID, candidatePath, "")
 	if err != nil {
 		t.Fatalf("PROJECT candidate must seal without fabricated ChangeAnalysis: %v", err)
 	}
-	if err := PersistWritePlan(".", runID, plan.PlanID); err != nil {
+	if err := PersistWritePlan(root, runID, plan.PlanID); err != nil {
 		t.Fatalf("PROJECT sealed plan must persist with PROJECT_SOURCE authority: %v", err)
 	}
 	t.Log("PROJECT_DISCOVER_SEAL_PERSIST PASS")
@@ -65,25 +56,16 @@ func Test163Task2ProjectDiscoverSealPersist(t *testing.T) {
 
 func Test163Task2ProjectDiscoverPersistedChain(t *testing.T) {
 	root := t.TempDir()
-	old, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(old) })
-
 	runID := "run-163-project-persisted-chain"
-	candidatePath, candidate := setupTask163ProjectPersistenceCandidate(t, runID)
-	plan, err := SealWritePlan(".", runID, candidatePath, "")
+	candidatePath, candidate := setupTask163ProjectPersistenceCandidate(t, root, runID)
+	plan, err := SealWritePlan(root, runID, candidatePath, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := PersistWritePlan(".", runID, plan.PlanID); err != nil {
+	if err := PersistWritePlan(root, runID, plan.PlanID); err != nil {
 		t.Fatal(err)
 	}
-	path, err := ChainPath(".", candidate.ID)
+	path, err := ChainPath(root, candidate.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,29 +81,20 @@ func Test163Task2ProjectDiscoverPersistedChain(t *testing.T) {
 
 func Test163Task2ProjectSourceStaleBeforePersistRejects(t *testing.T) {
 	root := t.TempDir()
-	old, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(old) })
-
 	runID := "run-163-project-stale"
-	candidatePath, candidate := setupTask163ProjectPersistenceCandidate(t, runID)
-	plan, err := SealWritePlan(".", runID, candidatePath, "")
+	candidatePath, candidate := setupTask163ProjectPersistenceCandidate(t, root, runID)
+	plan, err := SealWritePlan(root, runID, candidatePath, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	marker := filepath.Join("src", "main", "java", "com", "example", "order", "OrderService.java")
+	marker := filepath.Join(root, "src", "main", "java", "com", "example", "order", "OrderService.java")
 	if err := os.WriteFile(marker, []byte("package com.example.order; class OrderService { void approveChanged() {} }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := PersistWritePlan(".", runID, plan.PlanID); err == nil || !strings.Contains(err.Error(), "PROJECT_SOURCE_STALE") {
+	if err := PersistWritePlan(root, runID, plan.PlanID); err == nil || !strings.Contains(err.Error(), "PROJECT_SOURCE_STALE") {
 		t.Fatalf("stale PROJECT source must reject before Project State write, err=%v", err)
 	}
-	projectPath, err := ChainPath(".", candidate.ID)
+	projectPath, err := ChainPath(root, candidate.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
