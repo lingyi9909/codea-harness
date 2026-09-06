@@ -85,5 +85,5 @@ func (n Navigator) FindImplementations(ctx context.Context,symbol,scope string)(
 		"abstract class $C extends "+owner+" { $$$BODY }",
 		"public abstract class $C extends "+owner+" { $$$BODY }",
 	}
-	return n.run(ctx,symbol,scope,patterns...)
+	return n.run(ctx,symbol,scope,withAnnotationVariants(patterns)...)
 }
