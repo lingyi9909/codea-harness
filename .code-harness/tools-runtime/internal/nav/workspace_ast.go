@@ -71,6 +71,18 @@ func (n Navigator) runWorkspaceRaw(ctx context.Context, patterns ...string) ([]w
 	return n.runWorkspaceRawTargets(ctx, nil, patterns...)
 }
 
+// runWorkspaceRawNarrowed treats candidate files as an optimization only. If
+// the narrowed AST query finds nothing, Runtime falls back to the original
+// full Workspace AST scope so a conservative prefilter can never become
+// semantic authority.
+func (n Navigator) runWorkspaceRawNarrowed(ctx context.Context, targets []string, patterns ...string) ([]workspaceRawMatch, error) {
+	raw, err := n.runWorkspaceRawTargets(ctx, targets, patterns...)
+	if err != nil || len(raw) > 0 || targets == nil {
+		return raw, err
+	}
+	return n.runWorkspaceRawTargets(ctx, nil, patterns...)
+}
+
 func (n Navigator) runWorkspaceRawTargets(ctx context.Context, targets []string, patterns ...string) ([]workspaceRawMatch, error) {
 	scope := "src/main/java"
 	if err := n.validate("X", scope); err != nil {
@@ -392,7 +404,7 @@ func (n Navigator) WorkspaceSuperclass(ctx context.Context, className string) (w
 	if err != nil {
 		return workspaceTypeMatch{}, err
 	}
-	raw, err := n.runWorkspaceRawTargets(ctx, candidates, withAnnotationVariants(patterns)...)
+	raw, err := n.runWorkspaceRawNarrowed(ctx, candidates, withAnnotationVariants(patterns)...)
 	if err != nil {
 		return workspaceTypeMatch{}, err
 	}
@@ -414,7 +426,7 @@ func (n Navigator) WorkspaceMethod(ctx context.Context, owner, method string) (w
 	if err != nil {
 		return workspaceMethodMatch{}, err
 	}
-	typesRaw, err := n.runWorkspaceRawTargets(ctx, candidates, workspaceClassPatterns(owner, true)...)
+	typesRaw, err := n.runWorkspaceRawNarrowed(ctx, candidates, workspaceClassPatterns(owner, true)...)
 	if err != nil {
 		return workspaceMethodMatch{}, err
 	}
@@ -481,9 +493,12 @@ func (n Navigator) WorkspaceDirectSubclassesWithMethod(ctx context.Context, supe
 	if err != nil {
 		return nil, err
 	}
-	classesRaw, err := n.runWorkspaceRawTargets(ctx, candidates, workspaceSubclassPatterns(superName)...)
+	classesRaw, err := n.runWorkspaceRawNarrowed(ctx, candidates, workspaceSubclassPatterns(superName)...)
 	if err != nil {
 		return nil, err
+	}
+	if len(classesRaw) == 0 {
+		return []workspaceTypeMatch{}, nil
 	}
 	classTargets := workspaceRawPaths(classesRaw)
 	methodRaw, err := n.runWorkspaceRawTargets(ctx, classTargets, workspaceMethodPatterns(method)...)
@@ -542,7 +557,7 @@ func (n Navigator) WorkspaceDirectSubclassesWithMethod(ctx context.Context, supe
 
 func workspaceRawPaths(raw []workspaceRawMatch) []string {
 	seen := map[string]bool{}
-	var out []string
+	out := make([]string, 0, len(raw))
 	for _, match := range raw {
 		if match.Path == "" || seen[match.Path] {
 			continue
@@ -555,11 +570,7 @@ func workspaceRawPaths(raw []workspaceRawMatch) []string {
 }
 
 func (n Navigator) workspaceAllClassTypes(ctx context.Context, targets ...string) ([]workspaceTypeMatch, error) {
-	var targetArg []string
-	if targets != nil {
-		targetArg = append([]string(nil), targets...)
-	}
-	raw, err := n.runWorkspaceRawTargets(ctx, targetArg, workspaceClassPatterns("$C", true)...)
+	raw, err := n.runWorkspaceRawTargets(ctx, targets, workspaceClassPatterns("$C", true)...)
 	if err != nil {
 		return nil, err
 	}
