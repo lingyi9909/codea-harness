@@ -1,0 +1,96 @@
+name: task163-task3-apply-active-contracts
+
+on:
+  push:
+    branches:
+      - hotfix/1.6.3-runtime-usability-task3
+    paths:
+      - .github/workflows/task163-task3-apply-active-contracts.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/1.6.3-runtime-usability-task3
+          fetch-depth: 0
+
+      - name: Append Task 3 hard-stop contracts
+        shell: pwsh
+        run: |
+          $targets = @{
+            '.code-harness/AGENTS.md' = @'
+
+## 1.6.3 Multi-Chain Review Assistant Turn Gate
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+当 plain `harness review` 的 Runtime `review options` 返回 `decision=USER_SELECTION`（2+ valid Chains）时，当前 Assistant Turn 必须只展示 Runtime 生成的选择并询问用户，然后立即结束；只有**下一条用户消息**提供明确选择后才允许继续 same-run Review。
+
+在下一条用户消息到达前，禁止调用 `review select`、`review units`、`review dispatch`、创建 `finding-proposals.json`、执行 Finding Certification 或 `report review`。不得把 Agent 自己选择的 FULL / TARGETED / LIST 冒充用户选择，也不得默认 ALL。AUTO_FULL 与 AUTO_SINGLE 的既有机器直通规则保持不变。
+'@
+            '.code-harness/agents/orchestrator.md' = @'
+
+## 1.6.3 Multi-Chain Review Turn Hard Stop
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+当 Runtime `review options` 返回 `decision=USER_SELECTION` 时，Orchestrator 必须把当前 Runtime 生成的 FULL / LIST 入口和 C1..Cn Chain 选项展示给用户并要求明确选择，随后**立即结束当前 Assistant Turn**。只有**下一条用户消息**明确表达“全部评审”、具体 Runtime selectionIds/编号，或“仅查看调用链”后，才允许继续当前 same-run authority chain。
+
+在 USER_SELECTION 的同一 Assistant Turn 内一律禁止：
+
+```text
+review select
+review units
+review dispatch
+finding-proposals
+review certify-findings
+report review
+```
+
+不得自动构造 FULL，不得自动构造 TARGETED，也不得默认 LIST/ALL。用户下一条消息选择“全部评审”时才构造当前 `optionsHash` 绑定的 FULL selection；选择一个或多个 C1..Cn 时才构造 TARGETED selection；明确选择仅查看调用链时才构造 LIST。空选择/取消必须 STOP。若下一条用户消息到达时 current optionsHash / same-run authority 已 stale，必须 fail closed 或重建 options，禁止复用旧选择。
+
+该 Gate 是 Agent/Orchestrator turn 行为约束；不得声称 Controlled Runtime 能密码学证明某个 selection 是真实用户输入。Runtime 原有 optionsHash、selectionId、scope verification 仍负责机器 authority。
+'@
+            '.code-harness/agents/reviewer.md' = @'
+
+## 1.6.3 Multi-Chain Review Turn Gate
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+当 same-run Runtime `review options` 返回 `USER_SELECTION` 时，Reviewer 必须把控制权交回 Orchestrator 进行用户选择，并立即停止当前 Assistant Turn 的 Review 执行。在收到**下一条用户消息**并由 Runtime `review select` 形成 verified FULL/TARGETED/LIST scope 之前，不得调用 `review-code`，**不得进入 Finding Proposal**，不得创建 `finding-proposals.json`，也不得触发 Finding Certification 或 Review Report。
+
+AUTO_FULL / AUTO_SINGLE 保持既有自动继续语义；本 Gate 只约束 USER_SELECTION 和显式下游 target 的多上游选择场景。
+'@
+            '.code-harness/skills/review-code/SKILL.md' = @'
+
+## 1.6.3 USER_SELECTION 前置门禁
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+如果当前 same-run `review-options.json` 的 decision 仍为 `USER_SELECTION`，且尚未在**下一条用户消息**之后通过 Runtime `review select` 生成 verified FULL/TARGETED scope，则**不得执行本 Skill**，不得读取 ReviewUnit 做 Finding Review，也不得生成 `finding-proposals.json`。Agent 自行推断 FULL/TARGETED/LIST 或默认 ALL 不能解除本门禁。
+'@
+          }
+          foreach ($path in $targets.Keys) {
+            $text = Get-Content -Raw $path
+            if (-not $text.Contains('TASK163_USER_SELECTION_TURN_HARD_STOP')) {
+              Add-Content -Path $path -Value $targets[$path] -Encoding utf8
+            }
+          }
+
+      - name: Commit active contract changes
+        shell: bash
+        run: |
+          git config user.name "Codea Task3 CI"
+          git config user.email "codea-task3@example.invalid"
+          git add .code-harness/AGENTS.md .code-harness/agents/orchestrator.md .code-harness/agents/reviewer.md .code-harness/skills/review-code/SKILL.md
+          if git diff --cached --quiet; then
+            echo "No contract changes required"
+            exit 0
+          fi
+          git commit -m "fix: enforce multi-chain user-selection turn boundary"
+          git push origin HEAD:hotfix/1.6.3-runtime-usability-task3
