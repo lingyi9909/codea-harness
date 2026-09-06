@@ -145,7 +145,7 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         if(!(Test-Path $optionsPath)){throw 'Turn 1 did not produce review-options.json'}
         $options=Get-Content -Raw $optionsPath|ConvertFrom-Json
         if([string]$options.decision-ne'USER_SELECTION'){throw "Turn 1 decision=$($options.decision), expected USER_SELECTION"}
-        if(@($options.options).Count-lt 2){throw 'Turn 1 must expose 2+ Runtime chain options'}
+        if(@($options.chains).Count-lt 2){throw 'Turn 1 must expose 2+ Runtime chain options'}
         if($turn1-notmatch 'TURN1_SELECTION_REQUIRED'){throw "Turn 1 did not ask the user:`n$turn1"}
 
         Assert-Absent (Join-Path $run 'requests/review-selection-request.json') 'review select request'
