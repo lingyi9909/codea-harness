@@ -240,7 +240,10 @@ func (n Navigator) workspaceCandidateJavaFiles(literals ...string) ([]string, er
 				break
 			}
 		}
-		if matches {
+		// Java Unicode escapes are processed before lexical analysis. Keep any
+		// file containing one as a conservative candidate so text narrowing can
+		// never hide a declaration; AST verification below remains authoritative.
+		if matches || workspaceHasJavaUnicodeEscape(data) {
 			out = append(out, file)
 		}
 	}
@@ -415,6 +418,13 @@ func (n Navigator) WorkspaceSuperclass(ctx context.Context, className string) (w
 	if len(matches) > 1 {
 		return workspaceTypeMatch{}, ErrAmbiguousSymbol
 	}
+	conflict, err := n.workspaceUnicodeEscapedTypeConflict(ctx, candidates, matches, workspaceClassPatterns(className, true)...)
+	if err != nil {
+		return workspaceTypeMatch{}, err
+	}
+	if conflict {
+		return workspaceTypeMatch{}, ErrAmbiguousSymbol
+	}
 	return matches[0], nil
 }
 
@@ -435,6 +445,13 @@ func (n Navigator) WorkspaceMethod(ctx context.Context, owner, method string) (w
 		return workspaceMethodMatch{}, ErrSymbolNotFound
 	}
 	if len(types) > 1 {
+		return workspaceMethodMatch{}, ErrAmbiguousSymbol
+	}
+	conflict, err := n.workspaceUnicodeEscapedTypeConflict(ctx, candidates, types, workspaceClassPatterns(owner, true)...)
+	if err != nil {
+		return workspaceMethodMatch{}, err
+	}
+	if conflict {
 		return workspaceMethodMatch{}, ErrAmbiguousSymbol
 	}
 	ownerTargets := []string{types[0].Path}
