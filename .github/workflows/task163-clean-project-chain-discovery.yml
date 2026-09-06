@@ -44,12 +44,12 @@ jobs:
           go test -count=1 -v ./cmd/codea-dcep-tools -run '^Test163Task2'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Affected discovery + chain regression
+      - name: Affected discovery + chain + navigation regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
           $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
-          go test -count=1 ./internal/chain ./cmd/codea-dcep-tools
+          go test -count=1 ./internal/nav ./internal/chain ./cmd/codea-dcep-tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Static verification
