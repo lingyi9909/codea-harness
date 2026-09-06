@@ -51,6 +51,41 @@ func (r *workspaceScopeRunner163) Run(_ context.Context, _ string, args ...strin
 	return append(b, '\n'), nil
 }
 
+type workspaceLargeJSONRunner163 struct{ file string }
+
+func (r workspaceLargeJSONRunner163) Run(_ context.Context, _ string, _ ...string) ([]byte, error) {
+	line := workspaceSGLine{File: r.file, Text: strings.Repeat("x", 128*1024)}
+	line.Range.Start.Line = 0
+	line.Range.Start.Column = 0
+	line.Range.End.Line = 2200
+	line.Range.End.Column = 1
+	line.MetaVariables.Single = map[string]workspaceMetaValue{}
+	b, err := json.Marshal(line)
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}
+
+func Test163WorkspaceRawAcceptsLargeAstGrepJSONRecord(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "src", "main", "java", "com", "example", "BigService.java")
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("class BigService {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	n := Navigator{RepoRoot: root, AstGrepPath: "ast-grep", Runner: workspaceLargeJSONRunner163{file: file}}
+	matches, err := n.runWorkspaceRaw(context.Background(), "class BigService { $$$BODY }")
+	if err != nil {
+		t.Fatalf("large ast-grep JSON record must be parseable: %v", err)
+	}
+	if len(matches) != 1 || len(matches[0].Text) != 128*1024 {
+		t.Fatalf("unexpected large-record result: count=%d text=%d", len(matches), func() int { if len(matches) == 0 { return 0 }; return len(matches[0].Text) }())
+	}
+}
+
 func Test163WorkspaceMethodNarrowsAstGrepToCandidateJavaFile(t *testing.T) {
 	root := t.TempDir()
 	rel := filepath.FromSlash("src/main/java/com/example/BigService.java")
