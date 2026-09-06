@@ -1,0 +1,64 @@
+name: task163-multi-chain-review-selection
+
+on:
+  push:
+    branches:
+      - hotfix/1.6.3-runtime-usability-task3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  task3-multi-chain-selection:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Exact HEAD guard
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) { throw "exact-head mismatch: actual=$actual expected=$env:GITHUB_SHA" }
+          Write-Output "TASK163_TASK3_EXACT_HEAD $actual"
+
+      - name: Task 3 active-contract hard-stop gate
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-task3-active-contract-regression.ps1
+
+      - name: Existing Runtime ReviewOptions and selection authority regressions
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/reviewselection ./internal/reviewscope ./internal/reviewunit ./internal/reviewrules
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Existing review command regressions
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./cmd/codea-dcep-tools -run 'Review|Selection|ReviewOptions'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Static verification
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exact HEAD evidence
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) { throw "exact-head mismatch: actual=$actual expected=$env:GITHUB_SHA" }
+          Write-Output "TASK163_TASK3_EXACT_HEAD PASS head=$actual"
