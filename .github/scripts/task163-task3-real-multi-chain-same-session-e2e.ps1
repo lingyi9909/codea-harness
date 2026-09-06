@@ -162,10 +162,10 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         if([string]$options.runId-ne$runId){throw "review-options runId mismatch: $($options.runId) != $runId"}
         if([string]$options.decision-ne'USER_SELECTION'){throw "Turn 1 decision=$($options.decision), expected USER_SELECTION"}
         if(@($options.chains).Count-lt 2){throw 'Turn 1 must expose 2+ Runtime chain options'}
-        if($turn1-notmatch 'TURN1_SELECTION_REQUIRED'){throw "Turn 1 did not ask the user:`n$turn1"}
 
-        # This assertion is deliberately before display checks so the negative control proves
-        # that removing Task 3 contracts advances into selection in the same Assistant Turn.
+        # This assertion is deliberately before Assistant display checks so the negative
+        # control proves that removing Task 3 contracts advances into selection in the
+        # same Assistant Turn, instead of merely proving that the prompt text disappeared.
         Assert-Absent (Join-Path $run 'requests/review-selection-request.json') 'review select request'
         Assert-Absent (Join-Path $run 'analysis/review-scope.json') 'review scope'
         Assert-Absent (Join-Path $run 'analysis/review-units.json') 'review units'
@@ -174,6 +174,7 @@ For every `harness` intent, read `.code-harness/AGENTS.md` and follow the active
         Assert-Absent (Join-Path $run 'analysis/certified-findings.json') 'certified findings'
         Assert-Absent (Join-Path $run 'review.md') 'review report'
 
+        if($turn1-notmatch 'TURN1_SELECTION_REQUIRED'){throw "Turn 1 did not ask the user:`n$turn1"}
         foreach($chain in @($options.chains)){
             $entrySummary=(@($chain.entryPoints)-join ' -> ')
             $visible=("{0} - {1}" -f [string]$chain.selectionId,$entrySummary)
