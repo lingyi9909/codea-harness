@@ -21,6 +21,22 @@ func (r *workspaceASTRecordingRunner) Run(_ context.Context, _ string, args ...s
 	return r.out, nil
 }
 
+type workspaceASTFallbackRunner struct {
+	sourceRoot string
+	out        []byte
+	calls      [][]string
+}
+
+func (r *workspaceASTFallbackRunner) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
+	r.calls = append(r.calls, append([]string(nil), args...))
+	for _, arg := range args[5:] {
+		if filepath.Clean(arg) == filepath.Clean(r.sourceRoot) {
+			return r.out, nil
+		}
+	}
+	return nil, nil
+}
+
 func Test163WorkspaceASTNarrowsConcreteClassCandidates(t *testing.T) {
 	root := t.TempDir()
 	sourceRoot := filepath.Join(root, "src", "main", "java")
@@ -110,6 +126,69 @@ public class LooksRelevant {}
 	_, err := n.WorkspaceSuperclass(context.Background(), "TargetService")
 	if !errors.Is(err, ErrSymbolNotFound) {
 		t.Fatalf("candidate text must not become semantic truth without AST confirmation: %v", err)
+	}
+}
+
+func Test163WorkspaceASTPrefilterMissFallsBackToAST(t *testing.T) {
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "src", "main", "java")
+	writeJava(t, root, "src/main/java/com/company/LooksRelevant.java", `package com.company;
+// TargetService appears here, but this is not its declaration.
+public class LooksRelevant {}
+`)
+	writeJava(t, root, "src/main/java/com/company/Escaped.java", `package com.company;
+public class \u0054argetService extends BaseService {}
+`)
+	line := workspaceASTLine(t,
+		filepath.Join(sourceRoot, "com", "company", "Escaped.java"),
+		"public class TargetService extends BaseService {}",
+		map[string]string{"SUPER": "BaseService"},
+	)
+	runner := &workspaceASTFallbackRunner{sourceRoot: sourceRoot, out: line}
+	n := Navigator{RepoRoot: root, AstGrepPath: "ast-grep", Runner: runner}
+
+	got, err := n.WorkspaceSuperclass(context.Background(), "TargetService")
+	if err != nil {
+		t.Fatalf("candidate prefilter miss must fall back to AST authority: %v", err)
+	}
+	if got.Name != "TargetService" || got.Super != "BaseService" {
+		t.Fatalf("unexpected fallback AST fact: %#v", got)
+	}
+	seenRoot := false
+	for _, call := range runner.calls {
+		for _, arg := range call[5:] {
+			if filepath.Clean(arg) == filepath.Clean(sourceRoot) {
+				seenRoot = true
+			}
+		}
+	}
+	if !seenRoot {
+		t.Fatalf("prefilter miss never reached full AST fallback: %v", runner.calls)
+	}
+}
+
+func Test163WorkspaceASTEmptySubclassCandidatesDoNotRescanRoot(t *testing.T) {
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "src", "main", "java")
+	writeJava(t, root, "src/main/java/com/company/Irrelevant.java", `package com.company;
+public class Irrelevant extends BaseService {}
+`)
+	runner := &workspaceASTRecordingRunner{}
+	n := Navigator{RepoRoot: root, AstGrepPath: "ast-grep", Runner: runner}
+
+	got, err := n.WorkspaceDirectSubclassesWithMethod(context.Background(), "BaseService", "target", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected no AST-confirmed subclasses, got %#v", got)
+	}
+	for _, call := range runner.calls {
+		for _, arg := range call[5:] {
+			if filepath.Clean(arg) == filepath.Clean(sourceRoot) {
+				t.Fatalf("zero AST-confirmed subclasses triggered a follow-up full-tree scan: %v", call)
+			}
+		}
 	}
 }
 
