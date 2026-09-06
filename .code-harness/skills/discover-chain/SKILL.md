@@ -11,6 +11,14 @@ version: 10
 `harness chain discover [target]` 的公开语义固定为 **PROJECT DISCOVERY**：
 
 ```text
+harness chain discover
+harness chain discover OrderController
+harness chain discover OrderController.approve
+```
+
+执行语义：
+
+```text
 Current Source
 → Runtime Controller / EntryPoint inventory
 → AST Code Navigation
