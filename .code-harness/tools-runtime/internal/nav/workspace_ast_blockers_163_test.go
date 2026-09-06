@@ -37,13 +37,19 @@ class \u0054argetService extends BaseService {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fullRaw, err := n.runWorkspaceRaw(ctx, workspaceClassPatterns("TargetService", true)...)
+	inventoryRaw, err := n.runWorkspaceRaw(ctx, workspaceClassPatterns("$C", true)...)
 	if err != nil {
-		t.Fatalf("full AST fixture verification failed: %v", err)
+		t.Fatalf("full AST fixture inventory failed: %v", err)
 	}
-	fullTypes := dedupeWorkspaceTypes(fullRaw, "TargetService", false)
-	if len(fullTypes) != 2 {
-		t.Fatalf("fixture must produce two AST-confirmed TargetService declarations, got %#v", fullTypes)
+	confirmed := map[string]bool{}
+	for _, match := range inventoryRaw {
+		name := strings.TrimSpace(match.Meta["C"])
+		if name == "TargetService" || name == `\u0054argetService` {
+			confirmed[match.Path] = true
+		}
+	}
+	if len(confirmed) != 2 {
+		t.Fatalf("fixture must expose both declarations through AST wildcard inventory, confirmed=%v raw=%#v", confirmed, inventoryRaw)
 	}
 
 	t.Run("superclass", func(t *testing.T) {
