@@ -322,7 +322,11 @@ class Handler(BaseHTTPRequestHandler):
         selection_pending = USER_SELECTION_MARKER in text and SELECTION_CREATED_MARKER not in text
         hard_stop_active = HARD_STOP_CONTRACT_MARKER in text
         if selection_pending and hard_stop_active:
-            if user_text == "harness review":
+            # USER_SELECTION itself is the turn boundary. Do not require the original
+            # `harness review` text to survive every OpenCode tool-call round: the current
+            # Runtime state plus active contract is authoritative. Only an explicit next-
+            # turn FULL selection is allowed to advance past this checkpoint in this E2E.
+            if user_text not in {"全部", "全部评审"}:
                 options = runtime_chain_options(text)
                 if len(options) < 2:
                     self.respond_text(body, "TASK163_E2E_ABORT Runtime chain options unavailable for user display")
@@ -335,9 +339,6 @@ class Handler(BaseHTTPRequestHandler):
                     }
                 )
                 self.respond_text(body, selection_prompt(options))
-                return
-            if user_text not in {"全部", "全部评审"}:
-                self.respond_text(body, "TASK163_E2E_ABORT explicit next-turn selection missing")
                 return
             self.append_log(
                 {
