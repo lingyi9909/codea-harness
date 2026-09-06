@@ -43,6 +43,13 @@ jobs:
           & '.code-harness/bin/ast-grep.exe' --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Task 2 persistence authority and TOCTOU gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./internal/chain -run '^Test163Task2(ProjectDiscoverSealPersist|ProjectDiscoverPersistedChain|ProjectSourceStaleBeforePersistRejects|ProjectSourceChangedDuringDiscoveryRejects)$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Task 2 focused clean-project discovery gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
@@ -71,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
-          go test -count=1 ./cmd/codea-dcep-tools -run '^(Test163Task2ActiveContractsSplitProjectFromAffectedDiscovery|Test163Task2CleanProjectDiscoveryFindsExistingChain|TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState|TestChainDiscoverRejectsOutsideInputAndRunIDMismatch|TestChainDiscoverRejectsRawTargetOrOutputCLIArguments)$'
+          go test -count=1 ./cmd/codea-dcep-tools -run '^(Test163Task2ActiveContractsSplitProjectFromAffectedDiscovery|Test163Task2CleanProjectDiscoveryFindsExistingChain|Test163Task2AffectedPersistRegression|TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState|TestChainDiscoverRejectsOutsideInputAndRunIDMismatch|TestChainDiscoverRejectsRawTargetOrOutputCLIArguments)$'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Static verification
