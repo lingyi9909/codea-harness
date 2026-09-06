@@ -86,7 +86,7 @@ STAGES: list[tuple[str, str]] = [
     ),
     (
         "Verify Runtime returned USER_SELECTION",
-        "$o=Get-Content -Raw .code-harness/runs/task3-multi-chain-review/analysis/review-options.json|ConvertFrom-Json; if([string]$o.decision-ne'USER_SELECTION'){throw ('expected USER_SELECTION got '+$o.decision)}; if(@($o.options).Count-lt 2){throw 'expected 2+ review options'}; Get-Content -Raw .code-harness/runs/task3-multi-chain-review/analysis/review-options.json; Write-Output 'TASK163_STAGE_10 PASS USER_SELECTION'",
+        "$o=Get-Content -Raw .code-harness/runs/task3-multi-chain-review/analysis/review-options.json|ConvertFrom-Json; if([string]$o.decision-ne'USER_SELECTION'){throw ('expected USER_SELECTION got '+$o.decision)}; if(@($o.chains).Count-lt 2){throw 'expected 2+ review options'}; Get-Content -Raw .code-harness/runs/task3-multi-chain-review/analysis/review-options.json; Write-Output 'TASK163_STAGE_10 PASS USER_SELECTION'",
     ),
     (
         "Create FULL selection only after explicit second-turn user choice",
