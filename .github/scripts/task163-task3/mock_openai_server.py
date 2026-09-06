@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Task 3 deterministic OpenAI entrypoint.
 
-OpenCode may encode tool-result transport as role=user messages and may wrap terminal
-user text in provider-specific content envelopes. This adapter extracts only exact
-terminal user intents; USER_SELECTION stopping remains conditional on the active Task 3
-contract marker inside the engine, so the no-contract negative control still advances in
-the same Assistant turn.
+OpenCode sends one Assistant turn as multiple model requests while tool calls execute.
+Later requests may contain only tool transport and omit the original terminal user text.
+This adapter remembers only the most recent *explicit terminal user intent* across those
+requests. It does not remember or enforce USER_SELECTION state: the hard stop remains
+conditional on the active Task 3 contract marker inside the engine, so removing that
+contract still makes the same E2E advance past USER_SELECTION for the negative control.
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ _TOOL_ENVELOPE_TYPES = {
     "function-result",
     "function_result",
 }
+_last_terminal_intent = ""
 
 
 def exact_intent_leaf(value: Any) -> str:
@@ -50,8 +52,6 @@ def exact_intent_leaf(value: Any) -> str:
         envelope_type = str(value.get("type", "")).strip().lower()
         if envelope_type in _TOOL_ENVELOPE_TYPES:
             return ""
-        # Provider adapters use several wrappers for genuine text. Inspect only known
-        # text-bearing fields and require the leaf itself to exactly equal an intent.
         for key in ("text", "content", "value", "input", "prompt"):
             if key not in value:
                 continue
@@ -61,24 +61,31 @@ def exact_intent_leaf(value: Any) -> str:
     return ""
 
 
-def latest_explicit_user_intent(messages: list[dict[str, Any]]) -> str:
-    """Return the newest explicit terminal-user intent, never inferred from tool output."""
-    # Normal OpenAI-compatible shape: terminal input is a role=user message.
+def current_explicit_user_intent(messages: list[dict[str, Any]]) -> str:
+    """Extract a newly supplied terminal-user intent from the current model request."""
     for message in reversed(messages):
         if message.get("role") != "user":
             continue
         intent = exact_intent_leaf(message.get("content", ""))
         if intent:
             return intent
-
-    # OpenCode/provider adapters can wrap the original terminal text outside the canonical
-    # user content field on later tool-call rounds. Exact-leaf matching keeps this fallback
-    # fail-closed: contract prose and command transcripts are larger strings and do not match.
+    # Provider adapters can place terminal input in another message envelope. Because the
+    # leaf must exactly equal one of the three E2E user inputs, contract prose/tool output
+    # cannot accidentally become an intent.
     for message in reversed(messages):
         intent = exact_intent_leaf(message)
         if intent:
             return intent
     return ""
+
+
+def latest_explicit_user_intent(messages: list[dict[str, Any]]) -> str:
+    """Carry the real terminal intent across tool-call rounds of the same Assistant turn."""
+    global _last_terminal_intent
+    current = current_explicit_user_intent(messages)
+    if current:
+        _last_terminal_intent = current
+    return _last_terminal_intent
 
 
 engine.latest_user_text = latest_explicit_user_intent
