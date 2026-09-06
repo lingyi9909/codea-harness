@@ -26,6 +26,11 @@ jobs:
         working-directory: .code-harness/tools-runtime
         run: go test -count=1 -run 'Test163Workspace' -v ./internal/nav
 
+      - name: Task 1 workspace navigation regression
+        shell: pwsh
+        working-directory: .code-harness/tools-runtime
+        run: go test -count=1 ./internal/nav
+
       - name: Exact head verification
         shell: pwsh
         run: |
