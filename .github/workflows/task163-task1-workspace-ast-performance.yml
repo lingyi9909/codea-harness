@@ -30,7 +30,7 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 ./internal/nav -run 'Test163WorkspaceAST(NarrowsConcreteClassCandidates|LargeJSONRecord|CandidateTextIsNotSemanticAuthority)$'
+          go test -count=1 ./internal/nav -run 'Test163WorkspaceAST(NarrowsConcreteClassCandidates|LargeJSONRecord|CandidateTextIsNotSemanticAuthority|PrefilterMissFallsBackToAST|EmptySubclassCandidatesDoNotRescanRoot)$'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Vendor pinned ast-grep Windows x64
