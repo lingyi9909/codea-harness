@@ -1,0 +1,60 @@
+name: task163-clean-project-chain-discovery
+
+on:
+  push:
+    branches:
+      - hotfix/1.6.3-runtime-usability-task2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  task2-clean-project-discovery:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+
+      - name: Vendor pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-163-task2.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-163-task2'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Task 2 focused clean-project discovery gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 -v ./cmd/codea-dcep-tools -run '^Test163Task2'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Affected discovery + chain regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/chain ./cmd/codea-dcep-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Static verification
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
