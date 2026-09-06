@@ -50,6 +50,14 @@ jobs:
           & '.code-harness/bin/ast-grep.exe' --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Task 1 blocker regressions
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 -v ./internal/nav -run 'Test163WorkspaceAST(UnicodeEscapeAmbiguityUsesFullASTAuthority|ResolverLargeClassWithinProductionBudget)$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Task 1 focused Workspace AST gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
