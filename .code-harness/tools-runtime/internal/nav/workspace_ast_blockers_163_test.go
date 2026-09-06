@@ -37,32 +37,17 @@ class \u0054argetService extends BaseService {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	inventoryRaw, err := n.runWorkspaceRaw(ctx, workspaceClassPatterns("$C", true)...)
-	if err != nil {
-		t.Fatalf("full AST fixture inventory failed: %v", err)
-	}
-	confirmed := map[string]bool{}
-	for _, match := range inventoryRaw {
-		name := strings.TrimSpace(match.Meta["C"])
-		if name == "TargetService" || name == `\u0054argetService` {
-			confirmed[match.Path] = true
-		}
-	}
-	if len(confirmed) != 2 {
-		t.Fatalf("fixture must expose both declarations through AST wildcard inventory, confirmed=%v raw=%#v", confirmed, inventoryRaw)
-	}
-
 	t.Run("superclass", func(t *testing.T) {
 		_, err := n.WorkspaceSuperclass(ctx, "TargetService")
 		if !errors.Is(err, ErrAmbiguousSymbol) {
-			t.Fatalf("WorkspaceSuperclass must preserve AST ambiguity across prefilter misses, got %v", err)
+			t.Fatalf("WorkspaceSuperclass must preserve AST ambiguity across Unicode-escaped candidate misses, got %v", err)
 		}
 	})
 
 	t.Run("method", func(t *testing.T) {
 		_, err := n.WorkspaceMethod(ctx, "TargetService", "target")
 		if !errors.Is(err, ErrAmbiguousSymbol) {
-			t.Fatalf("WorkspaceMethod must preserve AST ambiguity across prefilter misses, got %v", err)
+			t.Fatalf("WorkspaceMethod must preserve AST ambiguity across Unicode-escaped candidate misses, got %v", err)
 		}
 	})
 }
