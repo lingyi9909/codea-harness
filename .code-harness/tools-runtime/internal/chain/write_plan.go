@@ -185,6 +185,7 @@ func PersistWritePlan(root string, runID, planID string) error {
 	}
 
 	var candidate Chain
+	var candidateCert CandidateCertificate
 	switch plan.AuthorityKind {
 	case "":
 		if plan.SourceHash != "" {
@@ -198,7 +199,7 @@ func PersistWritePlan(root string, runID, planID string) error {
 		if analysisCert.AnalysisSHA256 != plan.AnalysisHash {
 			return fmt.Errorf("CHAIN_WRITE_PLAN_ANALYSIS_HASH_MISMATCH")
 		}
-		candidate, candidateCert, err := LoadRuntimeCandidate(root, plan.CandidatePath, analysisCert)
+		candidate, candidateCert, err = LoadRuntimeCandidate(root, plan.CandidatePath, analysisCert)
 		if err != nil {
 			return err
 		}
@@ -217,17 +218,18 @@ func PersistWritePlan(root string, runID, planID string) error {
 		if plan.SourceHash == "" || plan.AnalysisHash != plan.SourceHash {
 			return fmt.Errorf("CHAIN_WRITE_PLAN_PROJECT_SOURCE_IDENTITY_MISMATCH")
 		}
-		projectCandidate, candidateCert, err := LoadProjectRuntimeCandidate(root, plan.CandidatePath)
+		projectCandidate, projectCert, err := LoadProjectRuntimeCandidate(root, plan.CandidatePath)
 		if err != nil {
 			return err
 		}
-		if candidateCert.RunID != runID || candidateCert.SourceHash != plan.SourceHash || candidateCert.AnalysisHash != plan.AnalysisHash {
+		if projectCert.RunID != runID || projectCert.SourceHash != plan.SourceHash || projectCert.AnalysisHash != plan.AnalysisHash {
 			return fmt.Errorf("CHAIN_WRITE_PLAN_PROJECT_SOURCE_IDENTITY_MISMATCH")
 		}
-		if candidateCert.CandidateHash != plan.CandidateHash {
+		if projectCert.CandidateHash != plan.CandidateHash {
 			return fmt.Errorf("CHAIN_CANDIDATE_HASH_MISMATCH: %s", plan.ChainID)
 		}
 		candidate = projectCandidate
+		candidateCert = projectCert
 	default:
 		return fmt.Errorf("CHAIN_WRITE_PLAN_AUTHORITY_INVALID: %s", plan.AuthorityKind)
 	}
