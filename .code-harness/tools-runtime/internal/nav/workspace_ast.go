@@ -14,6 +14,8 @@ import (
 	"strings"
 )
 
+const workspaceASTMaxJSONRecord = 16 * 1024 * 1024
+
 type workspaceMetaValue struct {
 	Text string `json:"text"`
 }
@@ -66,29 +68,33 @@ type workspaceMethodMatch struct {
 }
 
 func (n Navigator) runWorkspaceRaw(ctx context.Context, patterns ...string) ([]workspaceRawMatch, error) {
+	return n.runWorkspaceRawTargets(ctx, nil, patterns...)
+}
+
+func (n Navigator) runWorkspaceRawTargets(ctx context.Context, targets []string, patterns ...string) ([]workspaceRawMatch, error) {
 	scope := "src/main/java"
 	if err := n.validate("X", scope); err != nil {
 		return nil, err
 	}
-	root := strings.TrimSpace(n.RepoRoot)
-	if root == "" {
-		root = "."
-	}
-	rootAbs, err := filepath.Abs(root)
+	rootAbs, sourceRoot, exists, err := n.workspaceRoots()
 	if err != nil {
 		return nil, err
 	}
-	rootAbs = filepath.Clean(rootAbs)
-	sourceRoot := filepath.Join(rootAbs, "src", "main", "java")
-	info, err := os.Stat(sourceRoot)
-	if errors.Is(err, os.ErrNotExist) {
+	if !exists {
 		return []workspaceRawMatch{}, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	if !info.IsDir() {
-		return []workspaceRawMatch{}, nil
+
+	var scanTargets []string
+	if targets == nil {
+		scanTargets = []string{sourceRoot}
+	} else {
+		scanTargets, err = workspaceNormalizeTargets(rootAbs, sourceRoot, targets)
+		if err != nil {
+			return nil, err
+		}
+		if len(scanTargets) == 0 {
+			return []workspaceRawMatch{}, nil
+		}
 	}
 
 	runner := n.Runner
@@ -98,7 +104,8 @@ func (n Navigator) runWorkspaceRaw(ctx context.Context, patterns ...string) ([]w
 	seen := map[string]bool{}
 	var out []workspaceRawMatch
 	for _, pattern := range patterns {
-		args := []string{"--lang", "java", "--json=stream", "--pattern", pattern, sourceRoot}
+		args := []string{"--lang", "java", "--json=stream", "--pattern", pattern}
+		args = append(args, scanTargets...)
 		data, runErr := runner.Run(ctx, n.AstGrepPath, args...)
 		if runErr != nil {
 			var exitErr *exec.ExitError
@@ -110,6 +117,7 @@ func (n Navigator) runWorkspaceRaw(ctx context.Context, patterns ...string) ([]w
 			}
 		}
 		scanner := bufio.NewScanner(bytes.NewReader(data))
+		scanner.Buffer(make([]byte, 64*1024), workspaceASTMaxJSONRecord)
 		for scanner.Scan() {
 			var line workspaceSGLine
 			if json.Unmarshal(scanner.Bytes(), &line) != nil {
@@ -160,6 +168,143 @@ func (n Navigator) runWorkspaceRaw(ctx context.Context, patterns ...string) ([]w
 		}
 		return out[i].Path < out[j].Path
 	})
+	return out, nil
+}
+
+func (n Navigator) workspaceRoots() (rootAbs, sourceRoot string, exists bool, err error) {
+	root := strings.TrimSpace(n.RepoRoot)
+	if root == "" {
+		root = "."
+	}
+	rootAbs, err = filepath.Abs(root)
+	if err != nil {
+		return "", "", false, err
+	}
+	rootAbs = filepath.Clean(rootAbs)
+	sourceRoot = filepath.Join(rootAbs, "src", "main", "java")
+	info, statErr := os.Stat(sourceRoot)
+	if errors.Is(statErr, os.ErrNotExist) {
+		return rootAbs, sourceRoot, false, nil
+	}
+	if statErr != nil {
+		return "", "", false, statErr
+	}
+	if !info.IsDir() {
+		return rootAbs, sourceRoot, false, nil
+	}
+	return rootAbs, sourceRoot, true, nil
+}
+
+func (n Navigator) workspaceCandidateJavaFiles(literals ...string) ([]string, error) {
+	for _, literal := range literals {
+		if !identRE.MatchString(literal) {
+			return nil, ErrInvalidSymbol
+		}
+	}
+	_, sourceRoot, exists, err := n.workspaceRoots()
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return []string{}, nil
+	}
+	files, err := workspaceJavaInventory(sourceRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(literals) == 0 {
+		return files, nil
+	}
+	out := make([]string, 0, len(files))
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return nil, err
+		}
+		matches := true
+		for _, literal := range literals {
+			if !bytes.Contains(data, []byte(literal)) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			out = append(out, file)
+		}
+	}
+	return out, nil
+}
+
+func workspaceJavaInventory(sourceRoot string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(sourceRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(entry.Name()), ".java") {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		files = append(files, filepath.Clean(path))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func workspaceNormalizeTargets(rootAbs, sourceRoot string, targets []string) ([]string, error) {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if strings.TrimSpace(target) == "" {
+			continue
+		}
+		clean := filepath.Clean(filepath.FromSlash(target))
+		if !filepath.IsAbs(clean) {
+			clean = filepath.Join(rootAbs, clean)
+		}
+		abs, err := filepath.Abs(clean)
+		if err != nil {
+			return nil, err
+		}
+		abs = filepath.Clean(abs)
+		rel, err := filepath.Rel(sourceRoot, abs)
+		if err != nil {
+			return nil, err
+		}
+		relSlash := filepath.ToSlash(rel)
+		if relSlash == ".." || strings.HasPrefix(relSlash, "../") || filepath.IsAbs(rel) {
+			return nil, fmt.Errorf("workspace AST candidate escaped source root: %s", target)
+		}
+		if !strings.EqualFold(filepath.Ext(abs), ".java") {
+			return nil, fmt.Errorf("workspace AST candidate is not Java source: %s", target)
+		}
+		info, err := os.Stat(abs)
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("workspace AST candidate is not a regular file: %s", target)
+		}
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
+		out = append(out, abs)
+	}
+	sort.Strings(out)
 	return out, nil
 }
 
@@ -243,7 +388,11 @@ func (n Navigator) WorkspaceSuperclass(ctx context.Context, className string) (w
 		"class " + className + " extends $SUPER implements $$$IFACES { $$$BODY }",
 		"public class " + className + " extends $SUPER implements $$$IFACES { $$$BODY }",
 	}
-	raw, err := n.runWorkspaceRaw(ctx, withAnnotationVariants(patterns)...)
+	candidates, err := n.workspaceCandidateJavaFiles(className)
+	if err != nil {
+		return workspaceTypeMatch{}, err
+	}
+	raw, err := n.runWorkspaceRawTargets(ctx, candidates, withAnnotationVariants(patterns)...)
 	if err != nil {
 		return workspaceTypeMatch{}, err
 	}
@@ -261,7 +410,11 @@ func (n Navigator) WorkspaceMethod(ctx context.Context, owner, method string) (w
 	if !identRE.MatchString(owner) || !identRE.MatchString(method) {
 		return workspaceMethodMatch{}, ErrInvalidSymbol
 	}
-	typesRaw, err := n.runWorkspaceRaw(ctx, workspaceClassPatterns(owner, true)...)
+	candidates, err := n.workspaceCandidateJavaFiles(owner)
+	if err != nil {
+		return workspaceMethodMatch{}, err
+	}
+	typesRaw, err := n.runWorkspaceRawTargets(ctx, candidates, workspaceClassPatterns(owner, true)...)
 	if err != nil {
 		return workspaceMethodMatch{}, err
 	}
@@ -272,12 +425,13 @@ func (n Navigator) WorkspaceMethod(ctx context.Context, owner, method string) (w
 	if len(types) > 1 {
 		return workspaceMethodMatch{}, ErrAmbiguousSymbol
 	}
-	methodsRaw, err := n.runWorkspaceRaw(ctx, workspaceMethodPatterns(method)...)
+	ownerTargets := []string{types[0].Path}
+	methodsRaw, err := n.runWorkspaceRawTargets(ctx, ownerTargets, workspaceMethodPatterns(method)...)
 	if err != nil {
 		return workspaceMethodMatch{}, err
 	}
 	methods := workspaceMethodsInside(types[0], methodsRaw, owner, method)
-	allTypes, err := n.workspaceAllClassTypes(ctx)
+	allTypes, err := n.workspaceAllClassTypes(ctx, ownerTargets...)
 	if err != nil {
 		return workspaceMethodMatch{}, err
 	}
@@ -300,7 +454,7 @@ func (n Navigator) WorkspaceMethodCalls(ctx context.Context, fromSymbol, called 
 	if err != nil {
 		return false, err
 	}
-	calls, err := n.runWorkspaceRaw(ctx, called+"($$$ARGS)", "super."+called+"($$$ARGS)")
+	calls, err := n.runWorkspaceRawTargets(ctx, []string{from.Path}, called+"($$$ARGS)", "super."+called+"($$$ARGS)")
 	if err != nil {
 		return false, err
 	}
@@ -319,15 +473,24 @@ func (n Navigator) WorkspaceDirectSubclassesWithMethod(ctx context.Context, supe
 	if concrete != "" && !identRE.MatchString(concrete) {
 		return nil, ErrInvalidSymbol
 	}
-	classesRaw, err := n.runWorkspaceRaw(ctx, workspaceSubclassPatterns(superName)...)
+	literals := []string{superName}
+	if concrete != "" {
+		literals = append(literals, concrete)
+	}
+	candidates, err := n.workspaceCandidateJavaFiles(literals...)
 	if err != nil {
 		return nil, err
 	}
-	methodRaw, err := n.runWorkspaceRaw(ctx, workspaceMethodPatterns(method)...)
+	classesRaw, err := n.runWorkspaceRawTargets(ctx, candidates, workspaceSubclassPatterns(superName)...)
 	if err != nil {
 		return nil, err
 	}
-	allTypes, err := n.workspaceAllClassTypes(ctx)
+	classTargets := workspaceRawPaths(classesRaw)
+	methodRaw, err := n.runWorkspaceRawTargets(ctx, classTargets, workspaceMethodPatterns(method)...)
+	if err != nil {
+		return nil, err
+	}
+	allTypes, err := n.workspaceAllClassTypes(ctx, classTargets...)
 	if err != nil {
 		return nil, err
 	}
@@ -377,8 +540,26 @@ func (n Navigator) WorkspaceDirectSubclassesWithMethod(ctx context.Context, supe
 	return out, nil
 }
 
-func (n Navigator) workspaceAllClassTypes(ctx context.Context) ([]workspaceTypeMatch, error) {
-	raw, err := n.runWorkspaceRaw(ctx, workspaceClassPatterns("$C", true)...)
+func workspaceRawPaths(raw []workspaceRawMatch) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, match := range raw {
+		if match.Path == "" || seen[match.Path] {
+			continue
+		}
+		seen[match.Path] = true
+		out = append(out, match.Path)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (n Navigator) workspaceAllClassTypes(ctx context.Context, targets ...string) ([]workspaceTypeMatch, error) {
+	var targetArg []string
+	if targets != nil {
+		targetArg = append([]string(nil), targets...)
+	}
+	raw, err := n.runWorkspaceRawTargets(ctx, targetArg, workspaceClassPatterns("$C", true)...)
 	if err != nil {
 		return nil, err
 	}
