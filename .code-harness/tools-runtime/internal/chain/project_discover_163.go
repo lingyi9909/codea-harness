@@ -52,6 +52,14 @@ func DiscoverProject(ctx context.Context, root string, in ProjectDiscoverInput) 
 		return result, ProjectSourceIdentity{}, fmt.Errorf("invalid chain discovery target %q", in.Target)
 	}
 
+	// Capture the source identity before any navigation. The exact same source
+	// state must still exist after discovery before a candidate can be persisted
+	// or certified as PROJECT_SOURCE authority.
+	before, err := computeProjectSourceIdentity163(root, in.RunID)
+	if err != nil {
+		return result, ProjectSourceIdentity{}, err
+	}
+
 	navigator := in.Navigator
 	if strings.TrimSpace(navigator.RepoRoot) == "" {
 		navigator.RepoRoot = root
@@ -68,9 +76,9 @@ func DiscoverProject(ctx context.Context, root string, in ProjectDiscoverInput) 
 		} else {
 			result.Unresolved = []string{"PROJECT_TARGET_ENTRYPOINT_NOT_FOUND: " + in.Target}
 		}
-		identity, snapErr := SnapshotProjectSource(root, in.RunID)
-		if snapErr != nil {
-			return result, ProjectSourceIdentity{}, snapErr
+		identity, stableErr := finalizeProjectSourceIdentity163(root, before)
+		if stableErr != nil {
+			return result, ProjectSourceIdentity{}, stableErr
 		}
 		return result, identity, nil
 	}
@@ -111,11 +119,11 @@ func DiscoverProject(ctx context.Context, root string, in ProjectDiscoverInput) 
 		result.Status = DiscoveryPartial
 		result.Unresolved = []string{"PROJECT_CHAIN_NOT_RESOLVED"}
 	}
-	if err := persistDiscovered(root, in.RunID, discovered); err != nil {
+	identity, err := finalizeProjectSourceIdentity163(root, before)
+	if err != nil {
 		return result, ProjectSourceIdentity{}, err
 	}
-	identity, err := SnapshotProjectSource(root, in.RunID)
-	if err != nil {
+	if err := persistDiscovered(root, in.RunID, discovered); err != nil {
 		return result, ProjectSourceIdentity{}, err
 	}
 	return result, identity, nil
@@ -416,19 +424,43 @@ func SnapshotProjectSource(root, runID string) (ProjectSourceIdentity, error) {
 	if err != nil {
 		return ProjectSourceIdentity{}, err
 	}
-	data, err := json.MarshalIndent(identity, "", "  ")
+	if err := persistProjectSourceIdentity163(root, identity); err != nil {
+		return ProjectSourceIdentity{}, err
+	}
+	return identity, nil
+}
+
+func finalizeProjectSourceIdentity163(root string, before ProjectSourceIdentity) (ProjectSourceIdentity, error) {
+	after, err := computeProjectSourceIdentity163(root, before.RunID)
 	if err != nil {
 		return ProjectSourceIdentity{}, err
 	}
+	if before.SourceHash == "" || before.SourceHash != after.SourceHash {
+		return ProjectSourceIdentity{}, fmt.Errorf("PROJECT_SOURCE_CHANGED_DURING_DISCOVERY")
+	}
+	if err := persistProjectSourceIdentity163(root, before); err != nil {
+		return ProjectSourceIdentity{}, err
+	}
+	return before, nil
+}
+
+func persistProjectSourceIdentity163(root string, identity ProjectSourceIdentity) error {
+	if identity.RunID == "" || identity.AuthorityKind != projectSourceAuthority163 || identity.SourceHash == "" {
+		return fmt.Errorf("PROJECT_SOURCE_IDENTITY_INVALID")
+	}
+	data, err := json.MarshalIndent(identity, "", "  ")
+	if err != nil {
+		return err
+	}
 	data = append(data, '\n')
-	path := filepath.Join(filepath.Clean(root), ".code-harness", "runs", runID, "analysis", "project-source.json")
+	path := filepath.Join(filepath.Clean(root), ".code-harness", "runs", identity.RunID, "analysis", "project-source.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return ProjectSourceIdentity{}, fmt.Errorf("PROJECT_SOURCE_DIR_FAILED: %w", err)
+		return fmt.Errorf("PROJECT_SOURCE_DIR_FAILED: %w", err)
 	}
 	if err := atomicReplace(path, data); err != nil {
-		return ProjectSourceIdentity{}, fmt.Errorf("PROJECT_SOURCE_WRITE_FAILED: %w", err)
+		return fmt.Errorf("PROJECT_SOURCE_WRITE_FAILED: %w", err)
 	}
-	return identity, nil
+	return nil
 }
 
 func computeProjectSourceIdentity163(root, runID string) (ProjectSourceIdentity, error) {
