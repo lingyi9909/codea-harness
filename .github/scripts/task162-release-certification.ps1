@@ -78,24 +78,21 @@ function Invoke-RetainedReviewAuthorityRegression([string]$Script, [string]$Labe
 
 function Invoke-RetainedBusinessRegression {
     $label = 'retained single-module business regression'
-    $runReadme = Join-Path $repoRoot '.code-harness/runs/README.md'
-    if (-not (Test-Path $runReadme -PathType Leaf)) { throw "$label current runs/README.md missing" }
-    $runReadmeBytes = [IO.File]::ReadAllBytes($runReadme)
-    $gitkeep = Join-Path $repoRoot '.code-harness/runs/.gitkeep'
-    $hadGitkeep = Test-Path $gitkeep -PathType Leaf
-    $gitkeepBytes = if ($hadGitkeep) { [IO.File]::ReadAllBytes($gitkeep) } else { $null }
+    $runsRoot = Join-Path $repoRoot '.code-harness/runs'
+    if (-not (Test-Path $runsRoot -PathType Container)) { throw "$label current runs directory missing" }
+    $backupRoot = Join-Path $env:RUNNER_TEMP ('task162-final-runs-backup-' + [guid]::NewGuid().ToString('N'))
 
     try {
-        Remove-Item $runReadme -Force
-        Remove-Item $gitkeep -Force -ErrorAction SilentlyContinue
+        Move-Item $runsRoot $backupRoot
+        New-Item -ItemType Directory -Force $runsRoot | Out-Null
         Invoke-Regression './.github/scripts/task152-task5-real-business-regression.ps1' $label
     }
     finally {
-        [IO.File]::WriteAllBytes($runReadme, $runReadmeBytes)
-        if ($hadGitkeep) { [IO.File]::WriteAllBytes($gitkeep, $gitkeepBytes) }
+        Remove-Item $runsRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $backupRoot -PathType Container) { Move-Item $backupRoot $runsRoot }
         $global:LASTEXITCODE = 0
     }
-    Write-Output 'TASK162_FINAL_RETAINED_BUSINESS_RUN_README_ADAPTER PASS'
+    Write-Output 'TASK162_FINAL_RETAINED_BUSINESS_RUN_STATE_ADAPTER PASS'
 }
 
 function Assert-AcceptedHotfixBaselines {
@@ -329,7 +326,7 @@ try {
     Invoke-Regression './.github/scripts/task152-workspace-smoke.ps1' 'retained Workspace regression'
     Invoke-RetainedBusinessRegression
     Invoke-Regression './.github/scripts/task162-hotfix-final-chain-regression.ps1' 'retained Chain regression (final Task 2 contract adapter)'
-    Invoke-Regression './.github/scripts/task160-real-review-precision-regression.ps1' 'retained 1.6 Review Precision regression'
+    Invoke-RetainedReviewAuthorityRegression './.github/scripts/task160-real-review-precision-regression.ps1' 'retained 1.6 Review Precision regression'
     Assert-RuntimeRenameRetained
 
     Write-Host 'TASK162 RELEASE: Task 2 package/no-Go/upgrade regression'
