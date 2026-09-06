@@ -1,0 +1,61 @@
+name: task163-workspace-ast-performance
+
+on:
+  push:
+    branches:
+      - hotfix/1.6.3-task1-workspace-ast-performance
+    paths:
+      - '.code-harness/tools-runtime/internal/nav/**'
+      - '.github/workflows/task163-workspace-ast-performance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  task1-workspace-ast-performance:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+
+      - name: Vendor pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-163.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-163'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Task 1 focused tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 -v ./internal/nav -run '^Test163Task1'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: internal/nav regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/nav
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Go vet Runtime
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
