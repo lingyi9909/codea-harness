@@ -33,7 +33,7 @@ func (ProjectExecRunner) Run(ctx context.Context, name string, args ...string) (
 	if patternIndex < 0 {
 		return data, originalErr
 	}
-	alternates := projectHeritagePatterns163(args[patternIndex])
+	alternates := projectFallbackPatterns163(args[patternIndex])
 	if len(alternates) == 0 {
 		return data, originalErr
 	}
@@ -63,15 +63,45 @@ func (ProjectExecRunner) Run(ctx context.Context, name string, args ...string) (
 	return data, originalErr
 }
 
-func projectHeritagePatterns163(pattern string) []string {
+func projectFallbackPatterns163(pattern string) []string {
 	const body = " { $$$BODY }"
-	if !strings.Contains(pattern, "class ") || strings.Contains(pattern, " extends ") || strings.Contains(pattern, " implements ") || !strings.HasSuffix(pattern, body) {
+	trimmed := strings.TrimSpace(pattern)
+	if !strings.Contains(trimmed, "class ") || !strings.HasSuffix(trimmed, body) {
 		return nil
 	}
-	prefix := strings.TrimSuffix(pattern, body)
-	return []string{
-		prefix + " extends $SUPER" + body,
-		prefix + " implements $$$IFACES" + body,
-		prefix + " extends $SUPER implements $$$IFACES" + body,
+
+	seen := map[string]bool{pattern: true}
+	out := make([]string, 0, 8)
+	add := func(value string) {
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
 	}
+	addAnnotated := func(value string) {
+		if strings.HasPrefix(strings.TrimSpace(value), "@") {
+			return
+		}
+		add("@$_ANN " + value)
+		add("@$_ANN($$$ANNARGS) " + value)
+	}
+
+	// FindImplementations already carries implements/extends semantics but the
+	// baseline patterns do not include annotations. PROJECT discovery may add
+	// those AST variants without changing the shared Navigator contract.
+	addAnnotated(pattern)
+
+	if !strings.Contains(trimmed, " extends ") && !strings.Contains(trimmed, " implements ") {
+		prefix := strings.TrimSuffix(pattern, body)
+		for _, heritage := range []string{
+			prefix + " extends $SUPER" + body,
+			prefix + " implements $$$IFACES" + body,
+			prefix + " extends $SUPER implements $$$IFACES" + body,
+		} {
+			add(heritage)
+			addAnnotated(heritage)
+		}
+	}
+	return out
 }
