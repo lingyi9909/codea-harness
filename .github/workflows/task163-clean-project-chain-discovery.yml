@@ -19,6 +19,13 @@ jobs:
         with:
           go-version: '1.23.x'
 
+      - name: Exact HEAD guard
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) { throw "exact-head mismatch: actual=$actual expected=$env:GITHUB_SHA" }
+          Write-Host "TASK163_TASK2_EXACT_HEAD $actual"
+
       - name: Vendor pinned ast-grep Windows x64
         shell: pwsh
         run: |
@@ -44,12 +51,26 @@ jobs:
           go test -count=1 -v ./cmd/codea-dcep-tools -run '^Test163Task2'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Affected discovery + chain + navigation regression
+      - name: Full navigation regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
           $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
-          go test -count=1 ./internal/nav ./internal/chain ./cmd/codea-dcep-tools
+          go test -count=1 ./internal/nav
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Full chain regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/chain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Public and AFFECTED chain-discover command regressions
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./cmd/codea-dcep-tools -run '^TestChainDiscover'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Static verification
@@ -58,3 +79,11 @@ jobs:
         run: |
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exact HEAD evidence
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) { throw "exact-head mismatch: actual=$actual expected=$env:GITHUB_SHA" }
+          Write-Host "TASK163_TASK2_EXACT_HEAD PASS"
+          Write-Host "head=$actual"
