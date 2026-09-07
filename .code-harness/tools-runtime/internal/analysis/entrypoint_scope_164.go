@@ -10,24 +10,27 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
+	"sync"
 
 	"codea-harness-tools/internal/changeset"
-	"codea-harness-tools/internal/nav"
 )
 
 // EntrypointScanPlan is Runtime-owned scope authority derived from the
-// freshness-validated canonical ChangeSet. It is internal execution evidence,
-// not Agent/Reviewer input and not part of certification hashes.
+// freshness-validated canonical ChangeSet. Agent/Reviewer/Orchestrator input
+// cannot supply or widen these paths.
 type EntrypointScanPlan struct {
-	RunID               string
-	SnapshotSHA256      string
-	MergeBase           string
-	CurrentPaths        []string
-	BasePaths           []string
-	CurrentScopeSHA256  string
-	BaseScopeSHA256     string
+	RunID              string
+	SnapshotSHA256     string
+	MergeBase          string
+	CurrentPaths       []string
+	BasePaths          []string
+	CurrentScopeSHA256 string
+	BaseScopeSHA256    string
+
+	baseSources           map[string][]byte
+	baseGitBatchProcesses int
+	mergeBaseProcesses    int
 }
 
 type snapshotScopedEntrypointScanner164 struct {
@@ -37,6 +40,12 @@ type snapshotScopedEntrypointScanner164 struct {
 	snapshotPaths map[string]bool
 	current       map[string]bool
 	base          map[string]bool
+
+	once           sync.Once
+	initErr        error
+	currentResults map[string][]ControllerEndpoint
+	baseResults    map[string][]ControllerEndpoint
+	stats          entrypointBatchStats164
 }
 
 type exactEntrypointRunner164 struct {
@@ -48,211 +57,130 @@ func buildEntrypointScanPlan164(ctx context.Context, repoRoot, runID string, sna
 	if strings.TrimSpace(runID) == "" {
 		return EntrypointScanPlan{}, errors.New("ENTRYPOINT_INVENTORY_RUN_ID_REQUIRED")
 	}
-	current := make([]string, 0, len(snapshot.Files))
-	baseCandidates := make([]string, 0, len(snapshot.Files))
-	for _, changed := range snapshot.Files {
-		p, ok := exactProductionJavaPath164(changed.Path)
-		if !ok {
-			if isProductionJava153(changed.Path) {
-				return EntrypointScanPlan{}, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: invalid snapshot path %q", changed.Path)
-			}
-			continue
-		}
-		full := filepath.Join(repoRoot, filepath.FromSlash(p))
-		if info, err := os.Stat(full); err == nil {
-			if !info.Mode().IsRegular() {
-				return EntrypointScanPlan{}, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: current source is not regular file %s", p)
-			}
-			current = append(current, p)
-		} else if !os.IsNotExist(err) {
-			return EntrypointScanPlan{}, fmt.Errorf("ENTRYPOINT_CURRENT_SOURCE_STAT_FAILED: %s: %w", p, err)
-		}
-		if strings.ToUpper(strings.TrimSpace(changed.Status)) != "A" {
-			baseCandidates = append(baseCandidates, p)
-		}
-	}
-	sort.Strings(current)
-	sort.Strings(baseCandidates)
-	base := baseCandidates
-	if strings.TrimSpace(snapshot.MergeBase) != "" && len(baseCandidates) > 0 {
-		var err error
-		base, err = probeBaseExistingPaths164(ctx, repoRoot, snapshot.MergeBase, baseCandidates)
-		if err != nil {
-			return EntrypointScanPlan{}, err
-		}
-	}
-	snapshotHash := strings.TrimSpace(snapshot.SnapshotSHA256)
-	if snapshotHash == "" {
-		snapshotHash = strings.TrimSpace(snapshot.SHA256)
-	}
-	return EntrypointScanPlan{
-		RunID:              runID,
-		SnapshotSHA256:     snapshotHash,
-		MergeBase:          strings.TrimSpace(snapshot.MergeBase),
-		CurrentPaths:       current,
-		BasePaths:          base,
-		CurrentScopeSHA256: hashEntrypointScope164(current),
-		BaseScopeSHA256:    hashEntrypointScope164(base),
-	}, nil
-}
-
-func probeBaseExistingPaths164(ctx context.Context, repoRoot, mergeBase string, candidates []string) ([]string, error) {
-	if strings.TrimSpace(mergeBase) == "" || len(candidates) == 0 {
-		return append([]string(nil), candidates...), nil
-	}
-	var request strings.Builder
-	for _, p := range candidates {
-		if _, ok := exactProductionJavaPath164(p); !ok || strings.ContainsAny(p, "\x00\r\n") {
-			return nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_OUT_OF_SCOPE: %q", p)
-		}
-		request.WriteString(mergeBase)
-		request.WriteByte(':')
-		request.WriteString(p)
-		request.WriteByte('\n')
-	}
-	cmd := exec.CommandContext(ctx, "git", "cat-file", "--batch-check")
-	cmd.Dir = repoRoot
-	cmd.Stdin = strings.NewReader(request.String())
-	out, err := cmd.CombinedOutput()
+	current, baseCandidates, err := classifyEntrypointPaths164(repoRoot, snapshot)
 	if err != nil {
-		return nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_PROBE_FAILED: %w: %s", err, strings.TrimSpace(string(out)))
+		return EntrypointScanPlan{}, err
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) != len(candidates) {
-		return nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_PROBE_FAILED: responses=%d requests=%d", len(lines), len(candidates))
+	stats := entrypointBatchStats164{}
+	baseSources, basePaths, err := loadEntrypointBaseSources164(ctx, repoRoot, snapshot, baseCandidates, &stats)
+	if err != nil {
+		return EntrypointScanPlan{}, err
 	}
-	base := make([]string, 0, len(candidates))
-	for i, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if strings.HasSuffix(line, " missing") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) != 3 || fields[1] != "blob" {
-			return nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_PROBE_FAILED: unexpected response for %s: %q", candidates[i], line)
-		}
-		base = append(base, candidates[i])
-	}
-	return base, nil
+	plan := newEntrypointScanPlan164(runID, snapshot, current, basePaths)
+	plan.baseSources = cloneBaseSources164(baseSources)
+	plan.baseGitBatchProcesses = stats.BaseGitBatchProcesses
+	plan.mergeBaseProcesses = stats.MergeBaseProcesses
+	return plan, nil
 }
 
-func newSnapshotScopedEntrypointScanner164(repoRoot, astGrepPath string, plan EntrypointScanPlan, snapshot changeset.Snapshot) snapshotScopedEntrypointScanner164 {
+func newSnapshotScopedEntrypointScanner164(repoRoot, astGrepPath string, plan EntrypointScanPlan, snapshot changeset.Snapshot) *snapshotScopedEntrypointScanner164 {
 	snapshotPaths := map[string]bool{}
 	for _, changed := range snapshot.Files {
 		if p, ok := exactProductionJavaPath164(changed.Path); ok {
 			snapshotPaths[p] = true
 		}
 	}
-	return snapshotScopedEntrypointScanner164{
+	return &snapshotScopedEntrypointScanner164{
 		repoRoot: repoRoot,
 		astGrepPath: astGrepPath,
 		plan: plan,
 		snapshotPaths: snapshotPaths,
 		current: pathSet164(plan.CurrentPaths),
 		base: pathSet164(plan.BasePaths),
+		stats: entrypointBatchStats164{
+			CurrentRequestedFiles: len(plan.CurrentPaths),
+			BaseRequestedFiles: len(plan.BasePaths),
+			BaseGitBatchProcesses: plan.baseGitBatchProcesses,
+			MergeBaseProcesses: plan.mergeBaseProcesses,
+		},
 	}
 }
 
-func (s snapshotScopedEntrypointScanner164) Current(ctx context.Context, p string) ([]ControllerEndpoint, error) {
-	p, ok := exactProductionJavaPath164(p)
-	if !ok || !s.snapshotPaths[p] {
+func (s *snapshotScopedEntrypointScanner164) Current(ctx context.Context, p string) ([]ControllerEndpoint, error) {
+	clean, ok := exactProductionJavaPath164(p)
+	if !ok || !s.snapshotPaths[clean] {
 		return nil, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: current path %q", p)
 	}
-	if !s.current[p] {
+	if !s.current[clean] {
 		return nil, nil
 	}
-	return s.scanExactAtRoot(ctx, s.repoRoot, p)
+	if err := s.ensureBatch164(ctx); err != nil {
+		return nil, err
+	}
+	return append([]ControllerEndpoint(nil), s.currentResults[clean]...), nil
 }
 
-func (s snapshotScopedEntrypointScanner164) Base(ctx context.Context, snapshot changeset.Snapshot, p string) ([]ControllerEndpoint, error) {
-	p, ok := exactProductionJavaPath164(p)
-	if !ok || !s.snapshotPaths[p] {
+func (s *snapshotScopedEntrypointScanner164) Base(ctx context.Context, snapshot changeset.Snapshot, p string) ([]ControllerEndpoint, error) {
+	clean, ok := exactProductionJavaPath164(p)
+	if !ok || !s.snapshotPaths[clean] {
 		return nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_OUT_OF_SCOPE: %q", p)
 	}
-	if !s.base[p] {
+	if strings.TrimSpace(snapshot.MergeBase) != "" && strings.TrimSpace(s.plan.MergeBase) != "" && strings.TrimSpace(snapshot.MergeBase) != strings.TrimSpace(s.plan.MergeBase) {
+		return nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_OUT_OF_SCOPE: mergeBase changed from %s to %s", s.plan.MergeBase, snapshot.MergeBase)
+	}
+	if !s.base[clean] {
 		return nil, nil
 	}
-	mergeBase := strings.TrimSpace(snapshot.MergeBase)
-	if mergeBase == "" {
-		mergeBaseCmd := exec.CommandContext(ctx, "git", "merge-base", snapshot.BaseRef, "HEAD")
-		mergeBaseCmd.Dir = s.repoRoot
-		mergeBaseBytes, err := mergeBaseCmd.CombinedOutput()
+	if err := s.ensureBatch164(ctx); err != nil {
+		return nil, err
+	}
+	return append([]ControllerEndpoint(nil), s.baseResults[clean]...), nil
+}
+
+func (s *snapshotScopedEntrypointScanner164) ensureBatch164(ctx context.Context) error {
+	s.once.Do(func() {
+		tmpRoot, err := os.MkdirTemp("", "codea-harness-entrypoint-batch-")
 		if err != nil {
-			return nil, fmt.Errorf("git merge-base %s HEAD: %w: %s", snapshot.BaseRef, err, strings.TrimSpace(string(mergeBaseBytes)))
+			s.initErr = fmt.Errorf("ENTRYPOINT_BATCH_TEMP_CREATE_FAILED: %w", err)
+			return
 		}
-		mergeBase = strings.TrimSpace(string(mergeBaseBytes))
-	}
-	object := mergeBase + ":" + p
-	show := exec.CommandContext(ctx, "git", "show", object)
-	show.Dir = s.repoRoot
-	content, err := show.Output()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return nil, nil
+		if insideRepository164(s.repoRoot, tmpRoot) {
+			_ = os.RemoveAll(tmpRoot)
+			s.initErr = errors.New("ENTRYPOINT_BATCH_TEMP_SCOPE_INVALID: temp workspace must be outside repository")
+			return
 		}
-		return nil, err
-	}
-	tmp, err := os.MkdirTemp("", "codea-harness-entrypoint-base-")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(tmp)
-	tmpFile := filepath.Join(tmp, filepath.FromSlash(p))
-	if err := os.MkdirAll(filepath.Dir(tmpFile), 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(tmpFile, content, 0o600); err != nil {
-		return nil, err
-	}
-	return s.scanExactAtRoot(ctx, tmp, p)
-}
+		defer func() {
+			if cleanupErr := os.RemoveAll(tmpRoot); cleanupErr != nil && s.initErr == nil {
+				s.initErr = fmt.Errorf("ENTRYPOINT_BATCH_TEMP_CLEANUP_FAILED: %w", cleanupErr)
+			}
+		}()
 
-func (s snapshotScopedEntrypointScanner164) scanExactAtRoot(ctx context.Context, scanRoot, scope string) ([]ControllerEndpoint, error) {
-	if _, ok := exactProductionJavaPath164(scope); !ok {
-		return nil, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: %q", scope)
-	}
-	full := filepath.Join(scanRoot, filepath.FromSlash(scope))
-	info, err := os.Stat(full)
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: non-file scope %s", scope)
-	}
-	allowed := map[string]bool{scope: true}
-	n := nav.Navigator{
-		RepoRoot: scanRoot,
-		AstGrepPath: s.astGrepPath,
-		Runner: exactEntrypointRunner164{dir: scanRoot, allowed: allowed},
-	}
-	matches, err := n.FindControllerEndpoints(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ControllerEndpoint, 0, len(matches))
-	for _, match := range matches {
-		matchPath := filepath.ToSlash(match.Path)
-		if !allowed[matchPath] {
-			return nil, fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: requested=%s result=%s", scope, matchPath)
+		currentRoot := filepath.Join(tmpRoot, "current")
+		baseRoot := filepath.Join(tmpRoot, "base")
+		if err := materializeCurrentEntrypointSources164(s.repoRoot, currentRoot, s.plan.CurrentPaths); err != nil {
+			s.initErr = err
+			return
 		}
-		out = append(out, ControllerEndpoint{
-			Controller: match.Controller,
-			Symbol: match.Symbol,
-			Path: matchPath,
-			ControllerStartLine: match.ControllerStartLine,
-			ControllerEndLine: match.ControllerEndLine,
-			StartLine: match.StartLine,
-			EndLine: match.EndLine,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Symbol != out[j].Symbol { return out[i].Symbol < out[j].Symbol }
-		return out[i].StartLine < out[j].StartLine
+		if err := materializeBaseEntrypointSources164(baseRoot, s.plan.BasePaths, s.plan.baseSources); err != nil {
+			s.initErr = err
+			return
+		}
+		s.currentResults, err = scanEntrypointSide164(ctx, currentRoot, s.astGrepPath, s.plan.CurrentPaths, &s.stats.CurrentASTProcesses)
+		if err != nil {
+			s.initErr = fmt.Errorf("ENTRYPOINT_CURRENT_SCAN_FAILED: %w", err)
+			return
+		}
+		if len(s.plan.CurrentPaths) > 0 {
+			s.stats.CurrentScannedFiles = len(s.plan.CurrentPaths)
+		}
+		s.baseResults, err = scanEntrypointSide164(ctx, baseRoot, s.astGrepPath, s.plan.BasePaths, &s.stats.BaseASTProcesses)
+		if err != nil {
+			s.initErr = fmt.Errorf("ENTRYPOINT_BASE_SCAN_FAILED: %w", err)
+			return
+		}
+		if len(s.plan.BasePaths) > 0 {
+			s.stats.BaseScannedFiles = len(s.plan.BasePaths)
+		}
 	})
-	return out, nil
+	return s.initErr
 }
 
+func (s *snapshotScopedEntrypointScanner164) stats164() entrypointBatchStats164 {
+	return s.stats
+}
+
+// exactEntrypointRunner164 is retained as the Task 1A single-file runner
+// regression. Production Task 1B uses exactBatchEntrypointRunner164.
 func (r exactEntrypointRunner164) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	if len(args) == 0 {
 		return nil, errors.New("ENTRYPOINT_SCAN_SCOPE_WIDENED: missing exact file target")
@@ -309,4 +237,12 @@ func pathSet164(paths []string) map[string]bool {
 func hashEntrypointScope164(paths []string) string {
 	canonical, _ := json.Marshal(paths)
 	return fmt.Sprintf("%x", sha256.Sum256(canonical))
+}
+
+func cloneBaseSources164(in map[string][]byte) map[string][]byte {
+	out := make(map[string][]byte, len(in))
+	for p, content := range in {
+		out[p] = append([]byte(nil), content...)
+	}
+	return out
 }
