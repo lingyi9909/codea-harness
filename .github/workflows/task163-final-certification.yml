@@ -36,7 +36,8 @@ jobs:
         run: |
           foreach ($path in @(
             '.github/scripts/task163-final-certification.ps1',
-            '.github/scripts/task163-release-package.ps1'
+            '.github/scripts/task163-release-package.ps1',
+            '.github/scripts/task163-final-contract-regression.ps1'
           )) {
             $tokens = $null
             $errors = $null
@@ -51,6 +52,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m py_compile .github/scripts/task162-hotfix-task3/mock_openai_server.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Detached HEAD and fail-closed scope regression
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-final-contract-regression.ps1
 
       - name: Full final certification
         shell: pwsh
