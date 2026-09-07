@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.3 - 2026-09-07
+
+- **Workspace AST Performance Hardening**：大型 Java workspace 的 AST 导航改为候选预筛选 + 保守 Unicode escape authority，避免已知候选场景反复全仓扫描，并覆盖长 ast-grep JSON record、nested class、inheritance/interface/template 等回归。
+- **Clean Project Chain Discovery**：clean project discovery 正式持久化 Runtime-certified PROJECT source，增加 discovery 前后 source snapshot / hash 一致性与 persist 前 stale fail-closed，同时保留 AFFECTED ChangeAnalysis authority。
+- **Multi-Chain Review Explicit User Selection**：plain `harness review` 在 2+ 条业务 Chain 时进入 Runtime-owned `USER_SELECTION`；Turn 1 展示真实 Chain 选项并 hard stop，Turn 2 在同一 OpenCode session / review run 内根据用户 `全部` 或显式选择继续，不允许模型伪造 human selection provenance。
+- **Upgrade V2 Hash-Aware Delta Apply**：Framework managed artifacts 按 hash 分类 UNCHANGED / ADD / UPDATE / REMOVE；未变化文件不触碰，stale managed file 依据旧 `RELEASE-MANIFEST.json` 删除，未知用户文件保留；Windows live Runtime 仅在 bytes/hash 变化时安全替换，失败可事务回滚并在 rollback 失败时保留 backup/stage。
+- **Release Certification**：Windows x64 Final Certification 重新执行 full Go regression、`go vet ./...`、Task 1–4 gates、真实 OpenCode same-session E2E、1.6.2 retained Review Reliability regressions 与 install/upgrade package validation；正式 main 发布复用并校验 exact certified candidate，不重新构建已认证制品。
+
 ## 1.6.1
 
 - Windows Tool Runtime 正式从 `codea-harness-tools.exe` 改名为 `codea-dcep-tools.exe`，production invocation 与 active regression 统一使用新名称。
