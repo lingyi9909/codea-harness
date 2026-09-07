@@ -14,6 +14,14 @@ $definition = @($ast.FindAll({ param($node) $node -is [System.Management.Automat
 if ($definition.Count -ne 1) { throw 'Expected exactly one production Assert-ReleaseScope function' }
 . ([scriptblock]::Create($definition[0].Extent.Text))
 
+# Exercise the real gate runner too: successful native commands such as go vet
+# intentionally write no output, while failures must remain isolated and FAIL.
+foreach ($name in @('Invoke-Gate', 'Write-Checklist')) {
+    $function = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true))
+    if ($function.Count -ne 1) { throw "Expected exactly one production $name function" }
+    . ([scriptblock]::Create($function[0].Extent.Text))
+}
+
 function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
     & $Executable @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Executable $($Arguments -join ' ') exited $LASTEXITCODE" }
@@ -82,6 +90,56 @@ try {
     $expected = (& git -C $root rev-parse HEAD).Trim()
     $env:GITHUB_SHA = $expected
     Assert-Case 'scope-rejected' $false 'Unapproved release scope'
+
+    # A narrowly listed legacy test migration must not admit adjacent tests or
+    # production files. Each probe is independent of the previous bad commit.
+    foreach ($path in @(
+        '.code-harness/tools-runtime/cmd/codea-dcep-tools/unapproved_test.go',
+        '.code-harness/tools-runtime/cmd/codea-dcep-tools/workspace_chain_152.go'
+    )) {
+        Invoke-Git @('reset','--hard',$candidate)
+        $file = Join-Path $root $path
+        New-Item -ItemType Directory -Force (Split-Path $file) | Out-Null
+        [IO.File]::WriteAllText($file, 'package main')
+        Invoke-Git @('add','.')
+        Invoke-Git @('commit','-qm','fixture adjacent unapproved file')
+        $expected = (& git -C $root rev-parse HEAD).Trim()
+        $env:GITHUB_SHA = $expected
+        Assert-Case (Split-Path $path -Leaf) $false 'Unapproved release scope'
+    }
+
+    $evidence = Join-Path $root 'evidence'
+    New-Item -ItemType Directory -Force $evidence | Out-Null
+    $checklistPath = Join-Path $root 'checklist.json'
+    $utf8 = [Text.UTF8Encoding]::new($false)
+    $results = [ordered]@{}
+    $artifacts = [ordered]@{}
+
+    Invoke-Gate 'silentSuccess' { & pwsh -NoProfile -Command 'exit 0' }
+    if ($results.silentSuccess.status -ne 'PASS' -or -not (Test-Path (Join-Path $evidence 'silentSuccess.log'))) {
+        throw 'Silent successful command must PASS with an initialized log'
+    }
+    Invoke-Gate 'nativeFailure' { & pwsh -NoProfile -Command 'exit 7' }
+    if ($results.nativeFailure.status -ne 'FAIL' -or $results.nativeFailure.error -notmatch 'exited 7') {
+        throw 'Silent nonzero native command must remain FAIL'
+    }
+    Invoke-Gate 'exceptionFailure' { throw 'gate-exception-probe' }
+    if ($results.exceptionFailure.status -ne 'FAIL' -or $results.exceptionFailure.error -notmatch 'gate-exception-probe') {
+        throw 'PowerShell exception must remain FAIL'
+    }
+    Invoke-Gate 'missingMarker' { & pwsh -NoProfile -Command 'exit 0' } @('required-marker')
+    if ($results.missingMarker.status -ne 'FAIL' -or $results.missingMarker.error -notmatch 'Required evidence missing: required-marker') {
+        throw 'Silent success must not satisfy a required marker'
+    }
+    Invoke-Gate 'successAfterFailure' { & pwsh -NoProfile -Command 'exit 0' }
+    if ($results.successAfterFailure.status -ne 'PASS' -or $LASTEXITCODE -ne 0) {
+        throw 'Previous gate failure leaked into a subsequent successful gate'
+    }
+    $saved = Get-Content $checklistPath -Raw | ConvertFrom-Json
+    if ($saved.gates.nativeFailure.status -ne 'FAIL' -or $saved.gates.successAfterFailure.status -ne 'PASS') {
+        throw 'Checklist must preserve both failed and successful gate results'
+    }
+    Write-Output 'TASK163_FINAL_GATE_ISOLATION_REGRESSION PASS'
 
     Write-Output 'TASK163_FINAL_CONTRACT_REGRESSION PASS'
 } finally {

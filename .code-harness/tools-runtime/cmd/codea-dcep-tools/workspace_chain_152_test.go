@@ -553,16 +553,100 @@ type businessAstRunner152 struct {
 	ambiguous bool
 }
 
+func Test163FinalBusinessASTFixtureHonorsQueryTargets(t *testing.T) {
+	fixture := newWorkspaceBusinessFixture152(t, workspaceBusinessScenario152{ambiguousOverride: true})
+	current := filepath.Join(fixture.current, "src/main/java")
+	dependency := filepath.Join(fixture.dependency, "src/main/java")
+	service := filepath.Join(current, "com/company/order/XxxServiceImpl.java")
+	another := filepath.Join(current, "com/company/order/AnotherServiceImpl.java")
+	framework := filepath.Join(dependency, "com/company/framework/AbstractTemplate.java")
+	for _, tc := range []struct {
+		name    string
+		pattern string
+		targets []string
+		want    []string
+	}{
+		{"source directory", "class $C extends AbstractTemplate", []string{current}, []string{another, service}},
+		{"single current file", "class $C extends AbstractTemplate", []string{service}, []string{service}},
+		{"multiple candidates", "class $C extends AbstractTemplate", []string{another, service}, []string{another, service}},
+		{"dependency file", "$RET execute(", []string{framework}, []string{framework}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"--lang", "java", "--json=stream", "--pattern", tc.pattern}, tc.targets...)
+			out, err := (businessAstRunner152{ambiguous: true}).Run(context.Background(), "fixture-ast-grep", args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				var match struct {
+					File string `json:"file"`
+				}
+				if err := json.Unmarshal([]byte(line), &match); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := os.Stat(match.File); err != nil {
+					t.Fatalf("fixture emitted a nonexistent source path: %s: %v", match.File, err)
+				}
+				got = append(got, filepath.Clean(match.File))
+			}
+			sort.Strings(got)
+			if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+				t.Fatalf("query targets %v produced %v, want %v", tc.targets, got, tc.want)
+			}
+		})
+	}
+}
+
 func (r businessAstRunner152) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
 	if len(args) < 6 {
 		return nil, fmt.Errorf("unexpected ast-grep args: %v", args)
 	}
 	pattern := args[4]
-	sourceRoot := args[len(args)-1]
-	if strings.Contains(filepath.ToSlash(sourceRoot), "/company-framework/") {
-		return r.frameworkOutput152(pattern, sourceRoot), nil
+	// Task 1 narrows AST requests to one or more Java files. Return matches
+	// only from the requested files, while retaining directory-query support.
+	var lines [][]byte
+	seen := map[string]bool{}
+	for _, target := range args[5:] {
+		target = filepath.Clean(target)
+		info, err := os.Stat(target)
+		if err != nil {
+			return nil, err
+		}
+		slash := filepath.ToSlash(target)
+		const sourceSuffix = "/src/main/java"
+		index := strings.Index(slash, sourceSuffix)
+		if index < 0 {
+			return nil, fmt.Errorf("unexpected AST fixture target: %s", target)
+		}
+		sourceRoot := filepath.FromSlash(slash[:index+len(sourceSuffix)])
+		var output []byte
+		if strings.Contains(slash, "/company-framework/") {
+			output = r.frameworkOutput152(pattern, sourceRoot)
+		} else {
+			output = r.currentOutput152(pattern, sourceRoot)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+			if line == "" {
+				continue
+			}
+			var match struct {
+				File string `json:"file"`
+			}
+			if err := json.Unmarshal([]byte(line), &match); err != nil {
+				return nil, err
+			}
+			file := filepath.Clean(match.File)
+			if file != target && !(info.IsDir() && strings.HasPrefix(file, target+string(filepath.Separator))) {
+				continue
+			}
+			if !seen[line] {
+				seen[line] = true
+				lines = append(lines, append([]byte(line), '\n'))
+			}
+		}
 	}
-	return r.currentOutput152(pattern, sourceRoot), nil
+	return joinAstLines152(lines), nil
 }
 
 func (r businessAstRunner152) frameworkOutput152(pattern, sourceRoot string) []byte {

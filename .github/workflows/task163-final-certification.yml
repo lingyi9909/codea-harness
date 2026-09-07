@@ -57,6 +57,43 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -File ./.github/scripts/task163-final-contract-regression.ps1
 
+      - name: Replay final certification RED on rejected HEAD
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = (Get-Location).Path
+          $evidence = Join-Path $root 'task163-final-evidence'
+          New-Item -ItemType Directory -Force $evidence | Out-Null
+          $baseline = 'd0d094cfaccc19bef19eaa03349db30500b98f8d'
+          $redRoot = Join-Path $env:RUNNER_TEMP ('task163-final-red-' + [guid]::NewGuid().ToString('N'))
+          git worktree add --detach $redRoot $baseline
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot check out rejected certification HEAD' }
+          try {
+            Copy-Item '.github/scripts/task163-final-contract-regression.ps1' (Join-Path $redRoot '.github/scripts/task163-final-contract-regression.ps1') -Force
+            $gateLog = Join-Path $evidence 'rejected-head-gate-red.log'
+            & pwsh -NoProfile -File (Join-Path $redRoot '.github/scripts/task163-final-contract-regression.ps1') *> $gateLog
+            $gateExit = $LASTEXITCODE
+            $gateText = Get-Content $gateLog -Raw
+            if ($gateExit -eq 0 -or $gateText -notmatch 'Silent successful command must PASS with an initialized log') {
+              throw "Gate RED did not fail for the expected silent-log cause: $gateText"
+            }
+            Push-Location (Join-Path $redRoot '.code-harness/tools-runtime')
+            try {
+              $goLog = Join-Path $evidence 'rejected-head-go-red.log'
+              & go test -count=1 -v ./cmd/codea-dcep-tools -run 'Test151ChainDiscoverBootstrapContractIsSelfContained|TestTask160ReleaseMetadataAndPackageWorkflow|Test152RealDualProjectWorkspaceBusiness' *> $goLog
+              $goExit = $LASTEXITCODE
+            } finally { Pop-Location }
+            $goText = Get-Content $goLog -Raw
+            if ($goExit -eq 0 -or $goText -match '\[build failed\]|undefined:|syntax error:') { throw 'Go RED was not a valid runtime assertion failure' }
+            foreach ($test in @('Test151ChainDiscoverBootstrapContractIsSelfContained','TestTask160ReleaseMetadataAndPackageWorkflow','Test152RealDualProjectWorkspaceBusinessRegression','Test152RealDualProjectWorkspaceBusinessFailureRegressions')) {
+              if (-not $goText.Contains("--- FAIL: $test")) { throw "Missing rejected-HEAD RED: $test" }
+            }
+            Write-Output "TASK163_FINAL_REJECTED_HEAD_RED PASS baseline=$baseline"
+          } finally {
+            git worktree remove --force $redRoot
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot remove disposable RED checkout' }
+          }
+
       - name: Full final certification
         shell: pwsh
         run: pwsh -NoProfile -File ./.github/scripts/task163-final-certification.ps1

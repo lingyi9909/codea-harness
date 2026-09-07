@@ -39,10 +39,13 @@ function Invoke-Gate([string]$Name, [scriptblock]$Action, [string[]]$Markers = @
     $status = 'FAIL'
     $errorText = $null
     try {
+        # Tee-Object does not create a file for a successful silent command.
+        # Start a fresh log for every gate, including go vet and failed probes.
+        [IO.File]::WriteAllText($log, '', $utf8)
         $global:LASTEXITCODE = 0
         & $Action *>&1 | Tee-Object -FilePath $log
         if ($LASTEXITCODE -ne 0) { throw "Gate process exited $LASTEXITCODE" }
-        $text = Get-Content $log -Raw
+        $text = [IO.File]::ReadAllText($log)
         foreach ($marker in $Markers) {
             if (-not $text.Contains($marker)) { throw "Required evidence missing: $marker" }
         }
@@ -73,8 +76,16 @@ function Assert-ReleaseScope {
     if ((Get-Content (Join-Path $root '.code-harness/VERSION') -Raw).Trim() -ne $version) { throw 'Release version mismatch' }
     $changed = @(& git -C $root diff --name-only "$base..$head")
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect release scope' }
+    # Exact legacy test migrations diagnosed by final CI 34072313345.
+    # No directory-wide test allowance and no Task 1-4 production changes.
+    $retainedTestMigrations = @(
+        '.code-harness/tools-runtime/cmd/codea-dcep-tools/chain_discover_bootstrap_151_test.go',
+        '.code-harness/tools-runtime/cmd/codea-dcep-tools/task160_release_test.go',
+        '.code-harness/tools-runtime/cmd/codea-dcep-tools/workspace_chain_152_test.go'
+    )
     foreach ($path in $changed) {
         if ($path -eq '.code-harness/VERSION' -or
+            $path -cin $retainedTestMigrations -or
             $path -match '^\.github/scripts/task163-(final-certification|release-package|final-contract-regression)\.ps1$' -or
             $path -eq '.github/workflows/task163-final-certification.yml' -or
             $path -match '^docs/superpowers/(plans|evidence)/2026-09-07-codea-harness-1\.6\.3-final-certification.*\.md$') { continue }
@@ -182,6 +193,9 @@ try {
         exit 1
     }
     Write-Checklist 'PASS'
+    # Emit the same checklist bytes uploaded with the candidate so the final
+    # gate and artifact identities can also be audited from the exact-run log.
+    Write-Output ([IO.File]::ReadAllText($checklistPath))
     Write-Output "TASK163_FINAL_CERTIFICATION PASS exactHead=$head"
     exit 0
 } finally {
