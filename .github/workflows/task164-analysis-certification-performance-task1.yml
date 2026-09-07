@@ -1,32 +1,25 @@
 name: task164-analysis-certification-performance-task1
-
 on:
   workflow_dispatch:
   push:
-    branches:
-      - hotfix/1.6.4-analysis-certification-performance-task1
+    branches: [hotfix/1.6.4-analysis-certification-performance-task1]
     paths:
       - '.code-harness/tools-runtime/internal/analysis/**'
       - '.code-harness/tools-runtime/internal/nav/**'
       - '.github/scripts/task164-analysis-certification-performance-task1.ps1'
       - '.github/workflows/task164-analysis-certification-performance-task1.yml'
-
-permissions:
-  contents: read
-
+permissions: {contents: read}
 jobs:
   task1a-scope-gate:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: {fetch-depth: 0}
       - uses: actions/setup-go@v7
-        with:
-          go-version: '1.23.x'
-      - name: Task 1A snapshot-bounded scope regression
-        working-directory: .code-harness/tools-runtime
+        with: {go-version: '1.23.x'}
+      - name: Task 1A and Task 1B scope regressions
         shell: pwsh
+        working-directory: .code-harness/tools-runtime
         run: |
-          go test -count=1 ./internal/analysis -run 'Test164Task1A'
+          go test -count=1 ./internal/analysis -run 'Test164Task1A|Test164Task1BRunner'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
