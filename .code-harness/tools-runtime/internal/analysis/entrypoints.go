@@ -50,12 +50,16 @@ func (r rootedRunner153) Run(ctx context.Context, name string, args ...string) (
 func BuildEntrypointInventory(repoRoot, runID string, snapshot changeset.Snapshot, intent Intent) (EntrypointInventory, error) {
 	absRoot, err := filepath.Abs(repoRoot)
 	if err != nil { return EntrypointInventory{}, fmt.Errorf("ENTRYPOINT_REPO_ROOT_INVALID: %w", err) }
-	scanner := navigationEntrypointScanner153{
-		repoRoot: absRoot,
-		astGrepPath: filepath.Join(absRoot, ".code-harness", "bin", "ast-grep.exe"),
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	plan, err := buildEntrypointScanPlan164(ctx, absRoot, runID, snapshot)
+	if err != nil { return EntrypointInventory{}, err }
+	scanner := newSnapshotScopedEntrypointScanner164(
+		absRoot,
+		filepath.Join(absRoot, ".code-harness", "bin", "ast-grep.exe"),
+		plan,
+		snapshot,
+	)
 	return buildEntrypointInventoryWithScanner(ctx, runID, snapshot, intent, scanner)
 }
 
@@ -76,6 +80,7 @@ func buildEntrypointInventoryWithScanner(ctx context.Context, runID string, snap
 		if !isProductionJava153(changed.Path) { continue }
 		current, err := scanner.Current(ctx, changed.Path)
 		if err != nil { return EntrypointInventory{}, fmt.Errorf("ENTRYPOINT_CURRENT_SCAN_FAILED: %s: %w", changed.Path, err) }
+		if err := validateEntrypointResults164(changed.Path, current); err != nil { return EntrypointInventory{}, err }
 
 		status := strings.ToUpper(strings.TrimSpace(changed.Status))
 		switch status {
@@ -84,10 +89,12 @@ func buildEntrypointInventoryWithScanner(ctx context.Context, runID string, snap
 		case "D":
 			base, err := scanner.Base(ctx, snapshot, changed.Path)
 			if err != nil { return EntrypointInventory{}, fmt.Errorf("ENTRYPOINT_BASE_SCAN_FAILED: %s: %w", changed.Path, err) }
+			if err := validateEntrypointResults164(changed.Path, base); err != nil { return EntrypointInventory{}, err }
 			for _, ep := range base { addExpected153(byKey, ep, DispositionRemoved) }
 		default:
 			base, err := scanner.Base(ctx, snapshot, changed.Path)
 			if err != nil { return EntrypointInventory{}, fmt.Errorf("ENTRYPOINT_BASE_SCAN_FAILED: %s: %w", changed.Path, err) }
+			if err := validateEntrypointResults164(changed.Path, base); err != nil { return EntrypointInventory{}, err }
 			collectModifiedEntrypoints153(byKey, changed, current, base)
 		}
 	}
@@ -350,7 +357,9 @@ func (s navigationEntrypointScanner153) scanAtRoot(ctx context.Context, scanRoot
 	if err != nil { return nil, err }
 	out := make([]ControllerEndpoint, 0, len(matches))
 	for _, match := range matches {
-		if filepath.ToSlash(match.Path) != filepath.ToSlash(scope) { continue }
+		if filepath.ToSlash(match.Path) != filepath.ToSlash(scope) {
+			return nil, fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: requested=%s result=%s", filepath.ToSlash(scope), filepath.ToSlash(match.Path))
+		}
 		out = append(out, ControllerEndpoint{
 			Controller: match.Controller,
 			Symbol: match.Symbol,
