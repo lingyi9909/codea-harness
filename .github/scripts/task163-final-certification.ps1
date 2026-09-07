@@ -65,7 +65,10 @@ function Assert-ReleaseScope {
     $script:head = (git -C $root rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve exact HEAD' }
     if ($head -ne $expected) { throw "Exact HEAD mismatch: $head != $expected" }
-    if ((git -C $root branch --show-current).Trim() -ne 'release/1.6.3-final-certification') { throw 'Unexpected release branch' }
+    # Actions checks out an exact SHA in detached HEAD. The trusted workflow
+    # event ref identifies the release branch; never infer it from local HEAD.
+    $releaseRef = 'refs/heads/release/1.6.3-final-certification'
+    if ($env:GITHUB_REF -cne $releaseRef) { throw "Unexpected release ref: $($env:GITHUB_REF)" }
     Invoke-Checked 'git' @('-C',$root,'merge-base','--is-ancestor',$base,$head)
     if ((Get-Content (Join-Path $root '.code-harness/VERSION') -Raw).Trim() -ne $version) { throw 'Release version mismatch' }
     $changed = @(& git -C $root diff --name-only "$base..$head")
