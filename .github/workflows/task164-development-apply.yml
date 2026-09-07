@@ -1,0 +1,63 @@
+name: task164-development-apply
+on:
+  workflow_dispatch:
+  push:
+    branches: [hotfix/1.6.4-analysis-certification-performance-task1]
+    paths:
+      - '.github/scripts/task164-dev-apply.py'
+      - '.github/workflows/task164-development-apply.yml'
+permissions:
+  contents: write
+concurrency:
+  group: task164-development-apply
+  cancel-in-progress: false
+jobs:
+  apply-and-verify:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Apply exact source patch
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:GITHUB_SHA) { throw 'checkout SHA mismatch' }
+          python .github/scripts/task164-dev-apply.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $files = @(
+            '.code-harness/tools-runtime/internal/analysis/entrypoint_batch_164.go',
+            '.code-harness/tools-runtime/internal/analysis/entrypoint_runner_contract_164.go',
+            '.code-harness/tools-runtime/internal/analysis/entrypoint_batch_scope_164_test.go',
+            '.code-harness/tools-runtime/internal/nav/entrypoint_batch_164.go'
+          )
+          gofmt -w $files
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Fresh Windows scope and batch regressions
+        shell: pwsh
+        working-directory: .code-harness/tools-runtime
+        run: |
+          go test -count=1 ./internal/analysis -run 'Test164Task1A|Test164Task1BRunner'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test -count=1 ./internal/nav -run 'Test164'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./internal/analysis ./internal/nav
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Commit verified implementation
+        shell: pwsh
+        run: |
+          git config user.name 'task164-development'
+          git config user.email 'task164-development@users.noreply.github.com'
+          git add -- .code-harness/tools-runtime/internal/analysis/entrypoint_batch_164.go .code-harness/tools-runtime/internal/analysis/entrypoint_runner_contract_164.go .code-harness/tools-runtime/internal/analysis/entrypoint_batch_scope_164_test.go .code-harness/tools-runtime/internal/nav/entrypoint_batch_164.go
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git commit -m 'fix: enforce exact batch AST invocation and reject scope escapes'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin HEAD:refs/heads/hotfix/1.6.4-analysis-certification-performance-task1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host ('TASK164_VERIFIED_HEAD=' + (git rev-parse HEAD).Trim())
