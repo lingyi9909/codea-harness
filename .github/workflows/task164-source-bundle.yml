@@ -1,0 +1,32 @@
+name: task164-source-bundle
+on:
+  workflow_dispatch:
+  push:
+    branches: [hotfix/1.6.4-analysis-certification-performance-task1]
+    paths:
+      - '.github/workflows/task164-source-bundle.yml'
+permissions:
+  contents: read
+jobs:
+  source-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export source and Git history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          tar -czf "$RUNNER_TEMP/task164-source.tar.gz" --exclude='.git' .
+          git bundle create "$RUNNER_TEMP/task164-history.bundle" --all
+          sha256sum "$RUNNER_TEMP/task164-source.tar.gz" "$RUNNER_TEMP/task164-history.bundle"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: task164-source-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/task164-source.tar.gz
+            ${{ runner.temp }}/task164-history.bundle
+          retention-days: 1
+          if-no-files-found: error
