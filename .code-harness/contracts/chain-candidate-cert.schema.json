@@ -10,6 +10,14 @@
     "chainId": {"type": "string", "minLength": 1, "maxLength": 128},
     "candidatePath": {"type": "string", "minLength": 1},
     "candidateHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "analysisHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-  }
+    "analysisHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authorityKind": {"enum": ["PROJECT_SOURCE"]},
+    "sourceHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {"required": ["authorityKind"]},
+      "then": {"required": ["sourceHash"]}
+    }
+  ]
 }

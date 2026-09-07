@@ -21,9 +21,44 @@ type CandidateCertificate struct {
 	CandidatePath string `json:"candidatePath"`
 	CandidateHash string `json:"candidateHash"`
 	AnalysisHash  string `json:"analysisHash"`
+	AuthorityKind string `json:"authorityKind,omitempty"`
+	SourceHash    string `json:"sourceHash,omitempty"`
 }
 
 func CertifyCandidate(root string, c Chain, candidatePath, kind string, cert analysisruntime.Certificate) (CandidateCertificate, error) {
+	if cert.RunID == "" || strings.TrimSpace(cert.AnalysisSHA256) == "" {
+		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_ANALYSIS_IDENTITY_MISMATCH")
+	}
+	return certifyCandidateAuthority153(root, c, candidatePath, kind, CandidateCertificate{
+		RunID:        cert.RunID,
+		AnalysisHash: cert.AnalysisSHA256,
+	})
+}
+
+// CertifyProjectCandidate binds a DISCOVERED candidate to the Runtime-owned
+// project source snapshot instead of to Review ChangeAnalysis. AnalysisHash is
+// retained on the wire for backwards-compatible candidate certificate shape;
+// for PROJECT_SOURCE authority it is exactly the source snapshot hash.
+func CertifyProjectCandidate(root string, c Chain, candidatePath string, source ProjectSourceIdentity) (CandidateCertificate, error) {
+	if source.RunID == "" || source.AuthorityKind != projectSourceAuthority163 || strings.TrimSpace(source.SourceHash) == "" {
+		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_PROJECT_SOURCE_IDENTITY_MISMATCH")
+	}
+	current, err := loadProjectSourceIdentity163(root, source.RunID)
+	if err != nil {
+		return CandidateCertificate{}, err
+	}
+	if current.SourceHash != source.SourceHash {
+		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_PROJECT_SOURCE_IDENTITY_MISMATCH")
+	}
+	return certifyCandidateAuthority153(root, c, candidatePath, "DISCOVERED", CandidateCertificate{
+		RunID:         source.RunID,
+		AnalysisHash:  source.SourceHash,
+		AuthorityKind: projectSourceAuthority163,
+		SourceHash:    source.SourceHash,
+	})
+}
+
+func certifyCandidateAuthority153(root string, c Chain, candidatePath, kind string, authority CandidateCertificate) (CandidateCertificate, error) {
 	root = filepath.Clean(root)
 	runID, normalizedPath, pathKind, chainID, err := parseRuntimeCandidatePath153(candidatePath)
 	if err != nil {
@@ -33,8 +68,13 @@ func CertifyCandidate(root string, c Chain, candidatePath, kind string, cert ana
 	if kind != pathKind {
 		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_KIND_MISMATCH: path=%s requested=%s", pathKind, kind)
 	}
-	if cert.RunID != runID || strings.TrimSpace(cert.AnalysisSHA256) == "" {
+	if authority.RunID != runID || strings.TrimSpace(authority.AnalysisHash) == "" {
 		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_ANALYSIS_IDENTITY_MISMATCH")
+	}
+	if authority.AuthorityKind != "" {
+		if authority.AuthorityKind != projectSourceAuthority163 || authority.SourceHash == "" || authority.SourceHash != authority.AnalysisHash {
+			return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_PROJECT_SOURCE_IDENTITY_MISMATCH")
+		}
 	}
 	if c.ID != chainID {
 		return CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_ID_MISMATCH: path=%s chain=%s", chainID, c.ID)
@@ -63,15 +103,19 @@ func CertifyCandidate(root string, c Chain, candidatePath, kind string, cert ana
 	}
 
 	out := CandidateCertificate{
-		RunID: runID,
-		Kind: kind,
-		ChainID: chainID,
+		RunID:         runID,
+		Kind:          kind,
+		ChainID:       chainID,
 		CandidatePath: normalizedPath,
 		CandidateHash: hashChainBytes153(candidateBytes),
-		AnalysisHash: cert.AnalysisSHA256,
+		AnalysisHash:  authority.AnalysisHash,
+		AuthorityKind: authority.AuthorityKind,
+		SourceHash:    authority.SourceHash,
 	}
 	certBytes, err := json.MarshalIndent(out, "", "  ")
-	if err != nil { return CandidateCertificate{}, err }
+	if err != nil {
+		return CandidateCertificate{}, err
+	}
 	certBytes = append(certBytes, '\n')
 	if err := validateChainAuthorityJSON153(root, "chain-candidate-cert.schema.json", certBytes); err != nil {
 		return CandidateCertificate{}, err
@@ -106,8 +150,32 @@ func LoadRuntimeCandidate(root string, candidatePath string, cert analysisruntim
 	if err != nil {
 		return Chain{}, CandidateCertificate{}, err
 	}
+	if candidateCert.AuthorityKind != "" {
+		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_ANALYSIS_IDENTITY_MISMATCH")
+	}
 	if cert.RunID != candidateCert.RunID || strings.TrimSpace(cert.AnalysisSHA256) == "" || candidateCert.AnalysisHash != cert.AnalysisSHA256 {
 		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_ANALYSIS_IDENTITY_MISMATCH")
+	}
+	return candidate, candidateCert, nil
+}
+
+// LoadProjectRuntimeCandidate verifies exact candidate bytes and the current
+// Runtime-owned source snapshot. It intentionally does not accept or fabricate
+// a Certified ChangeAnalysis.
+func LoadProjectRuntimeCandidate(root string, candidatePath string) (Chain, CandidateCertificate, error) {
+	candidate, candidateCert, err := loadRuntimeCandidateProvenance153(root, candidatePath)
+	if err != nil {
+		return Chain{}, CandidateCertificate{}, err
+	}
+	if candidateCert.AuthorityKind != projectSourceAuthority163 || candidateCert.SourceHash == "" || candidateCert.AnalysisHash != candidateCert.SourceHash {
+		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_PROJECT_SOURCE_IDENTITY_MISMATCH")
+	}
+	identity, err := loadProjectSourceIdentity163(root, candidateCert.RunID)
+	if err != nil {
+		return Chain{}, CandidateCertificate{}, err
+	}
+	if identity.SourceHash != candidateCert.SourceHash {
+		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_PROJECT_SOURCE_IDENTITY_MISMATCH")
 	}
 	return candidate, candidateCert, nil
 }
@@ -133,12 +201,21 @@ func loadRuntimeCandidateProvenance153(root string, candidatePath string) (Chain
 		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_DECODE_FAILED: %w", err)
 	}
 	canonical, err := json.MarshalIndent(candidateCert, "", "  ")
-	if err != nil { return Chain{}, CandidateCertificate{}, err }
+	if err != nil {
+		return Chain{}, CandidateCertificate{}, err
+	}
 	canonical = append(canonical, '\n')
 	if !bytes.Equal(certBytes, canonical) {
 		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_BYTES_NOT_CANONICAL")
 	}
 	if candidateCert.RunID != runID || candidateCert.Kind != pathKind || candidateCert.ChainID != chainID || candidateCert.CandidatePath != normalizedPath || strings.TrimSpace(candidateCert.AnalysisHash) == "" {
+		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_IDENTITY_MISMATCH")
+	}
+	if candidateCert.AuthorityKind == "" {
+		if candidateCert.SourceHash != "" {
+			return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_IDENTITY_MISMATCH")
+		}
+	} else if candidateCert.AuthorityKind != projectSourceAuthority163 || candidateCert.SourceHash == "" || candidateCert.SourceHash != candidateCert.AnalysisHash {
 		return Chain{}, CandidateCertificate{}, fmt.Errorf("CHAIN_CANDIDATE_CERT_IDENTITY_MISMATCH")
 	}
 	candidateAbs := filepath.Join(root, filepath.FromSlash(normalizedPath))

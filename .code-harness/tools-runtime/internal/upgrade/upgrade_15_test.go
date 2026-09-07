@@ -123,6 +123,8 @@ func TestUpgrade140ToCurrent15xInstallsChainFrameworkAndPreservesAllProjectState
 		}
 		before[rel] = sha256.Sum256(data)
 	}
+	writeInventory(t, target)
+	writeInventory(t, source)
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
 	if result.Status != StatusUpgraded || result.FromVersion != "1.4.0" || result.ToVersion != currentVersion {
@@ -225,6 +227,8 @@ func TestCurrentUpgradeFrom152PreservesAllProjectStateBytes(t *testing.T) {
 		}
 		before[rel] = sha256.Sum256(data)
 	}
+	writeInventory(t, target)
+	writeInventory(t, source)
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/custom-release"}}})
 	if result.Status != StatusUpgraded || result.FromVersion != "1.5.2" || result.ToVersion != currentVersion {

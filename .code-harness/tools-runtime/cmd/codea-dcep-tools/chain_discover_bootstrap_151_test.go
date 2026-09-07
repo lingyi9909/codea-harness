@@ -39,8 +39,19 @@ func Test151ChainDiscoverBootstrapContractIsSelfContained(t *testing.T) {
 		t.Fatal("orchestrator must continue routing direct chain discover to Reviewer → discover-chain")
 	}
 	reviewer := texts[paths[1]]
-	if !strings.Contains(reviewer, "analyze-change → discover-chain → Controlled Runtime") {
-		t.Fatal("Reviewer must keep coordinating analyze-change → discover-chain → Controlled Runtime")
+	// 1.6.3 splits public PROJECT discovery from retained Review/AFFECTED
+	// discovery. Keep certification in the latter instead of requiring the
+	// superseded direct analyze-change-to-discover handoff.
+	for _, want := range []string{
+		"公开 `harness chain discover [target]` 固定走 **PROJECT DISCOVERY**",
+		"Reviewer 直接协调 `discover-chain → Controlled Runtime`",
+		"不执行 `analysis snapshot` / `analyze-change` / ChangeAnalysis certification",
+		"Canonical ChangeSet → Certified ChangeAnalysis → affectedControllers/callChains → chain discover mode=AFFECTED",
+		"Runtime analysis snapshot → analyze-change semantic proposal → analysis certify → discover-chain → Controlled Runtime",
+	} {
+		if !strings.Contains(reviewer, want) {
+			t.Fatalf("Reviewer missing current discovery authority contract %q", want)
+		}
 	}
 	analyzeChange := texts[paths[2]]
 	for _, want := range []string{"committed", "staged", "unstaged", "untracked", "生产 Controller Method"} {

@@ -91,7 +91,9 @@ Runtime 必须重新计算 live Snapshot，并验证 `resolvedBaseCommit / merge
 
 Reviewer 不得直接创建、修改或“修复”上述 Runtime-owned artifacts，也不得在 certification 失败后把 semantic proposal 当成已验证 ChangeAnalysis 继续 Review/Chain 流程。
 
-对于 `harness chain discover [target]`，Reviewer 继续协调 `analyze-change → discover-chain → Controlled Runtime`；前半段仍必须先取得 Runtime Canonical Snapshot 并完成 ChangeAnalysis certification，`discover-chain` 只能消费 Certified ChangeAnalysis，不得建立第二套 Git/Java/resource authority。
+公开 `harness chain discover [target]` 固定走 **PROJECT DISCOVERY**：Reviewer 直接协调 `discover-chain → Controlled Runtime`，不执行 `analysis snapshot` / `analyze-change` / ChangeAnalysis certification，也不得为了复用 Review 流程伪造 Change Set。PROJECT discovery 的正式 authority 来自 Runtime current-source inventory、AST navigation、`project-source.json` 与 Runtime-owned candidate provenance。
+
+Review 内部 **AFFECTED DISCOVERY** 保持既有 Review authority：`Canonical ChangeSet → Certified ChangeAnalysis → affectedControllers/callChains → chain discover mode=AFFECTED`。Review 的 FULL/TARGETED、zero-change lifecycle、Snapshot 与 ChangeAnalysis certification 规则均不因公开 PROJECT discovery 改变。
 
 以下任一情况固定 fail closed：
 
@@ -429,3 +431,11 @@ report-review.json           → .code-harness/contracts/report-review-request.s
 正式 `report review` 的 Agent-facing request contract 只能是 `report-review-request.schema.json`。正式 report request 的 `findings` 固定为 `[]`；Agent raw Finding 只能进入 `requests/finding-proposals.json`，正式 Finding 必须由 Runtime `review certify-findings` 生成 same-run `analysis/certified-findings.json` + `certified-findings.cert.json` 后再由 `report review` 加载。
 
 `changedFiles=[]` 不是提前成功返回条件。0 Change 仍必须执行 `review units → review dispatch → finding-proposals.json=[] → review certify-findings → report review`，并生成 0 Change / 0 Finding 的正式 `review.md`。
+
+## 1.6.3 Multi-Chain Review Turn Gate
+
+`TASK163_USER_SELECTION_TURN_HARD_STOP`
+
+当 same-run Runtime `review options` 返回 `USER_SELECTION` 时，Reviewer 必须把控制权交回 Orchestrator 进行用户选择，并立即停止当前 Assistant Turn 的 Review 执行。在收到**下一条用户消息**并由 Runtime `review select` 形成 verified FULL/TARGETED/LIST scope 之前，不得调用 `review-code`，**不得进入 Finding Proposal**，不得创建 `finding-proposals.json`，也不得触发 Finding Certification 或 Review Report。
+
+AUTO_FULL / AUTO_SINGLE 保持既有自动继续语义；本 Gate 只约束 USER_SELECTION 和显式下游 target 的多上游选择场景。

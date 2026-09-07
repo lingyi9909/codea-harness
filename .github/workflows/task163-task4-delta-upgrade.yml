@@ -1,0 +1,180 @@
+name: task163-task4-delta-upgrade
+
+on:
+  push:
+    branches: [hotfix/1.6.3-runtime-usability-task4]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  task4-delta-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Exact HEAD and accepted base guard
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:GITHUB_SHA) { throw "HEAD mismatch: $head" }
+          git merge-base --is-ancestor 87bf170a2f5969faca531a3996f9299b2d249e10 HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Task 3 accepted base is not an ancestor' }
+          Write-Output "TASK163_TASK4_EXACT_HEAD $head"
+
+      - name: Replay RED on accepted production baseline
+        shell: pwsh
+        run: |
+          $base = '87bf170a2f5969faca531a3996f9299b2d249e10'
+          $redRoot = Join-Path $env:RUNNER_TEMP 'task163-task4-red'
+          $archive = Join-Path $env:RUNNER_TEMP 'task163-task4-red.zip'
+          git archive --format=zip --output $archive $base .code-harness
+          if ($LASTEXITCODE -ne 0) { throw 'cannot archive accepted baseline' }
+          Expand-Archive $archive $redRoot -Force
+          $probe = git show '87aa5db763a39425d2f567a6c807a6bd2fda44a8:.code-harness/tools-runtime/internal/upgrade/task163_delta_apply_test.go'
+          if ($LASTEXITCODE -ne 0) { throw 'cannot read accepted Task 4 delta RED probe' }
+          $probe | Set-Content (Join-Path $redRoot '.code-harness/tools-runtime/internal/upgrade/task163_delta_apply_test.go') -Encoding utf8
+          Push-Location (Join-Path $redRoot '.code-harness/tools-runtime')
+          try {
+            $lines = @(& go test -count=1 -v ./internal/upgrade -run '^Test163Task4' 2>&1)
+            $redExit = $LASTEXITCODE
+            $text = $lines | Out-String
+            $lines | ForEach-Object { Write-Output $_ }
+            if ($redExit -eq 0) { throw 'RED invalid: accepted baseline passed delta tests' }
+            if ($text -match 'build failed|undefined:|syntax error') { throw 'RED invalid: compilation error' }
+            if ($text -notmatch 'unchanged file was replaced|unchanged file mtime changed') { throw 'RED missing unchanged-file assertion failure' }
+            if ($text -notmatch 'updatedFiles=') { throw 'RED missing actual delta reporting assertion failure' }
+            Write-Output "TASK163_TASK4_RED PASS baseline=$base testsFrom=$env:GITHUB_SHA"
+          } finally { Pop-Location }
+          $global:LASTEXITCODE = 0
+
+      - name: Replay acceptance-blocker RED on rejected Task 4 HEAD
+        shell: pwsh
+        run: |
+          $rejected = '87aa5db763a39425d2f567a6c807a6bd2fda44a8'
+          $redRoot = Join-Path $env:RUNNER_TEMP 'task163-task4-blocker-red'
+          $archive = Join-Path $env:RUNNER_TEMP 'task163-task4-blocker-red.zip'
+          git archive --format=zip --output $archive $rejected .code-harness
+          if ($LASTEXITCODE -ne 0) { throw 'cannot archive rejected Task 4 HEAD' }
+          Expand-Archive $archive $redRoot -Force
+          Copy-Item '.github/scripts/task163-task4-acceptance-red-probe_test.go' (Join-Path $redRoot '.code-harness/tools-runtime/internal/upgrade/')
+          Push-Location (Join-Path $redRoot '.code-harness/tools-runtime')
+          try {
+            $lines = @(& go test -count=1 -v ./internal/upgrade -run '^Test163AcceptanceRED' 2>&1)
+            $redExit = $LASTEXITCODE
+            $text = $lines | Out-String
+            $lines | ForEach-Object { Write-Output $_ }
+            if ($redExit -eq 0) { throw 'RED invalid: rejected Task 4 HEAD passed acceptance-blocker probes' }
+            if ($text -match 'build failed|undefined:|syntax error') { throw 'RED invalid: compilation error' }
+            foreach ($expected in @('long filename:','unknown user file lost','installed manifest not updated','invalid inventory accepted')) {
+              if ($text -notmatch [regex]::Escape($expected)) { throw "RED missing expected failure: $expected" }
+            }
+            Write-Output "TASK163_TASK4_BLOCKER_RED PASS baseline=$rejected testsFrom=$env:GITHUB_SHA"
+          } finally { Pop-Location }
+          $global:LASTEXITCODE = 0
+
+      - name: Focused delta and real Windows executable tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./internal/upgrade -run '^Test163Task4|^Test163Blocker1'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Full upgrade regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./internal/upgrade
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build current Runtime and retained release packages with pinned ast-grep
+        shell: pwsh
+        run: |
+          & ./.github/scripts/task162-task2-package.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Inspect install and upgrade ZIPs and exact-head manifest hashes
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-task4-package-regression.ps1
+
+      - name: Full internal regression including Task 1 and Task 2 authority
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retained discovery and review command regressions
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./cmd/codea-dcep-tools -run 'Test163Task2|TestChainDiscover|Review|Selection|ReviewOptions'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retained Task 3 active-contract hard stop
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-task3-active-contract-regression.ps1
+
+      - name: Install pinned OpenCode Agent Host
+        shell: pwsh
+        run: |
+          npm install -g opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          opencode --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retained Task 3 negative control
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-task3-negative-control.ps1
+
+      - name: Retained real OpenCode same-session two-turn E2E
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1
+
+      - name: Static verification
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exact HEAD and Task 4 scope evidence
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:GITHUB_SHA) { throw 'HEAD drift' }
+          $changed = @(git diff --name-only 87bf170a2f5969faca531a3996f9299b2d249e10 HEAD)
+          if ($LASTEXITCODE -ne 0) { throw 'cannot audit scope' }
+          foreach ($path in $changed) {
+            if ($path -notmatch '^\.code-harness/tools-runtime/internal/upgrade/' -and
+                $path -notin @('.code-harness/contracts/upgrade-result.schema.json', '.code-harness/upgrade.md', '.github/scripts/task162-task2-package.ps1', '.github/scripts/task163-task4-acceptance-red-probe_test.go', '.github/scripts/task163-task4-package-regression.ps1', '.github/workflows/task163-task4-delta-upgrade.yml') -and
+                $path -notmatch '^docs/superpowers/(plans|evidence)/2026-09-06-codea-harness-1\.6\.3-task4-') {
+              throw "Task 4 scope violation: $path"
+            }
+          }
+          $dirty = @(git diff --name-only HEAD)
+          if ($dirty.Count -ne 0) { throw "tracked files changed during CI: $dirty" }
+          Write-Output "TASK163_TASK4_SCOPE PASS files=$($changed.Count)"
+          Write-Output "TASK163_TASK4_EXACT_HEAD PASS head=$head"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: task163-task4-package-candidates-${{ github.sha }}
+          path: codea-harness-*-windows-x64-*.zip
+          if-no-files-found: error

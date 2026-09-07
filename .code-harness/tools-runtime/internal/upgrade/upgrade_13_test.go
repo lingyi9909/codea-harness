@@ -45,6 +45,8 @@ func TestUpgrade120To130InstallsNewFrameworkAndPreservesProjectState(t *testing.
 		t.Fatal(err)
 	}
 	write(t, target, "skills/stale/SKILL.md", "stale\n")
+	writeInventory(t, target)
+	writeInventory(t, source)
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
 	if result.Status != StatusUpgraded {

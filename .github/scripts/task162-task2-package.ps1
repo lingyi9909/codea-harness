@@ -89,6 +89,14 @@ try {
         Remove-Item -Force (Join-Path $releaseRoot 'RELEASE-MANIFEST.json') -ErrorAction SilentlyContinue
     }
 
+    # Ownership is an explicit per-file release inventory. Never infer installed
+    # ownership from directory prefixes; exclude the manifest's self hash.
+    $inventory = [ordered]@{}
+    $inventoryRoot = Join-Path $installStage '.code-harness'
+    foreach ($file in (Get-ChildItem $inventoryRoot -Recurse -Force -File | Sort-Object FullName)) {
+        $rel = [IO.Path]::GetRelativePath($inventoryRoot, $file.FullName).Replace('\', '/')
+        $inventory[$rel] = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
     $manifest = [ordered]@{
         version = '1.6.2'
         platform = 'windows'
@@ -98,6 +106,7 @@ try {
         astGrepVersion = $astVersion
         astGrepSha256 = $astHash
         buildCommit = $exactHead
+        managedFiles = $inventory
     } | ConvertTo-Json
     [IO.File]::WriteAllText((Join-Path $installStage '.code-harness/RELEASE-MANIFEST.json'), $manifest, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $upgradeStage '.code-harness-upgrade/RELEASE-MANIFEST.json'), $manifest, [Text.UTF8Encoding]::new($false))

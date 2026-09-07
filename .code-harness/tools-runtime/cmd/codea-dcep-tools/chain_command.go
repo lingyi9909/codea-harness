@@ -19,8 +19,9 @@ var loadCertifiedAnalysis153 = analysisruntime.LoadCertified
 
 type chainDiscoverRequest struct {
 	RunID              string `json:"runId"`
+	Mode               string `json:"mode,omitempty"`
 	Target             string `json:"target,omitempty"`
-	ChangeAnalysisPath string `json:"changeAnalysisPath"`
+	ChangeAnalysisPath string `json:"changeAnalysisPath,omitempty"`
 }
 
 type chainRefreshRequest struct {
@@ -144,14 +145,36 @@ func runChainDiscover(args []string) error {
 	if err := decodeStrictChainRequest(requestBytes, &req, "chain discovery request"); err != nil {
 		return err
 	}
-	if strings.TrimSpace(req.RunID) == "" || strings.TrimSpace(req.ChangeAnalysisPath) == "" {
-		return errors.New("chain discovery request requires runId and changeAnalysisPath")
+	if strings.TrimSpace(req.RunID) == "" {
+		return errors.New("chain discovery request requires runId")
 	}
 	if req.RunID != pathRunID {
 		return fmt.Errorf("RUN_ID_PATH_MISMATCH: body runId %q does not match request path runId %q", req.RunID, pathRunID)
 	}
 	if !validChainArtifactID(req.RunID) {
 		return errors.New("chain discovery request contains invalid runId")
+	}
+
+	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
+	if mode == "" {
+		if strings.TrimSpace(req.ChangeAnalysisPath) == "" {
+			mode = "PROJECT"
+		} else {
+			mode = "AFFECTED"
+		}
+	}
+	switch mode {
+	case "PROJECT":
+		if strings.TrimSpace(req.ChangeAnalysisPath) != "" {
+			return errors.New("PROJECT chain discovery must not accept changeAnalysisPath")
+		}
+		return runProjectChainDiscover163(req)
+	case "AFFECTED":
+		if strings.TrimSpace(req.ChangeAnalysisPath) == "" {
+			return errors.New("AFFECTED chain discovery requires changeAnalysisPath")
+		}
+	default:
+		return fmt.Errorf("unsupported chain discovery mode %q", req.Mode)
 	}
 	if !sameRunChangeAnalysisPath(req.ChangeAnalysisPath, req.RunID) {
 		return errors.New("chain discovery changeAnalysisPath must be .code-harness/runs/<runId>/analysis/change-analysis.json for the same run")
@@ -252,9 +275,13 @@ func runChainSealPersist(args []string) error {
 		return errors.New("chain seal-persist requires --input")
 	}
 	pathRunID, cleanInput, err := validateChainRequestPath(*inputPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	data, err := os.ReadFile(cleanInput)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	var req chainSealPersistRequest
 	if err := decodeStrictChainRequest(data, &req, "chain seal-persist request"); err != nil {
 		return err
@@ -266,7 +293,9 @@ func runChainSealPersist(args []string) error {
 		return errors.New("chain seal-persist request requires candidatePath")
 	}
 	plan, err := chain.SealWritePlan(".", req.RunID, req.CandidatePath, req.ExpectedExistingHash)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	planPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "chain-write-plans", plan.PlanID+".json"))
 	return writeJSONAndStatus(map[string]any{"status": "SEALED", "planId": plan.PlanID, "planPath": planPath, "plan": plan}, true)
 }
@@ -398,8 +427,8 @@ func decodeChainDiscoveryRequest(data []byte) (chainDiscoverRequest, error) {
 	if err := decodeStrictChainRequest(data, &req, "chain discovery request"); err != nil {
 		return chainDiscoverRequest{}, err
 	}
-	if strings.TrimSpace(req.RunID) == "" || strings.TrimSpace(req.ChangeAnalysisPath) == "" {
-		return chainDiscoverRequest{}, errors.New("chain discovery request requires runId and changeAnalysisPath")
+	if strings.TrimSpace(req.RunID) == "" {
+		return chainDiscoverRequest{}, errors.New("chain discovery request requires runId")
 	}
 	return req, nil
 }

@@ -53,6 +53,8 @@ func TestUpgrade132To140MigratesResourceScopesAndPreservesProjectState(t *testin
 	}
 	write(t, target, "runs/run-140/evidence.json", string(originalRun))
 	write(t, target, "skills/stale-132/SKILL.md", "stale 1.3.2 framework\n")
+	writeInventory(t, target)
+	writeInventory(t, source)
 
 	result := Run(Options{SourceDir: source, TargetDir: target, Refs: StaticRefs{RemoteBranches: []string{"origin/develop"}}})
 	if result.Status != StatusUpgraded {
