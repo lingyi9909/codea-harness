@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os/exec"
 	"path"
 	"sort"
 	"strings"
@@ -141,13 +139,11 @@ func (n Navigator) runEntrypointRuleBatch164(ctx context.Context, scopes []strin
 		"--json=stream",
 		"--color", "never",
 	}
+	args = append(args, "--")
 	args = append(args, cleanScopes...)
 	output, runErr := runner.Run(ctx, n.AstGrepPath, args...)
 	if runErr != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(runErr, &exitErr) || len(output) == 0 {
-			return nil, runErr
-		}
+		return nil, fmt.Errorf("ENTRYPOINT_AST_BATCH_EXECUTION_FAILED: %w", runErr)
 	}
 
 	allowed := make(map[string]bool, len(cleanScopes))

@@ -19,14 +19,14 @@ import (
 )
 
 type entrypointBatchStats164 struct {
-	CurrentRequestedFiles  int
-	BaseRequestedFiles     int
-	CurrentScannedFiles    int
-	BaseScannedFiles       int
-	CurrentASTProcesses    int
-	BaseASTProcesses       int
-	BaseGitBatchProcesses  int
-	MergeBaseProcesses     int
+	CurrentRequestedFiles int
+	BaseRequestedFiles    int
+	CurrentScannedFiles   int
+	BaseScannedFiles      int
+	CurrentASTProcesses   int
+	BaseASTProcesses      int
+	BaseGitBatchProcesses int
+	MergeBaseProcesses    int
 }
 
 type countedEntrypointRunner164 struct {
@@ -45,25 +45,8 @@ type exactBatchEntrypointRunner164 struct {
 }
 
 func (r exactBatchEntrypointRunner164) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	if len(r.allowed) == 0 || len(args) < len(r.allowed) {
-		return nil, errors.New("ENTRYPOINT_SCAN_SCOPE_WIDENED: exact targets missing")
-	}
-	targets := args[len(args)-len(r.allowed):]
-	seen := map[string]bool{}
-	for _, raw := range targets {
-		p, ok := exactProductionJavaPath164(raw)
-		if !ok || !r.allowed[p] || seen[p] {
-			return nil, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: target=%q", raw)
-		}
-		full := filepath.Join(r.dir, filepath.FromSlash(p))
-		info, err := os.Stat(full)
-		if err != nil || !info.Mode().IsRegular() {
-			return nil, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: target=%q is not an exact regular file", raw)
-		}
-		seen[p] = true
-	}
-	if len(seen) != len(r.allowed) {
-		return nil, fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: requested=%d allowed=%d", len(seen), len(r.allowed))
+	if err := validateEntrypointBatchInvocation164(r.dir, r.allowed, args); err != nil {
+		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = r.dir
@@ -160,9 +143,13 @@ func buildEntrypointInventoryBatch164(ctx context.Context, repoRoot, runID strin
 		status := strings.ToUpper(strings.TrimSpace(changed.Status))
 		switch status {
 		case "A":
-			for _, ep := range currentEndpoints { addExpected153(byKey, ep, "") }
+			for _, ep := range currentEndpoints {
+				addExpected153(byKey, ep, "")
+			}
 		case "D":
-			for _, ep := range baseEndpoints { addExpected153(byKey, ep, DispositionRemoved) }
+			for _, ep := range baseEndpoints {
+				addExpected153(byKey, ep, DispositionRemoved)
+			}
 		default:
 			collectModifiedEntrypoints153(byKey, changed, currentEndpoints, baseEndpoints)
 		}
@@ -175,15 +162,19 @@ func buildEntrypointInventoryBatch164(ctx context.Context, repoRoot, runID strin
 		}
 	}
 	sort.Slice(items, func(i, j int) bool {
-		if items[i].Symbol != items[j].Symbol { return items[i].Symbol < items[j].Symbol }
-		if items[i].Path != items[j].Path { return items[i].Path < items[j].Path }
+		if items[i].Symbol != items[j].Symbol {
+			return items[i].Symbol < items[j].Symbol
+		}
+		if items[i].Path != items[j].Path {
+			return items[i].Path < items[j].Path
+		}
 		return items[i].Disposition < items[j].Disposition
 	})
 	inventory = EntrypointInventory{
-		RunID: runID,
-		Status: inventoryComplete153,
+		RunID:               runID,
+		Status:              inventoryComplete153,
 		ExpectedEntrypoints: items,
-		ChangeSetSHA256: snapshot.SHA256,
+		ChangeSetSHA256:     snapshot.SHA256,
 	}
 	return
 }
@@ -223,15 +214,17 @@ func newEntrypointScanPlan164(runID string, snapshot changeset.Snapshot, current
 	sort.Strings(current)
 	sort.Strings(base)
 	snapshotHash := strings.TrimSpace(snapshot.SnapshotSHA256)
-	if snapshotHash == "" { snapshotHash = strings.TrimSpace(snapshot.SHA256) }
+	if snapshotHash == "" {
+		snapshotHash = strings.TrimSpace(snapshot.SHA256)
+	}
 	return EntrypointScanPlan{
-		RunID: runID,
-		SnapshotSHA256: snapshotHash,
-		MergeBase: strings.TrimSpace(snapshot.MergeBase),
-		CurrentPaths: current,
-		BasePaths: base,
+		RunID:              runID,
+		SnapshotSHA256:     snapshotHash,
+		MergeBase:          strings.TrimSpace(snapshot.MergeBase),
+		CurrentPaths:       current,
+		BasePaths:          base,
 		CurrentScopeSHA256: hashEntrypointScope164(current),
-		BaseScopeSHA256: hashEntrypointScope164(base),
+		BaseScopeSHA256:    hashEntrypointScope164(base),
 	}
 }
 
@@ -320,7 +313,9 @@ func materializeCurrentEntrypointSources164(repoRoot, currentRoot string, paths 
 		if err != nil {
 			return fmt.Errorf("ENTRYPOINT_CURRENT_SOURCE_READ_FAILED: %s: %w", p, err)
 		}
-		if err := writeExactEntrypointSource164(currentRoot, p, content); err != nil { return err }
+		if err := writeExactEntrypointSource164(currentRoot, p, content); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -337,7 +332,9 @@ func materializeBaseEntrypointSources164(baseRoot string, paths []string, source
 		if !ok {
 			return fmt.Errorf("ENTRYPOINT_BASE_SOURCE_OUT_OF_SCOPE: planned source missing %s", p)
 		}
-		if err := writeExactEntrypointSource164(baseRoot, p, content); err != nil { return err }
+		if err := writeExactEntrypointSource164(baseRoot, p, content); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -348,8 +345,12 @@ func writeExactEntrypointSource164(root, p string, content []byte) error {
 		return fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: materialize path %q", p)
 	}
 	full := filepath.Join(root, filepath.FromSlash(clean))
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { return err }
-	if err := os.WriteFile(full, content, 0o600); err != nil { return err }
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(full, content, 0o600); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -368,25 +369,29 @@ func scanEntrypointSide164(ctx context.Context, root, astGrepPath string, paths 
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range paths { result[p] = nil }
+	for _, p := range paths {
+		result[p] = nil
+	}
 	for _, match := range matches {
 		p := filepath.ToSlash(match.Path)
 		if !allowed[p] {
 			return nil, fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: result=%s", p)
 		}
 		result[p] = append(result[p], ControllerEndpoint{
-			Controller: match.Controller,
-			Symbol: match.Symbol,
-			Path: p,
+			Controller:          match.Controller,
+			Symbol:              match.Symbol,
+			Path:                p,
 			ControllerStartLine: match.ControllerStartLine,
-			ControllerEndLine: match.ControllerEndLine,
-			StartLine: match.StartLine,
-			EndLine: match.EndLine,
+			ControllerEndLine:   match.ControllerEndLine,
+			StartLine:           match.StartLine,
+			EndLine:             match.EndLine,
 		})
 	}
 	for p := range result {
 		sort.Slice(result[p], func(i, j int) bool {
-			if result[p][i].Symbol != result[p][j].Symbol { return result[p][i].Symbol < result[p][j].Symbol }
+			if result[p][i].Symbol != result[p][j].Symbol {
+				return result[p][i].Symbol < result[p][j].Symbol
+			}
 			return result[p][i].StartLine < result[p][j].StartLine
 		})
 	}
@@ -396,8 +401,12 @@ func scanEntrypointSide164(ctx context.Context, root, astGrepPath string, paths 
 func insideRepository164(repoRoot, candidate string) bool {
 	repoAbs, repoErr := filepath.Abs(repoRoot)
 	candidateAbs, candidateErr := filepath.Abs(candidate)
-	if repoErr != nil || candidateErr != nil { return true }
+	if repoErr != nil || candidateErr != nil {
+		return true
+	}
 	rel, err := filepath.Rel(repoAbs, candidateAbs)
-	if err != nil { return true }
+	if err != nil {
+		return true
+	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
