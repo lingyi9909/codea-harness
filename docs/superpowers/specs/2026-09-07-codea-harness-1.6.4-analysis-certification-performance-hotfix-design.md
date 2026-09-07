@@ -264,7 +264,7 @@ $RET $M($$$ARGS);
 
 基础 2 条。
 
-modifier 集合当前共 11 个：
+modifier 集合当前共 **12 个**：
 
 ```text
 public
@@ -285,31 +285,31 @@ default
 
 ```text
 2 base
-+ 11 × 2 modifier variants
-= 24 method patterns before annotation variants
++ 12 × 2 modifier variants
+= 26 method patterns before annotation variants
 ```
 
 然后同样经过 `withAnnotationVariants()`：
 
 ```text
-24 × 3 = 72 method patterns
+26 × 3 = 78 method patterns
 ```
 
 因此，一旦一个文件的 Type phase 发现 Controller，当前同一侧还会追加：
 
 ```text
-72 × ast-grep.exe
+78 × ast-grep.exe
 ```
 
 最终该 Controller 文件单侧最多约：
 
 ```text
-30 + 72 = 102 ast-grep processes
+30 + 78 = 108 ast-grep processes
 ```
 
 ## 5.5 精确 process amplification 模型
 
-不能把所有 Java 文件都简单按 `204 ast-grep/file` 估算。
+不能把所有 Java 文件都简单按固定最高值估算。
 
 当前更精确的模型是：
 
@@ -318,8 +318,8 @@ AstProcessCount
 =
 30 × Ncurrent
 + 30 × Nbase
-+ 72 × Ccurrent
-+ 72 × Cbase
++ 78 × Ccurrent
++ 78 × Cbase
 ```
 
 其中：
@@ -343,10 +343,10 @@ AstProcessCount
 ```text
 Current Type:   15 × 30 = 450
 Base Type:      15 × 30 = 450
-Current Method:  4 × 72 = 288
-Base Method:     4 × 72 = 288
+Current Method:  4 × 78 = 312
+Base Method:     4 × 78 = 312
 --------------------------------
-Total                    = 1476 ast-grep processes
+Total                    = 1524 ast-grep processes
 ```
 
 如果 Controller 比例更高，进程数继续显著上升。
@@ -493,10 +493,16 @@ O(total candidate source bytes + AST matching)
 O(1)级 process startup per scan phase
 ```
 
-## 7.2 推荐正式结构
+## 7.2 正式结构
 
 ```text
-Canonical Snapshot
+Canonical Snapshot loaded from run
+        │
+        ▼
+certify live runtime.Compute freshness verification
+        │
+        ▼
+verified live Snapshot
         │
         ▼
 Classify production Java sides
@@ -506,7 +512,7 @@ Classify production Java sides
 Current side        Base side
 A/M existing        M/D base objects
         │               │
-        │        snapshot.MergeBase
+        │        live.MergeBase
         │               │
         │        git cat-file --batch
         │               │
@@ -543,15 +549,17 @@ A/M existing        M/D base objects
  Runtime EntrypointInventory
 ```
 
-## 7.3 为什么采用 Two-phase Batch，而不是“一侧一个 102-rule scan”
+**Batch Inventory 必须消费 canonical certify 已经 freshness 验证通过的 `live` Snapshot，不得回退使用未经 live revalidation 的旧 snapshot authority。**
 
-理论上可以一侧一次同时扫描全部 102 rules。
+## 7.3 为什么采用 Two-phase Batch，而不是“一侧一个 108-rule scan”
+
+理论上可以一侧一次同时扫描全部 108 rules。
 
 但当前真实语义存在一个重要优化：
 
 ```text
 Type phase 未发现 Controller
-→ 不执行 72 条 Method patterns
+→ 不执行 78 条 Method patterns
 ```
 
 实际 changed Java 中，大部分通常是：
@@ -563,9 +571,9 @@ Type phase 未发现 Controller
 - Config；
 - Utility。
 
-如果为了追求“1 process/side”而对所有 Java 都执行 72 method rules，会增加不必要 AST work。
+如果为了追求“1 process/side”而对所有 Java 都执行 78 method rules，会增加不必要 AST work。
 
-因此本设计推荐：
+因此本设计固定推荐：
 
 ```text
 每侧最多 2 个 ast-grep process：
@@ -590,7 +598,7 @@ Total ast-grep  <= 4 per inventory
 该侧 Method batch = 0
 ```
 
-这比“严格 2 process 总量”更符合真实 workload，同时仍然把 process count 从数百/上千降到常数级。
+这是本轮正式 process-count 设计，不要求为了追求“2 个总进程”把 Method rules 扫过所有无关 Java 文件。
 
 ## 7.4 Scanner interface
 
@@ -622,8 +630,8 @@ type EntrypointBatchScanner interface {
 
 具体名字可以按仓库风格调整，但 Authority 边界必须是：
 
-- input paths 来自 canonical snapshot；
-- output path 必须能 exact map 回 canonical repo-relative path；
+- input paths 来自 freshness-verified live canonical snapshot；
+- output path 必须 exact map 回 canonical repo-relative path；
 - scanner 不能自己扩大到全 repo；
 - scanner 不能修改 Snapshot/ChangeSet。
 
@@ -659,7 +667,7 @@ Batch 实现必须保持现有生产行为 parity，不得借性能 hotfix 顺�
 - 传大量绝对路径；
 - scan 意外扩大到无关源码；
 
-推荐整个 inventory 只创建 **一个** temp root：
+推荐整个 inventory 只创建 **一个、位于 repository 之外** 的 temp root：
 
 ```text
 %TEMP%/codea-harness-entrypoint-batch-<id>/
@@ -674,6 +682,8 @@ Batch 实现必须保持现有生产行为 parity，不得借性能 hotfix 顺�
     method-rules...
 ```
 
+不能在 repository working tree 下创建该 temp workspace，避免污染 `includeWorkingTree` / ChangeSet。
+
 Current 文件：
 
 - 从工作区读取 exact bytes；
@@ -684,7 +694,7 @@ Current 文件：
 
 Base 文件：
 
-- 从 `snapshot.MergeBase` 批量读取 exact blob bytes；
+- 从 `live.MergeBase` 批量读取 exact blob bytes；
 - 写入 `base/<repo-relative-path>`。
 
 ast-grep 输出 path 必须去掉：
@@ -698,6 +708,8 @@ base/
 
 任何 path traversal / normalization mismatch 必须 fail closed。
 
+Temp workspace 必须在 success/error/timeout 后清理；清理失败不得伪造成 certification success，也不得把 temp 内容当 Project State。
+
 ## 7.7 Base source 批量读取
 
 禁止继续 per-file：
@@ -707,10 +719,10 @@ git merge-base
 git show
 ```
 
-Base batch 固定使用 canonical snapshot 已有：
+Base batch 固定使用 freshness-verified live snapshot 已有：
 
 ```text
-snapshot.MergeBase
+live.MergeBase
 ```
 
 Base source 建议一次：
@@ -722,7 +734,7 @@ git cat-file --batch
 读取所有：
 
 ```text
-<snapshot.MergeBase>:<path>
+<live.MergeBase>:<path>
 ```
 
 目标：
@@ -732,6 +744,18 @@ Base Git content process <= 1
 per-file git merge-base = 0
 per-file git show = 0
 ```
+
+### Batch protocol safety
+
+repo-relative path 在进入 batch protocol 前必须继续通过 canonical path validation，并额外拒绝可能破坏 line/batch protocol 的控制字符，例如：
+
+```text
+NUL
+CR
+LF
+```
+
+不得把未经验证的 path 直接拼接到 batch stdin。
 
 ### Base missing behavior
 
@@ -771,7 +795,7 @@ Task 1 必须先增加一个真实 CLI capability probe，确认该 pinned binar
 
 ```text
 30 Type patterns
-72 Method patterns
+78 Method patterns
 ```
 
 必须被确定性映射成 batch rule set。
@@ -780,7 +804,7 @@ Task 1 必须先增加一个真实 CLI capability probe，确认该 pinned binar
 
 ```text
 entrypoint-type-000 ... entrypoint-type-029
-entrypoint-method-000 ... entrypoint-method-071
+entrypoint-method-000 ... entrypoint-method-077
 ```
 
 Rule pack 的 pattern 来源应继续复用现有 canonical pattern generator，避免维护两份不同 pattern 列表。
@@ -834,7 +858,7 @@ Task 1 完成后：
 - 可继续保留 60s 作为安全上限；
 - performance gate 必须远低于 60s。
 
-本轮不要求降低 timeout，因为安全 margin 与性能 SLA 是两回事。
+本轮不要求降低 timeout，因为 safety margin 与性能 SLA 是两回事。
 
 ---
 
@@ -843,7 +867,7 @@ Task 1 完成后：
 Task 1 必须保持以下全部不变：
 
 1. Canonical Change Set 只有 Runtime authority。
-2. Batch paths 只能来自当前 canonical snapshot。
+2. Batch paths 只能来自 freshness-verified live canonical snapshot。
 3. Controller identity 仍由 AST + existing semantic filtering 决定。
 4. `@Controller` / `@RestController` 语义不变。
 5. Spring mapping annotation 语义不变。
@@ -861,6 +885,7 @@ Task 1 必须保持以下全部不变：
 17. Coverage validation 不变。
 18. 只有 Certified ChangeAnalysis 才能进入 ReviewOptions。
 19. USER_SELECTION 仍只能发生在 certify 成功之后。
+20. Temp/batch artifact 不得成为新的长期 semantic authority。
 
 ---
 
@@ -876,13 +901,16 @@ Task 1 必须保持以下全部不变：
 
 ```text
 TYPE_PATTERN_COUNT = 30
-METHOD_PATTERN_COUNT = 72
+METHOD_PATTERN_COUNT = 78
 ```
 
 构造多个 changed Java / Controller 文件，证明旧模型 process count 随：
 
 ```text
-files × patterns
+30 × Ncurrent
++ 30 × Nbase
++ 78 × Ccurrent
++ 78 × Cbase
 ```
 
 增长。
@@ -930,6 +958,8 @@ disposition equality
 stable ordering
 ```
 
+推荐同时比较 canonical inventory bytes（除明确允许变化的非语义字段外）；若无法 byte-equal，必须说明差异并证明不改变 Authority。
+
 ## 9.3 Process count gate
 
 必须增加 deterministic process counter gate。
@@ -970,6 +1000,7 @@ Process count gate 是本轮最重要的非时间型性能回归门禁。
 
 - real multi-rule scan works；
 - output parser works；
+- rule ID mapping works；
 - path mapping works；
 - large JSON record works；
 - functional parity works。
@@ -1072,7 +1103,7 @@ Task 2 增加 Runtime-owned performance evidence。
 {
   "status": "FAILED",
   "errorCode": "ENTRYPOINT_CURRENT_SCAN_FAILED",
-  "timingMs": { ...已完成阶段... }
+  "timingMs": { "...": 0 }
 }
 ```
 
@@ -1411,7 +1442,7 @@ contains @RestController => final Controller fact
 
 最终 Controller/endpoint identity 仍必须来自 AST + existing Runtime semantic verification。
 
-## 13.5 改写 30/72 patterns 语义
+## 13.5 改写 30/78 patterns 语义
 
 Task 1 不允许为了 batch 方便顺手“精简” pattern set。
 
@@ -1499,9 +1530,9 @@ Task 1 不应提前修改 Snapshot schema。
 2. CurrentBatch；
 3. BaseBatch；
 4. 30 Type rules batch；
-5. Controller-only 72 Method rules batch；
+5. Controller-only 78 Method rules batch；
 6. single batch temp workspace；
-7. `snapshot.MergeBase` reuse；
+7. `live.MergeBase` reuse；
 8. `git cat-file --batch` Base source load；
 9. exact semantic parity regression；
 10. deterministic process count gate；
@@ -1674,8 +1705,8 @@ Task 1 正式开工前：
 ```text
 30 × Current Java files
 + 30 × Base Java files
-+ 72 × Current Controller files
-+ 72 × Base Controller files
++ 78 × Current Controller files
++ 78 × Base Controller files
 ```
 
 因此一个普通 20-file 级 Change Set 就可能产生上千次 ast-grep process。
