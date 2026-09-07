@@ -9,17 +9,33 @@ on:
       - '.github/scripts/task164-analysis-certification-performance-task1.ps1'
       - '.github/workflows/task164-analysis-certification-performance-task1.yml'
 permissions: {contents: read}
+concurrency:
+  group: task164-verification-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  task1a-scope-gate:
-    runs-on: windows-latest
+  task1-focused:
+    runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}
       - uses: actions/setup-go@v7
-        with: {go-version: '1.23.x'}
-      - name: Task 1A and Task 1B scope regressions
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Confirm exact HEAD
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:GITHUB_SHA) { throw 'exact HEAD mismatch' }
+          Write-Host "TASK164_EXACT_HEAD=$head"
+      - name: Task 1A and Task 1B focused regressions
         shell: pwsh
         working-directory: .code-harness/tools-runtime
         run: |
-          go test -count=1 ./internal/analysis -run 'Test164Task1A|Test164Task1BRunner'
+          go test -count=1 -v ./internal/analysis -run 'Test164Task1A|Test164Task1B'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test -count=1 -v ./internal/nav -run 'Test164'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./internal/analysis ./internal/nav
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host 'TASK164_FOCUSED_WINDOWS_PASS'
