@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -20,12 +21,23 @@ func Test164Task1AScanPlanIsSnapshotBounded(t *testing.T) {
 		"c": "src/main/java/acme/C.java",
 		"d": "src/main/java/acme/D.java",
 	}
-	for _, key := range []string{"a", "b", "d"} {
-		full := filepath.Join(root, filepath.FromSlash(paths[key]))
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { t.Fatal(err) }
-		if err := os.WriteFile(full, []byte("class X {}\n"), 0o600); err != nil { t.Fatal(err) }
+	git164(t, root, "init")
+	git164(t, root, "config", "user.email", "task164@example.invalid")
+	git164(t, root, "config", "user.name", "Task 164")
+	for _, key := range []string{"a", "b", "c"} {
+		writeJava164(t, root, paths[key], "class "+strings.ToUpper(key)+" {}\n")
 	}
+	git164(t, root, "add", ".")
+	git164(t, root, "commit", "-m", "base")
+	mergeBase := strings.TrimSpace(git164(t, root, "rev-parse", "HEAD"))
+
+	writeJava164(t, root, paths["a"], "class A { int changed; }\n")
+	writeJava164(t, root, paths["b"], "class B { int changed; }\n")
+	if err := os.Remove(filepath.Join(root, filepath.FromSlash(paths["c"]))); err != nil { t.Fatal(err) }
+	writeJava164(t, root, paths["d"], "class D {}\n")
+
 	snapshot := changeset.Snapshot{
+		MergeBase: mergeBase,
 		SHA256: strings.Repeat("1", 64),
 		Files: []changeset.File{
 			{Path: paths["a"], Status: "M"},
@@ -46,6 +58,9 @@ func Test164Task1AScanPlanIsSnapshotBounded(t *testing.T) {
 	if plan.CurrentScopeSHA256 == "" || plan.BaseScopeSHA256 == "" || plan.CurrentScopeSHA256 == plan.BaseScopeSHA256 {
 		t.Fatalf("scope hashes not bound correctly: %+v", plan)
 	}
+	if plan.baseGitBatchProcesses != 1 {
+		t.Fatalf("Base plan must use one git cat-file --batch process, got %d", plan.baseGitBatchProcesses)
+	}
 }
 
 func Test164Task1ARunnerRejectsDirectoryScope(t *testing.T) {
@@ -57,4 +72,20 @@ func Test164Task1ARunnerRejectsDirectoryScope(t *testing.T) {
 	if errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("runner reached process execution before rejecting widened scope: %v", err)
 	}
+}
+
+func writeJava164(t *testing.T, root, p, content string) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(p))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(full, []byte(content), 0o600); err != nil { t.Fatal(err) }
+}
+
+func git164(t *testing.T, root string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil { t.Fatalf("git %v: %v: %s", args, err, out) }
+	return string(out)
 }
