@@ -3,7 +3,7 @@ name: package-windows-x64
 on:
   workflow_dispatch:
   pull_request:
-    branches: [develop, docs/1.6-review-precision]
+    branches: [develop, main, docs/1.6-review-precision]
     paths:
       - '.code-harness/**'
       - 'README.md'
@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   package:
@@ -44,7 +45,7 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
-          if ($version -notin @('1.6.1', '1.6.2')) {
+          if ($version -notin @('1.6.1', '1.6.2', '1.6.3')) {
             throw "unsupported release version: $version"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -173,4 +174,95 @@ jobs:
         with:
           name: codea-dcep-tools-whitelist
           path: codea-dcep-tools-whitelist.txt
+          if-no-files-found: error
+
+      - name: Validate 1.6.3 certified release lineage
+        if: steps.release.outputs.version == '1.6.3'
+        shell: pwsh
+        run: |
+          $integrationHead = (git rev-parse HEAD).Trim()
+          $certifiedHead = '2278ad49d4534b57f3144466ffe0e65ddca7f189'
+          git merge-base --is-ancestor $certifiedHead $integrationHead
+          $ancestorExit = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($ancestorExit -ne 0) {
+            throw "accepted 1.6.3 certified head is not an ancestor of integration head: certified=$certifiedHead integration=$integrationHead"
+          }
+          $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
+          if ($version -ne '1.6.3') { throw "repository VERSION mismatch: $version" }
+          Write-Output "PACKAGE_WINDOWS_X64_163_CERTIFIED_LINEAGE PASS certified=$certifiedHead integration=$integrationHead"
+
+      - name: Download 1.6.3 certified release candidate
+        if: steps.release.outputs.version == '1.6.3'
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.3-release-candidate-2278ad49d4534b57f3144466ffe0e65ddca7f189
+          path: task163-certified-release
+          github-token: ${{ github.token }}
+          run-id: 34078028987
+
+      - name: Validate 1.6.3 certified release candidate
+        if: steps.release.outputs.version == '1.6.3'
+        shell: pwsh
+        run: |
+          $certifiedHead = '2278ad49d4534b57f3144466ffe0e65ddca7f189'
+          $root = Join-Path (Get-Location).Path 'task163-certified-release'
+          $checklistPath = Join-Path $root 'codea-harness-1.6.3-release-checklist.json'
+          $checklist = Get-Content $checklistPath -Raw | ConvertFrom-Json
+          if ([string]$checklist.status -ne 'PASS') { throw '1.6.3 certification checklist is not PASS' }
+          if ([string]$checklist.version -ne '1.6.3') { throw '1.6.3 certification checklist version mismatch' }
+          if ([string]$checklist.exactHeadSha -ne $certifiedHead) { throw '1.6.3 certification checklist exact HEAD mismatch' }
+          foreach ($kind in @('install','upgrade')) {
+            $zip = Join-Path $root "codea-harness-1.6.3-windows-x64-$kind.zip"
+            if (-not (Test-Path $zip -PathType Leaf)) { throw "missing certified $kind ZIP" }
+            $actualHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+            $expectedHash = [string]$checklist.artifacts.$kind.sha256
+            if ($actualHash -ne $expectedHash) { throw "$kind ZIP hash mismatch" }
+            $expand = Join-Path $env:RUNNER_TEMP ("task163-certified-$kind-" + [guid]::NewGuid().ToString('N'))
+            try {
+              Expand-Archive $zip $expand -Force
+              $top = if ($kind -eq 'install') { '.code-harness' } else { '.code-harness-upgrade' }
+              $manifest = Get-Content (Join-Path (Join-Path $expand $top) 'RELEASE-MANIFEST.json') -Raw | ConvertFrom-Json
+              if ([string]$manifest.version -ne '1.6.3') { throw "$kind manifest version mismatch" }
+              if ([string]$manifest.buildCommit -ne $certifiedHead) { throw "$kind manifest certified HEAD mismatch" }
+            } finally {
+              Remove-Item $expand -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+          $whitelist = Join-Path $root 'codea-dcep-tools-whitelist.txt'
+          if (-not (Test-Path $whitelist -PathType Leaf)) { throw 'missing certified Runtime whitelist' }
+          $whitelistHash = (Get-FileHash $whitelist -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($whitelistHash -ne [string]$checklist.artifacts.whitelist.sha256) { throw 'Runtime whitelist hash mismatch' }
+          Write-Output "PACKAGE_WINDOWS_X64_163_CERTIFIED_ARTIFACTS PASS head=$certifiedHead"
+
+      - name: Upload 1.6.3 install package
+        if: steps.release.outputs.version == '1.6.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.3-windows-x64-install
+          path: task163-certified-release/codea-harness-1.6.3-windows-x64-install.zip
+          if-no-files-found: error
+
+      - name: Upload 1.6.3 upgrade package
+        if: steps.release.outputs.version == '1.6.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.3-windows-x64-upgrade
+          path: task163-certified-release/codea-harness-1.6.3-windows-x64-upgrade.zip
+          if-no-files-found: error
+
+      - name: Upload 1.6.3 release checklist
+        if: steps.release.outputs.version == '1.6.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.3-release-checklist
+          path: task163-certified-release/codea-harness-1.6.3-release-checklist.json
+          if-no-files-found: error
+
+      - name: Upload 1.6.3 Runtime whitelist
+        if: steps.release.outputs.version == '1.6.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-dcep-tools-whitelist-1.6.3
+          path: task163-certified-release/codea-dcep-tools-whitelist.txt
           if-no-files-found: error
