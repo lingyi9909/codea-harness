@@ -111,3 +111,56 @@ jobs:
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne '${{ github.sha }}') { throw "workflow checkout drift: head=$head github.sha=${{ github.sha }}" }
           Write-Output "TASK164_TASK1_PERFORMANCE_EXACT_HEAD PASS head=$head"
+
+  task1-regression:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Forbidden Entrypoint fallback static gate
+        shell: pwsh
+        run: |
+          $files = @(
+            '.code-harness/tools-runtime/internal/analysis/entrypoints.go',
+            '.code-harness/tools-runtime/internal/analysis/entrypoint_scan_plan_164.go',
+            '.code-harness/tools-runtime/internal/analysis/entrypoint_bounded_scanner_164.go',
+            '.code-harness/tools-runtime/internal/analysis/entrypoint_batch_inventory_164.go'
+          )
+          $text = ($files | ForEach-Object { Get-Content $_ -Raw }) -join "`n"
+          foreach ($forbidden in @('git", "merge-base', 'git", "show', 'codea-harness-entrypoint-base-"')) {
+            if ($text.Contains($forbidden)) { throw "forbidden Entrypoint fallback remains: $forbidden" }
+          }
+          Write-Output 'TASK164_FORBIDDEN_ENTRYPOINT_FALLBACK PASS'
+      - name: Full relevant analysis/nav regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/analysis ./internal/nav
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_RELEVANT_REGRESSION PASS'
+      - name: Full Go test
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_GO_TEST PASS'
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_GO_VET PASS'
+      - name: Exact HEAD evidence
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "workflow checkout drift: head=$head github.sha=${{ github.sha }}" }
+          Write-Output "TASK164_TASK1_REGRESSION_EXACT_HEAD PASS head=$head"
