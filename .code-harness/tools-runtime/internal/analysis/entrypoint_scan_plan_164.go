@@ -46,6 +46,9 @@ func buildEntrypointScanPlan164(ctx context.Context, repoRoot, runID string, sna
 	}
 	candidateSet := map[string]bool{}
 	for _, changed := range snapshot.Files {
+		if err := validateEntrypointBatchProtocolPath164(changed.Path); err != nil {
+			return EntrypointScanPlan{}, nil, err
+		}
 		p, ok := projectpath.Normalize(changed.Path)
 		if !ok || !projectpath.IsMainJava(p) {
 			continue
@@ -74,6 +77,9 @@ func buildEntrypointScanPlan164(ctx context.Context, repoRoot, runID string, sna
 	}
 	baseSet := map[string]bool{}
 	for raw := range baseSources {
+		if err := validateEntrypointBatchProtocolPath164(raw); err != nil {
+			return EntrypointScanPlan{}, nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_OUT_OF_SCOPE: %w", err)
+		}
 		p, ok := projectpath.Normalize(raw)
 		if !ok || p != filepath.ToSlash(raw) || !candidateSet[p] || !projectpath.IsMainJava(p) {
 			return EntrypointScanPlan{}, nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_OUT_OF_SCOPE: %s", raw)
@@ -117,6 +123,9 @@ func validateEntrypointScanResults164(requested []string, results []ControllerEn
 		set[p] = true
 	}
 	for _, result := range results {
+		if validateEntrypointBatchProtocolPath164(result.Path) != nil {
+			return fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: %s", result.Path)
+		}
 		p, valid := projectpath.Normalize(result.Path)
 		if !valid || !set[p] {
 			return fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: %s", result.Path)
@@ -128,6 +137,9 @@ func validateEntrypointScanResults164(requested []string, results []ControllerEn
 func exactEntrypointPathSet164(paths []string) ([]string, bool) {
 	set := map[string]bool{}
 	for _, raw := range paths {
+		if validateEntrypointBatchProtocolPath164(raw) != nil {
+			return nil, false
+		}
 		p, ok := projectpath.Normalize(raw)
 		if !ok || p != filepath.ToSlash(raw) || !projectpath.IsMainJava(p) || set[p] {
 			return nil, false
@@ -135,6 +147,13 @@ func exactEntrypointPathSet164(paths []string) ([]string, bool) {
 		set[p] = true
 	}
 	return sortedEntrypointPaths164(set), true
+}
+
+func validateEntrypointBatchProtocolPath164(raw string) error {
+	if strings.ContainsAny(raw, "\x00\r\n") {
+		return fmt.Errorf("ENTRYPOINT_SCAN_SCOPE_WIDENED: batch protocol path contains NUL/CR/LF")
+	}
+	return nil
 }
 
 func sortedEntrypointPaths164(set map[string]bool) []string {
