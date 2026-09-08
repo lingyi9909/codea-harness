@@ -112,6 +112,9 @@ func (n Navigator) validateEntrypointBatchTargets164(targets []string) ([]string
 	seen := map[string]bool{}
 	out := make([]string, 0, len(targets))
 	for _, raw := range targets {
+		if strings.ContainsAny(raw, "\x00\r\n") {
+			return nil, ErrInvalidScope
+		}
 		clean := strings.ReplaceAll(strings.TrimSpace(raw), "\\", "/")
 		if err := n.validate("X", clean); err != nil {
 			return nil, ErrInvalidScope
@@ -179,7 +182,7 @@ func (n Navigator) runRawBatch164(ctx context.Context, targets []string, ruleID 
 		if match.EndLine < match.StartLine {
 			match.EndLine = match.StartLine
 		}
-		if !allowed[match.Path] {
+		if strings.ContainsAny(match.Path, "\x00\r\n") || !allowed[match.Path] {
 			return nil, fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: %s", match.Path)
 		}
 		key := fmt.Sprintf("%s:%d:%d:%d:%d:%s", match.Path, match.StartLine, match.StartColumn, match.EndLine, match.EndColumn, match.Text)
