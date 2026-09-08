@@ -31,8 +31,15 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) { t.Fatalf("CHANGELOG missing %q", want) }
 	}
-	section := strings.SplitN(text, "## 1.5.3", 2)[0]
-	if got := strings.Count(section, "\n- **"); got != 6 {
+	release160 := strings.SplitN(text, "## 1.6.0", 2)
+	if len(release160) != 2 {
+		t.Fatal("CHANGELOG missing 1.6.0 release section")
+	}
+	section := strings.SplitN(release160[1], "## 1.5.3", 2)
+	if len(section) != 2 {
+		t.Fatal("CHANGELOG missing 1.5.3 boundary after 1.6.0")
+	}
+	if got := strings.Count(section[0], "\n- **"); got != 6 {
 		t.Fatalf("1.6.0 CHANGELOG must preserve exactly 6 scoped Task160 bullets, got %d", got)
 	}
 
