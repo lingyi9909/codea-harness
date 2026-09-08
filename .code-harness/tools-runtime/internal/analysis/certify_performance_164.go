@@ -18,11 +18,11 @@ const (
 var certifyPerformanceErrorCode164 = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 
 type certifyPerformanceCounts164 struct {
-	ChangedFiles              int `json:"changedFiles"`
-	ProductionJavaCurrent     int `json:"productionJavaCurrent"`
-	ProductionJavaBase        int `json:"productionJavaBase"`
-	ControllerFilesCurrent    int `json:"controllerFilesCurrent"`
-	ControllerFilesBase       int `json:"controllerFilesBase"`
+	ChangedFiles           int `json:"changedFiles"`
+	ProductionJavaCurrent  int `json:"productionJavaCurrent"`
+	ProductionJavaBase     int `json:"productionJavaBase"`
+	ControllerFilesCurrent int `json:"controllerFilesCurrent"`
+	ControllerFilesBase    int `json:"controllerFilesBase"`
 }
 
 type certifyPerformanceTiming164 struct {
@@ -145,9 +145,13 @@ func elapsedMillis164(started time.Time) int64 {
 	if started.IsZero() {
 		return 0
 	}
-	ms := time.Since(started).Milliseconds()
-	if ms < 0 {
+	elapsed := time.Since(started)
+	if elapsed < 0 {
 		return 0
+	}
+	ms := elapsed.Milliseconds()
+	if elapsed > 0 && ms == 0 {
+		return 1
 	}
 	return ms
 }
