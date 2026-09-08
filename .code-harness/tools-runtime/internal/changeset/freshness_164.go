@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
 )
 
-// VerifyFreshness proves that the live Git source identity still matches a
-// previously sealed canonical Snapshot. It intentionally does not rebuild
-// Files/Hunks or mint a replacement Snapshot; Compute remains the sole
-// canonical Snapshot producer.
+// VerifyFreshness proves that the live Git source identity and the canonical
+// Runtime projection still match a previously sealed Snapshot. It reuses the
+// already-read Git diff/untracked state to derive Files/Hunks in memory; it does
+// not run a second Compute or mint a replacement Snapshot.
 func VerifyFreshness(repoRoot string, snapshot Snapshot) error {
 	if err := validateCanonicalSnapshot162(snapshot); err != nil {
 		return err
@@ -84,6 +85,11 @@ func VerifyFreshness(repoRoot string, snapshot Snapshot) error {
 		return fmt.Errorf("CHANGE_SET_SNAPSHOT_STALE: Git state changed")
 	}
 
+	liveFiles := freshnessProjection164(committedPatch, stagedPatch, unstagedPatch, untrackedState, snapshot.IncludeWorkingTree)
+	if !reflect.DeepEqual(liveFiles, snapshot.Files) {
+		return fmt.Errorf("CHANGE_SET_SNAPSHOT_STALE: canonical Files projection changed")
+	}
+
 	resolvedBaseAfter, headAfter, err := resolveFreshnessCommits164(ctx, repoRoot, snapshot.RequestedBaseRef)
 	if err != nil {
 		return err
@@ -99,6 +105,49 @@ func VerifyFreshness(repoRoot string, snapshot Snapshot) error {
 		return fmt.Errorf("CHANGE_SET_SNAPSHOT_STALE: current branch changed during freshness verification")
 	}
 	return nil
+}
+
+func freshnessProjection164(committedPatch, stagedPatch, unstagedPatch string, untracked []untrackedState162, includeWorkingTree bool) []File {
+	files := map[string]*File{}
+	mergePatch := func(patch string, source Source) {
+		for _, file := range parseUnifiedDiff153([]byte(patch), source) {
+			if inHarnessScope153(file.Path) {
+				mergeFile153(files, file)
+			}
+		}
+	}
+
+	mergePatch(committedPatch, SourceCommitted)
+	if includeWorkingTree {
+		mergePatch(stagedPatch, SourceStaged)
+		mergePatch(unstagedPatch, SourceUnstaged)
+		for _, item := range untracked {
+			mergeFile153(files, File{Path: item.Path, Status: "A", Sources: []Source{SourceUntracked}})
+		}
+	}
+
+	out := make([]File, 0, len(files))
+	for _, file := range files {
+		sort.Slice(file.Sources, func(i, j int) bool { return sourceOrder153[file.Sources[i]] < sourceOrder153[file.Sources[j]] })
+		file.Sources = dedupeSources153(file.Sources)
+		sort.Slice(file.Hunks, func(i, j int) bool {
+			a, b := file.Hunks[i], file.Hunks[j]
+			if a.NewStart != b.NewStart {
+				return a.NewStart < b.NewStart
+			}
+			if a.OldStart != b.OldStart {
+				return a.OldStart < b.OldStart
+			}
+			if a.NewLines != b.NewLines {
+				return a.NewLines < b.NewLines
+			}
+			return a.OldLines < b.OldLines
+		})
+		file.Hunks = dedupeHunks153(file.Hunks)
+		out = append(out, *file)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
 }
 
 func resolveFreshnessCommits164(ctx context.Context, repoRoot, requestedBaseRef string) (string, string, error) {
