@@ -30,7 +30,7 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 -v ./internal/analysis -run 'Test164Entrypoint|Test164CertifyEntrypointScopeWidening'
+          go test -count=1 -v ./internal/analysis -run 'Test164Entrypoint|Test164CertifyEntrypointScopeWidening|Test164CertifyBatchProtocol'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exact HEAD evidence
         shell: pwsh
