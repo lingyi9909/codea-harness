@@ -88,7 +88,7 @@ func Test164CanonicalCertifyFreshnessFastPathFailsClosedBeforeInventory(t *testi
 	assertNoAuthoritativeAnalysis153(t, root, req.RunID)
 }
 
-func Test164CanonicalCertifyRehashedProjectionTamperFailsClosedBeforeInventory(t *testing.T) {
+func Test164CanonicalCertifyFreshnessFastPathRehashedProjectionTamperFailsClosedBeforeInventory(t *testing.T) {
 	root, snapshot, req, contract := createTask164CertifyPerformanceContractFixture(t, "run-task3-projection-stale")
 	if len(snapshot.Files) == 0 {
 		t.Fatal("fixture requires a canonical changed file")
