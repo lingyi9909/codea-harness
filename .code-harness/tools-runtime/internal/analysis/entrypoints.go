@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"codea-harness-tools/internal/changeset"
-	"codea-harness-tools/internal/nav"
 	"codea-harness-tools/internal/projectpath"
 	"codea-harness-tools/internal/symbolid"
 )
@@ -32,11 +30,6 @@ type ControllerEndpoint struct {
 type entrypointScanner153 interface {
 	Current(context.Context, string) ([]ControllerEndpoint, error)
 	Base(context.Context, changeset.Snapshot, string) ([]ControllerEndpoint, error)
-}
-
-type navigationEntrypointScanner153 struct {
-	repoRoot    string
-	astGrepPath string
 }
 
 type rootedRunner153 struct{ dir string }
@@ -419,81 +412,6 @@ func VerifyEntrypointDispositions(inventory EntrypointInventory, proposal Change
 	}
 	sort.Strings(missing)
 	return fmt.Errorf("ENTRYPOINT_COMPLETENESS_INCOMPLETE: %s", strings.Join(missing, ", "))
-}
-
-func (s navigationEntrypointScanner153) Current(ctx context.Context, p string) ([]ControllerEndpoint, error) {
-	clean := filepath.FromSlash(p)
-	if _, err := os.Stat(filepath.Join(s.repoRoot, clean)); err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return s.scanAtRoot(ctx, s.repoRoot, filepath.ToSlash(p))
-}
-
-func (s navigationEntrypointScanner153) Base(ctx context.Context, snapshot changeset.Snapshot, p string) ([]ControllerEndpoint, error) {
-	mergeBaseCmd := exec.CommandContext(ctx, "git", "merge-base", snapshot.BaseRef, "HEAD")
-	mergeBaseCmd.Dir = s.repoRoot
-	mergeBaseBytes, err := mergeBaseCmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("git merge-base %s HEAD: %w: %s", snapshot.BaseRef, err, strings.TrimSpace(string(mergeBaseBytes)))
-	}
-	mergeBase := strings.TrimSpace(string(mergeBaseBytes))
-	object := mergeBase + ":" + filepath.ToSlash(p)
-	show := exec.CommandContext(ctx, "git", "show", object)
-	show.Dir = s.repoRoot
-	content, err := show.Output()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	tmp, err := os.MkdirTemp("", "codea-harness-entrypoint-base-")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(tmp)
-	tmpFile := filepath.Join(tmp, filepath.FromSlash(p))
-	if err := os.MkdirAll(filepath.Dir(tmpFile), 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(tmpFile, content, 0o600); err != nil {
-		return nil, err
-	}
-	return s.scanAtRoot(ctx, tmp, filepath.ToSlash(p))
-}
-
-func (s navigationEntrypointScanner153) scanAtRoot(ctx context.Context, scanRoot, scope string) ([]ControllerEndpoint, error) {
-	n := nav.Navigator{RepoRoot: scanRoot, AstGrepPath: s.astGrepPath, Runner: rootedRunner153{dir: scanRoot}}
-	matches, err := n.FindControllerEndpoints(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ControllerEndpoint, 0, len(matches))
-	for _, match := range matches {
-		if filepath.ToSlash(match.Path) != filepath.ToSlash(scope) {
-			continue
-		}
-		out = append(out, ControllerEndpoint{
-			Controller:          match.Controller,
-			Symbol:              match.Symbol,
-			Path:                filepath.ToSlash(match.Path),
-			ControllerStartLine: match.ControllerStartLine,
-			ControllerEndLine:   match.ControllerEndLine,
-			StartLine:           match.StartLine,
-			EndLine:             match.EndLine,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Symbol != out[j].Symbol {
-			return out[i].Symbol < out[j].Symbol
-		}
-		return out[i].StartLine < out[j].StartLine
-	})
-	return out, nil
 }
 
 func owner153(symbol string) string {
