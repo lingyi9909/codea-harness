@@ -33,6 +33,13 @@ jobs:
           go test -count=1 -v ./internal/changeset -run '^Test164VerifyFreshness'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output "TASK164_TASK3_FRESHNESS_MATRIX PASS"
+      - name: Task 3 canonical certify fast path
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./internal/analysis -run '^Test164CanonicalCertify.*FreshnessFastPath'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output "TASK164_TASK3_CANONICAL_FASTPATH PASS"
       - name: Exact HEAD evidence
         shell: pwsh
         run: |
