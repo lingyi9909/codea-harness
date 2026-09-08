@@ -149,9 +149,8 @@ func elapsedMillis164(started time.Time) int64 {
 	if elapsed < 0 {
 		return 0
 	}
-	ms := elapsed.Milliseconds()
-	if elapsed > 0 && ms == 0 {
+	if elapsed < time.Millisecond {
 		return 1
 	}
-	return ms
+	return elapsed.Milliseconds()
 }
