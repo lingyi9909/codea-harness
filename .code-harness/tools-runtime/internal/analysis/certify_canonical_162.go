@@ -63,13 +63,13 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 
 	stageStarted = time.Now()
 	live, err := runtime.Compute(root, snapshot.RequestedBaseRef, snapshot.IncludeWorkingTree)
+	recorder.doc.TimingMS.SnapshotFreshness = elapsedMillis164(stageStarted)
 	if err != nil {
 		return Certificate{}, err
 	}
 	if !sameCanonicalSnapshotAuthority162(snapshot, live) {
 		return Certificate{}, fmt.Errorf("CHANGE_SET_SNAPSHOT_STALE: snapshot=%s live=%s", snapshot.SnapshotSHA256, live.SnapshotSHA256)
 	}
-	recorder.doc.TimingMS.SnapshotFreshness = elapsedMillis164(stageStarted)
 
 	stageStarted = time.Now()
 	proposalBytes, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(req.ProposalPath)))
@@ -101,7 +101,14 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 
 	certifyIntent := Intent{Mode: strings.ToUpper(strings.TrimSpace(req.Intent.Mode)), Target: strings.TrimSpace(req.Intent.Target)}
 	stageStarted = time.Now()
-	inventory, err := runtime.Inventory(root, req.RunID, live, req.Intent)
+	var inventory EntrypointInventory
+	if performanceRuntime, ok := runtime.(certificationPerformanceRuntime164); ok {
+		var metrics entrypointExecutionMetrics164
+		inventory, metrics, err = performanceRuntime.InventoryWithPerformance(root, req.RunID, live, req.Intent)
+		recorder.applyEntrypointMetrics(metrics)
+	} else {
+		inventory, err = runtime.Inventory(root, req.RunID, live, req.Intent)
+	}
 	recorder.doc.TimingMS.EntrypointInventory = elapsedMillis164(stageStarted)
 	if err != nil {
 		return Certificate{}, err
