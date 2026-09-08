@@ -133,7 +133,7 @@ jobs:
             '.code-harness/tools-runtime/internal/analysis/entrypoint_batch_inventory_164.go'
           )
           $text = ($files | ForEach-Object { Get-Content $_ -Raw }) -join "`n"
-          foreach ($forbidden in @('git", "merge-base', 'git", "show', 'codea-harness-entrypoint-base-"')) {
+          foreach ($forbidden in @('git", "merge-base', 'git", "show', 'navigationEntrypointScanner153')) {
             if ($text.Contains($forbidden)) { throw "forbidden Entrypoint fallback remains: $forbidden" }
           }
           Write-Output 'TASK164_FORBIDDEN_ENTRYPOINT_FALLBACK PASS'
