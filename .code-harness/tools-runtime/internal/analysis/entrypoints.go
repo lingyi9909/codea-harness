@@ -48,24 +48,30 @@ func (r rootedRunner153) Run(ctx context.Context, name string, args ...string) (
 }
 
 func BuildEntrypointInventory(repoRoot, runID string, snapshot changeset.Snapshot, intent Intent) (EntrypointInventory, error) {
+	inventory, _, err := buildEntrypointInventoryWithMetrics164(repoRoot, runID, snapshot, intent)
+	return inventory, err
+}
+
+func buildEntrypointInventoryWithMetrics164(repoRoot, runID string, snapshot changeset.Snapshot, intent Intent) (EntrypointInventory, entrypointExecutionMetrics164, error) {
+	var metrics entrypointExecutionMetrics164
 	absRoot, err := filepath.Abs(repoRoot)
 	if err != nil {
-		return EntrypointInventory{}, fmt.Errorf("ENTRYPOINT_REPO_ROOT_INVALID: %w", err)
+		return EntrypointInventory{}, metrics, fmt.Errorf("ENTRYPOINT_REPO_ROOT_INVALID: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	plan, baseSources, err := buildEntrypointScanPlan164(ctx, absRoot, runID, snapshot, gitBatchBaseSourceReader164{})
+	plan, baseSources, err := buildEntrypointScanPlan164(ctx, absRoot, runID, snapshot, gitBatchBaseSourceReader164{metrics: &metrics})
 	if err != nil {
-		return EntrypointInventory{}, err
+		return EntrypointInventory{}, metrics, err
 	}
-	scanner := plannedEntrypointScanner164{
-		plan:        plan,
-		repoRoot:    absRoot,
-		astGrepPath: filepath.Join(absRoot, ".code-harness", "bin", "ast-grep.exe"),
-		baseSources: baseSources,
+	astGrepPath := filepath.Join(absRoot, ".code-harness", "bin", "ast-grep.exe")
+	scanner, err := scanEntrypointPlan164(ctx, absRoot, astGrepPath, plan, baseSources, &metrics)
+	if err != nil {
+		return EntrypointInventory{}, metrics, err
 	}
-	return buildEntrypointInventoryWithScanner(ctx, runID, snapshot, intent, scanner)
+	inventory, err := buildEntrypointInventoryWithScanner(ctx, runID, snapshot, intent, scanner)
+	return inventory, metrics, err
 }
 
 func buildEntrypointInventoryWithScanner(ctx context.Context, runID string, snapshot changeset.Snapshot, intent Intent, scanner entrypointScanner153) (EntrypointInventory, error) {
