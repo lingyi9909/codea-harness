@@ -38,6 +38,7 @@ func Test164EntrypointBatchProtocolRejectsBeforeAnyProcess(t *testing.T) {
 			snapshot := task153Snapshot([]changeset.File{{
 				Path: path, Status: "M", Sources: []changeset.Source{changeset.SourceStaged},
 			}})
+			snapshot.MergeBase = strings.Repeat("b", 40)
 			_, metrics, err := buildEntrypointInventoryWithMetrics164(t.TempDir(), "run164-protocol", snapshot, Intent{Mode: "FULL"})
 			if err == nil || !strings.Contains(err.Error(), "ENTRYPOINT_SCAN_SCOPE_WIDENED") {
 				t.Fatalf("batch protocol delimiter %s must fail closed as scope widening, got %v", tc.name, err)
@@ -45,6 +46,7 @@ func Test164EntrypointBatchProtocolRejectsBeforeAnyProcess(t *testing.T) {
 			if metrics.AstGrepProcessCount != 0 || metrics.BaseGitBatchProcessCount != 0 {
 				t.Fatalf("batch protocol delimiter %s launched processes: astGrep=%d baseGitBatch=%d; want 0/0", tc.name, metrics.AstGrepProcessCount, metrics.BaseGitBatchProcessCount)
 			}
+			t.Logf("TASK164_BATCH_PROTOCOL_ZERO_PROCESS PASS delimiter=%s astGrepProcessCount=0 baseGitBatchProcessCount=0", tc.name)
 		})
 	}
 }
@@ -65,6 +67,7 @@ func Test164CertifyBatchProtocolRejectsZeroProcessesZeroCertifiedWrites(t *testi
 			snapshot := task153Snapshot([]changeset.File{{
 				Path: path, Status: "A", Sources: []changeset.Source{changeset.SourceStaged},
 			}})
+			snapshot.MergeBase = strings.Repeat("b", 40)
 			draft := validCertificationDraft153([]string{path})
 			runID := "run164-protocol-" + strings.ToLower(tc.name)
 			writeCertificationDraft153(t, root, runID, draft)
@@ -84,6 +87,7 @@ func Test164CertifyBatchProtocolRejectsZeroProcessesZeroCertifiedWrites(t *testi
 				t.Fatalf("batch protocol delimiter %s launched processes during certify: astGrep=%d baseGitBatch=%d; want 0/0", tc.name, runtime.metrics.AstGrepProcessCount, runtime.metrics.BaseGitBatchProcessCount)
 			}
 			assertNoAuthoritativeAnalysis153(t, root, runID)
+			t.Logf("TASK164_BATCH_PROTOCOL_CERTIFY_FAIL_CLOSED PASS delimiter=%s astGrepProcessCount=0 baseGitBatchProcessCount=0 certifiedWrites=0", tc.name)
 		})
 	}
 }
