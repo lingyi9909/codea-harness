@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/coverage"
@@ -17,10 +18,13 @@ func isCanonicalCertifyRequest162(req CertifyRequest) bool {
 	return strings.TrimSpace(req.ProposalPath) != "" || strings.TrimSpace(req.SnapshotPath) != "" || strings.TrimSpace(req.SnapshotSHA256) != ""
 }
 
-func certifyCanonical162(root string, req CertifyRequest, runtime certificationRuntime153) (Certificate, error) {
+func certifyCanonical162(root string, req CertifyRequest, runtime certificationRuntime153) (cert Certificate, retErr error) {
 	if !artifactID153.MatchString(strings.TrimSpace(req.RunID)) || strings.TrimSpace(req.Intent.Mode) == "" {
 		return Certificate{}, fmt.Errorf("ANALYSIS_CERTIFY_REQUEST_INVALID: runId and intent.mode are required")
 	}
+	recorder := newCertifyPerformanceRecorder164(root, req.RunID, req.SnapshotSHA256)
+	defer func() { recorder.finish(retErr) }()
+
 	if strings.TrimSpace(req.DraftPath) != "" || strings.TrimSpace(req.BaseRef) != "" {
 		return Certificate{}, fmt.Errorf("ANALYSIS_CERTIFY_REQUEST_INVALID: canonical snapshot mode cannot include legacy draftPath/baseRef")
 	}
@@ -34,6 +38,7 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 		return Certificate{}, fmt.Errorf("ANALYSIS_CERTIFY_REQUEST_INVALID: snapshotSha256 is required")
 	}
 
+	stageStarted := time.Now()
 	snapshotBytes, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(req.SnapshotPath)))
 	if err != nil {
 		return Certificate{}, fmt.Errorf("CHANGE_SET_SNAPSHOT_READ_FAILED: %w", err)
@@ -52,7 +57,11 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 	if req.SnapshotSHA256 != snapshot.SnapshotSHA256 {
 		return Certificate{}, fmt.Errorf("CHANGE_SET_SNAPSHOT_IDENTITY_MISMATCH: request=%s artifact=%s", req.SnapshotSHA256, snapshot.SnapshotSHA256)
 	}
+	recorder.doc.SnapshotSHA256 = snapshot.SnapshotSHA256
+	recorder.doc.Counts.ChangedFiles = len(snapshot.Files)
+	recorder.doc.TimingMS.SnapshotSchemaAndDecode = elapsedMillis164(stageStarted)
 
+	stageStarted = time.Now()
 	live, err := runtime.Compute(root, snapshot.RequestedBaseRef, snapshot.IncludeWorkingTree)
 	if err != nil {
 		return Certificate{}, err
@@ -60,7 +69,9 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 	if !sameCanonicalSnapshotAuthority162(snapshot, live) {
 		return Certificate{}, fmt.Errorf("CHANGE_SET_SNAPSHOT_STALE: snapshot=%s live=%s", snapshot.SnapshotSHA256, live.SnapshotSHA256)
 	}
+	recorder.doc.TimingMS.SnapshotFreshness = elapsedMillis164(stageStarted)
 
+	stageStarted = time.Now()
 	proposalBytes, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(req.ProposalPath)))
 	if err != nil {
 		return Certificate{}, fmt.Errorf("ANALYSIS_PROPOSAL_READ_FAILED: %w", err)
@@ -72,6 +83,9 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 	if err := schema.ValidateJSON(proposalSchema, proposalBytes); err != nil {
 		return Certificate{}, fmt.Errorf("ANALYSIS_PROPOSAL_SCHEMA_INVALID: %w", err)
 	}
+	recorder.doc.TimingMS.ProposalSchema = elapsedMillis164(stageStarted)
+
+	stageStarted = time.Now()
 	canonicalAnalysis, typed, err := assembleCanonicalAnalysis162(proposalBytes, live)
 	if err != nil {
 		return Certificate{}, err
@@ -83,9 +97,12 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 	if err := schema.ValidateJSON(analysisSchema, canonicalAnalysis); err != nil {
 		return Certificate{}, fmt.Errorf("ANALYSIS_ASSEMBLED_SCHEMA_INVALID: %w", err)
 	}
+	recorder.doc.TimingMS.AnalysisAssembly = elapsedMillis164(stageStarted)
 
 	certifyIntent := Intent{Mode: strings.ToUpper(strings.TrimSpace(req.Intent.Mode)), Target: strings.TrimSpace(req.Intent.Target)}
+	stageStarted = time.Now()
 	inventory, err := runtime.Inventory(root, req.RunID, live, req.Intent)
+	recorder.doc.TimingMS.EntrypointInventory = elapsedMillis164(stageStarted)
 	if err != nil {
 		return Certificate{}, err
 	}
@@ -93,16 +110,32 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 		return Certificate{}, fmt.Errorf("ENTRYPOINT_INVENTORY_IDENTITY_MISMATCH")
 	}
 	inventory.Intent = &Intent{Mode: certifyIntent.Mode, Target: certifyIntent.Target}
+
+	stageStarted = time.Now()
 	if err := VerifyEntrypointDispositions(inventory, typed); err != nil {
 		return Certificate{}, err
 	}
+	recorder.doc.TimingMS.EntrypointVerification = elapsedMillis164(stageStarted)
+
+	stageStarted = time.Now()
 	if err := validateEvidenceAtRoot153(root, typed, inventory); err != nil {
 		return Certificate{}, err
 	}
+	recorder.doc.TimingMS.EvidenceValidation = elapsedMillis164(stageStarted)
+
+	stageStarted = time.Now()
 	if _, err := coverage.VerifyAnalysisJSON(canonicalAnalysis); err != nil {
 		return Certificate{}, fmt.Errorf("ANALYSIS_COVERAGE_INVALID: %w", err)
 	}
-	return publishCertifiedAnalysis162(root, req.RunID, canonicalAnalysis, inventory, live, certifyIntent)
+	recorder.doc.TimingMS.CoverageValidation = elapsedMillis164(stageStarted)
+
+	stageStarted = time.Now()
+	cert, err = publishCertifiedAnalysis162(root, req.RunID, canonicalAnalysis, inventory, live, certifyIntent)
+	recorder.doc.TimingMS.Publish = elapsedMillis164(stageStarted)
+	if err != nil {
+		return Certificate{}, err
+	}
+	return cert, nil
 }
 
 func sameCanonicalSnapshotAuthority162(expected, live changeset.Snapshot) bool {
