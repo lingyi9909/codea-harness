@@ -55,3 +55,30 @@ func Test164CertifyPerformanceProductionReportsActualPhaseProcesses(t *testing.T
 		t.Fatalf("phase timings must be non-negative: %+v", perf.TimingMS)
 	}
 }
+
+func Test164CertifyPerformanceNoControllerSideSkipsMethodProcesses(t *testing.T) {
+	astPath := strings.TrimSpace(os.Getenv("CODEA_AST_GREP_TEST_PATH"))
+	if astPath == "" {
+		t.Skip("pinned ast-grep path not configured")
+	}
+	absAst, err := filepath.Abs(astPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root, snapshot, _, _ := createTask164CertifyPerformanceContractFixture(t, "run-no-controller-fixture")
+	copyTask164File(t, absAst, filepath.Join(root, ".code-harness", "bin", "ast-grep.exe"), 0o755)
+	_, metrics, err := buildEntrypointInventoryWithMetrics164(root, "run-no-controller-metrics", snapshot, Intent{Mode: "FULL"})
+	if err != nil {
+		t.Fatalf("no-controller inventory failed: %v", err)
+	}
+	if metrics.CurrentTypeAstProcessCount != 1 || metrics.BaseTypeAstProcessCount != 1 {
+		t.Fatalf("type phase must execute once per nonempty side: %+v", metrics)
+	}
+	if metrics.CurrentMethodAstProcessCount != 0 || metrics.BaseMethodAstProcessCount != 0 {
+		t.Fatalf("method phases must not start without Controller files: %+v", metrics)
+	}
+	if metrics.BaseGitBatchProcessCount != 1 {
+		t.Fatalf("base cat-file process count=%d want=1", metrics.BaseGitBatchProcessCount)
+	}
+}
