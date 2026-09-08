@@ -88,6 +88,7 @@ func Test164EntrypointBatchRejectsProtocolDelimiterBeforeProcess(t *testing.T) {
 			if len(runner.calls) != 0 {
 				t.Fatalf("batch protocol delimiter %s launched %d ast-grep processes; want 0", tc.name, len(runner.calls))
 			}
+			t.Logf("TASK164_BATCH_PROTOCOL_AST_ZERO_PROCESS PASS delimiter=%s astGrepProcessCount=0", tc.name)
 		})
 	}
 }
@@ -160,42 +161,54 @@ public class FullyQualifiedCase {
 		"src/main/java/matrix/AllMappingsCase.java": `package matrix;
 @RestController
 public class AllMappingsCase {
-    @RequestMapping public String request() { return "ok"; }
-    @GetMapping public String get() { return "ok"; }
-    @PostMapping public String post() { return "ok"; }
-    @PutMapping public String put() { return "ok"; }
-    @PatchMapping public String patch() { return "ok"; }
-    @DeleteMapping public String delete() { return "ok"; }
+    @RequestMapping
+    public String request() { return "ok"; }
+    @GetMapping
+    public String get() { return "ok"; }
+    @PostMapping
+    public String post() { return "ok"; }
+    @PutMapping
+    public String put() { return "ok"; }
+    @PatchMapping
+    public String patch() { return "ok"; }
+    @DeleteMapping
+    public String delete() { return "ok"; }
 }
 `,
 		"src/main/java/matrix/MultiTypeCase.java": `package matrix;
 @Controller
 class FirstController {
-    @GetMapping public String first() { return "ok"; }
+    @GetMapping
+    public String first() { return "ok"; }
 }
 class PlainType {
-    @PostMapping public String ignored() { return "ignored"; }
+    @PostMapping
+    public String ignored() { return "ignored"; }
 }
 `,
 		"src/main/java/matrix/NestedClassCase.java": `package matrix;
 @RestController
 public class OuterController {
-    @GetMapping public String outer() { return "ok"; }
+    @GetMapping
+    public String outer() { return "ok"; }
     @Controller
     static class NestedController {
-        @DeleteMapping public String nested() { return "ok"; }
+        @DeleteMapping
+        public String nested() { return "ok"; }
     }
 }
 `,
 		"src/main/java/matrix/AnnotationAddedCase.java": `package matrix;
 @RestController
 public class AnnotationAddedCase {
-    @PatchMapping public String added() { return "ok"; }
+    @PatchMapping
+    public String added() { return "ok"; }
 }
 `,
 		"src/main/java/matrix/AnnotationRemovedCase.java": `package matrix;
 public class AnnotationRemovedCase {
-    @PutMapping public String removed() { return "not-an-entrypoint"; }
+    @PutMapping
+    public String removed() { return "not-an-entrypoint"; }
 }
 `,
 	}
@@ -246,6 +259,7 @@ public class AnnotationRemovedCase {
 	if !reflect.DeepEqual(gotSymbols, wantSymbols) {
 		t.Fatalf("semantic parity matrix coverage mismatch\ngot=%v\nwant=%v", gotSymbols, wantSymbols)
 	}
+	t.Logf("TASK164_BATCH_LEGACY_SEMANTIC_PARITY PASS files=%d endpoints=%d", len(targets), len(batch))
 }
 
 type entrypointRootedRunner164 struct{ dir string }
