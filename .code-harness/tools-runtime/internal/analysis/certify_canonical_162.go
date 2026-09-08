@@ -62,13 +62,18 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 	recorder.doc.TimingMS.SnapshotSchemaAndDecode = elapsedMillis164(stageStarted)
 
 	stageStarted = time.Now()
-	live, err := runtime.Compute(root, snapshot.RequestedBaseRef, snapshot.IncludeWorkingTree)
+	live := snapshot
+	if freshnessRuntime, ok := runtime.(certificationFreshnessRuntime164); ok {
+		err = freshnessRuntime.VerifyFreshness(root, snapshot)
+	} else {
+		live, err = runtime.Compute(root, snapshot.RequestedBaseRef, snapshot.IncludeWorkingTree)
+		if err == nil && !sameCanonicalSnapshotAuthority162(snapshot, live) {
+			err = fmt.Errorf("CHANGE_SET_SNAPSHOT_STALE: snapshot=%s live=%s", snapshot.SnapshotSHA256, live.SnapshotSHA256)
+		}
+	}
 	recorder.doc.TimingMS.SnapshotFreshness = elapsedMillis164(stageStarted)
 	if err != nil {
 		return Certificate{}, err
-	}
-	if !sameCanonicalSnapshotAuthority162(snapshot, live) {
-		return Certificate{}, fmt.Errorf("CHANGE_SET_SNAPSHOT_STALE: snapshot=%s live=%s", snapshot.SnapshotSHA256, live.SnapshotSHA256)
 	}
 
 	stageStarted = time.Now()
