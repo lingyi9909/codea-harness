@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -62,6 +65,58 @@ func Test164EntrypointBatchRejectsBroadOrWildcardTarget(t *testing.T) {
 		if _, err := n.FindControllerEndpointsBatch(context.Background(), targets); !errors.Is(err, ErrInvalidScope) {
 			t.Fatalf("targets=%v must fail closed with ErrInvalidScope, got %v", targets, err)
 		}
+	}
+}
+
+func Test164EntrypointBatchRealPinnedAstGrep(t *testing.T) {
+	astPath := os.Getenv("CODEA_AST_GREP_TEST_PATH")
+	if astPath == "" {
+		t.Skip("real pinned ast-grep path not configured")
+	}
+	absAst, err := filepath.Abs(astPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	controller := "src/main/java/acme/AController.java"
+	service := "src/main/java/acme/PlainService.java"
+	writeEntrypointBatchJava164(t, root, controller, `package acme;
+@RestController
+public class AController {
+    @GetMapping
+    public String get() { return "ok"; }
+}
+`)
+	writeEntrypointBatchJava164(t, root, service, `package acme;
+public class PlainService { public void work() {} }
+`)
+
+	n := Navigator{RepoRoot: root, AstGrepPath: absAst, Runner: entrypointRootedRunner164{dir: root}}
+	got, err := n.FindControllerEndpointsBatch(context.Background(), []string{controller, service})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Symbol != "AController.get" || got[0].Path != controller {
+		t.Fatalf("real pinned ast-grep batch semantics drifted: %+v", got)
+	}
+}
+
+type entrypointRootedRunner164 struct{ dir string }
+
+func (r entrypointRootedRunner164) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = r.dir
+	return cmd.Output()
+}
+
+func writeEntrypointBatchJava164(t *testing.T, root, path, content string) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
