@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type gitBatchBaseSourceReader164 struct {
@@ -27,9 +28,6 @@ func (r gitBatchBaseSourceReader164) ReadBaseSources(ctx context.Context, repoRo
 	if len(clean) == 0 {
 		return map[string][]byte{}, nil
 	}
-	if r.metrics != nil {
-		r.metrics.BaseGitBatchProcessCount++
-	}
 
 	var input strings.Builder
 	for _, p := range clean {
@@ -41,7 +39,14 @@ func (r gitBatchBaseSourceReader164) ReadBaseSources(ctx context.Context, repoRo
 	cmd := exec.CommandContext(ctx, "git", "cat-file", "--batch")
 	cmd.Dir = repoRoot
 	cmd.Stdin = strings.NewReader(input.String())
+	if r.metrics != nil {
+		r.metrics.BaseGitBatchProcessCount++
+	}
+	started := time.Now()
 	out, err := cmd.Output()
+	if r.metrics != nil {
+		r.metrics.BaseSourceLoadDuration += time.Since(started)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("ENTRYPOINT_BASE_SOURCE_BATCH_FAILED: %w", err)
 	}
