@@ -7,33 +7,100 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/nav"
 )
 
 type entrypointExecutionMetrics164 struct {
-	CurrentRequestedFiles     []string
-	BaseRequestedFiles        []string
-	CurrentScannedFiles       []string
-	BaseScannedFiles          []string
-	AstGrepProcessCount       int
-	BaseGitBatchProcessCount  int
-	PerFileGitMergeBaseCount  int
-	PerFileGitShowCount       int
-	FullProjectBaseScanCount  int
+	CurrentRequestedFiles          []string
+	BaseRequestedFiles             []string
+	CurrentScannedFiles            []string
+	BaseScannedFiles               []string
+	ProductionJavaCurrent          int
+	ProductionJavaBase             int
+	ControllerFilesCurrent         int
+	ControllerFilesBase            int
+	AstGrepProcessCount            int
+	CurrentTypeAstProcessCount     int
+	CurrentMethodAstProcessCount   int
+	BaseTypeAstProcessCount        int
+	BaseMethodAstProcessCount      int
+	BaseGitBatchProcessCount       int
+	PerFileGitMergeBaseCount       int
+	PerFileGitShowCount            int
+	FullProjectBaseScanCount       int
+	CurrentTypeAstDuration         time.Duration
+	CurrentMethodAstDuration       time.Duration
+	BaseTypeAstDuration            time.Duration
+	BaseMethodAstDuration          time.Duration
+	BaseSourceLoadDuration         time.Duration
 }
 
 type countingEntrypointRunner164 struct {
 	dir     string
+	side    string
 	metrics *entrypointExecutionMetrics164
 }
 
 func (r countingEntrypointRunner164) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	phase := entrypointAstPhase164(args)
 	if r.metrics != nil {
 		r.metrics.AstGrepProcessCount++
+		switch r.side + ":" + phase {
+		case entrypointScanSideCurrent164 + ":TYPE":
+			r.metrics.CurrentTypeAstProcessCount++
+		case entrypointScanSideCurrent164 + ":METHOD":
+			r.metrics.CurrentMethodAstProcessCount++
+			r.metrics.ControllerFilesCurrent = entrypointAstTargetCount164(args)
+		case entrypointScanSideBase164 + ":TYPE":
+			r.metrics.BaseTypeAstProcessCount++
+		case entrypointScanSideBase164 + ":METHOD":
+			r.metrics.BaseMethodAstProcessCount++
+			r.metrics.ControllerFilesBase = entrypointAstTargetCount164(args)
+		}
 	}
-	return rootedRunner153{dir: r.dir}.Run(ctx, name, args...)
+	started := time.Now()
+	data, err := rootedRunner153{dir: r.dir}.Run(ctx, name, args...)
+	elapsed := time.Since(started)
+	if r.metrics != nil {
+		switch r.side + ":" + phase {
+		case entrypointScanSideCurrent164 + ":TYPE":
+			r.metrics.CurrentTypeAstDuration += elapsed
+		case entrypointScanSideCurrent164 + ":METHOD":
+			r.metrics.CurrentMethodAstDuration += elapsed
+		case entrypointScanSideBase164 + ":TYPE":
+			r.metrics.BaseTypeAstDuration += elapsed
+		case entrypointScanSideBase164 + ":METHOD":
+			r.metrics.BaseMethodAstDuration += elapsed
+		}
+	}
+	return data, err
+}
+
+func entrypointAstPhase164(args []string) string {
+	if len(args) < 3 || args[0] != "scan" || args[1] != "--inline-rules" {
+		return ""
+	}
+	rule := args[2]
+	switch {
+	case strings.Contains(rule, "id: codea-entrypoint-types-164"):
+		return "TYPE"
+	case strings.Contains(rule, "id: codea-entrypoint-methods-164"):
+		return "METHOD"
+	default:
+		return ""
+	}
+}
+
+func entrypointAstTargetCount164(args []string) int {
+	for i, arg := range args {
+		if arg == "--json=stream" {
+			return len(args) - i - 1
+		}
+	}
+	return 0
 }
 
 type precomputedEntrypointScanner164 struct {
@@ -74,13 +141,15 @@ func scanEntrypointPlan164(ctx context.Context, repoRoot, astGrepPath string, pl
 		metrics.BaseRequestedFiles = append([]string(nil), plan.BasePaths...)
 		metrics.CurrentScannedFiles = append([]string(nil), plan.CurrentPaths...)
 		metrics.BaseScannedFiles = append([]string(nil), plan.BasePaths...)
+		metrics.ProductionJavaCurrent = len(plan.CurrentPaths)
+		metrics.ProductionJavaBase = len(plan.BasePaths)
 	}
 
 	currentByPath := map[string][]ControllerEndpoint{}
 	if len(plan.CurrentPaths) > 0 {
 		n := nav.Navigator{
 			RepoRoot: repoRoot, AstGrepPath: astGrepPath,
-			Runner: countingEntrypointRunner164{dir: repoRoot, metrics: metrics},
+			Runner: countingEntrypointRunner164{dir: repoRoot, side: entrypointScanSideCurrent164, metrics: metrics},
 		}
 		matches, err := n.FindControllerEndpointsBatch(ctx, plan.CurrentPaths)
 		if err != nil {
@@ -102,7 +171,7 @@ func scanEntrypointPlan164(ctx context.Context, repoRoot, astGrepPath string, pl
 		defer cleanup()
 		n := nav.Navigator{
 			RepoRoot: baseRoot, AstGrepPath: astGrepPath,
-			Runner: countingEntrypointRunner164{dir: baseRoot, metrics: metrics},
+			Runner: countingEntrypointRunner164{dir: baseRoot, side: entrypointScanSideBase164, metrics: metrics},
 		}
 		matches, err := n.FindControllerEndpointsBatch(ctx, plan.BasePaths)
 		if err != nil {
