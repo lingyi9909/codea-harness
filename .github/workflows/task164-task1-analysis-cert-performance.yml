@@ -29,7 +29,7 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 -v ./internal/analysis -run 'Test164EntrypointScanPlan|Test164EntrypointScope|Test164CertifyEntrypointScopeWidening'
+          go test -count=1 -v ./internal/analysis -run 'Test164Entrypoint|Test164CertifyEntrypointScopeWidening'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exact HEAD evidence
         shell: pwsh
@@ -37,3 +37,21 @@ jobs:
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne '${{ github.sha }}') { throw "workflow checkout drift: head=$head github.sha=${{ github.sha }}" }
           Write-Output "TASK164_TASK1A_EXACT_HEAD PASS head=$head"
+
+  task1b-batch-ast:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Task 1B batch AST gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./internal/nav -run 'Test164EntrypointBatch'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
