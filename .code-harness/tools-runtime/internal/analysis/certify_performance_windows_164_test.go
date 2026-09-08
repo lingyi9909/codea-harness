@@ -162,7 +162,7 @@ func createTask164Task2ScaleFixture(t *testing.T, changedFiles, productionJava, 
 		writeTask164Java(t, root, path, task164Task2JavaSource(i, controllers, false))
 	}
 	for i := productionJava; i < changedFiles; i++ {
-		writeTask164Text(t, root, fmt.Sprintf("src/main/resources/perf-%03d.txt", i-productionJava), fmt.Sprintf("base-%d\n", i))
+		writeTask164Text(t, root, fmt.Sprintf("src/main/resources/perf-%03d.yml", i-productionJava), fmt.Sprintf("value: base-%d\n", i))
 	}
 	gitTask164(t, root, "add", ".")
 	gitTask164(t, root, "commit", "-m", "task2 scale base")
@@ -172,7 +172,7 @@ func createTask164Task2ScaleFixture(t *testing.T, changedFiles, productionJava, 
 		writeTask164Java(t, root, path, task164Task2JavaSource(i, controllers, true))
 	}
 	for i := productionJava; i < changedFiles; i++ {
-		writeTask164Text(t, root, fmt.Sprintf("src/main/resources/perf-%03d.txt", i-productionJava), fmt.Sprintf("current-%d\n", i))
+		writeTask164Text(t, root, fmt.Sprintf("src/main/resources/perf-%03d.yml", i-productionJava), fmt.Sprintf("value: current-%d\n", i))
 	}
 	snapshot, err := changeset.Compute(root, baseSHA, true)
 	if err != nil {
@@ -318,7 +318,7 @@ func task164Task2Role(path string) string {
 	case strings.Contains(path, "Controller"):
 		return "Controller"
 	case strings.Contains(path, "ServiceImpl"):
-		return "ServiceImpl"
+		return "Service"
 	case strings.Contains(path, "Service"):
 		return "Service"
 	case strings.Contains(path, "Mapper"):
@@ -326,7 +326,7 @@ func task164Task2Role(path string) string {
 	case strings.Contains(path, "Dto"):
 		return "DTO"
 	case strings.Contains(path, "/resources/"):
-		return "Resource"
+		return "YamlConfig"
 	default:
 		return "Other"
 	}
