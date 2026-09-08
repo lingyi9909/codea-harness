@@ -23,7 +23,7 @@ func (canonicalScopeWideningRuntime164) Inventory(_ string, _ string, _ changese
 	return EntrypointInventory{}, errors.New("ENTRYPOINT_SCAN_SCOPE_WIDENED: injected canonical runner widening")
 }
 
-func Test164CanonicalCertifyEntrypointScopeWideningZeroCertifiedWrites(t *testing.T) {
+func Test164CertifyEntrypointScopeWideningCanonicalZeroCertifiedWrites(t *testing.T) {
 	root := t.TempDir()
 	gitTask164(t, root, "init", "-b", "feature")
 	gitTask164(t, root, "config", "user.email", "task164@example.invalid")
