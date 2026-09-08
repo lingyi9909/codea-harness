@@ -232,7 +232,7 @@ func createTask164CertifyPerformanceContractFixture(t *testing.T, runID string) 
 	}
 	runtime := task164PerformanceContractRuntime{
 		snapshot: snapshot,
-		inventory: EntrypointInventory{RunID: runID, Status: inventoryComplete153, ChangeSetSHA256: snapshot.SHA256},
+		inventory: EntrypointInventory{RunID: runID, Status: inventoryComplete153, ChangeSetSHA256: snapshot.SHA256, ExpectedEntrypoints: []ExpectedEntrypoint{}},
 	}
 	return root, snapshot, req, runtime
 }
