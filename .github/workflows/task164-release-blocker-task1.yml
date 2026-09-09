@@ -1,0 +1,39 @@
+name: task164-release-blocker-task1
+
+on:
+  push:
+    branches: [release/1.6.4-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  task1-config-migration:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Exact HEAD guard
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:GITHUB_SHA) { throw "HEAD mismatch: $head" }
+          git merge-base --is-ancestor bfa3a43c02e9204833131c41cdbb0deae8bd8083 HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Task 1 start HEAD is not an ancestor' }
+          Write-Output "TASK164_RELEASE_BLOCKER_TASK1_EXACT_HEAD PASS head=$head"
+
+      - name: Config migration RED probe
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./internal/upgrade -run '^Test164ConfigMigrationRED$'
