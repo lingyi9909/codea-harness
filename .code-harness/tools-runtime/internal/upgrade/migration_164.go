@@ -14,10 +14,10 @@ var (
 const configMigration163To164 = "config-1.6.3-to-1.6.4"
 
 // migrateConfigForReleaseEdge applies Runtime-owned release migrations before
-// the candidate target schema is consulted. The 1.6.3 -> 1.6.4 edge is an
-// explicit compatibility migration: the exact release schemas are compatible,
-// so supported version=2 source config is preserved byte-for-byte while the
-// source/target edge remains explicit and auditable.
+// the candidate target schema is consulted. The exact 1.6.3 and 1.6.4 schemas
+// are compatible, so this explicit release edge preserves the 1.6.3 bytes and
+// leaves the retained config-version migration to handle version=1 later in the
+// authoritative migration sequence.
 func migrateConfigForReleaseEdge(cfg []byte, from, to [3]int) ([]byte, []string, error) {
 	if cmp(from, configMigration163Source) != 0 {
 		return append([]byte(nil), cfg...), nil, nil
@@ -46,6 +46,7 @@ func migrateConfig163To164(cfg []byte) ([]byte, error) {
 
 	mapping := root.Content[0]
 	versionCount := 0
+	configVersion := ""
 	for i := 0; i+1 < len(mapping.Content); i += 2 {
 		key := mapping.Content[i]
 		value := mapping.Content[i+1]
@@ -53,12 +54,16 @@ func migrateConfig163To164(cfg []byte) ([]byte, error) {
 			continue
 		}
 		versionCount++
-		if value.Kind != yaml.ScalarNode || value.Tag != "!!int" || value.Value != "2" {
-			return nil, fmt.Errorf("1.6.3 harness config version must be integer 2")
+		if value.Kind != yaml.ScalarNode || value.Tag != "!!int" {
+			return nil, fmt.Errorf("1.6.3 harness config version must be integer 1 or 2")
 		}
+		configVersion = value.Value
 	}
 	if versionCount != 1 {
 		return nil, fmt.Errorf("1.6.3 harness config requires exactly one top-level version")
+	}
+	if configVersion != "1" && configVersion != "2" {
+		return nil, fmt.Errorf("1.6.3 harness config version must be integer 1 or 2")
 	}
 
 	return append([]byte(nil), cfg...), nil
