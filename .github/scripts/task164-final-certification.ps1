@@ -96,7 +96,8 @@ function Assert-ReleaseScope {
         '.github/scripts/task164-final-certification.ps1',
         '.github/scripts/task164-release-package.ps1',
         '.github/workflows/task164-final-certification.yml',
-        'docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-plan.md'
+        'docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-plan.md',
+        'docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-release-closeout-plan.md'
     )
     foreach ($path in $changed) {
         if ($path -cnotin $allowed) { throw "Unapproved release scope: $path" }
