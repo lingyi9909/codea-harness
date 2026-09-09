@@ -22,7 +22,7 @@ func Test153ReportReviewRejectsUncertifiedAnalysis(t *testing.T) {
 	}
 }
 
-func Test153ReportReviewUsesCertifiedIdentityAndCoverageInsteadOfTransportAuthority(t *testing.T) {
+func Test164ReportReviewRejectsCertifiedAnalysisWithoutReviewerCertifiedFindings(t *testing.T) {
 	withTempProject(t)
 	runID := "run-153-report-certified"
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
@@ -30,19 +30,17 @@ func Test153ReportReviewUsesCertifiedIdentityAndCoverageInsteadOfTransportAuthor
 	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
 	input := writeReportTransport153(t, runID)
 
-	if err := run([]string{"report", "review", "--input", input}); err != nil {
-		t.Fatalf("certified review report must pass: %v", err)
+	err := run([]string{"report", "review", "--input", input})
+	if err == nil {
+		t.Fatal("Certified ChangeAnalysis alone must not authorize final report without Reviewer-certified findings")
 	}
-	out, err := os.ReadFile(filepath.Join(".code-harness", "runs", runID, "review.md"))
-	if err != nil { t.Fatal(err) }
-	text := string(out)
-	for _, bad := range []string{"agent-version", "agent-base", "agent-head", "src/main/java/Evil.java"} {
-		if strings.Contains(text, bad) {
-			t.Fatalf("Agent self-reported authority leaked into report: %q\n%s", bad, text)
+	for _, marker := range []string{"REVIEWER_UNAVAILABLE", "MANUAL_ACTION_REQUIRED", "HARD STOP"} {
+		if !strings.Contains(err.Error(), marker) {
+			t.Fatalf("missing fail-closed marker %s: %v", marker, err)
 		}
 	}
-	if !strings.Contains(text, "src/main/java/OrderController.java") || !strings.Contains(text, "1.5.2") {
-		t.Fatalf("report missing Certified Runtime authority: %s", text)
+	if _, statErr := os.Stat(filepath.Join(".code-harness", "runs", runID, "review.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("report without Reviewer-certified findings published review.md: %v", statErr)
 	}
 }
 
