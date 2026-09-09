@@ -61,6 +61,24 @@ $body
     [IO.File]::WriteAllText($Destination, $host, [Text.UTF8Encoding]::new($false))
 }
 
+function New-ReviewerHostCommand([string]$Destination) {
+    $command = @'
+---
+description: Delegate one Codea Harness semantic review phase to the independent Reviewer child session.
+agent: reviewer
+subagent: true
+---
+
+Execute only the requested Codea Harness Reviewer semantic proposal phase.
+Treat the following text as the exact parent-provided review input; do not replace Runtime authority:
+
+$ARGUMENTS
+'@
+    $dir = Split-Path -Parent $Destination
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    [IO.File]::WriteAllText($Destination, $command, [Text.UTF8Encoding]::new($false))
+}
+
 function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$HarnessRootName) {
     $stage = Join-Path $env:RUNNER_TEMP ('task164-host-registration-' + [guid]::NewGuid().ToString('N'))
     try {
@@ -69,7 +87,9 @@ function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$HarnessRoot
         $harnessRoot = Join-Path $stage $HarnessRootName
         if (-not (Test-Path $harnessRoot -PathType Container)) { throw "package missing $HarnessRootName" }
         $reviewerDestination = Join-Path $stage '.opencode/agents/reviewer.md'
+        $commandDestination = Join-Path $stage '.opencode/commands/harness-review-reviewer.md'
         New-ReviewerHostAgent $reviewerDestination
+        New-ReviewerHostCommand $commandDestination
 
         $manifestPath = Join-Path $harnessRoot 'RELEASE-MANIFEST.json'
         if (-not (Test-Path $manifestPath -PathType Leaf)) { throw "package missing $HarnessRootName/RELEASE-MANIFEST.json" }
@@ -81,6 +101,8 @@ function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$HarnessRoot
                 mode = 'subagent'
                 source = '.code-harness/agents/reviewer.md'
                 sha256 = (Get-FileHash -Algorithm SHA256 $reviewerDestination).Hash.ToLowerInvariant()
+                command = '.opencode/commands/harness-review-reviewer.md'
+                commandSha256 = (Get-FileHash -Algorithm SHA256 $commandDestination).Hash.ToLowerInvariant()
             }
         }) -Force
         [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
@@ -100,3 +122,4 @@ foreach ($kind in @('install','upgrade')) {
 }
 Write-Output 'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4'
 Write-Output 'REVIEWER_HOST_PACKAGE_REGISTRATION PASS path=.opencode/agents/reviewer.md mode=subagent'
+Write-Output 'REVIEWER_HOST_COMMAND_REGISTRATION PASS command=.opencode/commands/harness-review-reviewer.md subagent=true'
