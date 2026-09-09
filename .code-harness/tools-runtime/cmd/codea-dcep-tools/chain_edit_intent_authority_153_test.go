@@ -42,15 +42,15 @@ func recertifyTask153AnalysisForEdit(t *testing.T, runID string, intent analysis
 	if strings.TrimSpace(meta.ReviewScope.BaseRef) == "" {
 		t.Fatal("certified analysis fixture missing reviewScope.baseRef")
 	}
-	draftPath := filepath.Join(".code-harness", "runs", runID, "requests", "change-analysis-draft.json")
-	if err := os.WriteFile(draftPath, analysisBytes, 0o644); err != nil { t.Fatal(err) }
-	req := analysisruntime.CertifyRequest{
-		RunID:              runID,
-		DraftPath:          filepath.ToSlash(draftPath),
-		BaseRef:            meta.ReviewScope.BaseRef,
-		IncludeWorkingTree: meta.ReviewScope.IncludeWorkingTree,
-		Intent:             intent,
-	}
+	req := canonicalAnalysisCertifyRequestFromExistingTest(
+		t,
+		".",
+		runID,
+		filepath.ToSlash(analysisPath),
+		meta.ReviewScope.BaseRef,
+		meta.ReviewScope.IncludeWorkingTree,
+		intent,
+	)
 	reqBytes, err := json.Marshal(req)
 	if err != nil { t.Fatal(err) }
 	requestPath := writeQueryRequest(t, runID, "analysis-certify-edit.json", string(reqBytes))
