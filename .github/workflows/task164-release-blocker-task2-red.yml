@@ -1,8 +1,6 @@
 name: task164-release-blocker-task2-red
 
 on:
-  push:
-    branches: [release/1.6.4-final-certification]
   workflow_dispatch:
 
 permissions:
