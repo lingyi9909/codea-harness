@@ -201,6 +201,13 @@ func Run(o Options) Result {
 		}
 	}
 
+	// 1.6.4 Reviewer Host resources are staged inside the upgrade payload and
+	// preflighted before any live framework or .opencode write occurs.
+	hostTxn, err := prepareReviewerHostTransaction(o, oldV, newV)
+	if err != nil {
+		return failManual(r, err)
+	}
+
 	parent := filepath.Dir(filepath.Clean(o.TargetDir))
 	id := strconv.FormatInt(time.Now().UnixNano(), 10)
 	backup := filepath.Join(parent, ".code-harness-backup-"+id)
@@ -257,12 +264,20 @@ func Run(o Options) Result {
 		return failAndRollback(r, err, stage, backup, o.TargetDir, o.RunningExecutable, updated, removed)
 	}
 
+	// Host files commit only after the framework stage has validated and applied.
+	// Any partial Host failure restores both framework and exact Host pre-state.
+	hostUpdated, err := hostTxn.apply()
+	if err != nil {
+		return failAndRollbackWithReviewerHost(r, err, hostTxn, stage, backup, o.TargetDir, o.RunningExecutable, updated, removed)
+	}
+	r.UpdatedFiles = append(r.UpdatedFiles, hostUpdated...)
+
 	// When the 1.4 upgrade package runtime executes the transaction itself on Windows,
 	// move that live executable to a same-volume sibling before removing the consumed
 	// source tree. Installed-runtime upgrades do not need this step.
 	parkedRuntime, err := parkRunningExecutableOutsideSource(o.SourceDir, o.RunningExecutable)
 	if err != nil {
-		return failAndRollback(r, err, stage, backup, o.TargetDir, o.RunningExecutable, updated, removed)
+		return failAndRollbackWithReviewerHost(r, err, hostTxn, stage, backup, o.TargetDir, o.RunningExecutable, updated, removed)
 	}
 
 	// Success cleanup semantics: stage + backup + consumed source package are removed.
