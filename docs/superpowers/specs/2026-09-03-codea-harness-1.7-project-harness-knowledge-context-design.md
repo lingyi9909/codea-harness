@@ -2,7 +2,9 @@
 
 ## Status
 
-Design draft for review. No implementation is authorized by this document.
+Historical draft — superseded on 2026-09-09 by [Codea Harness 1.7 — 调用链自动更新与业务上下文增强 Review](2026-09-09-codea-harness-1.7-review-call-context-design.md) and its [implementation plan](../plans/2026-09-09-codea-harness-1.7-review-call-context-plan.md).
+
+本文件仅保留历史讨论，不作为 1.7 实施依据。下文的 Project Harness、TeamAI、Business Context Snapshot、索引或图相关建议均未纳入本次确认范围；1.7 以新设计的六项 Code Review 功能为准。This document does not authorize implementation.
 
 ## Goal
 
