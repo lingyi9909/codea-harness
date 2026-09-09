@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -24,9 +25,9 @@ func prepareTask164FindingCertification(t *testing.T, withAuthority bool) string
 	} {
 		copyTask153CommandContract(t, ".", name)
 	}
-	sourceRoot, err := os.Getwd()
-	if err != nil { t.Fatal(err) }
-	installTask160DispatchFramework(t, sourceRoot)
+	_, testFile, _, ok := runtime.Caller(0)
+	if !ok { t.Fatal("locate Task 1.6.4 finding fixture source") }
+	installTask160DispatchFramework(t, filepath.Dir(testFile))
 	if err := run([]string{"review", "units", "--run-id", "run-task4-review"}); err != nil {
 		t.Fatalf("review units fixture: %v", err)
 	}
