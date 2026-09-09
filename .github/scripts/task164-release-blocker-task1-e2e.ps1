@@ -4,6 +4,8 @@ Set-StrictMode -Version Latest
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $artifactId = 10004022218
 $exact163BuildCommit = '2278ad49d4534b57f3144466ffe0e65ddca7f189'
+$revokedRCCommit = '6aa5d9dad0623cd60a845360c9b20ab153921e87'
+$revokedRCUpgrade = Join-Path $env:RUNNER_TEMP 'task164-revoked-rc-upgrade.zip'
 $exact163SchemaNormalizedSha256 = '0a192ce95adb9ff69eeb5c89cabfc8557e17437faa00e094bba7ba2bd49febf2'
 $utf8 = [Text.UTF8Encoding]::new($false)
 
@@ -90,16 +92,39 @@ function Initialize-RealProjectState([string]$ProjectRoot) {
     [IO.File]::WriteAllText((Join-Path $target 'skills/user-owned/keep.txt'), "unknown-user-file`r`n", $utf8)
 }
 
-function Get-ProjectSentinelHashes([string]$ProjectRoot) {
+function Initialize-Historical163ProjectState([string]$ProjectRoot) {
+    Initialize-RealProjectState $ProjectRoot
+    $configPath = Join-Path $ProjectRoot '.code-harness/harness.yaml'
+    $config = Get-Content $configPath -Raw
+    $historicalPattern = '(?ms)^initialization:\r?\n  status: NEEDS_CONFIRMATION\r?\n  unresolved:\r?\n    - projectNotInitialized\s*$'
+    if ($config -notmatch $historicalPattern) {
+        throw 'exact 1.6.3 template no longer contains expected initialized NEEDS_CONFIRMATION sentinel'
+    }
+    $legacy = [regex]::Replace(
+        $config,
+        $historicalPattern,
+        "initialization:`r`n  status: NEEDS_CONFIRMATION`r`n  unresolved: []",
+        1
+    )
+    if ($legacy -notmatch '(?m)^  unresolved: \[\]$' -or $legacy -match '(?m)^    - projectNotInitialized$') {
+        throw 'failed to materialize historical unresolved-empty state'
+    }
+    [IO.File]::WriteAllText($configPath, $legacy, $utf8)
+}
+
+function Get-ProjectSentinelHashes([string]$ProjectRoot, [bool]$IncludeHarness = $true) {
     $target = Join-Path $ProjectRoot '.code-harness'
-    $hashes = [ordered]@{}
-    foreach ($rel in @(
-        'harness.yaml',
+    $rels = @(
         'project.md',
         'chains/user-chain.yaml',
         'runs/user-run/evidence.txt',
         'skills/user-owned/keep.txt'
-    )) {
+    )
+    if ($IncludeHarness) {
+        $rels = @('harness.yaml') + $rels
+    }
+    $hashes = [ordered]@{}
+    foreach ($rel in $rels) {
         $hashes[$rel] = Get-FileSHA256 (Join-Path $target $rel)
     }
     return $hashes
@@ -119,15 +144,18 @@ function Assert-ProjectSentinelHashes([string]$ProjectRoot, $Expected) {
     }
 }
 
-function Install-CandidateUpgrade([string]$ProjectRoot) {
-    $candidate = Join-Path $repoRoot 'codea-harness-1.6.4-windows-x64-upgrade.zip'
-    if (-not (Test-Path $candidate -PathType Leaf)) {
-        throw "missing candidate 1.6.4 upgrade ZIP: $candidate"
+function Install-UpgradePackage([string]$ProjectRoot, [string]$PackagePath) {
+    if (-not (Test-Path $PackagePath -PathType Leaf)) {
+        throw "missing 1.6.4 upgrade ZIP: $PackagePath"
     }
-    Expand-Archive $candidate $ProjectRoot -Force
+    Expand-Archive $PackagePath $ProjectRoot -Force
     if (-not (Test-Path (Join-Path $ProjectRoot '.code-harness-upgrade/bin/codea-dcep-tools.exe') -PathType Leaf)) {
-        throw 'candidate upgrade Runtime missing'
+        throw 'upgrade Runtime missing'
     }
+}
+
+function Install-CandidateUpgrade([string]$ProjectRoot) {
+    Install-UpgradePackage $ProjectRoot (Join-Path $repoRoot 'codea-harness-1.6.4-windows-x64-upgrade.zip')
 }
 
 function Invoke-CandidateUpgrade([string]$ProjectRoot) {
@@ -147,10 +175,16 @@ function Invoke-CandidateUpgrade([string]$ProjectRoot) {
 if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
     throw 'GH_TOKEN is required to retrieve exact packaged 1.6.3 artifact'
 }
+if (-not (Test-Path $revokedRCUpgrade -PathType Leaf)) {
+    throw "revoked RC upgrade package missing: $revokedRCUpgrade"
+}
 
 $successRoot = Join-Path $env:RUNNER_TEMP ('task164-config-success-' + [guid]::NewGuid().ToString('N'))
+$historicalOldRoot = Join-Path $env:RUNNER_TEMP ('task164-historical-old-' + [guid]::NewGuid().ToString('N'))
+$historicalNewRoot = Join-Path $env:RUNNER_TEMP ('task164-historical-new-' + [guid]::NewGuid().ToString('N'))
 $failureRoot = Join-Path $env:RUNNER_TEMP ('task164-config-failure-' + [guid]::NewGuid().ToString('N'))
 try {
+    # Fresh 1.6.3 template path remains a permanent control.
     Expand-Exact163Install $successRoot
     Assert-Exact163Install $successRoot
     Assert-SchemaParity $successRoot
@@ -187,6 +221,83 @@ try {
     Remove-Item (Join-Path $successRoot '.code-harness-upgrade') -Recurse -Force -ErrorAction SilentlyContinue
     Write-Output 'CONFIG_MIGRATION_IDEMPOTENT PASS'
 
+    # Historical Project State: pre-680c58d Harness allowed NEEDS_CONFIRMATION
+    # with unresolved: []. Project State is preserved across release upgrades, so
+    # exact 1.6.3 Framework may coexist with this legacy harness.yaml state.
+    Expand-Exact163Install $historicalOldRoot
+    Assert-Exact163Install $historicalOldRoot
+    Initialize-Historical163ProjectState $historicalOldRoot
+    $historicalFixtureHash = Get-FileSHA256 (Join-Path $historicalOldRoot '.code-harness/harness.yaml')
+    $oldBefore = Get-ProjectSentinelHashes $historicalOldRoot
+    $oldVersionBefore = Get-FileSHA256 (Join-Path $historicalOldRoot '.code-harness/VERSION')
+
+    Install-UpgradePackage $historicalOldRoot $revokedRCUpgrade
+    $revoked = Invoke-CandidateUpgrade $historicalOldRoot
+    if ($revoked.ExitCode -eq 0 -or $revoked.Text -notmatch '"status"\s*:\s*"UPGRADE_FAILED"') {
+        throw "revoked RC did not reproduce historical upgrade failure: $($revoked.Text)"
+    }
+    if ($revoked.Text -notmatch 'harness.yaml incompatible with new schema') {
+        throw "revoked RC failure was not target-schema validation: $($revoked.Text)"
+    }
+    Assert-ProjectSentinelHashes $historicalOldRoot $oldBefore
+    if ((Get-FileSHA256 (Join-Path $historicalOldRoot '.code-harness/VERSION')) -ne $oldVersionBefore) {
+        throw 'revoked RC historical failure changed installed VERSION'
+    }
+    if (-not (Test-Path (Join-Path $historicalOldRoot '.code-harness-upgrade') -PathType Container)) {
+        throw 'revoked RC historical failure consumed upgrade source'
+    }
+    Write-Output "REAL_163_UPGRADE_FAILURE_REPRODUCED PASS revokedRC=$revokedRCCommit fixtureSha256=$historicalFixtureHash"
+
+    # The candidate must repair the exact same historical harness bytes.
+    Expand-Exact163Install $historicalNewRoot
+    Assert-Exact163Install $historicalNewRoot
+    Initialize-Historical163ProjectState $historicalNewRoot
+    $newFixtureHash = Get-FileSHA256 (Join-Path $historicalNewRoot '.code-harness/harness.yaml')
+    if ($newFixtureHash -ne $historicalFixtureHash) {
+        throw "historical fixtures differ old=$historicalFixtureHash new=$newFixtureHash"
+    }
+    $historicalNonConfigBefore = Get-ProjectSentinelHashes $historicalNewRoot $false
+
+    Install-CandidateUpgrade $historicalNewRoot
+    $repaired = Invoke-CandidateUpgrade $historicalNewRoot
+    if ($repaired.ExitCode -ne 0 -or $repaired.Text -notmatch '"status"\s*:\s*"UPGRADED"') {
+        throw "REAL_163_UPGRADE_FAILURE_REPAIRED RED: candidate still rejects historical fixture: $($repaired.Text)"
+    }
+    if ($repaired.Text -notmatch [regex]::Escape('config-1.6.3-to-1.6.4')) {
+        throw "historical repair did not use registered release edge: $($repaired.Text)"
+    }
+    Assert-ProjectSentinelHashes $historicalNewRoot $historicalNonConfigBefore
+    $repairedConfigPath = Join-Path $historicalNewRoot '.code-harness/harness.yaml'
+    $repairedConfig = Get-Content $repairedConfigPath -Raw
+    foreach ($sentinel in @('module: "payments-user-owned"','baseRef: origin/develop','timeoutSeconds: 777','status: NEEDS_CONFIRMATION','- projectNotInitialized')) {
+        if (-not $repairedConfig.Contains($sentinel)) {
+            throw "historical repair lost expected config value: $sentinel"
+        }
+    }
+    if ($repairedConfig -match '(?m)^  unresolved: \[\]$') {
+        throw 'historical invalid unresolved-empty state was not repaired'
+    }
+    if ((Get-Content (Join-Path $historicalNewRoot '.code-harness/VERSION') -Raw).Trim() -ne '1.6.4') {
+        throw 'historical repaired project did not install VERSION=1.6.4'
+    }
+    if (Test-Path (Join-Path $historicalNewRoot '.code-harness-upgrade')) {
+        throw 'historical repaired upgrade did not consume source tree'
+    }
+    $repairedHarnessHash = Get-FileSHA256 $repairedConfigPath
+
+    Install-CandidateUpgrade $historicalNewRoot
+    $historicalSecond = Invoke-CandidateUpgrade $historicalNewRoot
+    if ($historicalSecond.ExitCode -ne 0 -or $historicalSecond.Text -notmatch '"status"\s*:\s*"ALREADY_UP_TO_DATE"') {
+        throw "historical repaired project second upgrade not idempotent: $($historicalSecond.Text)"
+    }
+    if ((Get-FileSHA256 $repairedConfigPath) -ne $repairedHarnessHash) {
+        throw 'historical repaired harness changed on idempotent second upgrade'
+    }
+    Assert-ProjectSentinelHashes $historicalNewRoot $historicalNonConfigBefore
+    Remove-Item (Join-Path $historicalNewRoot '.code-harness-upgrade') -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Output "REAL_163_UPGRADE_FAILURE_REPAIRED PASS fixtureSha256=$historicalFixtureHash"
+
+    # Unsupported version remains fail-closed before any target mutation.
     Expand-Exact163Install $failureRoot
     Assert-Exact163Install $failureRoot
     Initialize-RealProjectState $failureRoot
@@ -222,5 +333,5 @@ try {
     Write-Output 'CONFIG_UNSUPPORTED_MIGRATION_FAIL_CLOSED PASS'
     Write-Output "TASK164_CONFIG_PACKAGED_163_TO_164_E2E PASS artifactId=$artifactId buildCommit=$exact163BuildCommit"
 } finally {
-    Remove-Item $successRoot,$failureRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $successRoot,$historicalOldRoot,$historicalNewRoot,$failureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
