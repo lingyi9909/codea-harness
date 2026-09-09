@@ -105,8 +105,6 @@ foreach ($needle in @('REVIEWER_UNAVAILABLE','MANUAL_ACTION_REQUIRED','HARD STOP
 }
 Write-Output 'MAIN_AGENT_REVIEWER_FALLBACK_FORBIDDEN CONTRACT PASS'
 
-# Build one real Git working tree. Harness/Host files are ignored so Runtime
-# ChangeSet authority sees only the intended application.yml working-tree change.
 [IO.File]::WriteAllText((Join-Path $fixture '.gitignore'), ".code-harness/`n.opencode/`nopencode.json`n", [Text.UTF8Encoding]::new($false))
 $sourcePath = Join-Path $fixture 'src/main/resources/application.yml'
 New-Item -ItemType Directory -Force (Split-Path -Parent $sourcePath) | Out-Null
@@ -122,9 +120,6 @@ if ($LASTEXITCODE -ne 0) { throw 'failed to create E2E git baseline' }
 $positiveRun = 'task164-reviewer-e2e'
 Initialize-AnalysisScenario $fixture $positiveRun
 
-# Local deterministic model: when running as Reviewer it calls the packaged
-# submission tool. The tool itself receives OpenCode Host context and writes the
-# proposal + authority receipt. This is not a direct test-side file injection.
 $port = Get-Random -Minimum 22000 -Maximum 42000
 $requestLog = Join-Path $env:RUNNER_TEMP ('task164-reviewer-provider-' + [guid]::NewGuid().ToString('N') + '.jsonl')
 $server = Join-Path $env:RUNNER_TEMP ('task164-reviewer-provider-' + [guid]::NewGuid().ToString('N') + '.py')
@@ -290,9 +285,9 @@ try {
         $findingProposalPath = Join-Path $fixture ".code-harness/runs/$positiveRun/requests/finding-proposals.json"
         if (-not (Test-Path $findingReceiptPath -PathType Leaf) -or -not (Test-Path $findingProposalPath -PathType Leaf)) { throw 'Reviewer finding child did not publish proposal + receipt' }
         $findingReceipt = Get-Content $findingReceiptPath -Raw | ConvertFrom-Json
-        $findingProposal = Get-Content $findingProposalPath -Raw | ConvertFrom-Json
+        $findingProposalRaw = (Get-Content $findingProposalPath -Raw).Trim()
         if ($findingReceipt.agent -ne 'reviewer' -or $findingReceipt.sessionId -ne $findingChild.Groups['id'].Value -or $findingReceipt.proposalKind -ne 'findings') { throw 'finding receipt identity mismatch' }
-        if ($null -eq $findingProposal -or @($findingProposal).Count -ne 0) { throw 'finding E2E must submit an empty JSON array' }
+        if ($findingProposalRaw -ne '[]') { throw "finding E2E must submit an empty JSON array, got: $findingProposalRaw" }
         Write-Output "REVIEWER_FINDING_PROPOSAL_HOST_RECEIPT PASS childSession=$($findingChild.Groups['id'].Value)"
     } finally {
         Pop-Location
