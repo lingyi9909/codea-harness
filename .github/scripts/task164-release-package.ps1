@@ -36,7 +36,7 @@ function New-ReviewerHostAgent([string]$Destination) {
     $match = [regex]::Match($canonical, '(?s)^---\r?\n.*?\r?\n---\r?\n(?<body>.*)$')
     if (-not $match.Success) { throw 'canonical Reviewer frontmatter is malformed' }
     $body = $match.Groups['body'].Value
-    $host = @"
+    $hostText = @"
 ---
 description: Codea Harness independent semantic Reviewer. Produces requests-only proposals; Runtime owns certification and report authority.
 mode: subagent
@@ -58,7 +58,7 @@ $body
 "@
     $dir = Split-Path -Parent $Destination
     New-Item -ItemType Directory -Force $dir | Out-Null
-    [IO.File]::WriteAllText($Destination, $host, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($Destination, $hostText, [Text.UTF8Encoding]::new($false))
 }
 
 function New-ReviewerHostCommand([string]$Destination) {
