@@ -1,0 +1,63 @@
+name: actions-housekeeping
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/actions-housekeeping.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  purge-obsolete-workflow-runs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Purge obsolete workflow runs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            Authorization = "Bearer $env:GH_TOKEN"
+            'X-GitHub-Api-Version' = '2026-03-10'
+          }
+          $keepPaths = @(
+            '.github/workflows/package-windows-x64.yml',
+            '.github/workflows/actions-housekeeping.yml'
+          )
+
+          $allRuns = [System.Collections.Generic.List[object]]::new()
+          $page = 1
+          while ($true) {
+            $uri = "https://api.github.com/repos/$env:REPOSITORY/actions/runs?per_page=100&page=$page"
+            $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get
+            $runs = @($response.workflow_runs)
+            foreach ($run in $runs) { $allRuns.Add($run) }
+            if ($runs.Count -lt 100) { break }
+            $page++
+          }
+
+          $obsolete = @($allRuns | Where-Object {
+            $_.status -eq 'completed' -and
+            [string]$_.id -ne $env:CURRENT_RUN_ID -and
+            [string]$_.path -notin $keepPaths
+          })
+
+          Write-Output "ACTIONS_HOUSEKEEPING_DISCOVERED total=$($allRuns.Count) obsolete=$($obsolete.Count)"
+          $deleted = 0
+          foreach ($run in $obsolete) {
+            $deleteUri = "https://api.github.com/repos/$env:REPOSITORY/actions/runs/$($run.id)"
+            Invoke-WebRequest -Uri $deleteUri -Headers $headers -Method Delete -UseBasicParsing | Out-Null
+            $deleted++
+            Write-Output "ACTIONS_HOUSEKEEPING_DELETED id=$($run.id) path=$($run.path) name=$($run.name)"
+          }
+
+          Write-Output "ACTIONS_HOUSEKEEPING_PASS deleted=$deleted preserved=package-windows-x64,actions-housekeeping"
