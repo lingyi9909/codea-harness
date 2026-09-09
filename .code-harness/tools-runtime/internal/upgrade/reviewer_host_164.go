@@ -12,6 +12,7 @@ const reviewerHostUpgradeRoot = "host"
 var reviewerHostFiles164 = []string{
 	".opencode/agents/reviewer.md",
 	".opencode/commands/harness-review-reviewer.md",
+	".opencode/tools/codea-reviewer-submit.ts",
 }
 
 // reviewerHostInstallHook is intentionally package-private test plumbing used
