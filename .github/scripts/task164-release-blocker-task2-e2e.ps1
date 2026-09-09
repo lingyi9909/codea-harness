@@ -49,7 +49,7 @@ $port = Get-Random -Minimum 22000 -Maximum 42000
 $requestLog = Join-Path $fixture 'mock-provider-requests.jsonl'
 $server = Join-Path $fixture 'mock_provider.py'
 $serverCode = @'
-import json, os, sys, time
+import json, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1])
@@ -138,7 +138,6 @@ try {
         $inventory = (& opencode agent list 2>&1 | Out-String)
         if ($LASTEXITCODE -ne 0 -or $inventory -notmatch '(?m)^reviewer\b') { throw "Reviewer not resolvable by OpenCode host:`n$inventory" }
 
-        $beforeSessions = (& opencode session list --format json 2>&1 | Out-String)
         $input = 'runId=task164-reviewer-e2e phase=CHANGE_ANALYSIS snapshotPath=.code-harness/runs/task164-reviewer-e2e/analysis/change-set.json proposalPath=.code-harness/runs/task164-reviewer-e2e/requests/change-analysis-proposal.json'
         $runOutput = (& opencode run --command harness-review-reviewer --model mock/reviewer-e2e --format json --title task164-reviewer-e2e $input 2>&1 | Out-String)
         $runExit = $LASTEXITCODE
@@ -151,22 +150,39 @@ try {
             if ($requests -notmatch [regex]::Escape($needle)) { throw "Reviewer provider request missing intended input/system identity: $needle" }
         }
 
-        $sessionJson = (& opencode session list --format json 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0) { throw "cannot list OpenCode sessions: $sessionJson" }
-        $sessions = @($sessionJson | ConvertFrom-Json)
-        $parent = @($sessions | Where-Object { $_.title -eq 'task164-reviewer-e2e' } | Select-Object -First 1)
-        if ($parent.Count -ne 1) { throw "parent OpenCode session not found: $sessionJson" }
-        $parentId = if ($parent[0].id) { $parent[0].id } elseif ($parent[0].sessionID) { $parent[0].sessionID } else { $null }
-        if (-not $parentId) { throw 'parent OpenCode session has no identity' }
-        $children = @($sessions | Where-Object { $_.parentID -eq $parentId -or $_.parentId -eq $parentId })
-        if ($children.Count -lt 1) { throw "Reviewer did not execute in an independent child session: $sessionJson" }
-        $child = $children[0]
-        $childId = if ($child.id) { $child.id } elseif ($child.sessionID) { $child.sessionID } else { $null }
-        if (-not $childId -or $childId -eq $parentId) { throw 'Reviewer child identity is not independent' }
-        $export = (& opencode export $childId 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $export -notmatch 'reviewer') { throw "Reviewer identity not present in child session export: $export" }
+        # OpenCode's real task event is stronger identity evidence than inferring
+        # session shape from `session list`: it reports subagent_type plus both
+        # parent and child session IDs for the invocation that just completed.
+        $parentMatch = [regex]::Match($runOutput, '"parentSessionId":"(?<id>ses_[^"]+)"')
+        $childMatch = [regex]::Match($runOutput, '"sessionId":"(?<id>ses_[^"]+)"')
+        if (-not $parentMatch.Success -or -not $childMatch.Success) { throw 'OpenCode task event did not expose parent/child session identity' }
+        $parentId = $parentMatch.Groups['id'].Value
+        $childId = $childMatch.Groups['id'].Value
+        if ($parentId -eq $childId) { throw 'Reviewer child identity equals parent identity' }
+        if ($runOutput -notmatch '"subagent_type":"reviewer"' -or $runOutput -notmatch '"command":"harness-review-reviewer"') { throw 'OpenCode task event is not bound to reviewer subagent command' }
         Write-Output "REVIEWER_INDEPENDENT_INVOCATION PASS parentSession=$parentId childSession=$childId"
         Write-Output "REVIEWER_IDENTITY_EVIDENCE PASS agent=reviewer childSession=$childId"
+
+        # Negative real-host E2E while the provider is still healthy: command
+        # remains installed but Reviewer registration is intentionally removed.
+        $negative = Join-Path $env:RUNNER_TEMP ('task164-task2-negative-' + [guid]::NewGuid().ToString('N'))
+        Copy-Item -Recurse -Force $fixture $negative
+        Remove-Item (Join-Path $negative '.opencode/agents/reviewer.md') -Force
+        Push-Location $negative
+        try {
+            $negativeInventory = (& opencode agent list 2>&1 | Out-String)
+            if ($LASTEXITCODE -eq 0 -and $negativeInventory -match '(?m)^reviewer\b') { throw 'Reviewer remained host-resolvable after registration removal' }
+            $negativeOutput = (& opencode run --command harness-review-reviewer --model mock/reviewer-e2e --format json 'runId=task164-reviewer-unavailable phase=CHANGE_ANALYSIS' 2>&1 | Out-String)
+            $negativeExit = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
+        if ($negativeExit -eq 0 -and $negativeOutput -match 'REVIEWER_E2E_PROPOSAL_ONLY') { throw 'OpenCode silently continued semantic Reviewer work with Reviewer registration removed' }
+        if ($negativeOutput -match '"subagent_type":"reviewer"') { throw 'OpenCode spawned Reviewer after registration was removed' }
+        foreach ($authority in @('analysis/change-analysis.json','analysis/change-analysis.cert.json','review.md')) {
+            if (Test-Path (Join-Path $negative ".code-harness/runs/task164-reviewer-unavailable/$authority")) { throw "Reviewer-unavailable path published authority artifact: $authority" }
+        }
+        Write-Output 'REVIEWER_UNAVAILABLE_FAIL_CLOSED PASS'
     } finally {
         Pop-Location
     }
@@ -183,22 +199,4 @@ foreach ($authority in @('analysis/change-analysis.json','analysis/change-analys
     if (Test-Path (Join-Path $fixture ".code-harness/runs/task164-reviewer-e2e/$authority")) { throw "Reviewer published Runtime authority artifact: $authority" }
 }
 Write-Output 'REVIEWER_RUNTIME_AUTHORITY_SEPARATION PASS'
-
-# Negative real-host E2E: command remains installed, Reviewer registration is
-# intentionally removed. The host must fail instead of executing semantic work.
-$negative = Join-Path $env:RUNNER_TEMP ('task164-task2-negative-' + [guid]::NewGuid().ToString('N'))
-Copy-Item -Recurse -Force $fixture $negative
-Remove-Item (Join-Path $negative '.opencode/agents/reviewer.md') -Force
-Push-Location $negative
-try {
-    $negativeOutput = (& opencode run --command harness-review-reviewer --model mock/reviewer-e2e --format json 'runId=task164-reviewer-unavailable phase=CHANGE_ANALYSIS' 2>&1 | Out-String)
-    $negativeExit = $LASTEXITCODE
-} finally {
-    Pop-Location
-}
-if ($negativeExit -eq 0 -and $negativeOutput -match 'REVIEWER_E2E_PROPOSAL_ONLY') { throw 'OpenCode silently continued semantic Reviewer work with Reviewer registration removed' }
-foreach ($authority in @('analysis/change-analysis.json','analysis/change-analysis.cert.json','review.md')) {
-    if (Test-Path (Join-Path $negative ".code-harness/runs/task164-reviewer-unavailable/$authority")) { throw "Reviewer-unavailable path published authority artifact: $authority" }
-}
-Write-Output 'REVIEWER_UNAVAILABLE_FAIL_CLOSED PASS'
 Write-Output 'TASK164_RELEASE_BLOCKER_TASK2_E2E PASS'
