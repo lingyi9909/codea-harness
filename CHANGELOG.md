@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.4 - 2026-09-09
+
+- **Batch Entrypoint Inventory**：`analysis certify` 的 Current/Base Controller EntryPoint 扫描改为 snapshot-bounded batch AST execution，Entrypoint AST 子进程固定为最多 4 个；Base source 改为单次 `git cat-file --batch`，禁止 per-file `merge-base` / `git show` 回退，同时保持既有 Controller/endpoint semantic authority、stable ordering 与 completeness fail-closed。
+- **Analysis Certify Performance Evidence**：新增 Runtime-owned `certify-performance.json`，记录真实阶段耗时、changed/production/controller counts 与实际 process counters；Windows 21/50/100-file fixture 持续执行 hard gate，防止重新退化为 files × patterns × process startup。
+- **Snapshot Freshness Fast Path**：`analysis certify` 使用独立 `VerifyFreshness()` 验证已封存 canonical Snapshot，不再重新执行完整 `changeset.Compute()`；freshness 继续覆盖 base/merge-base/HEAD/branch/committed/staged/unstaged/untracked exact bytes，并从同一 live diff state 重新派生 canonical `Files/Hunks` projection 与 snapshot exact compare，self-consistent rehashed tamper 仍 fail closed。
+- **Authority Preserved**：性能优化不改变 Review gate 顺序；只有 Certified ChangeAnalysis 才能进入 ReviewOptions，2+ Chains 仍进入 Runtime-owned `USER_SELECTION`，certify failure 不得继续 review options / selection / review units / report。
+- **Release Certification**：Windows x64 Final Certification 重新执行 full Go regression、`go vet ./...`、1.6.4 Task 1–3 gates、21/50/100 性能矩阵、1.6.3 Workspace/Chain/USER_SELECTION/Upgrade regressions、retained 1.6.2 Review Reliability gates，并生成 exact-head install/upgrade candidate、manifest、Runtime whitelist 与 release checklist。
+
 ## 1.6.3 - 2026-09-07
 
 - **Workspace AST Performance Hardening**：大型 Java workspace 的 AST 导航改为候选预筛选 + 保守 Unicode escape authority，避免已知候选场景反复全仓扫描，并覆盖长 ast-grep JSON record、nested class、inheritance/interface/template 等回归。
