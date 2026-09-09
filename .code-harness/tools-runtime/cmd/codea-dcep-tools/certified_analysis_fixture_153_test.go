@@ -112,6 +112,7 @@ func installCertifiedSchemas153(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{
 		"change-analysis.schema.json",
+		"change-analysis-proposal.schema.json",
 		"entrypoint-inventory.schema.json",
 		"change-analysis-cert.schema.json",
 		"chain-candidate-cert.schema.json",
