@@ -54,6 +54,25 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output 'CONFIG_UPGRADE_V2_DELTA_AND_ROLLBACK_RETAINED PASS'
 
+      - name: Build revoked 1.6.4 RC upgrade package
+        shell: pwsh
+        run: |
+          $rc = Join-Path $env:RUNNER_TEMP 'task164-revoked-rc'
+          $out = Join-Path $env:RUNNER_TEMP 'task164-revoked-rc-upgrade.zip'
+          Remove-Item $rc -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $out -Force -ErrorAction SilentlyContinue
+          git worktree add --detach $rc 6aa5d9dad0623cd60a845360c9b20ab153921e87
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          try {
+            pwsh -NoProfile -File (Join-Path $rc '.github/scripts/task164-release-package.ps1')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item (Join-Path $rc 'codea-harness-1.6.4-windows-x64-upgrade.zip') $out -Force
+            Write-Output 'TASK164_REVOKED_RC_PACKAGE_BUILD PASS head=6aa5d9dad0623cd60a845360c9b20ab153921e87'
+          } finally {
+            git worktree remove --force $rc
+            $global:LASTEXITCODE = 0
+          }
+
       - name: Build exact-head candidate 1.6.4 packages
         shell: pwsh
         run: |
