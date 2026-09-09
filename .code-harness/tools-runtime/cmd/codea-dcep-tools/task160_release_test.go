@@ -12,14 +12,18 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	version, err := os.ReadFile(filepath.Join(root, ".code-harness", "VERSION"))
 	if err != nil { t.Fatal(err) }
 	currentVersion := strings.TrimSpace(string(version))
-	if currentVersion != "1.6.3" {
-		t.Fatalf("VERSION must match current release 1.6.3, got %q", currentVersion)
+	if currentVersion != "1.6.4" {
+		t.Fatalf("VERSION must match current release 1.6.4, got %q", currentVersion)
 	}
 
 	changelog, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
 	if err != nil { t.Fatal(err) }
 	text := string(changelog)
 	for _, want := range []string{
+		"## 1.6.4",
+		"Batch Entrypoint Inventory",
+		"Analysis Certify Performance Evidence",
+		"Snapshot Freshness Fast Path",
 		"## 1.6.0",
 		"deterministic ReviewUnit",
 		"deterministic Spring Rule Dispatch",
