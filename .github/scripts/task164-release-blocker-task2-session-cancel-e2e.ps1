@@ -14,6 +14,13 @@ function Write-Utf8Json([string]$Path, $Value) {
     [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
 }
 
+function Stop-ProcessTree([Diagnostics.Process]$Process) {
+    if ($Process -and -not $Process.HasExited) {
+        & taskkill.exe /PID $Process.Id /T /F 2>&1 | Out-Null
+        $Process.WaitForExit()
+    }
+}
+
 $fixture = Join-Path $env:RUNNER_TEMP ('task164-reviewer-cancel-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $fixture | Out-Null
 Expand-Archive -Path $installZip -DestinationPath $fixture -Force
@@ -112,7 +119,9 @@ try {
     $stdout=Join-Path $env:RUNNER_TEMP ('task164-cancel-stdout-'+[guid]::NewGuid().ToString('N')+'.log')
     $stderr=Join-Path $env:RUNNER_TEMP ('task164-cancel-stderr-'+[guid]::NewGuid().ToString('N')+'.log')
     $opencodeCmd=(Get-Command opencode).Source
-    $opencodeProcess=Start-Process -FilePath $opencodeCmd -ArgumentList @('run','--model','mock/reviewer-e2e','--format','json',"runId=$runID delegate semantic analysis to reviewer and wait for completion") -WorkingDirectory $fixture -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    $prompt="runId=$runID delegate semantic analysis to reviewer and wait for completion"
+    $cmdLine="`"$opencodeCmd`" run --model mock/reviewer-e2e --format json `"$prompt`""
+    $opencodeProcess=Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/s','/c',$cmdLine) -WorkingDirectory $fixture -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
 
     $childStarted=$false
     for($i=0;$i -lt 300;$i++) {
@@ -128,8 +137,7 @@ try {
         throw "Reviewer child never reached its model request before cancellation:`n$out`n$err"
     }
     Write-Output 'REVIEWER_SESSION_STARTED_BEFORE_CANCEL PASS'
-    Stop-Process -Id $opencodeProcess.Id -Force
-    $opencodeProcess.WaitForExit()
+    Stop-ProcessTree $opencodeProcess
     Write-Output 'REVIEWER_SESSION_CANCELLED PASS'
 
     foreach($file in @('change-analysis-proposal.json','change-analysis-reviewer-authority.json')) {
@@ -149,8 +157,9 @@ try {
         if(Test-Path (Join-Path $fixture ".code-harness/runs/$runID/$authority")){throw "cancelled Reviewer path published authority: $authority"}
     }
     Write-Output 'REVIEWER_SESSION_CANCEL_FAIL_CLOSED PASS'
+    Write-Output 'REVIEWER_CHILD_CANCEL_CRASH_FAIL_CLOSED PASS'
 } finally {
-    if($opencodeProcess -and -not $opencodeProcess.HasExited){Stop-Process -Id $opencodeProcess.Id -Force -ErrorAction SilentlyContinue}
+    if($opencodeProcess -and -not $opencodeProcess.HasExited){Stop-ProcessTree $opencodeProcess}
     if($serverProcess -and -not $serverProcess.HasExited){Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue}
     Remove-Item $serverPath -Force -ErrorAction SilentlyContinue
 }
