@@ -71,6 +71,15 @@ func make163To164Pair(t *testing.T, config string) (string, string) {
 	return source, target
 }
 
+func task164Historical163Config() string {
+	return strings.Replace(
+		task164Real163Config,
+		"initialization:\n  status: READY\n  unresolved: []",
+		"initialization:\n  status: NEEDS_CONFIRMATION\n  unresolved: []",
+		1,
+	)
+}
+
 func Test164ConfigMigrationRED(t *testing.T) {
 	original := task164Real163Config + "# user-sentinel: preserve-me\n"
 	source, target := make163To164Pair(t, original)
@@ -127,7 +136,7 @@ func Test164ConfigMigrationTargetSchemaValidAndIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(first, second) || !bytes.Equal(first, []byte(task164Real163Config)) {
-		t.Fatal("1.6.3 -> 1.6.4 compatibility migration is not byte-idempotent")
+		t.Fatal("valid 1.6.3 config is not byte-idempotent")
 	}
 
 	schemaBytes := task164CurrentSchema(t)
@@ -136,6 +145,52 @@ func Test164ConfigMigrationTargetSchemaValidAndIdempotent(t *testing.T) {
 	}
 	t.Log("CONFIG_MIGRATION_TARGET_SCHEMA_VALID PASS")
 	t.Log("CONFIG_MIGRATION_IDEMPOTENT PASS")
+}
+
+func Test164ConfigMigrationRepairsHistoricalInitializationState(t *testing.T) {
+	historical := task164Historical163Config()
+	schemaBytes := task164CurrentSchema(t)
+	if err := schema.ValidateYAML(schemaBytes, []byte(historical)); err == nil {
+		t.Fatal("historical NEEDS_CONFIRMATION + unresolved: [] fixture must reproduce target-schema incompatibility")
+	}
+
+	migrated, err := migrateConfig163To164([]byte(historical))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Replace(
+		historical,
+		"  unresolved: []",
+		"  unresolved:\n    - projectNotInitialized",
+		1,
+	)
+	if !bytes.Equal(migrated, []byte(want)) {
+		t.Fatalf("historical repair changed more than the known legacy state:\n%s", migrated)
+	}
+	if err := schema.ValidateYAML(schemaBytes, migrated); err != nil {
+		t.Fatalf("historical repair still rejected by target schema: %v", err)
+	}
+	second, err := migrateConfig163To164(migrated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(second, migrated) {
+		t.Fatal("historical repair is not idempotent")
+	}
+
+	source, target := make163To164Pair(t, historical)
+	result := Run(Options{SourceDir: source, TargetDir: target})
+	if result.Status != StatusUpgraded || !contains(result.Migrations, configMigration163To164) {
+		t.Fatalf("historical 1.6.3 project did not upgrade through registered edge: %+v", result)
+	}
+	got, err := os.ReadFile(filepath.Join(target, "harness.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte(want)) {
+		t.Fatalf("installed historical config repair mismatch:\n%s", got)
+	}
+	t.Log("HISTORICAL_163_INITIALIZATION_REPAIR PASS")
 }
 
 func Test164ConfigMigrationRetainsLegacyVersion1Path(t *testing.T) {
