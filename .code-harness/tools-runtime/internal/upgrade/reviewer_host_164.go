@@ -42,6 +42,14 @@ func prepareReviewerHostTransaction(o Options, oldV, newV [3]int) (*reviewerHost
 	}
 	projectRoot := filepath.Dir(filepath.Clean(o.TargetDir))
 	sourceRoot := filepath.Join(o.SourceDir, reviewerHostUpgradeRoot)
+	if _, err := os.Stat(sourceRoot); os.IsNotExist(err) {
+		// Historical test/source trees predate Host resources. The official
+		// 1.6.4 package gate requires the staged Host tree; when it is present
+		// Runtime includes it in the same transaction.
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("inspect Reviewer Host staged source: %w", err)
+	}
 	txn := &reviewerHostTransaction{projectRoot: projectRoot, sourceRoot: sourceRoot}
 	for _, rel := range reviewerHostFiles164 {
 		src := filepath.Join(sourceRoot, filepath.FromSlash(rel))
