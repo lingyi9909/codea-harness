@@ -15,17 +15,17 @@ function Write-Utf8Json([string]$Path, $Value) {
     [IO.File]::WriteAllText($Path, $json, [Text.UTF8Encoding]::new($false))
 }
 
-function Invoke-Runtime([string]$Root, [string[]]$Args) {
+function Invoke-Runtime([string]$Root, [string[]]$RuntimeArgs) {
     $runtime = Join-Path $Root '.code-harness/bin/codea-dcep-tools.exe'
     if (-not (Test-Path $runtime -PathType Leaf)) { throw "packaged Runtime missing: $runtime" }
     Push-Location $Root
     try {
-        $output = (& $runtime @Args 2>&1 | Out-String)
+        $output = (& $runtime @RuntimeArgs 2>&1 | Out-String)
         $exit = $LASTEXITCODE
     } finally {
         Pop-Location
     }
-    if ($exit -ne 0) { throw "Runtime failed exit=$exit args=$($Args -join ' '):`n$output" }
+    if ($exit -ne 0) { throw "Runtime failed exit=$exit args=$($RuntimeArgs -join ' '):`n$output" }
     return $output
 }
 
@@ -318,8 +318,6 @@ try {
     if ($report -notmatch 'PASSED') { throw "Runtime-certified empty Reviewer findings did not drive PASSED report:`n$report" }
     Write-Output 'REVIEWER_RUNTIME_AUTHORITY_SEPARATION PASS'
 
-    # Registration missing: provider remains healthy, command remains installed,
-    # but Reviewer Host identity is unavailable. Runtime must hard stop.
     $negative = Join-Path $env:RUNNER_TEMP ('task164-reviewer-missing-' + [guid]::NewGuid().ToString('N'))
     Copy-Item -Recurse -Force $fixture $negative
     Remove-Item (Join-Path $negative '.opencode/agents/reviewer.md') -Force
@@ -335,7 +333,6 @@ try {
     $null = Assert-AnalysisHardStop $negative $missingRun
     Write-Output 'REVIEWER_UNAVAILABLE_FAIL_CLOSED PASS'
 
-    # File present but not Host-invokable: corrupt mode without deleting file.
     $nonInvokable = Join-Path $env:RUNNER_TEMP ('task164-reviewer-noninvokable-' + [guid]::NewGuid().ToString('N'))
     Copy-Item -Recurse -Force $fixture $nonInvokable
     $nonInvokableAgent = Join-Path $nonInvokable '.opencode/agents/reviewer.md'
@@ -348,8 +345,6 @@ try {
     } finally { Pop-Location }
     Write-Output 'REVIEWER_FILE_PRESENT_NOT_HOST_INVOKABLE_FAIL_CLOSED PASS'
 
-    # Reviewer is registered, but invocation cannot start because the requested
-    # model does not exist. No semantic authority may appear.
     $invokeFail = Join-Path $env:RUNNER_TEMP ('task164-reviewer-invoke-fail-' + [guid]::NewGuid().ToString('N'))
     Copy-Item -Recurse -Force $fixture $invokeFail
     $invokeFailRun = 'task164-reviewer-invocation-failure'
@@ -363,7 +358,6 @@ try {
     $null = Assert-AnalysisHardStop $invokeFail $invokeFailRun
     Write-Output 'REVIEWER_INVOCATION_FAILURE_FAIL_CLOSED PASS'
 
-    # Malformed semantic output must be rejected by the real Host submission tool.
     $malformed = Join-Path $env:RUNNER_TEMP ('task164-reviewer-malformed-' + [guid]::NewGuid().ToString('N'))
     Copy-Item -Recurse -Force $fixture $malformed
     $malformedRun = 'task164-reviewer-malformed'
@@ -377,7 +371,6 @@ try {
     $null = Assert-AnalysisHardStop $malformed $malformedRun
     Write-Output 'REVIEWER_MALFORMED_OUTPUT_FAIL_CLOSED PASS'
 
-    # Successful child completion without submission is not a valid proposal.
     $noProposal = Join-Path $env:RUNNER_TEMP ('task164-reviewer-no-proposal-' + [guid]::NewGuid().ToString('N'))
     Copy-Item -Recurse -Force $fixture $noProposal
     $noProposalRun = 'task164-reviewer-no-proposal'
@@ -391,8 +384,6 @@ try {
     $null = Assert-AnalysisHardStop $noProposal $noProposalRun
     Write-Output 'REVIEWER_NO_VALID_PROPOSAL_FAIL_CLOSED PASS'
 
-    # Force the primary/Main Agent to call the same submission tool. The tool
-    # reads Host context.agent and must reject before writing proposal/receipt.
     $mainFallback = Join-Path $env:RUNNER_TEMP ('task164-main-fallback-' + [guid]::NewGuid().ToString('N'))
     Copy-Item -Recurse -Force $fixture $mainFallback
     $mainRun = 'task164-main-fallback'
