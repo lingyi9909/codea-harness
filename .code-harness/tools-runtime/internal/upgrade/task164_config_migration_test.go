@@ -2,6 +2,8 @@ package upgrade
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,7 +13,9 @@ import (
 	"codea-harness-tools/internal/schema"
 )
 
-const task164Real163Config = `version: 2
+const (
+	task164Exact163SchemaNormalizedSHA256 = "0a192ce95adb9ff69eeb5c89cabfc8557e17437faa00e094bba7ba2bd49febf2"
+	task164Real163Config = `version: 2
 project:
   type: maven
   root: .
@@ -57,6 +61,7 @@ write:
 runs:
   directory: .code-harness/runs
 `
+)
 
 func make163To164Pair(t *testing.T, config string) (string, string) {
 	t.Helper()
@@ -125,20 +130,46 @@ func Test164ConfigMigrationTargetSchemaValidAndIdempotent(t *testing.T) {
 		t.Fatal("1.6.3 -> 1.6.4 compatibility migration is not byte-idempotent")
 	}
 
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot resolve test file")
-	}
-	schemaPath := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../contracts/harness-config.schema.json"))
-	schemaBytes, err := os.ReadFile(schemaPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemaBytes := task164CurrentSchema(t)
 	if err := schema.ValidateYAML(schemaBytes, first); err != nil {
 		t.Fatalf("migrated config rejected by 1.6.4 target schema: %v", err)
 	}
 	t.Log("CONFIG_MIGRATION_TARGET_SCHEMA_VALID PASS")
 	t.Log("CONFIG_MIGRATION_IDEMPOTENT PASS")
+}
+
+func Test164ConfigMigrationRetainsLegacyVersion1Path(t *testing.T) {
+	legacy := validConfig("review:\n  baseRef: origin/develop\n  includeWorkingTree: true\n")
+	source, target := make163To164Pair(t, legacy)
+
+	result := Run(Options{SourceDir: source, TargetDir: target})
+	if result.Status != StatusUpgraded {
+		t.Fatalf("result=%+v", result)
+	}
+	if !contains(result.Migrations, configMigration163To164) || !contains(result.Migrations, "upgrade-config-v1-to-v2-resource-scopes") {
+		t.Fatalf("legacy 1.6.3 config did not retain migration chain: %v", result.Migrations)
+	}
+	got, err := os.ReadFile(filepath.Join(target, "harness.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	for _, want := range []string{"version: 2", "mapperIncludes:", "configIncludes:"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("legacy v1 migration missing %q:\n%s", want, text)
+		}
+	}
+	t.Log("CONFIG_LEGACY_V1_PATH_PRESERVED PASS")
+}
+
+func Test164ConfigSchemaCompatibilityGuard(t *testing.T) {
+	schemaBytes := task164CurrentSchema(t)
+	normalized := bytes.ReplaceAll(schemaBytes, []byte("\r\n"), []byte("\n"))
+	actual := fmt.Sprintf("%x", sha256.Sum256(normalized))
+	if actual != task164Exact163SchemaNormalizedSHA256 {
+		t.Fatalf("harness-config schema changed from exact packaged 1.6.3: got=%s want=%s; add explicit migration or backward-compatibility proof", actual, task164Exact163SchemaNormalizedSHA256)
+	}
+	t.Logf("CONFIG_SCHEMA_163_164_BACKWARD_COMPATIBLE PASS normalizedSha256=%s", actual)
 }
 
 func Test164ConfigMigrationUnsupportedFailsClosed(t *testing.T) {
@@ -160,7 +191,7 @@ func Test164ConfigMigrationUnsupportedFailsClosed(t *testing.T) {
 	if result.Status != StatusManualActionRequired || result.RollbackPerformed {
 		t.Fatalf("result=%+v", result)
 	}
-	if len(result.Errors) == 0 || !strings.Contains(result.Errors[0], "version must be integer 2") {
+	if len(result.Errors) == 0 || !strings.Contains(result.Errors[0], "version must be integer 1 or 2") {
 		t.Fatalf("unexpected migration failure: %+v", result.Errors)
 	}
 	after, err := os.ReadFile(filepath.Join(target, "AGENTS.md"))
@@ -181,4 +212,18 @@ func Test164ConfigMigrationUnsupportedFailsClosed(t *testing.T) {
 		t.Fatalf("failed migration changed VERSION=%q", version)
 	}
 	t.Log("CONFIG_UNSUPPORTED_MIGRATION_FAIL_CLOSED PASS")
+}
+
+func task164CurrentSchema(t *testing.T) []byte {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve test file")
+	}
+	schemaPath := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../contracts/harness-config.schema.json"))
+	schemaBytes, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return schemaBytes
 }
