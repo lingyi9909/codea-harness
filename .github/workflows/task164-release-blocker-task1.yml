@@ -7,11 +7,12 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   task1-config-migration:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,8 +33,85 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Task 1 start HEAD is not an ancestor' }
           Write-Output "TASK164_RELEASE_BLOCKER_TASK1_EXACT_HEAD PASS head=$head"
 
-      - name: Config migration RED probe
+      - name: Parse packaged E2E script
+        shell: pwsh
+        run: |
+          [scriptblock]::Create((Get-Content '.github/scripts/task164-release-blocker-task1-e2e.ps1' -Raw)) | Out-Null
+          Write-Output 'TASK164_CONFIG_E2E_SCRIPT_PARSE PASS'
+
+      - name: Task 1 config migration contract tests
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: |
-          go test -count=1 -v ./internal/upgrade -run '^Test164ConfigMigrationRED$'
+          go test -count=1 -v ./internal/upgrade -run '^Test164Config'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retained Upgrade V2 delta and rollback semantics
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 -v ./internal/upgrade -run '^Test163Task4|^Test163Blocker1|^TestUpgradeFailureRollsBackAndKeepsSource$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'CONFIG_UPGRADE_V2_DELTA_AND_ROLLBACK_RETAINED PASS'
+
+      - name: Build exact-head candidate 1.6.4 packages
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./.github/scripts/task164-release-package.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $ast = (Resolve-Path '.code-harness/bin/ast-grep.exe').Path
+          "CODEA_AST_GREP_TEST_PATH=$ast" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Exact packaged 1.6.3 to candidate 1.6.4 Windows E2E
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task1-e2e.ps1
+
+      - name: Fresh full upgrade regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./internal/upgrade/...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_CONFIG_UPGRADE_REGRESSION PASS'
+
+      - name: Fresh full Go regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_CONFIG_FULL_GO_TEST PASS'
+
+      - name: Fresh go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_CONFIG_GO_VET PASS'
+
+      - name: Task 1 scope and final exact HEAD
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:GITHUB_SHA) { throw "final HEAD mismatch: $head" }
+          $changed = @(git diff --name-only bfa3a43c02e9204833131c41cdbb0deae8bd8083 HEAD)
+          if ($LASTEXITCODE -ne 0) { throw 'cannot inspect Task 1 scope' }
+          $allowed = @(
+            '.code-harness/tools-runtime/internal/upgrade/migration_164.go',
+            '.code-harness/tools-runtime/internal/upgrade/task164_config_migration_test.go',
+            '.code-harness/tools-runtime/internal/upgrade/upgrade.go',
+            '.code-harness/skills/upgrade-harness/SKILL.md',
+            '.code-harness/upgrade.md',
+            '.github/scripts/task164-release-blocker-task1-e2e.ps1',
+            '.github/workflows/task164-release-blocker-task1.yml'
+          )
+          foreach ($path in $changed) {
+            if ($path -cnotin $allowed) { throw "Task 1 scope violation: $path" }
+          }
+          $dirty = @(git diff --name-only HEAD)
+          if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw "tracked source changed during Task 1 CI: $($dirty -join ',')" }
+          Write-Output "TASK164_RELEASE_BLOCKER_TASK1_SCOPE PASS files=$($changed.Count)"
+          Write-Output "TASK164_RELEASE_BLOCKER_TASK1_EXACT_HEAD PASS head=$head"
