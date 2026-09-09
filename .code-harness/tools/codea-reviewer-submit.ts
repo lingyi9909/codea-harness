@@ -23,7 +23,7 @@ export default tool({
   args: {
     kind: tool.schema.enum(["change-analysis", "findings"]),
     runId: tool.schema.string(),
-    proposal: tool.schema.string().describe("Exact JSON object for the semantic proposal"),
+    proposal: tool.schema.string().describe("Exact JSON payload for the semantic proposal"),
   },
   async execute(args, context) {
     if (context.agent !== "reviewer") {
@@ -41,8 +41,12 @@ export default tool({
     } catch (error) {
       throw new Error(`REVIEWER_MALFORMED_OUTPUT: proposal is not JSON: ${String(error)}`)
     }
-    if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
-      throw new Error("REVIEWER_MALFORMED_OUTPUT: proposal must be a JSON object")
+    if (args.kind === "change-analysis") {
+      if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+        throw new Error("REVIEWER_MALFORMED_OUTPUT: change-analysis proposal must be a JSON object")
+      }
+    } else if (!Array.isArray(parsed)) {
+      throw new Error("REVIEWER_MALFORMED_OUTPUT: findings proposal must be a JSON array")
     }
 
     const target = canonicalTarget(args.kind, args.runId)
