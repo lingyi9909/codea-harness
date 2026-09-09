@@ -79,6 +79,14 @@ $ARGUMENTS
     [IO.File]::WriteAllText($Destination, $command, [Text.UTF8Encoding]::new($false))
 }
 
+function New-ReviewerHostTool([string]$Destination) {
+    $toolSource = Join-Path $repoRoot '.code-harness/tools/codea-reviewer-submit.ts'
+    if (-not (Test-Path $toolSource -PathType Leaf)) { throw 'canonical Reviewer submission tool missing' }
+    $dir = Split-Path -Parent $Destination
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    Copy-Item -LiteralPath $toolSource -Destination $Destination -Force
+}
+
 function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$Kind) {
     $stage = Join-Path $env:RUNNER_TEMP ('task164-host-registration-' + [guid]::NewGuid().ToString('N'))
     try {
@@ -95,8 +103,10 @@ function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$Kind) {
         $hostRoot = if ($Kind -eq 'install') { $stage } else { Join-Path $harnessRoot 'host' }
         $reviewerDestination = Join-Path $hostRoot '.opencode/agents/reviewer.md'
         $commandDestination = Join-Path $hostRoot '.opencode/commands/harness-review-reviewer.md'
+        $toolDestination = Join-Path $hostRoot '.opencode/tools/codea-reviewer-submit.ts'
         New-ReviewerHostAgent $reviewerDestination
         New-ReviewerHostCommand $commandDestination
+        New-ReviewerHostTool $toolDestination
 
         $manifestPath = Join-Path $harnessRoot 'RELEASE-MANIFEST.json'
         if (-not (Test-Path $manifestPath -PathType Leaf)) { throw "package missing $harnessRootName/RELEASE-MANIFEST.json" }
@@ -112,6 +122,9 @@ function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$Kind) {
                 command = '.opencode/commands/harness-review-reviewer.md'
                 commandUpgradeSource = 'host/.opencode/commands/harness-review-reviewer.md'
                 commandSha256 = (Get-FileHash -Algorithm SHA256 $commandDestination).Hash.ToLowerInvariant()
+                submissionTool = '.opencode/tools/codea-reviewer-submit.ts'
+                submissionToolUpgradeSource = 'host/.opencode/tools/codea-reviewer-submit.ts'
+                submissionToolSha256 = (Get-FileHash -Algorithm SHA256 $toolDestination).Hash.ToLowerInvariant()
             }
         }) -Force
         [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
@@ -135,4 +148,5 @@ foreach ($kind in @('install','upgrade')) {
 Write-Output 'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4'
 Write-Output 'REVIEWER_HOST_PACKAGE_REGISTRATION PASS path=.opencode/agents/reviewer.md mode=subagent'
 Write-Output 'REVIEWER_HOST_COMMAND_REGISTRATION PASS command=.opencode/commands/harness-review-reviewer.md subagent=true'
+Write-Output 'REVIEWER_HOST_TOOL_REGISTRATION PASS tool=.opencode/tools/codea-reviewer-submit.ts'
 Write-Output 'REVIEWER_HOST_UPGRADE_STAGED_TRANSACTION PASS source=.code-harness-upgrade/host/.opencode'
