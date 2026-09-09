@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 # Release-only adapter for the already accepted package builder. The accepted
-# builder remains unchanged; this adapter changes only the release version.
+# builder remains unchanged; this adapter changes only the release version and
+# overlays the OpenCode host registration required by 1.6.4 Task 2.
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $source = Join-Path $PSScriptRoot 'task162-task2-package.ps1'
 $expectedBlob = '84ff6bc44c06a3dbabd72cd8f807c008acf05594'
@@ -27,8 +28,75 @@ try {
     Remove-Item $temp -Force -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 0
 }
+
+function New-ReviewerHostAgent([string]$Destination) {
+    $reviewerSource = Join-Path $repoRoot '.code-harness/agents/reviewer.md'
+    if (-not (Test-Path $reviewerSource -PathType Leaf)) { throw 'canonical Reviewer agent source missing' }
+    $canonical = Get-Content $reviewerSource -Raw
+    $match = [regex]::Match($canonical, '(?s)^---\r?\n.*?\r?\n---\r?\n(?<body>.*)$')
+    if (-not $match.Success) { throw 'canonical Reviewer frontmatter is malformed' }
+    $body = $match.Groups['body'].Value
+    $host = @"
+---
+description: Codea Harness independent semantic Reviewer. Produces requests-only proposals; Runtime owns certification and report authority.
+mode: subagent
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: edit
+    resource: ".code-harness/runs/*/requests/**"
+    effect: allow
+  - action: shell
+    resource: "*"
+    effect: deny
+  - action: subagent
+    resource: "*"
+    effect: deny
+---
+$body
+"@
+    $dir = Split-Path -Parent $Destination
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    [IO.File]::WriteAllText($Destination, $host, [Text.UTF8Encoding]::new($false))
+}
+
+function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$HarnessRootName) {
+    $stage = Join-Path $env:RUNNER_TEMP ('task164-host-registration-' + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Force $stage | Out-Null
+        Expand-Archive -Path $ZipPath -DestinationPath $stage -Force
+        $harnessRoot = Join-Path $stage $HarnessRootName
+        if (-not (Test-Path $harnessRoot -PathType Container)) { throw "package missing $HarnessRootName" }
+        $reviewerDestination = Join-Path $stage '.opencode/agents/reviewer.md'
+        New-ReviewerHostAgent $reviewerDestination
+
+        $manifestPath = Join-Path $harnessRoot 'RELEASE-MANIFEST.json'
+        if (-not (Test-Path $manifestPath -PathType Leaf)) { throw "package missing $HarnessRootName/RELEASE-MANIFEST.json" }
+        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+        $manifest | Add-Member -NotePropertyName hostAgents -NotePropertyValue ([ordered]@{
+            reviewer = [ordered]@{
+                host = 'opencode'
+                path = '.opencode/agents/reviewer.md'
+                mode = 'subagent'
+                source = '.code-harness/agents/reviewer.md'
+                sha256 = (Get-FileHash -Algorithm SHA256 $reviewerDestination).Hash.ToLowerInvariant()
+            }
+        }) -Force
+        [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
+
+        Remove-Item -Force $ZipPath
+        Compress-Archive -Path @($harnessRoot, (Join-Path $stage '.opencode')) -DestinationPath $ZipPath -Force
+    } finally {
+        Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+    }
+}
+
 foreach ($kind in @('install','upgrade')) {
     $path = Join-Path $repoRoot "codea-harness-1.6.4-windows-x64-$kind.zip"
     if (-not (Test-Path $path -PathType Leaf)) { throw "Missing release package: $path" }
+    $rootName = if ($kind -eq 'install') { '.code-harness' } else { '.code-harness-upgrade' }
+    Add-OpenCodeReviewerRegistration $path $rootName
 }
 Write-Output 'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4'
+Write-Output 'REVIEWER_HOST_PACKAGE_REGISTRATION PASS path=.opencode/agents/reviewer.md mode=subagent'
