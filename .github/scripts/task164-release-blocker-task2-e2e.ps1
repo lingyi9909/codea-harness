@@ -310,7 +310,8 @@ try {
     })
     $null = Invoke-Runtime $fixture @('report','review','--input',".code-harness/runs/$positiveRun/requests/review-report.json")
     $report = Get-Content (Join-Path $fixture ".code-harness/runs/$positiveRun/review.md") -Raw
-    if ($report -notmatch 'PASSED') { throw "Runtime-certified empty Reviewer findings did not drive PASSED report:`n$report" }
+    $passedLabel = '| 评审结果 | ✅ 通过 |'
+    if ($report -notmatch [regex]::Escape($passedLabel)) { throw "Runtime-certified empty Reviewer findings did not drive canonical PASSED report:`n$report" }
     Write-Output 'REVIEWER_RUNTIME_AUTHORITY_SEPARATION PASS'
 
     $negative = Join-Path $env:RUNNER_TEMP ('task164-reviewer-missing-' + [guid]::NewGuid().ToString('N'))
