@@ -362,7 +362,9 @@ try {
     try {
         $malformedOutput = (& opencode run --command harness-review-reviewer --model mock/reviewer-e2e --format json "runId=$malformedRun phase=CHANGE_ANALYSIS submit malformed payload" 2>&1 | Out-String)
     } finally { Pop-Location }
-    if ($malformedOutput -notmatch 'REVIEWER_MALFORMED_OUTPUT') { throw "real Reviewer malformed tool rejection marker missing:`n$malformedOutput" }
+    if ($malformedOutput -notmatch '"subagent_type":"reviewer"') { throw "malformed case did not execute an independent Reviewer child:`n$malformedOutput" }
+    $providerTranscript = if (Test-Path $requestLog -PathType Leaf) { Get-Content $requestLog -Raw } else { '' }
+    if ($providerTranscript -notmatch 'REVIEWER_MALFORMED_OUTPUT') { throw "real Reviewer malformed tool rejection marker missing from child provider transcript:`n$malformedOutput" }
     if (Test-Path (Join-Path $malformed ".code-harness/runs/$malformedRun/requests/change-analysis-reviewer-authority.json")) { throw 'malformed Reviewer output published authority receipt' }
     $null = Assert-AnalysisHardStop $malformed $malformedRun
     Write-Output 'REVIEWER_MALFORMED_OUTPUT_FAIL_CLOSED PASS'
