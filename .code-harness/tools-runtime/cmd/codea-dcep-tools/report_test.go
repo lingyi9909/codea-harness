@@ -19,19 +19,19 @@ func TestReportDispatchRecognizesReport(t *testing.T) {
 }
 
 func TestReportReviewWritesArtifactAndDeletesTransport(t *testing.T) {
-	withTempProject(t)
-	runID := "review-001"
-	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
-	writeFile(t, analysisPath, fullReportAnalysis153())
-	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
-	input := writeReportTransport153(t, runID)
-	if err := run([]string{"report", "review", "--input", input}); err != nil {
+	input := prepareTask164FindingCertification(t, true)
+	if err := run([]string{"review", "certify-findings", "--input", input}); err != nil {
+		t.Fatalf("prepare Runtime-certified Reviewer findings: %v", err)
+	}
+	runID := "run-task4-review"
+	reportInput := writeReportTransport153(t, runID)
+	if err := run([]string{"report", "review", "--input", reportInput}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(".code-harness", "runs", runID, "review.md")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(input); !os.IsNotExist(err) {
+	if _, err := os.Stat(reportInput); !os.IsNotExist(err) {
 		t.Fatalf("transport should be deleted, stat err=%v", err)
 	}
 }
