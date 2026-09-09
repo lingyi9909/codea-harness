@@ -17,6 +17,7 @@ import (
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/finding"
 	"codea-harness-tools/internal/requestcontract"
+	"codea-harness-tools/internal/reviewauthority"
 	"codea-harness-tools/internal/reviewrules"
 	"codea-harness-tools/internal/reviewunit"
 )
@@ -186,6 +187,9 @@ func runReviewCertifyFindings160(args []string) error {
 	candidate := path.Clean(strings.ReplaceAll(strings.TrimSpace(req.ProposalsPath), "\\", "/"))
 	if candidate != expectedProposals || candidate != strings.ReplaceAll(req.ProposalsPath, "\\", "/") {
 		return fmt.Errorf("FINDING_PROPOSALS_PATH_INVALID: must be %s", expectedProposals)
+	}
+	if _, err := reviewauthority.Verify(".", runID, reviewauthority.Findings, candidate); err != nil {
+		return err
 	}
 	proposalBytes, err := os.ReadFile(filepath.FromSlash(candidate))
 	if err != nil {
