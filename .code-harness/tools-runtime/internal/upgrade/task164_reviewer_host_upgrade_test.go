@@ -16,6 +16,7 @@ func addReviewerHost164Source(t *testing.T, source string) {
 
 func Test164OfficialUpgradeInstallsReviewerHostTransactionally(t *testing.T) {
 	source, target := make163To164Pair(t, task164Real163Config)
+	addReviewerHost164Source(t, source)
 	projectRoot := filepath.Dir(target)
 	write(t, projectRoot, ".opencode/user-settings.json", "keep-user-host-config\n")
 
@@ -24,9 +25,9 @@ func Test164OfficialUpgradeInstallsReviewerHostTransactionally(t *testing.T) {
 		t.Fatalf("result=%+v", result)
 	}
 	for rel, want := range map[string]string{
-		".opencode/agents/reviewer.md":                         "reviewer-host-1.6.4\n",
-		".opencode/commands/harness-review-reviewer.md":        "reviewer-command-1.6.4\n",
-		".opencode/user-settings.json":                         "keep-user-host-config\n",
+		".opencode/agents/reviewer.md":                  "reviewer-host-1.6.4\n",
+		".opencode/commands/harness-review-reviewer.md": "reviewer-command-1.6.4\n",
+		".opencode/user-settings.json":                  "keep-user-host-config\n",
 	} {
 		got, err := os.ReadFile(filepath.Join(projectRoot, filepath.FromSlash(rel)))
 		if err != nil || string(got) != want {
@@ -40,6 +41,7 @@ func Test164OfficialUpgradeInstallsReviewerHostTransactionally(t *testing.T) {
 
 func Test164OfficialUpgradeRejectsUnknownReviewerHostConflictBeforeFrameworkWrite(t *testing.T) {
 	source, target := make163To164Pair(t, task164Real163Config)
+	addReviewerHost164Source(t, source)
 	projectRoot := filepath.Dir(target)
 	write(t, projectRoot, ".opencode/agents/reviewer.md", "user-owned-reviewer\n")
 	beforeVersion, _ := os.ReadFile(filepath.Join(target, "VERSION"))
@@ -68,6 +70,7 @@ func Test164OfficialUpgradeRejectsUnknownReviewerHostConflictBeforeFrameworkWrit
 
 func Test164OfficialUpgradeRollsBackFrameworkAndPartialReviewerHostCommit(t *testing.T) {
 	source, target := make163To164Pair(t, task164Real163Config)
+	addReviewerHost164Source(t, source)
 	projectRoot := filepath.Dir(target)
 	write(t, projectRoot, ".opencode/user-settings.json", "keep-user-host-config\n")
 	beforeVersion, _ := os.ReadFile(filepath.Join(target, "VERSION"))
