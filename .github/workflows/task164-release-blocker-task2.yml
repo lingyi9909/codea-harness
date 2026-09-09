@@ -66,7 +66,7 @@ jobs:
         shell: pwsh
         working-directory: .code-harness/tools-runtime
         run: |
-          go test -count=1 ./internal/analysis/... ./internal/finding/... ./internal/review/... ./internal/report/...
+          go test -count=1 ./internal/analysis/... ./internal/finding/... ./internal/changeset/... ./internal/coverage/...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output 'TASK164_TASK2_RUNTIME_AUTHORITY_REGRESSION PASS'
 
