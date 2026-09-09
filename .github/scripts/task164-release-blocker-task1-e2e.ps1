@@ -136,7 +136,7 @@ function Invoke-CandidateUpgrade([string]$ProjectRoot) {
         $lines = @(& '.\.code-harness-upgrade\bin\codea-dcep-tools.exe' upgrade 2>&1)
         $exit = $LASTEXITCODE
         $text = $lines | Out-String
-        $lines | ForEach-Object { Write-Output $_ }
+        $lines | ForEach-Object { Write-Host $_ }
         return [pscustomobject]@{ ExitCode = $exit; Text = $text }
     } finally {
         Pop-Location
