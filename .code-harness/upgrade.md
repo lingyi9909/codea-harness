@@ -136,6 +136,50 @@ Agent 应展示 Runtime 返回的实际变化文件和保留状态，不自行�
 
 必须使用新版升级包 Runtime 的原因是：registered migration 属于目标版本 Runtime。旧版本 Runtime 不会预先拥有未来版本新增的确定性 migration；正式升级必须由目标版本 Runtime 负责 migration + transaction，才能保证 Framework 与配置版本一起升级。
 
+## 1.6.3 → 1.6.4 Historical Project State Migration
+
+exact packaged 1.6.3 与当前 1.6.4 的 `.code-harness/contracts/harness-config.schema.json` 内容相同；因此 1.6.4 release blocker 的真实根因不是 target schema 在 1.6.4 发生变化。
+
+历史根因来自更早版本遗留的 `harness.yaml` Project State。commit `680c58d92e80dd6493327bbd447ba54bd3a25b37` 之前，正式模板与当时 schema 允许：
+
+```yaml
+initialization:
+  status: NEEDS_CONFIRMATION
+  unresolved: []
+```
+
+`680c58d` 收紧 initialization invariant 后，`NEEDS_CONFIRMATION` 必须至少包含一个 unresolved，并将模板改为：
+
+```yaml
+initialization:
+  status: NEEDS_CONFIRMATION
+  unresolved:
+    - projectNotInitialized
+```
+
+因为 `harness.yaml` 是跨 release 保留、只有 registered migration 才允许修改的 Project State，exact 1.6.3 Framework 可以与上述旧 Project State 共存。revoked 1.6.4 RC `6aa5d9dad0623cd60a845360c9b20ab153921e87` 对该 historical fixture 执行真实 Windows upgrade 时，会在 target-schema validation 明确失败：
+
+```text
+/initialization/unresolved
+minItems: got 0, want 1
+```
+
+1.6.4 Runtime 的 `config-1.6.3-to-1.6.4` release edge 在 target-schema validation 之前只对这个已证实的历史状态执行最小确定性修复：
+
+```text
+NEEDS_CONFIRMATION + unresolved: []
+→
+NEEDS_CONFIRMATION + unresolved: [projectNotInitialized]
+```
+
+规则：
+
+- 已满足 initialization invariant 的 config 不修改；
+- historical repair 只改变 `unresolved` 的空列表表示，其余用户值、顺序、注释和 Project State 保留；
+- 修复后的配置再进入既有 v1 → v2 migration（如需要）和 1.6.4 target-schema validation；
+- 无法匹配已证明历史表示、重复/歧义字段或不支持的版本边界不猜测，继续 fail-closed；
+- 正式 Windows Gate 必须同时用同一个 historical fixture 证明 revoked RC failure 与新 candidate repair，并保留 fresh 1.6.3 template E2E。
+
 ## 1.4.0 → 1.5.0 Project State 契约
 
 1.5.0 不新增 `harness.yaml` 配置 migration。升级只替换 Framework Managed 内容并安装 Chain Framework，因此以下 Project State 在 1.4.0 → 1.5.0 升级中必须 **byte-for-byte** 保持：
