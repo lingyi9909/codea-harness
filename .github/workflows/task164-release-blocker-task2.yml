@@ -11,7 +11,7 @@ permissions:
 jobs:
   reviewer-host-authority:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,13 +41,18 @@ jobs:
           $version = (& opencode --version | Out-String).Trim()
           if ($version -notmatch '1\.18\.25') { throw "unexpected OpenCode version: $version" }
 
-      - name: Parse Task 2 E2E script
+      - name: Parse Task 2 E2E scripts
         shell: pwsh
         run: |
-          $errors = $null
-          $tokens = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path ./.github/scripts/task164-release-blocker-task2-e2e.ps1), [ref]$tokens, [ref]$errors)
-          if ($errors.Count -ne 0) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+          foreach ($script in @(
+            './.github/scripts/task164-release-blocker-task2-e2e.ps1',
+            './.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1'
+          )) {
+            $errors = $null
+            $tokens = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)
+            if ($errors.Count -ne 0) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+          }
           Write-Output 'TASK164_TASK2_E2E_SCRIPT_PARSE PASS'
 
       - name: Build exact-head 1.6.4 package
@@ -60,6 +65,12 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-e2e.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Real Reviewer session cancel fail-closed E2E
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Fresh Runtime authority regressions
@@ -111,6 +122,7 @@ jobs:
             '.code-harness/tools-runtime/internal/upgrade/upgrade.go',
             '.code-harness/tools/codea-reviewer-submit.ts',
             '.github/scripts/task164-release-blocker-task2-e2e.ps1',
+            '.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1',
             '.github/scripts/task164-release-blocker-task2-red.ps1',
             '.github/scripts/task164-release-blocker-task2-reverify-red.ps1',
             '.github/scripts/task164-release-package.ps1',
