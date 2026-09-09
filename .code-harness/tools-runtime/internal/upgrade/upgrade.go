@@ -173,6 +173,12 @@ func Run(o Options) Result {
 		return failManual(r, err)
 	}
 	migrated := append([]byte(nil), cfg...)
+	var releaseMigrations []string
+	migrated, releaseMigrations, err = migrateConfigForReleaseEdge(migrated, oldV, newV)
+	if err != nil {
+		return failManual(r, fmt.Errorf("migrate harness config %s -> %s: %w", r.FromVersion, r.ToVersion, err))
+	}
+	r.Migrations = append(r.Migrations, releaseMigrations...)
 	if !hasTopLevelReview(cfg) {
 		if o.Refs == nil {
 			return failManual(r, fmt.Errorf("cannot detect Review baseline; configure review.baseRef"))
