@@ -15,12 +15,15 @@ Release closeout only. Do not modify accepted Task 1–3 production logic unless
 Allowed release-closeout changes:
 
 1. `.code-harness/VERSION` -> `1.6.4`
-2. `task164-release-package.ps1`
-3. `task164-final-certification.ps1`
-4. `task164-final-certification.yml`
-5. this plan
+2. `CHANGELOG.md`
+3. `.code-harness/tools-runtime/cmd/codea-dcep-tools/task160_release_test.go` — current release metadata expectation only
+4. `.github/scripts/task164-release-package.ps1`
+5. `.github/scripts/task164-final-certification.ps1`
+6. `.github/workflows/task164-final-certification.yml`
+7. `docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-plan.md`
+8. this plan
 
-No package/schema/authority relaxation is permitted.
+No package/schema/authority relaxation is permitted. The retained release test migration must not change Runtime behavior.
 
 ## Final certification gates
 
