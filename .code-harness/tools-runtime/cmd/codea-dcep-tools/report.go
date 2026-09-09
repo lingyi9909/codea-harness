@@ -86,6 +86,9 @@ func runReviewReport(args []string) error {
 	}
 
 	authoritative := buildCertifiedReviewRequest153(proposal, certified, cert, verifiedScope, machine)
+	if err := applyCertifiedFindingAuthority164(runID, cert, &authoritative); err != nil {
+		return err
+	}
 	path, err := report.Write(".", authoritative)
 	if err != nil {
 		return err
@@ -167,6 +170,7 @@ func buildCertifiedReviewRequest153(proposal report.ReviewRequest, certified ana
 	out.BaseRef = cert.BaseRef
 	out.Head = cert.Head
 	out.Mode = scope.Mode
+	out.Findings = []report.Finding{}
 	if scope.Target == nil {
 		out.Target = nil
 	} else {
