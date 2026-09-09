@@ -15,6 +15,7 @@ import (
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/requestcontract"
+	"codea-harness-tools/internal/reviewauthority"
 	"codea-harness-tools/internal/schema"
 )
 
@@ -154,6 +155,9 @@ func runAnalysisCertify(args []string) error {
 	}
 	if !analysisArtifactID153.MatchString(req.RunID) {
 		return errors.New("analysis certify request contains invalid runId")
+	}
+	if _, err := reviewauthority.Verify(".", req.RunID, reviewauthority.ChangeAnalysis, req.ProposalPath); err != nil {
+		return err
 	}
 	cert, err := analysisruntime.Certify(".", req)
 	if err != nil { return err }
