@@ -58,6 +58,22 @@ review:
 
 均不存在 → `MANUAL_ACTION_REQUIRED`，当前 Harness 0 修改，并提示用户显式配置。**已有 `review` 时整个 block 字节级保持，不重新识别、不覆盖。**
 
+## 1.6.3 → 1.6.4 已登记 Migration
+
+### `config-1.6.3-to-1.6.4`
+
+1.6.4 Runtime 显式登记 `1.6.3 -> 1.6.4` release edge，并且必须在 1.6.4 target schema 校验之前执行。
+
+当前 exact packaged 1.6.3 与 1.6.4 `harness-config.schema.json` 语义一致，因此：
+
+- `harness.yaml` 的 config `version: 2` 在该 release edge 中 byte-for-byte 保持；
+- 1.6.3 仍支持的 config `version: 1` 先通过该 release edge，随后继续执行既有 `upgrade-config-v1-to-v2-resource-scopes` 确定性迁移；
+- 其他 config version、重复/歧义顶层 `version` 或不受支持的 direct release edge 一律 fail-closed；
+- 所有 registered migrations 完成后才使用 1.6.4 `harness-config.schema.json` 校验；
+- migration 失败不得创建半升级安装，也不得由 Agent/LLM 猜测或补写配置。
+
+未来如果 `harness-config.schema.json` 出现 backward-incompatible change，必须新增明确 sourceVersion → targetVersion migration，或用长期回归证明所有受支持 source config 仍兼容。
+
 ## 禁止行为
 
 - 禁止 AI 猜 module/profile/path/baseRef。
