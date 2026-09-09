@@ -18,10 +18,13 @@ Allowed changes from the accepted Task 3 baseline:
 
 - `.code-harness/VERSION`
 - `CHANGELOG.md`
+- `.code-harness/tools-runtime/cmd/codea-dcep-tools/task160_release_test.go` (retained current-release metadata expectation only)
 - `.github/scripts/task164-final-certification.ps1`
 - `.github/scripts/task164-release-package.ps1`
 - `.github/workflows/task164-final-certification.yml`
 - this plan
+
+The retained test migration may only update current release metadata expectations; it must not change Runtime behavior or Task 1-3 semantics.
 
 ## Required Gates
 
