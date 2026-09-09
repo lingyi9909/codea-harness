@@ -12,6 +12,7 @@ func addReviewerHost164Source(t *testing.T, source string) {
 	t.Helper()
 	write(t, source, "host/.opencode/agents/reviewer.md", "reviewer-host-1.6.4\n")
 	write(t, source, "host/.opencode/commands/harness-review-reviewer.md", "reviewer-command-1.6.4\n")
+	write(t, source, "host/.opencode/tools/codea-reviewer-submit.ts", "reviewer-submit-tool-1.6.4\n")
 }
 
 func Test164OfficialUpgradeInstallsReviewerHostTransactionally(t *testing.T) {
@@ -27,6 +28,7 @@ func Test164OfficialUpgradeInstallsReviewerHostTransactionally(t *testing.T) {
 	for rel, want := range map[string]string{
 		".opencode/agents/reviewer.md":                  "reviewer-host-1.6.4\n",
 		".opencode/commands/harness-review-reviewer.md": "reviewer-command-1.6.4\n",
+		".opencode/tools/codea-reviewer-submit.ts":      "reviewer-submit-tool-1.6.4\n",
 		".opencode/user-settings.json":                  "keep-user-host-config\n",
 	} {
 		got, err := os.ReadFile(filepath.Join(projectRoot, filepath.FromSlash(rel)))
@@ -34,8 +36,10 @@ func Test164OfficialUpgradeInstallsReviewerHostTransactionally(t *testing.T) {
 			t.Fatalf("%s got=%q err=%v", rel, got, err)
 		}
 	}
-	if !contains(result.UpdatedFiles, ".opencode/agents/reviewer.md") || !contains(result.UpdatedFiles, ".opencode/commands/harness-review-reviewer.md") {
-		t.Fatalf("Reviewer Host files missing from transaction evidence: %v", result.UpdatedFiles)
+	for _, rel := range reviewerHostFiles164 {
+		if !contains(result.UpdatedFiles, rel) {
+			t.Fatalf("Reviewer Host transaction evidence missing %s: %v", rel, result.UpdatedFiles)
+		}
 	}
 }
 
@@ -78,8 +82,8 @@ func Test164OfficialUpgradeRollsBackFrameworkAndPartialReviewerHostCommit(t *tes
 
 	previousHook := reviewerHostInstallHook
 	reviewerHostInstallHook = func(index int, rel string) error {
-		if index == 1 {
-			return errors.New("injected Reviewer Host commit failure")
+		if index == 2 {
+			return errors.New("injected Reviewer Host submission-tool commit failure")
 		}
 		return nil
 	}
