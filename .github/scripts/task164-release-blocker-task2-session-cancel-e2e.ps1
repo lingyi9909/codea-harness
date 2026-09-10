@@ -111,6 +111,7 @@ $config = @{
 
 $serverProcess = Start-Process -FilePath python -ArgumentList @($serverPath,$port,$requestLog) -PassThru -WindowStyle Hidden
 $opencodeProcess = $null
+$runnerPath = Join-Path $env:RUNNER_TEMP ('task164-reviewer-cancel-runner-' + [guid]::NewGuid().ToString('N') + '.ps1')
 try {
     $ready=$false
     for($i=0;$i -lt 50;$i++) { try { $null=Invoke-RestMethod -Uri "http://127.0.0.1:$port/v1/models" -TimeoutSec 1; $ready=$true; break } catch { Start-Sleep -Milliseconds 100 } }
@@ -118,10 +119,14 @@ try {
 
     $stdout=Join-Path $env:RUNNER_TEMP ('task164-cancel-stdout-'+[guid]::NewGuid().ToString('N')+'.log')
     $stderr=Join-Path $env:RUNNER_TEMP ('task164-cancel-stderr-'+[guid]::NewGuid().ToString('N')+'.log')
-    $opencodeCmd=(Get-Command opencode).Source
     $prompt="runId=$runID delegate semantic analysis to reviewer and wait for completion"
-    $cmdLine="`"$opencodeCmd`" run --model mock/reviewer-e2e --format json `"$prompt`""
-    $opencodeProcess=Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/s','/c',$cmdLine) -WorkingDirectory $fixture -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    $runnerCode = @"
+& opencode run --model mock/reviewer-e2e --format json '$prompt'
+exit `$LASTEXITCODE
+"@
+    [IO.File]::WriteAllText($runnerPath, $runnerCode, [Text.UTF8Encoding]::new($false))
+    $pwsh=(Get-Command pwsh).Source
+    $opencodeProcess=Start-Process -FilePath $pwsh -ArgumentList @('-NoProfile','-File',$runnerPath) -WorkingDirectory $fixture -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
 
     $childStarted=$false
     for($i=0;$i -lt 300;$i++) {
@@ -162,4 +167,5 @@ try {
     if($opencodeProcess -and -not $opencodeProcess.HasExited){Stop-ProcessTree $opencodeProcess}
     if($serverProcess -and -not $serverProcess.HasExited){Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue}
     Remove-Item $serverPath -Force -ErrorAction SilentlyContinue
+    Remove-Item $runnerPath -Force -ErrorAction SilentlyContinue
 }
