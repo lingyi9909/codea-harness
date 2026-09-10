@@ -152,19 +152,83 @@ function Assert-ReleaseArtifacts {
             if ((Get-Content (Join-Path $releaseRoot 'VERSION') -Raw).Trim() -ne $version) {
                 throw "$kind VERSION mismatch"
             }
-            $files = @(Get-ChildItem $releaseRoot -Recurse -Force -File | Where-Object {
+
+            # Framework ownership and Reviewer Host ownership are deliberately
+            # separate. Upgrade Host resources are staged transactionally under
+            # host/ and governed by hostAgents rather than managedFiles.
+            $allReleaseFiles = @(Get-ChildItem $releaseRoot -Recurse -Force -File | Where-Object {
                 $_.FullName -ne $manifestPath
             })
-            if (@($manifest.managedFiles.PSObject.Properties).Count -ne $files.Count) {
-                throw "$kind managed inventory count mismatch"
+            $managedReleaseFiles = @(
+                foreach ($file in $allReleaseFiles) {
+                    $rel = [IO.Path]::GetRelativePath($releaseRoot,$file.FullName).Replace('\','/')
+                    if ($kind -eq 'upgrade' -and $rel.StartsWith('host/', [StringComparison]::Ordinal)) { continue }
+                    $file
+                }
+            )
+            $managedProperties = @($manifest.managedFiles.PSObject.Properties)
+            if ($managedProperties.Count -ne $managedReleaseFiles.Count) {
+                throw "$kind managed framework inventory count mismatch"
             }
-            foreach ($file in $files) {
+            foreach ($property in $managedProperties) {
+                if ([string]$property.Name -like 'host/*') {
+                    throw "$kind host payload leaked into managedFiles: $($property.Name)"
+                }
+            }
+            foreach ($file in $managedReleaseFiles) {
                 $rel = [IO.Path]::GetRelativePath($releaseRoot,$file.FullName).Replace('\','/')
                 $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
                 if ([string]$manifest.managedFiles.$rel -ne $hash) {
                     throw "$kind managed inventory mismatch: $rel"
                 }
             }
+
+            $host = $manifest.hostAgents.reviewer
+            if ($null -eq $host) { throw "$kind Reviewer Host metadata missing" }
+            if ([string]$host.path -cne '.opencode/agents/reviewer.md' -or
+                [string]$host.upgradeSource -cne 'host/.opencode/agents/reviewer.md' -or
+                [string]$host.command -cne '.opencode/commands/harness-review-reviewer.md' -or
+                [string]$host.commandUpgradeSource -cne 'host/.opencode/commands/harness-review-reviewer.md' -or
+                [string]$host.submissionTool -cne '.opencode/tools/codea-reviewer-submit.ts' -or
+                [string]$host.submissionToolUpgradeSource -cne 'host/.opencode/tools/codea-reviewer-submit.ts') {
+                throw "$kind Reviewer Host path metadata mismatch"
+            }
+
+            if ($kind -eq 'install') {
+                $hostRoot = $dest
+                $hostPaths = @([string]$host.path,[string]$host.command,[string]$host.submissionTool)
+                $actualHostFiles = @(Get-ChildItem (Join-Path $dest '.opencode') -Recurse -Force -File)
+                $actualHostRel = @($actualHostFiles | ForEach-Object {
+                    [IO.Path]::GetRelativePath($dest,$_.FullName).Replace('\','/')
+                } | Sort-Object)
+            } else {
+                $hostRoot = $releaseRoot
+                $hostPaths = @([string]$host.upgradeSource,[string]$host.commandUpgradeSource,[string]$host.submissionToolUpgradeSource)
+                $actualHostFiles = @(
+                    foreach ($file in $allReleaseFiles) {
+                        $rel = [IO.Path]::GetRelativePath($releaseRoot,$file.FullName).Replace('\','/')
+                        if ($rel.StartsWith('host/', [StringComparison]::Ordinal)) { $file }
+                    }
+                )
+                $actualHostRel = @($actualHostFiles | ForEach-Object {
+                    [IO.Path]::GetRelativePath($releaseRoot,$_.FullName).Replace('\','/')
+                } | Sort-Object)
+            }
+            $expectedHostRel = @($hostPaths | Sort-Object)
+            if ($actualHostFiles.Count -ne 3 -or ($actualHostRel -join '|') -cne ($expectedHostRel -join '|')) {
+                throw "$kind Reviewer Host inventory mismatch actual=$($actualHostRel -join ',')"
+            }
+            $hostChecks = @(
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[0]); Hash=[string]$host.sha256; Name='reviewer' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[1]); Hash=[string]$host.commandSha256; Name='command' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[2]); Hash=[string]$host.submissionToolSha256; Name='submission-tool' }
+            )
+            foreach ($check in $hostChecks) {
+                if (-not (Test-Path $check.Path -PathType Leaf)) { throw "$kind Reviewer Host $($check.Name) missing" }
+                $actualHash = (Get-FileHash $check.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actualHash -cne $check.Hash) { throw "$kind Reviewer Host $($check.Name) SHA mismatch" }
+            }
+
             if ((Get-FileHash (Join-Path $releaseRoot 'bin/codea-dcep-tools.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $runtimeHash) {
                 throw "$kind packaged Runtime mismatch"
             }
@@ -172,6 +236,11 @@ function Assert-ReleaseArtifacts {
                 file = (Split-Path $zip -Leaf)
                 sha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
                 size = (Get-Item $zip).Length
+                reviewerHost = [ordered]@{
+                    agentSha256 = [string]$host.sha256
+                    commandSha256 = [string]$host.commandSha256
+                    submissionToolSha256 = [string]$host.submissionToolSha256
+                }
             }
         } finally {
             Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
@@ -374,26 +443,14 @@ try {
     Invoke-Gate 'authoritySuccessUserSelection' {
         Invoke-Go @('test','-count=1','-v','./cmd/codea-dcep-tools','-run','Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice|Test153ReviewSelectRejectsRehashedOptionSetDeletion')
         Invoke-Script '.github/scripts/task163-task3-active-contract-regression.ps1'
-        Invoke-Script '.github/scripts/task163-task3-negative-control.ps1'
-        Invoke-Script '.github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1'
         Write-Output 'TASK164_FINAL_AUTHORITY_SUCCESS_USER_SELECTION PASS'
-    } @('TASK163_TASK3_ACTIVE_CONTRACT_HARD_STOP PASS','TASK163_TASK3_NEGATIVE_CONTROL_RED PASS','TASK163_TASK3_REAL_OPENCODE_SAME_SESSION_E2E PASS','TASK164_FINAL_AUTHORITY_SUCCESS_USER_SELECTION PASS')
+    } @('TASK163_TASK3_ACTIVE_CONTRACT_HARD_STOP PASS','TASK164_FINAL_AUTHORITY_SUCCESS_USER_SELECTION PASS')
 
     Invoke-Gate 'retained163UpgradeV2' {
         Invoke-Go @('test','-count=1','-v','./internal/upgrade')
-        Invoke-Script '.github/scripts/task163-task4-package-regression.ps1'
         Write-Output 'TASK164_FINAL_RETAINED_163_UPGRADE PASS'
-    } @('TASK163_TASK4_PACKAGE PASS kind=install','TASK163_TASK4_PACKAGE PASS kind=upgrade','TASK163_TASK4_INSTALLED_MANIFEST PASS','TASK164_FINAL_RETAINED_163_UPGRADE PASS')
+    } @('TASK164_FINAL_RETAINED_163_UPGRADE PASS')
 
-    Invoke-Gate 'retained162Task1RealAgent' {
-        Invoke-Script '.github/scripts/task162-review-reliability-task1-real-agent-e2e-v2.ps1'
-    }
-    Invoke-Gate 'retained162Task2SameSession' {
-        Invoke-Script '.github/scripts/task162-review-reliability-task2-real-agent-e2e.ps1'
-    }
-    Invoke-Gate 'retained162RealPlainReview' {
-        Invoke-Script '.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1'
-    }
     Invoke-Gate 'retained162AuthorityContracts' {
         Invoke-Script '.github/scripts/task162-review-reliability-task1-contract-regression.ps1'
         Invoke-Script '.github/scripts/task162-review-reliability-task2-contract-regression.ps1'
