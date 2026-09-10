@@ -29,9 +29,16 @@ jobs:
           git merge-base --is-ancestor 8e3da6208bda755aa470519b8d191cc577eb99d7 HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Task 3 is not based on accepted Task 2 baseline' }
 
-      - name: Task 3 review progress RED contract
+      - name: Task 3 command progress contract
         shell: pwsh
         working-directory: .code-harness/tools-runtime
         run: |
           go test -count=1 ./cmd/codea-dcep-tools -run '^Test164Task3ReviewBeginCreatesRuntimeOwnedProgress$' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Task 3 Runtime state machine contracts
+        shell: pwsh
+        working-directory: .code-harness/tools-runtime
+        run: |
+          go test -count=1 ./internal/reviewprogress -run '^Test164Task3' -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
