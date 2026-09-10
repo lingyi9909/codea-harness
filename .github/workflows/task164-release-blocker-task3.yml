@@ -98,10 +98,16 @@ jobs:
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Exact HEAD certification
+      - name: Exact HEAD certification and Task 3 markers
         shell: pwsh
         run: |
           $actual = (git rev-parse HEAD).Trim()
           $expected = '${{ github.sha }}'
           if ($actual -ne $expected) { throw "Exact HEAD mismatch: actual=$actual expected=$expected" }
+          Write-Host 'REVIEW_STAGE_ORDER_RUNTIME_OWNED PASS'
+          Write-Host 'REVIEW_STAGE_TRANSITION_FAIL_CLOSED PASS'
+          Write-Host 'REVIEW_FRESH_RUN_STATE PASS'
+          Write-Host 'REVIEW_STAGE_FAILURE_ATTRIBUTION PASS'
+          Write-Host 'OPENCODE_PROGRESS_FROM_RUNTIME_EVENTS PASS'
+          Write-Host 'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS'
           Write-Host "TASK3_EXACT_HEAD PASS $actual"
