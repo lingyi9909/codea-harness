@@ -18,6 +18,7 @@ import (
 	"codea-harness-tools/internal/finding"
 	"codea-harness-tools/internal/requestcontract"
 	"codea-harness-tools/internal/reviewauthority"
+	"codea-harness-tools/internal/reviewprogress"
 	"codea-harness-tools/internal/reviewrules"
 	"codea-harness-tools/internal/reviewunit"
 )
@@ -27,6 +28,8 @@ func runReview160(args []string) error {
 		switch args[0] {
 		case "begin":
 			return runReviewBegin162(args[1:])
+		case "progress":
+			return runReviewProgress164(args[1:])
 		case "units":
 			return runReviewUnits160(args[1:])
 		case "dispatch":
@@ -59,10 +62,20 @@ func runReviewBegin162(args []string) error {
 			}
 			return fmt.Errorf("REVIEW_BEGIN_RUN_DIR_FAILED: %w", err)
 		}
+		if _, err := reviewprogress.Begin(".", runID); err != nil {
+			_ = os.RemoveAll(runPath)
+			return fmt.Errorf("REVIEW_BEGIN_PROGRESS_FAILED: %w", err)
+		}
+		progressPath, err := reviewprogress.Path(runID)
+		if err != nil {
+			_ = os.RemoveAll(runPath)
+			return fmt.Errorf("REVIEW_BEGIN_PROGRESS_PATH_FAILED: %w", err)
+		}
 		return writeJSONAndStatus(map[string]any{
-			"status":  "READY",
-			"runId":   runID,
-			"runPath": filepath.ToSlash(runPath),
+			"status":       "READY",
+			"runId":        runID,
+			"runPath":      filepath.ToSlash(runPath),
+			"progressPath": filepath.ToSlash(progressPath),
 		}, true)
 	}
 	return errors.New("REVIEW_BEGIN_RUN_ID_EXHAUSTED")
