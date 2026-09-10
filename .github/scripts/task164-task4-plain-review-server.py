@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-"""Deterministic OpenAI-compatible model for Task 4 packaged full review E2E.
+"""Deterministic OpenAI-compatible model for Codea Harness 1.6.4 product E2E.
 
-The server never writes Harness artifacts. It only asks the real OpenCode host to
-invoke real tools/Reviewer children. Runtime and Reviewer Host remain the only
-authorities for review artifacts and receipts.
+The root session behaves like the formal Main Agent / Orchestrator contract:
+- OpenCode write is used only for same-run requests/** JSON.
+- OpenCode bash is used only for one exact Codea Runtime command per call.
+- OpenCode task is used only to delegate the two semantic phases to Reviewer.
+- Runtime progress events[].display are parsed from real Runtime output and echoed
+  into the real OpenCode transcript; prompt-only stage markers are never used as
+  authority.
+
+The Reviewer child can only submit semantic proposals through the real
+codea-reviewer-submit Host tool. Runtime remains the authority for analysis,
+planning, finding certification, progress, and review.md.
 """
 
 from __future__ import annotations
@@ -16,7 +24,7 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 def flatten(value: Any) -> str:
@@ -50,8 +58,91 @@ def completion_base(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def tool_outputs(messages: list[dict[str, Any]]) -> list[str]:
+    values: list[str] = []
+    for item in messages:
+        role = str(item.get("role", ""))
+        if role in {"assistant", "system", "user"}:
+            continue
+        text = message_text(item.get("content", ""))
+        if text:
+            values.append(text)
+    return values
+
+
+def parse_json_output(value: str) -> Any | None:
+    text = value.strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            return json.loads(text[start : end + 1])
+        except Exception:
+            return None
+    return None
+
+
+def latest_json(messages: list[dict[str, Any]], predicate: Callable[[Any], bool]) -> Any | None:
+    for value in reversed(tool_outputs(messages)):
+        parsed = parse_json_output(value)
+        if parsed is not None and predicate(parsed):
+            return parsed
+    return None
+
+
+def assistant_calls(messages: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    result: list[tuple[str, dict[str, Any]]] = []
+    for item in messages:
+        if item.get("role") != "assistant":
+            continue
+        for call in item.get("tool_calls") or []:
+            function = call.get("function") or {}
+            name = str(function.get("name", ""))
+            raw = function.get("arguments", "{}")
+            try:
+                arguments = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+            except Exception:
+                arguments = {}
+            result.append((name, arguments))
+    return result
+
+
+def assistant_content(messages: list[dict[str, Any]]) -> str:
+    return "\n".join(
+        message_text(item.get("content", ""))
+        for item in messages
+        if item.get("role") == "assistant"
+    )
+
+
+def progress_display_content(messages: list[dict[str, Any]]) -> str:
+    progress = latest_json(
+        messages,
+        lambda obj: isinstance(obj, dict) and isinstance(obj.get("events"), list) and isinstance(obj.get("stages"), list),
+    )
+    if not isinstance(progress, dict):
+        return ""
+    prior = assistant_content(messages)
+    displays: list[str] = []
+    for event in progress.get("events") or []:
+        if not isinstance(event, dict):
+            continue
+        display = event.get("display")
+        if isinstance(display, str) and display and display not in prior:
+            displays.append(display)
+    return "\n".join(displays)
+
+
+def json_text(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Task164Task4FullReview/1.0"
+    server_version = "Task164ClosureProductE2E/2.0"
 
     def log_message(self, *_: object) -> None:
         return
@@ -59,6 +150,10 @@ class Handler(BaseHTTPRequestHandler):
     @property
     def log_path(self) -> Path:
         return self.server.log_path  # type: ignore[attr-defined]
+
+    @property
+    def scenario(self) -> str:
+        return self.server.scenario  # type: ignore[attr-defined]
 
     def append_log(self, value: dict[str, Any]) -> None:
         with self.log_path.open("a", encoding="utf-8") as stream:
@@ -85,36 +180,90 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def respond_text(self, body: dict[str, Any], content: str) -> None:
+        self.append_log({"responseType": "text", "content": content})
         base = completion_base(body)
         if body.get("stream"):
-            self.send_sse([
-                {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": None}]},
-                {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
-            ])
+            self.send_sse(
+                [
+                    {
+                        **base,
+                        "object": "chat.completion.chunk",
+                        "choices": [{"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": None}],
+                    },
+                    {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+                ]
+            )
             return
-        self.send_json(200, {**base, "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]})
+        self.send_json(
+            200,
+            {**base, "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]},
+        )
 
-    def respond_tool(self, body: dict[str, Any], name: str, arguments: dict[str, Any]) -> None:
+    def respond_tool(
+        self,
+        body: dict[str, Any],
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        content: str = "",
+        runtime_progress_source: bool = False,
+    ) -> None:
+        self.append_log(
+            {
+                "responseType": "tool",
+                "tool": name,
+                "arguments": arguments,
+                "content": content,
+                "runtimeProgressSource": runtime_progress_source,
+            }
+        )
         base = completion_base(body)
-        call = {"id": "call_" + uuid.uuid4().hex, "type": "function", "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}}
+        call = {
+            "id": "call_" + uuid.uuid4().hex,
+            "type": "function",
+            "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+        }
         if body.get("stream"):
-            self.send_sse([
-                {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [{"index": 0, **call}]}, "finish_reason": None}]},
-                {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
-            ])
+            delta: dict[str, Any] = {"role": "assistant", "tool_calls": [{"index": 0, **call}]}
+            if content:
+                delta["content"] = content
+            self.send_sse(
+                [
+                    {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": delta, "finish_reason": None}]},
+                    {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+                ]
+            )
             return
-        self.send_json(200, {**base, "choices": [{"index": 0, "message": {"role": "assistant", "content": None, "tool_calls": [call]}, "finish_reason": "tool_calls"}]})
+        self.send_json(
+            200,
+            {
+                **base,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": content or None, "tool_calls": [call]},
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+            },
+        )
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
-            self.send_json(200, {"status": "ok"})
+            self.send_json(200, {"status": "ok", "scenario": self.scenario})
             return
         if self.path.rstrip("/") == "/v1/models":
             self.send_json(200, {"object": "list", "data": [{"id": "task4", "object": "model", "owned_by": "task164"}]})
             return
         self.send_json(404, {"error": "not found"})
 
-    def reviewer_response(self, body: dict[str, Any], text: str, tool_result_text: str, names: list[str]) -> bool:
+    def reviewer_response(
+        self,
+        body: dict[str, Any],
+        text: str,
+        tool_result_text: str,
+        names: list[str],
+    ) -> bool:
         submit = next((name for name in names if "reviewer" in name.lower() and "submit" in name.lower()), "")
         if not submit:
             return False
@@ -123,14 +272,18 @@ class Handler(BaseHTTPRequestHandler):
             self.respond_text(body, "REVIEWER_MALFORMED_OUTPUT missing runId")
             return True
         run_id = run_match.group(1)
-        if "phase=FINDINGS" in text:
+        phase = "FINDINGS" if "phase=FINDINGS" in text else "CHANGE_ANALYSIS"
+        if self.scenario == "reviewer-unavailable" and phase == "CHANGE_ANALYSIS":
+            self.respond_text(body, "REVIEWER_UNAVAILABLE controlled independent Reviewer failure")
+            return True
+        if phase == "FINDINGS":
             if "REVIEWER_PROPOSAL_SUBMITTED kind=findings" in tool_result_text:
-                self.respond_text(body, "TASK4_FINDING_REVIEWER_COMPLETE")
+                self.respond_text(body, "Reviewer FINDINGS proposal submitted through codea-reviewer-submit")
             else:
                 self.respond_tool(body, submit, {"kind": "findings", "runId": run_id, "proposal": "[]"})
             return True
         if "REVIEWER_PROPOSAL_SUBMITTED kind=change-analysis" in tool_result_text:
-            self.respond_text(body, "TASK4_CHANGE_REVIEWER_COMPLETE")
+            self.respond_text(body, "Reviewer CHANGE_ANALYSIS proposal submitted through codea-reviewer-submit")
             return True
         proposal = {
             "changedFileRoles": [{"path": "src/main/resources/application.yml", "role": "YamlConfig"}],
@@ -142,11 +295,17 @@ class Handler(BaseHTTPRequestHandler):
             "riskAreas": [],
             "reviewCoverage": {
                 "status": "COMPLETE",
-                "reviewedFiles": [{"path": "src/main/resources/application.yml", "role": "YamlConfig", "reason": "CHANGED"}],
+                "reviewedFiles": [
+                    {"path": "src/main/resources/application.yml", "role": "YamlConfig", "reason": "CHANGED"}
+                ],
                 "unresolvedSymbols": [],
             },
         }
-        self.respond_tool(body, submit, {"kind": "change-analysis", "runId": run_id, "proposal": json.dumps(proposal, separators=(",", ":"))})
+        self.respond_tool(
+            body,
+            submit,
+            {"kind": "change-analysis", "runId": run_id, "proposal": json.dumps(proposal, separators=(",", ":"))},
+        )
         return True
 
     def do_POST(self) -> None:  # noqa: N802
@@ -158,114 +317,351 @@ class Handler(BaseHTTPRequestHandler):
         tools = body.get("tools") or []
         text = flatten(messages)
         system_text = flatten([item for item in messages if item.get("role") == "system"])
-        tool_result_text = flatten([item for item in messages if item.get("role") not in {"assistant", "system"}])
+        outputs = tool_outputs(messages)
+        tool_result_text = "\n".join(outputs)
         names = [str(item.get("function", {}).get("name", "")) for item in tools]
-        self.append_log({"messages": messages, "toolNames": names})
+        self.append_log({"requestType": "completion", "messages": messages, "toolNames": names})
         with self.server.request_lock:  # type: ignore[attr-defined]
             self.server.request_count += 1  # type: ignore[attr-defined]
             request_count = self.server.request_count  # type: ignore[attr-defined]
-        if request_count > 64:
+        if request_count > 96:
             self.respond_text(body, f"TASK4_REQUEST_LIMIT_EXCEEDED count={request_count} HARD STOP")
             return
 
-        is_root = any(item.get("role") == "user" and message_text(item.get("content", "")).strip() == "harness review" for item in messages)
+        is_root = any(
+            item.get("role") == "user" and message_text(item.get("content", "")).strip() == "harness review"
+            for item in messages
+        )
         is_reviewer = not is_root and "Reviewer 是只读 Agent" in system_text
         if is_reviewer and self.reviewer_response(body, text, tool_result_text, names):
             return
         if not tools or "harness review" not in text:
-            self.respond_text(body, "Task 4 packaged full review E2E")
+            self.respond_text(body, "Codea Harness 1.6.4 product E2E")
             return
 
         bash = "bash" if "bash" in names else ""
+        write = "write" if "write" in names else ""
         task = "task" if "task" in names else ""
-        if not bash:
-            self.respond_text(body, "TASK4_ABORT missing bash tool")
+        if not bash or not write or not task:
+            self.respond_text(body, "MANUAL_ACTION_REQUIRED missing required root Host tool; HARD STOP")
             return
 
-        run_match = re.search(r"TASK4_REVIEW_BEGIN runId=(review-[0-9a-f]+)", tool_result_text)
-        run_id = run_match.group(1) if run_match else ""
+        calls = assistant_calls(messages)
+        bash_commands = [str(args.get("command", "")) for name, args in calls if name == bash]
+        write_paths = [str(args.get("filePath", "")) for name, args in calls if name == write]
+        task_prompts = [str(args.get("prompt", "")) for name, args in calls if name == task]
+        progress_calls = [cmd for cmd in bash_commands if " review progress --run-id " in f" {cmd} "]
+        rendered = progress_display_content(messages)
 
-        if "TASK4_STAGE_00 PASS" not in tool_result_text:
-            cmd = "$paths=@('.code-harness/AGENTS.md','.code-harness/bootstrap.md','.code-harness/agents/orchestrator.md','.code-harness/contracts/reviewer-host-contract.md'); foreach($p in $paths){if(!(Test-Path $p)){throw ('missing '+$p)}; Get-Content -Raw $p|Out-Null}; Write-Output 'TASK4_STAGE_00 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Read packaged Harness authority contracts"})
+        begin = latest_json(
+            messages,
+            lambda obj: isinstance(obj, dict)
+            and isinstance(obj.get("runId"), str)
+            and str(obj.get("runId")).startswith("review-")
+            and obj.get("status") == "READY"
+            and "runPath" in obj,
+        )
+        run_id = str(begin.get("runId")) if isinstance(begin, dict) else ""
+        req = f".code-harness/runs/{run_id}/requests" if run_id else ""
+        ana = f".code-harness/runs/{run_id}/analysis" if run_id else ""
+
+        def send_runtime(command: str, description: str, *, show_progress: bool = False) -> None:
+            self.respond_tool(
+                body,
+                bash,
+                {"command": command, "description": description},
+                content=rendered if show_progress else "",
+                runtime_progress_source=show_progress and bool(rendered),
+            )
+
+        def send_write(path: str, value: Any, description: str, *, show_progress: bool = False) -> None:
+            self.respond_tool(
+                body,
+                write,
+                {"filePath": path, "content": json_text(value)},
+                content=rendered if show_progress else "",
+                runtime_progress_source=show_progress and bool(rendered),
+            )
+
+        if not any(cmd.endswith("codea-dcep-tools.exe review begin") for cmd in bash_commands):
+            send_runtime(".code-harness/bin/codea-dcep-tools.exe review begin", "Begin fresh Runtime-owned review")
             return
         if not run_id:
-            cmd = "$raw=(& ./.code-harness/bin/codea-dcep-tools.exe review begin 2>&1|Out-String); if($LASTEXITCODE -ne 0){throw $raw}; $j=$raw|ConvertFrom-Json; Write-Output ('TASK4_REVIEW_BEGIN runId='+[string]$j.runId); Write-Output 'TASK4_STAGE_01 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Begin fresh Runtime-owned review"})
+            self.respond_text(body, "MANUAL_ACTION_REQUIRED Runtime review begin did not return runId; HARD STOP")
+            return
+        if len(progress_calls) == 0:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render Runtime review progress after REVIEW_BEGIN",
+            )
             return
 
-        req = f".code-harness/runs/{run_id}/requests"
-        ana = f".code-harness/runs/{run_id}/analysis"
-        if "TASK4_STAGE_02 PASS" not in tool_result_text:
-            cmd = f"New-Item -ItemType Directory -Force '{req}'|Out-Null; $v=[ordered]@{{runId='{run_id}';baseRef='HEAD';includeWorkingTree=$true}}; [IO.File]::WriteAllText('{req}/change-set-request.json',($v|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false)); & ./.code-harness/bin/codea-dcep-tools.exe analysis snapshot --input {req}/change-set-request.json; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_SNAPSHOT_COMPLETE'; Write-Output 'TASK4_STAGE_02 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Create canonical Runtime snapshot"})
+        snapshot_request = f"{req}/change-set-request.json"
+        if snapshot_request not in write_paths:
+            send_write(
+                snapshot_request,
+                {"runId": run_id, "baseRef": "HEAD", "includeWorkingTree": True},
+                "Write same-run snapshot request",
+                show_progress=True,
+            )
             return
-        if "TASK4_CHANGE_REVIEWER_COMPLETE" not in tool_result_text:
-            if not task:
-                self.respond_text(body, "REVIEWER_UNAVAILABLE\nMANUAL_ACTION_REQUIRED\nHARD STOP")
+        snapshot_cmd = f".code-harness/bin/codea-dcep-tools.exe analysis snapshot --input {snapshot_request}"
+        if snapshot_cmd not in bash_commands:
+            send_runtime(snapshot_cmd, "Create canonical Runtime snapshot")
+            return
+        if len(progress_calls) == 1:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render Runtime review progress after SNAPSHOT",
+            )
+            return
+
+        change_prompt_prefix = f"runId={run_id} phase=CHANGE_ANALYSIS"
+        if not any(prompt.startswith(change_prompt_prefix) for prompt in task_prompts):
+            self.respond_tool(
+                body,
+                task,
+                {
+                    "prompt": (
+                        f"runId={run_id} phase=CHANGE_ANALYSIS snapshotPath={ana}/change-set.json. "
+                        "Submit the semantic change-analysis proposal using codea-reviewer-submit exactly once."
+                    ),
+                    "description": "Delegate CHANGE_ANALYSIS to independent Reviewer",
+                    "subagent_type": "reviewer",
+                    "command": "harness-review-reviewer",
+                },
+                content=rendered,
+                runtime_progress_source=bool(rendered),
+            )
+            return
+
+        unavailable_cmd = f".code-harness/bin/codea-dcep-tools.exe review reviewer-unavailable --run-id {run_id}"
+        if self.scenario == "reviewer-unavailable":
+            if unavailable_cmd not in bash_commands:
+                send_runtime(unavailable_cmd, "Record independent Reviewer unavailability at Runtime boundary")
                 return
-            args = {"prompt": f"runId={run_id} phase=CHANGE_ANALYSIS snapshotPath={ana}/change-set.json. Submit the semantic change-analysis proposal using codea-reviewer-submit exactly once.", "description": "Task 4 independent change-analysis Reviewer", "subagent_type": "reviewer", "command": "harness-review-reviewer"}
-            self.respond_tool(body, task, args)
-            return
-        if "TASK4_STAGE_03 PASS" not in tool_result_text:
-            cmd = f"if(!(Test-Path '{req}/change-analysis-proposal.json') -or !(Test-Path '{req}/change-analysis-reviewer-authority.json')){{throw 'change Reviewer proposal/receipt missing'}}; Write-Output 'TASK4_STAGE_03 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Confirm change-analysis Reviewer authority receipt"})
-            return
-        if "TASK4_STAGE_04 PASS" not in tool_result_text:
-            cmd = f"$s=Get-Content -Raw '{ana}/change-set.json'|ConvertFrom-Json; $v=[ordered]@{{runId='{run_id}';snapshotPath='{ana}/change-set.json';snapshotSha256=[string]$s.snapshotSha256;proposalPath='{req}/change-analysis-proposal.json';intent=[ordered]@{{mode='FULL'}}}}; [IO.File]::WriteAllText('{req}/analysis-certify-request.json',($v|ConvertTo-Json -Depth 10 -Compress),[Text.UTF8Encoding]::new($false)); & ./.code-harness/bin/codea-dcep-tools.exe analysis certify --input {req}/analysis-certify-request.json; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_ANALYSIS_CERTIFIED'; Write-Output 'TASK4_STAGE_04 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Runtime certify independent Reviewer analysis"})
-            return
-        if "TASK4_STAGE_05 PASS" not in tool_result_text:
-            cmd = f"$v=[ordered]@{{runId='{run_id}';changeAnalysisPath='{ana}/change-analysis.json'}}; [IO.File]::WriteAllText('{req}/review-options-request.json',($v|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false)); & ./.code-harness/bin/codea-dcep-tools.exe review options --input {req}/review-options-request.json; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_REVIEW_OPTIONS'; Write-Output 'TASK4_STAGE_05 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Runtime produce review options"})
-            return
-        if "TASK4_STAGE_06 PASS" not in tool_result_text:
-            cmd = f"$o=Get-Content -Raw '{ana}/review-options.json'|ConvertFrom-Json; if([string]$o.decision -ne 'AUTO_FULL'){{throw ('expected AUTO_FULL got '+$o.decision)}}; $v=[ordered]@{{runId='{run_id}';optionsHash=[string]$o.optionsHash;mode='FULL';selectionIds=@()}}; [IO.File]::WriteAllText('{req}/review-selection-request.json',($v|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false)); & ./.code-harness/bin/codea-dcep-tools.exe review select --input {req}/review-selection-request.json; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_REVIEW_SELECTED'; Write-Output 'TASK4_STAGE_06 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Runtime bind AUTO_FULL selection"})
-            return
-        if "TASK4_STAGE_07 PASS" not in tool_result_text:
-            cmd = f"& ./.code-harness/bin/codea-dcep-tools.exe review units --run-id {run_id}; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_REVIEW_UNITS'; Write-Output 'TASK4_STAGE_07 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Runtime build review units"})
-            return
-        if "TASK4_STAGE_08 PASS" not in tool_result_text:
-            cmd = f"& ./.code-harness/bin/codea-dcep-tools.exe review dispatch --run-id {run_id}; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_RULE_DISPATCH'; Write-Output 'TASK4_STAGE_08 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Runtime build rule dispatch"})
-            return
-        if "TASK4_FINDING_REVIEWER_COMPLETE" not in tool_result_text:
-            if not task:
-                self.respond_text(body, "REVIEWER_UNAVAILABLE\nMANUAL_ACTION_REQUIRED\nHARD STOP")
+            if len(progress_calls) == 2:
+                send_runtime(
+                    f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                    "Render Runtime failure progress after Reviewer unavailability",
+                )
                 return
-            args = {"prompt": f"runId={run_id} phase=FINDINGS reviewUnitsPath={ana}/review-units.json. Submit the benign empty findings array using codea-reviewer-submit exactly once.", "description": "Task 4 independent finding Reviewer", "subagent_type": "reviewer", "command": "harness-review-reviewer"}
-            self.respond_tool(body, task, args)
+            progress = latest_json(
+                messages,
+                lambda obj: isinstance(obj, dict) and isinstance(obj.get("events"), list) and obj.get("status") == "FAILED",
+            )
+            content = rendered
+            if isinstance(progress, dict):
+                content = (content + "\n" if content else "") + "REVIEWER_UNAVAILABLE\nMANUAL_ACTION_REQUIRED\nHARD STOP"
+            self.respond_text(body, content or "REVIEWER_UNAVAILABLE\nMANUAL_ACTION_REQUIRED\nHARD STOP")
             return
-        if "TASK4_STAGE_09 PASS" not in tool_result_text:
-            cmd = f"if(!(Test-Path '{req}/finding-proposals.json') -or !(Test-Path '{req}/finding-reviewer-authority.json')){{throw 'finding Reviewer proposal/receipt missing'}}; Write-Output 'TASK4_STAGE_09 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Confirm finding Reviewer authority receipt"})
+
+        if len(progress_calls) == 2:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render Runtime progress after Reviewer CHANGE_ANALYSIS proposal",
+            )
             return
-        if "TASK4_STAGE_10 PASS" not in tool_result_text:
-            cmd = f"$v=[ordered]@{{runId='{run_id}';proposalsPath='{req}/finding-proposals.json'}}; [IO.File]::WriteAllText('{req}/finding-certify-request.json',($v|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false)); & ./.code-harness/bin/codea-dcep-tools.exe review certify-findings --input {req}/finding-certify-request.json; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_FINDINGS_CERTIFIED'; Write-Output 'TASK4_STAGE_10 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Runtime certify Reviewer findings"})
+
+        snapshot = latest_json(
+            messages,
+            lambda obj: isinstance(obj, dict) and obj.get("status") == "SNAPSHOT_READY" and "snapshotSha256" in obj,
+        )
+        if not isinstance(snapshot, dict):
+            self.respond_text(body, "MANUAL_ACTION_REQUIRED Runtime snapshot evidence missing; HARD STOP")
             return
-        if "TASK4_STAGE_11 PASS" not in tool_result_text:
-            cmd = f"$a=Get-Content -Raw '{ana}/change-analysis.json'|ConvertFrom-Json; $paths=@($a.changedFiles|ForEach-Object{{[string]$_.path}}); $v=[ordered]@{{runId='{run_id}';harnessVersion='transport-not-authority';baseRef=[string]$a.reviewScope.baseRef;head=[string]$a.reviewScope.headCommit;result='FAILED';mode='FULL';reviewScope=[ordered]@{{changedFiles=$paths}};reviewCoverage=[ordered]@{{reviewedFiles=$paths;callChains=@();externalDependencies=@();unresolved=@();missingReviewedFiles=@();runtimeErrors=@();status='COMPLETE'}};findings=@()}}; [IO.File]::WriteAllText('{req}/review-report.json',($v|ConvertTo-Json -Depth 20 -Compress),[Text.UTF8Encoding]::new($false)); & ./.code-harness/bin/codea-dcep-tools.exe report review --input {req}/review-report.json; if($LASTEXITCODE -ne 0){{exit $LASTEXITCODE}}; Write-Output 'TASK4_REPORT_WRITTEN'; Write-Output 'TASK4_STAGE_11 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Runtime render final authority-bound review report"})
+        certify_request = f"{req}/analysis-certify-request.json"
+        if certify_request not in write_paths:
+            send_write(
+                certify_request,
+                {
+                    "runId": run_id,
+                    "snapshotPath": f"{ana}/change-set.json",
+                    "snapshotSha256": str(snapshot["snapshotSha256"]),
+                    "proposalPath": f"{req}/change-analysis-proposal.json",
+                    "intent": {"mode": "FULL"},
+                },
+                "Write same-run analysis certification request",
+                show_progress=True,
+            )
             return
-        if "TASK4_STAGE_12 PASS" not in tool_result_text:
-            cmd = f"$raw=(& ./.code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id} 2>&1|Out-String); if($LASTEXITCODE -ne 0){{throw $raw}}; $p=$raw|ConvertFrom-Json; if([string]$p.status -ne 'SUCCEEDED' -or [string]$p.terminalStage -ne 'REPORT'){{throw ('progress not terminal success: '+$raw)}}; if(@($p.stages|Where-Object{{$_.status -ne 'SUCCEEDED'}}).Count -ne 0){{throw ('not all stages succeeded: '+$raw)}}; if(@($p.events|Where-Object{{$_.display -eq '[8/8] REPORT PASS'}}).Count -ne 1){{throw ('8/8 report event missing: '+$raw)}}; Write-Output $raw; Write-Output 'TASK4_RUNTIME_PROGRESS_8_OF_8'; Write-Output 'TASK4_STAGE_12 PASS'"
-            self.respond_tool(body, bash, {"command": cmd, "description": "Read terminal Runtime progress state"})
+        certify_cmd = f".code-harness/bin/codea-dcep-tools.exe analysis certify --input {certify_request}"
+        if certify_cmd not in bash_commands:
+            send_runtime(certify_cmd, "Runtime certify independent Reviewer change analysis")
             return
-        self.respond_text(body, f"TASK4_FULL_REVIEW_COMPLETE runId={run_id}")
+        if len(progress_calls) == 3:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render Runtime progress after analysis certification",
+            )
+            return
+
+        options_request = f"{req}/review-options-request.json"
+        if options_request not in write_paths:
+            send_write(
+                options_request,
+                {"runId": run_id, "changeAnalysisPath": f"{ana}/change-analysis.json"},
+                "Write same-run review options request",
+                show_progress=True,
+            )
+            return
+        options_cmd = f".code-harness/bin/codea-dcep-tools.exe review options --input {options_request}"
+        if options_cmd not in bash_commands:
+            send_runtime(options_cmd, "Runtime produce review options")
+            return
+        options = latest_json(
+            messages,
+            lambda obj: isinstance(obj, dict)
+            and obj.get("status") == "READY"
+            and isinstance(obj.get("options"), dict)
+            and "optionsHash" in obj["options"],
+        )
+        if not isinstance(options, dict) or str(options["options"].get("decision")) != "AUTO_FULL":
+            self.respond_text(body, "MANUAL_ACTION_REQUIRED expected AUTO_FULL review options; HARD STOP")
+            return
+        selection_request = f"{req}/review-selection-request.json"
+        if selection_request not in write_paths:
+            send_write(
+                selection_request,
+                {
+                    "runId": run_id,
+                    "optionsHash": str(options["options"]["optionsHash"]),
+                    "mode": "FULL",
+                    "selectionIds": [],
+                },
+                "Write same-run review selection request",
+            )
+            return
+        select_cmd = f".code-harness/bin/codea-dcep-tools.exe review select --input {selection_request}"
+        if select_cmd not in bash_commands:
+            send_runtime(select_cmd, "Runtime bind AUTO_FULL review selection")
+            return
+        units_cmd = f".code-harness/bin/codea-dcep-tools.exe review units --run-id {run_id}"
+        if units_cmd not in bash_commands:
+            send_runtime(units_cmd, "Runtime build review units")
+            return
+        dispatch_cmd = f".code-harness/bin/codea-dcep-tools.exe review dispatch --run-id {run_id}"
+        if dispatch_cmd not in bash_commands:
+            send_runtime(dispatch_cmd, "Runtime build rule dispatch")
+            return
+        if len(progress_calls) == 4:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render Runtime progress after review planning",
+            )
+            return
+
+        finding_prompt_prefix = f"runId={run_id} phase=FINDINGS"
+        if not any(prompt.startswith(finding_prompt_prefix) for prompt in task_prompts):
+            self.respond_tool(
+                body,
+                task,
+                {
+                    "prompt": (
+                        f"runId={run_id} phase=FINDINGS reviewUnitsPath={ana}/review-units.json. "
+                        "Submit the benign empty findings array using codea-reviewer-submit exactly once."
+                    ),
+                    "description": "Delegate FINDINGS to independent Reviewer",
+                    "subagent_type": "reviewer",
+                    "command": "harness-review-reviewer",
+                },
+                content=rendered,
+                runtime_progress_source=bool(rendered),
+            )
+            return
+        if len(progress_calls) == 5:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render Runtime progress after Reviewer FINDINGS proposal",
+            )
+            return
+
+        finding_request = f"{req}/finding-certify-request.json"
+        if finding_request not in write_paths:
+            send_write(
+                finding_request,
+                {"runId": run_id, "proposalsPath": f"{req}/finding-proposals.json"},
+                "Write same-run finding certification request",
+                show_progress=True,
+            )
+            return
+        finding_cmd = f".code-harness/bin/codea-dcep-tools.exe review certify-findings --input {finding_request}"
+        if finding_cmd not in bash_commands:
+            send_runtime(finding_cmd, "Runtime certify independent Reviewer findings")
+            return
+        if len(progress_calls) == 6:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render Runtime progress after finding certification",
+            )
+            return
+
+        report_request = f"{req}/review-report.json"
+        if report_request not in write_paths:
+            head = str(snapshot.get("headCommit", "HEAD"))
+            base_ref = str(snapshot.get("resolvedBaseCommit", snapshot.get("mergeBase", "HEAD")))
+            changed = ["src/main/resources/application.yml"]
+            send_write(
+                report_request,
+                {
+                    "runId": run_id,
+                    "harnessVersion": "1.6.4",
+                    "baseRef": base_ref,
+                    "head": head,
+                    "result": "PASSED",
+                    "mode": "FULL",
+                    "reviewScope": {"changedFiles": changed},
+                    "reviewCoverage": {
+                        "reviewedFiles": changed,
+                        "callChains": [],
+                        "externalDependencies": [],
+                        "unresolved": [],
+                        "missingReviewedFiles": [],
+                        "runtimeErrors": [],
+                        "status": "COMPLETE",
+                    },
+                    "findings": [],
+                },
+                "Write same-run final report request",
+                show_progress=True,
+            )
+            return
+        report_cmd = f".code-harness/bin/codea-dcep-tools.exe report review --input {report_request}"
+        if report_cmd not in bash_commands:
+            send_runtime(report_cmd, "Runtime render final review report")
+            return
+        if len(progress_calls) == 7:
+            send_runtime(
+                f".code-harness/bin/codea-dcep-tools.exe review progress --run-id {run_id}",
+                "Render terminal Runtime review progress",
+            )
+            return
+
+        progress = latest_json(
+            messages,
+            lambda obj: isinstance(obj, dict) and isinstance(obj.get("events"), list) and isinstance(obj.get("stages"), list),
+        )
+        if not isinstance(progress, dict) or progress.get("status") != "SUCCEEDED":
+            self.respond_text(body, "MANUAL_ACTION_REQUIRED Runtime progress did not reach SUCCEEDED; HARD STOP")
+            return
+        final_content = rendered
+        if final_content:
+            final_content += "\n"
+        final_content += f"TASK4_FULL_REVIEW_COMPLETE runId={run_id}"
+        self.respond_text(body, final_content)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True, type=int)
     parser.add_argument("--log", required=True, type=Path)
+    parser.add_argument("--scenario", choices=["success", "reviewer-unavailable"], default="success")
     args = parser.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
     args.log.write_text("", encoding="utf-8")
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.log_path = args.log  # type: ignore[attr-defined]
+    server.scenario = args.scenario  # type: ignore[attr-defined]
     server.request_count = 0  # type: ignore[attr-defined]
     server.request_lock = threading.Lock()  # type: ignore[attr-defined]
     server.serve_forever()
