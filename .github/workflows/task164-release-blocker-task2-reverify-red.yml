@@ -1,4 +1,4 @@
-name: task164-release-blocker-task2-reverify-red
+name: task164-release-blocker-task2-reverify
 
 on:
   push:
@@ -9,38 +9,49 @@ permissions:
   contents: read
 
 jobs:
-  expected-red:
+  reverify:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+
       - uses: actions/setup-go@v7
         with:
           go-version: 1.23.x
           cache-dependency-path: .code-harness/tools-runtime/go.sum
+
       - name: Accepted Task 1 ancestry
         shell: pwsh
         run: |
           git merge-base --is-ancestor 51ad4cbc32008e388fc7a2564dbd5e518d04d9ae HEAD
           if ($LASTEXITCODE -ne 0) { throw 'not based on accepted Task 1' }
+
       - name: Build current official 1.6.4 release package
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./.github/scripts/task164-release-package.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Task 2 blocker expected RED
-        shell: pwsh
-        continue-on-error: true
-        id: red
-        run: |
-          pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-reverify-red.ps1 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMP/task2-red.log
-          if ($LASTEXITCODE -eq 0) { throw 'expected RED command unexpectedly returned zero' }
-      - name: Verify RED was behavioral
+
+      - name: Task 2 product contract reverify
         shell: pwsh
         run: |
-          $log = Get-Content -Raw $env:RUNNER_TEMP/task2-red.log
-          if ($log -notmatch 'TASK164_TASK2_REVERIFY_EXPECTED_RED PASS') { throw 'RED did not reach expected behavioral assertions' }
-          Write-Output 'TASK164_TASK2_REVERIFY_RED_GATE PASS'
+          pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-reverify-red.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Fresh official Reviewer Host upgrade transaction tests
+        shell: pwsh
+        working-directory: .code-harness/tools-runtime
+        run: |
+          go test -count=1 ./internal/upgrade -run 'Test164OfficialUpgrade(InstallsReviewerHostTransactionally|RejectsUnknownReviewerHostConflictBeforeFrameworkWrite|RollsBackFrameworkAndPartialReviewerHostCommit)$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_TASK2_REVERIFY_UPGRADE_TRANSACTION PASS'
+
+      - name: Exact HEAD reverify
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "exact HEAD mismatch: $head != ${{ github.sha }}" }
+          Write-Output "TASK164_TASK2_REVERIFY_EXACT_HEAD PASS head=$head"
