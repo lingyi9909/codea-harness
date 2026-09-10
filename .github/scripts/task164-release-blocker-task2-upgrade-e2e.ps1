@@ -77,8 +77,8 @@ try {
     $result = Invoke-CandidateUpgrade $success
     if ($result.ExitCode -ne 0 -or $result.Text -notmatch '"status"\s*:\s*"UPGRADED"') { throw "official 1.6.3 -> 1.6.4 upgrade failed`n$($result.Text)" }
     if ((Get-Content (Join-Path $success '.code-harness/VERSION') -Raw).Trim() -ne '1.6.4') { throw 'official upgrade did not install VERSION=1.6.4' }
-    foreach ($host in @('.opencode/agents/reviewer.md','.opencode/commands/harness-review-reviewer.md','.opencode/tools/codea-reviewer-submit.ts')) {
-        if (-not (Test-Path (Join-Path $success $host) -PathType Leaf)) { throw "official upgrade missing Reviewer Host resource $host" }
+    foreach ($hostPath in @('.opencode/agents/reviewer.md','.opencode/commands/harness-review-reviewer.md','.opencode/tools/codea-reviewer-submit.ts')) {
+        if (-not (Test-Path (Join-Path $success $hostPath) -PathType Leaf)) { throw "official upgrade missing Reviewer Host resource $hostPath" }
     }
     Push-Location $success
     try {
@@ -110,8 +110,8 @@ try {
     if ((FileHash (Join-Path $rollback '.code-harness/VERSION')) -ne $versionHash) { throw 'packaged rollback did not restore 1.6.3 VERSION bytes' }
     if ((FileHash (Join-Path $rollback '.code-harness/RELEASE-MANIFEST.json')) -ne $manifestHash) { throw 'packaged rollback did not restore 1.6.3 manifest bytes' }
     if ((FileHash (Join-Path $rollback '.task164-user-owned.txt')) -ne $userHash) { throw 'packaged rollback changed unknown user file' }
-    foreach ($host in @('.opencode/agents/reviewer.md','.opencode/commands/harness-review-reviewer.md','.opencode/tools/codea-reviewer-submit.ts')) {
-        if (Test-Path (Join-Path $rollback $host) -PathType Leaf) { throw "packaged rollback leaked partial Reviewer Host resource $host" }
+    foreach ($hostPath in @('.opencode/agents/reviewer.md','.opencode/commands/harness-review-reviewer.md','.opencode/tools/codea-reviewer-submit.ts')) {
+        if (Test-Path (Join-Path $rollback $hostPath) -PathType Leaf) { throw "packaged rollback leaked partial Reviewer Host resource $hostPath" }
     }
     Write-Output 'TASK164_PACKAGED_163_TO_164_REVIEWER_HOST_ROLLBACK PASS'
 } finally {
