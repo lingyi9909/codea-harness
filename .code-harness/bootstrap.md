@@ -61,6 +61,30 @@ HARD STOP
 
 此状态之后不得继续 analysis certification、review planning/selection/units/dispatch、finding certification 或 report publication，也不得由 Main Agent / Orchestrator 生成 semantic proposal 作为 fallback。
 
+## Runtime Review Progress Gate（1.6.4 Task 3）
+
+`harness review` 的阶段状态只能由 Controlled Runtime 的 8-stage review state machine 决定。OpenCode / Main Agent / Orchestrator 只负责展示状态，不能选择、跳过、补写或宣告阶段结果。
+
+在 `review begin` 获得同一 `runId` 后，以及每个 Runtime/Reviewer 阶段返回后，使用只读命令读取当前状态：
+
+```text
+codea-dcep-tools.exe review progress --run-id <runId>
+```
+
+OpenCode 只展示该命令返回的 Runtime-derived `events[].display`，并据此告诉用户当前阶段、已完成阶段或阻断阶段。不得自行生成或宣告阶段 PASS/FAIL/RUNNING；prompt 文本、Reviewer 输出、Main Agent 叙述均不是 progress authority。
+
+固定 authority 规则：
+
+```text
+Runtime state/event -> 可展示、可决定是否继续
+Agent/Reviewer prompt text -> 仅语义内容，不得改变 progress
+Reviewer proposal -> 只有 Reviewer Host receipt + session attestation 被 Runtime 验证后，才允许推进对应 Reviewer stage
+Runtime command failure -> 当前 stage FAILED，后续 stage BLOCKED
+Runtime terminal success -> REPORT SUCCEEDED
+```
+
+`review progress` 是严格只读接口。不得向 Agent、Reviewer 或 prompt 暴露任何 progress advance/fail/complete mutation 命令；阶段推进只能发生在 snapshot、Reviewer authority verification、certification、planning/dispatch、finding certification、report publication 等既有 Runtime-owned 成功/失败边界内部。
+
 ---
 
-`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行；涉及 Reviewer semantic phase 时，必须同时受上述 1.6.4 Host binding 覆盖。
+`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行；涉及 Reviewer semantic phase 时，必须同时受上述 1.6.4 Host binding 和 Runtime Review Progress Gate 覆盖。
