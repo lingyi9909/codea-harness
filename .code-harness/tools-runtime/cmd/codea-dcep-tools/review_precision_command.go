@@ -94,20 +94,23 @@ func runReviewUnits160(args []string) error {
 	if canonicalRunID != *runID {
 		return fmt.Errorf("REVIEW_UNIT_RUN_ID_INVALID: %q", *runID)
 	}
+	failPlanning := func(err error) error {
+		return failReviewProgressStage164(canonicalRunID, reviewprogress.StageReviewPlanning, "REVIEW_PLANNING_FAILED", err)
+	}
 	manifest, err := reviewunit.Build(reviewunit.BuildInput{RunID: canonicalRunID, CertifiedRunID: canonicalRunID, RepoRoot: "."})
 	if err != nil {
-		return err
+		return failPlanning(err)
 	}
 	encoded, err := reviewunit.CanonicalBytes(manifest)
 	if err != nil {
-		return fmt.Errorf("REVIEW_UNIT_ENCODE_FAILED: %w", err)
+		return failPlanning(fmt.Errorf("REVIEW_UNIT_ENCODE_FAILED: %w", err))
 	}
 	if err := validateReviewContract153("review-unit.schema.json", encoded); err != nil {
-		return fmt.Errorf("REVIEW_UNIT_SCHEMA_INVALID: %w", err)
+		return failPlanning(fmt.Errorf("REVIEW_UNIT_SCHEMA_INVALID: %w", err))
 	}
 	artifactPath := filepath.Join(".code-harness", "runs", canonicalRunID, "analysis", "review-units.json")
 	if err := atomicReviewWrite153(artifactPath, encoded); err != nil {
-		return fmt.Errorf("REVIEW_UNIT_WRITE_FAILED: %w", err)
+		return failPlanning(fmt.Errorf("REVIEW_UNIT_WRITE_FAILED: %w", err))
 	}
 	return writeJSONAndStatus(map[string]any{
 		"status":       "READY",
@@ -129,28 +132,35 @@ func runReviewDispatch160(args []string) error {
 	if canonicalRunID != *runID {
 		return fmt.Errorf("RULE_DISPATCH_RUN_ID_INVALID: %q", *runID)
 	}
+	failPlanning := func(err error) error {
+		return failReviewProgressStage164(canonicalRunID, reviewprogress.StageReviewPlanning, "REVIEW_PLANNING_FAILED", err)
+	}
+	unitsPath := filepath.Join(".code-harness", "runs", canonicalRunID, "analysis", "review-units.json")
 	units, err := reviewunit.Load(reviewunit.BuildInput{RunID: canonicalRunID, CertifiedRunID: canonicalRunID, RepoRoot: "."})
 	if err != nil {
-		return fmt.Errorf("RULE_DISPATCH_STALE: %w", err)
+		return failPlanning(fmt.Errorf("RULE_DISPATCH_STALE: %w", err))
 	}
 	rules, catalogSHA, err := reviewrules.LoadCatalog(filepath.Join(".code-harness", "review-rules", "spring-v1.yaml"))
 	if err != nil {
-		return err
+		return failPlanning(err)
 	}
 	manifest, err := reviewrules.BuildDispatch(units, rules, catalogSHA)
 	if err != nil {
-		return err
+		return failPlanning(err)
 	}
 	encoded, err := reviewrules.CanonicalBytes(manifest)
 	if err != nil {
-		return err
+		return failPlanning(err)
 	}
 	if err := validateReviewContract153("rule-dispatch.schema.json", encoded); err != nil {
-		return fmt.Errorf("RULE_DISPATCH_SCHEMA_INVALID: %w", err)
+		return failPlanning(fmt.Errorf("RULE_DISPATCH_SCHEMA_INVALID: %w", err))
 	}
 	artifactPath := filepath.Join(".code-harness", "runs", canonicalRunID, "analysis", "rule-dispatch.json")
 	if err := atomicReviewWrite153(artifactPath, encoded); err != nil {
-		return fmt.Errorf("RULE_DISPATCH_WRITE_FAILED: %w", err)
+		return failPlanning(fmt.Errorf("RULE_DISPATCH_WRITE_FAILED: %w", err))
+	}
+	if err := advanceReviewProgressStage164(canonicalRunID, reviewprogress.StageReviewPlanning, filepath.ToSlash(unitsPath), filepath.ToSlash(artifactPath)); err != nil {
+		return err
 	}
 	return writeJSONAndStatus(map[string]any{
 		"status":       "READY",
@@ -201,40 +211,47 @@ func runReviewCertifyFindings160(args []string) error {
 	if candidate != expectedProposals || candidate != strings.ReplaceAll(req.ProposalsPath, "\\", "/") {
 		return fmt.Errorf("FINDING_PROPOSALS_PATH_INVALID: must be %s", expectedProposals)
 	}
+	authorityPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "requests", "finding-reviewer-authority.json"))
 	if _, err := reviewauthority.Verify(".", runID, reviewauthority.Findings, candidate); err != nil {
+		return failReviewProgressStage164(runID, reviewprogress.StageReviewExecution, "REVIEW_EXECUTION_AUTHORITY_FAILED", err)
+	}
+	if err := advanceReviewProgressStage164(runID, reviewprogress.StageReviewExecution, candidate, authorityPath); err != nil {
 		return err
+	}
+	failCertification := func(err error) error {
+		return failReviewProgressStage164(runID, reviewprogress.StageFindingCertification, "FINDING_CERTIFICATION_FAILED", err)
 	}
 	proposalBytes, err := os.ReadFile(filepath.FromSlash(candidate))
 	if err != nil {
-		return fmt.Errorf("FINDING_PROPOSALS_READ_FAILED: %w", err)
+		return failCertification(fmt.Errorf("FINDING_PROPOSALS_READ_FAILED: %w", err))
 	}
 	if err := validateReviewContract153("finding-proposals.schema.json", proposalBytes); err != nil {
-		return fmt.Errorf("FINDING_PROPOSALS_SCHEMA_INVALID: %w", err)
+		return failCertification(fmt.Errorf("FINDING_PROPOSALS_SCHEMA_INVALID: %w", err))
 	}
 	proposals, err := finding.DecodeProposals(proposalBytes)
 	if err != nil {
-		return err
+		return failCertification(err)
 	}
 	verifyCtx, err := finding.LoadVerifyContext(".", runID, filepath.Join(".code-harness", "bin", "ast-grep.exe"))
 	if err != nil {
-		return err
+		return failCertification(err)
 	}
 	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json"))
 	_, analysisCert, err := analysisruntime.LoadCertified(".", analysisPath)
 	if err != nil {
-		return err
+		return failCertification(err)
 	}
 	units, err := reviewunit.Load(reviewunit.BuildInput{RunID: runID, CertifiedRunID: runID, RepoRoot: "."})
 	if err != nil {
-		return err
+		return failCertification(err)
 	}
 	unitBytes, err := os.ReadFile(filepath.Join(".code-harness", "runs", runID, "analysis", "review-units.json"))
 	if err != nil {
-		return fmt.Errorf("FINDING_REVIEW_UNITS_READ_FAILED: %w", err)
+		return failCertification(fmt.Errorf("FINDING_REVIEW_UNITS_READ_FAILED: %w", err))
 	}
 	dispatchBytes, err := os.ReadFile(filepath.Join(".code-harness", "runs", runID, "analysis", "rule-dispatch.json"))
 	if err != nil {
-		return fmt.Errorf("FINDING_RULE_DISPATCH_READ_FAILED: %w", err)
+		return failCertification(fmt.Errorf("FINDING_RULE_DISPATCH_READ_FAILED: %w", err))
 	}
 	ctx := finding.CertifyContext{
 		Verify:                 verifyCtx,
@@ -250,13 +267,16 @@ func runReviewCertifyFindings160(args []string) error {
 	}
 	set, cert, rejections, err := finding.Certify(ctx, proposals)
 	if err != nil {
-		return err
+		return failCertification(err)
 	}
 	if err := finding.WriteCertified(".", set, cert); err != nil {
-		return err
+		return failCertification(err)
 	}
 	setPath := filepath.Join(".code-harness", "runs", runID, "analysis", "certified-findings.json")
 	certPath := filepath.Join(".code-harness", "runs", runID, "analysis", "certified-findings.cert.json")
+	if err := advanceReviewProgressStage164(runID, reviewprogress.StageFindingCertification, filepath.ToSlash(setPath), filepath.ToSlash(certPath)); err != nil {
+		return err
+	}
 	return writeJSONAndStatus(map[string]any{
 		"status":          "CERTIFIED",
 		"findingsPath":    filepath.ToSlash(setPath),
