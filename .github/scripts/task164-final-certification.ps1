@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$base = '48158a74a5cbec61ac8936e1c65901013e757101'
+$base = 'ffedb2a273dc714db080dc2115f189f20d55b227'
 $expected = $env:GITHUB_SHA
 $version = '1.6.4'
 $releaseRef = 'refs/heads/release/1.6.4-final-certification'
@@ -13,6 +13,7 @@ $results = [ordered]@{}
 $artifacts = [ordered]@{}
 $head = ''
 New-Item -ItemType Directory -Force $evidence | Out-Null
+$env:TASK164_FINAL_EVIDENCE_DIR = $evidence
 
 function Write-Checklist([string]$Status) {
     $record = [ordered]@{
@@ -88,27 +89,41 @@ function Assert-ReleaseScope {
         throw 'Release version mismatch'
     }
     $changed = @(& git -C $root diff --name-only "$base..$head")
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect release scope' }
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Task 4 scope' }
     $allowed = @(
-        '.code-harness/VERSION',
-        'CHANGELOG.md',
-        '.code-harness/tools-runtime/cmd/codea-dcep-tools/task160_release_test.go',
+        '.github/scripts/task164-final-certification-contract.py',
         '.github/scripts/task164-final-certification.ps1',
-        '.github/scripts/task164-release-package.ps1',
-        '.github/workflows/task164-final-certification.yml',
-        'docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-plan.md',
-        'docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-release-closeout-plan.md'
+        '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
+        '.github/scripts/task164-task4-plain-review-server.py',
+        '.github/scripts/task164-task4-progress-interruption-e2e.ps1',
+        '.github/workflows/task164-final-certification.yml'
     )
     foreach ($path in $changed) {
-        if ($path -cnotin $allowed) { throw "Unapproved release scope: $path" }
+        if ($path -cnotin $allowed) { throw "Unapproved Task 4 scope: $path" }
     }
-    $productionChanges = @($changed | Where-Object {
-        $_ -like '.code-harness/tools-runtime/*' -and $_ -ne '.code-harness/tools-runtime/cmd/codea-dcep-tools/task160_release_test.go'
-    })
-    if ($productionChanges.Count -ne 0) {
-        throw "Task 1-3 production scope changed during release: $($productionChanges -join ',')"
+    $acceptedProductChanges = @($changed | Where-Object { $_ -like '.code-harness/*' })
+    if ($acceptedProductChanges.Count -ne 0) {
+        throw "Accepted Task 1-3 product scope changed during Task 4: $($acceptedProductChanges -join ',')"
     }
-    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count)"
+    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count) acceptedTask3=$base"
+}
+
+function Build-RevokedRCUpgrade {
+    $rc = Join-Path $env:RUNNER_TEMP 'task164-final-revoked-rc'
+    $out = Join-Path $env:RUNNER_TEMP 'task164-revoked-rc-upgrade.zip'
+    Remove-Item $rc -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $out -Force -ErrorAction SilentlyContinue
+    Invoke-Checked 'git' @('-C',$root,'worktree','add','--detach',$rc,'6aa5d9dad0623cd60a845360c9b20ab153921e87')
+    try {
+        Invoke-Checked 'pwsh' @('-NoProfile','-File',(Join-Path $rc '.github/scripts/task164-release-package.ps1'))
+        $built = Join-Path $rc 'codea-harness-1.6.4-windows-x64-upgrade.zip'
+        if (-not (Test-Path $built -PathType Leaf)) { throw 'Revoked RC did not produce upgrade package' }
+        Copy-Item $built $out -Force
+        Write-Output 'TASK164_FINAL_REVOKED_RC_PACKAGE PASS head=6aa5d9dad0623cd60a845360c9b20ab153921e87'
+    } finally {
+        & git -C $root worktree remove --force $rc 2>&1 | Out-Null
+        $global:LASTEXITCODE = 0
+    }
 }
 
 function Assert-ReleaseArtifacts {
@@ -228,6 +243,66 @@ try {
         $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '.code-harness/bin/ast-grep.exe').Path
     }
 
+    Invoke-Gate 'task164MigrationE2E' {
+        Build-RevokedRCUpgrade
+        Invoke-Script '.github/scripts/task164-release-blocker-task1-e2e.ps1'
+    } @(
+        'CONFIG_MIGRATION_163_TO_164_REGISTERED PASS',
+        'CONFIG_MIGRATION_BEFORE_TARGET_SCHEMA_VALIDATION PASS',
+        'CONFIG_MIGRATION_TARGET_SCHEMA_VALID PASS',
+        'CONFIG_MIGRATION_IDEMPOTENT PASS',
+        'CONFIG_USER_VALUES_PRESERVED PASS',
+        'CONFIG_UNSUPPORTED_MIGRATION_FAIL_CLOSED PASS',
+        'TASK164_CONFIG_PACKAGED_163_TO_164_E2E PASS'
+    )
+
+    Invoke-Gate 'task164ReviewerEntryE2E' {
+        Invoke-Script '.github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1'
+    } @(
+        'TASK164_TASK2_TOP_LEVEL_REVIEW_CHAIN PASS',
+        'TASK164_TASK2_TOP_LEVEL_DISABLED_HARD_STOP PASS',
+        'gate_task2_entry_e2e PASS'
+    )
+
+    Invoke-Gate 'task164ReviewerAuthorityE2E' {
+        Invoke-Script '.github/scripts/task164-release-blocker-task2-e2e.ps1'
+    } @(
+        'REVIEWER_INDEPENDENT_INVOCATION PASS',
+        'REVIEWER_FINDING_PROPOSAL_HOST_RECEIPT PASS',
+        'REVIEWER_RUNTIME_AUTHORITY_SEPARATION PASS',
+        'REVIEWER_UNAVAILABLE_FAIL_CLOSED PASS',
+        'MAIN_AGENT_REVIEWER_FALLBACK_FORBIDDEN PASS',
+        'MAIN_AGENT_FORGED_REVIEWER_RECEIPT_RUNTIME_REJECTED PASS',
+        'TASK164_RELEASE_BLOCKER_TASK2_E2E PASS'
+    )
+
+    Invoke-Gate 'task164ReviewerCancelE2E' {
+        Invoke-Script '.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1'
+    } @(
+        'REVIEWER_SESSION_STARTED_BEFORE_CANCEL PASS',
+        'REVIEWER_SESSION_CANCELLED PASS',
+        'REVIEWER_SESSION_CANCEL_FAIL_CLOSED PASS',
+        'REVIEWER_CHILD_CANCEL_CRASH_FAIL_CLOSED PASS'
+    )
+
+    Invoke-Gate 'task164PackagedFullReviewE2E' {
+        Invoke-Script '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1'
+    } @(
+        'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',
+        'TASK164_TASK4_INDEPENDENT_REVIEWER_BOTH_PHASES PASS',
+        'TASK164_TASK4_RUNTIME_PROGRESS_TERMINAL PASS',
+        'TASK164_TASK4_REVIEW_MD PASS',
+        'TASK164_TASK4_GATE_B PASS'
+    )
+
+    Invoke-Gate 'task164ProgressInterruptionE2E' {
+        Invoke-Script '.github/scripts/task164-task4-progress-interruption-e2e.ps1'
+    } @(
+        'TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS',
+        'TASK164_TASK4_DOWNSTREAM_BLOCKED PASS',
+        'TASK164_TASK4_GATE_D PASS'
+    )
+
     Invoke-Gate 'fullGoRegression' {
         Invoke-Go @('test','-count=1','./...')
         Write-Output 'TASK164_FINAL_GO_TEST PASS'
@@ -237,6 +312,24 @@ try {
         Invoke-Go @('vet','./...')
         Write-Output 'TASK164_FINAL_GO_VET PASS'
     } @('TASK164_FINAL_GO_VET PASS')
+
+    Invoke-Gate 'task164Task3ProgressState' {
+        Invoke-Go @('test','-count=1','-v','./cmd/codea-dcep-tools','-run','^Test164Task3')
+        Invoke-Go @('test','-count=1','-v','./internal/reviewprogress','-run','^Test164Task3')
+        Write-Output 'REVIEW_STAGE_ORDER_RUNTIME_OWNED PASS'
+        Write-Output 'REVIEW_STAGE_TRANSITION_FAIL_CLOSED PASS'
+        Write-Output 'REVIEW_FRESH_RUN_STATE PASS'
+        Write-Output 'REVIEW_STAGE_FAILURE_ATTRIBUTION PASS'
+        Write-Output 'OPENCODE_PROGRESS_FROM_RUNTIME_EVENTS PASS'
+        Write-Output 'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS'
+    } @(
+        'REVIEW_STAGE_ORDER_RUNTIME_OWNED PASS',
+        'REVIEW_STAGE_TRANSITION_FAIL_CLOSED PASS',
+        'REVIEW_FRESH_RUN_STATE PASS',
+        'REVIEW_STAGE_FAILURE_ATTRIBUTION PASS',
+        'OPENCODE_PROGRESS_FROM_RUNTIME_EVENTS PASS',
+        'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS'
+    )
 
     Invoke-Gate 'task164Task1ScopeParity' {
         Invoke-Go @('test','-count=1','-v','./internal/analysis','-run','Test164Entrypoint|Test164CertifyEntrypointScopeWidening|Test164CertifyBatchProtocol')
