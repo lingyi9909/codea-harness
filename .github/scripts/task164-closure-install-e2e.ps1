@@ -55,7 +55,11 @@ try {
     $stderr = Join-Path $fixture 'install-conflict.stderr.log'
     $stdout = (& pwsh -NoProfile -File $installer -ProjectRoot $conflictTarget 2> $stderr | Out-String)
     $exit = $LASTEXITCODE
-    $conflictOutput = $stdout + (if (Test-Path $stderr) { Get-Content -Raw $stderr } else { '' })
+    $stderrText = ''
+    if (Test-Path $stderr -PathType Leaf) {
+        $stderrText = Get-Content -Raw $stderr
+    }
+    $conflictOutput = $stdout + $stderrText
     if ($exit -eq 0) { throw "conflicting install unexpectedly succeeded`n$conflictOutput" }
     foreach ($marker in @('MANUAL_ACTION_REQUIRED','INSTALL_EXISTING_OPENCODE_CONFLICT','0 destructive overwrite')) {
         if (-not $conflictOutput.Contains($marker)) { throw "conflict output missing marker: $marker`n$conflictOutput" }
