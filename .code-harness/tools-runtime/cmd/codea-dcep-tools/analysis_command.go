@@ -187,13 +187,22 @@ func runAnalysisCertify(args []string) error {
 	if !analysisArtifactID153.MatchString(req.RunID) {
 		return errors.New("analysis certify request contains invalid runId")
 	}
+	authorityPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "requests", "change-analysis-reviewer-authority.json"))
 	if _, err := reviewauthority.Verify(".", req.RunID, reviewauthority.ChangeAnalysis, req.ProposalPath); err != nil {
+		return failReviewProgressStage164(req.RunID, reviewprogress.StageChangeAnalysis, "CHANGE_ANALYSIS_AUTHORITY_FAILED", err)
+	}
+	if err := advanceReviewProgressStage164(req.RunID, reviewprogress.StageChangeAnalysis, req.ProposalPath, authorityPath); err != nil {
 		return err
 	}
 	cert, err := analysisruntime.Certify(".", req)
-	if err != nil { return err }
+	if err != nil {
+		return failReviewProgressStage164(req.RunID, reviewprogress.StageCertification, "CERTIFICATION_FAILED", err)
+	}
 	analysisPath := filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-analysis.json")
 	certPath := filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-analysis.cert.json")
+	if err := advanceReviewProgressStage164(req.RunID, reviewprogress.StageCertification, filepath.ToSlash(analysisPath), filepath.ToSlash(certPath)); err != nil {
+		return err
+	}
 	return writeJSONAndStatus(map[string]any{
 		"status": "CERTIFIED",
 		"runId": req.RunID,
