@@ -127,9 +127,17 @@ function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$Kind) {
         }) -Force
         [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
 
+        $installerPath = $null
+        if ($Kind -eq 'install') {
+            $installerSource = Join-Path $repoRoot '.github/scripts/task164-install.ps1'
+            if (-not (Test-Path $installerSource -PathType Leaf)) { throw 'safe first-install entrypoint missing' }
+            $installerPath = Join-Path $stage 'install.ps1'
+            Copy-Item -LiteralPath $installerSource -Destination $installerPath -Force
+        }
+
         Remove-Item -Force $ZipPath
         if ($Kind -eq 'install') {
-            Compress-Archive -Path @($harnessRoot, (Join-Path $stage '.opencode')) -DestinationPath $ZipPath -Force
+            Compress-Archive -Path @($harnessRoot, (Join-Path $stage '.opencode'), $installerPath) -DestinationPath $ZipPath -Force
         } else {
             Compress-Archive -Path $harnessRoot -DestinationPath $ZipPath -Force
         }
@@ -147,4 +155,5 @@ Write-Output 'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4'
 Write-Output 'REVIEWER_HOST_PACKAGE_REGISTRATION PASS path=.opencode/agents/reviewer.md mode=subagent'
 Write-Output 'REVIEWER_HOST_COMMAND_REGISTRATION PASS command=.opencode/commands/harness-review-reviewer.md subtask=true'
 Write-Output 'REVIEWER_HOST_TOOL_REGISTRATION PASS tool=.opencode/tools/codea-reviewer-submit.ts'
+Write-Output 'INSTALL_SAFE_ENTRYPOINT_PACKAGED PASS file=install.ps1'
 Write-Output 'REVIEWER_HOST_UPGRADE_STAGED_TRANSACTION PASS source=.code-harness-upgrade/host/.opencode'
