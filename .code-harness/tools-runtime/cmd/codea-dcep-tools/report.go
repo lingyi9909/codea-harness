@@ -97,11 +97,20 @@ func runReviewReport(args []string) error {
 	if err != nil {
 		return failReport(err)
 	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return failReport(fmt.Errorf("resolve review report project root: %w", err))
+	}
+	progressPath, err := filepath.Rel(cwd, path)
+	if err != nil {
+		return failReport(fmt.Errorf("relativize review report artifact: %w", err))
+	}
+	progressPath = filepath.ToSlash(progressPath)
 	if err := os.Remove(cleanInput); err != nil {
 		return failReport(fmt.Errorf("remove review report transport after success: %w", err))
 	}
-	if err := advanceReviewProgressStage164(runID, reviewprogress.StageReport, filepath.ToSlash(path)); err != nil {
-		return err
+	if err := advanceReviewProgressStage164(runID, reviewprogress.StageReport, progressPath); err != nil {
+		return failReport(err)
 	}
 	return reportPathJSON(path)
 }
