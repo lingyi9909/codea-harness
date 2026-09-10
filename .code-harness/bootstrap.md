@@ -31,7 +31,27 @@ mode: subagent
 
 `harness review` 的 semantic analysis 与 finding proposal 必须由该独立 Reviewer child session 执行；Main Agent / Orchestrator 只负责路由、Runtime 调用和门禁，不得代替 Reviewer 做 semantic review。
 
-如果 Reviewer 无法 resolve/start/invoke/complete，或者没有产出可供 Runtime 校验的有效 proposal，固定输出并立即停止：
+`.code-harness/agents/orchestrator.md` 中已有的 `Reviewer.analyze-change` / `Reviewer.review-code` 仅是 semantic shorthand。1.6.4 支持的 OpenCode 产品路径必须把这两个语义阶段绑定到项目级 `harness-review-reviewer` command，由它委派 `independent reviewer subagent child session`；不得把 shorthand 解释为 Main Agent / Orchestrator 本地执行 Reviewer 语义工作。
+
+固定 Host binding：
+
+```text
+CHANGE_ANALYSIS
+-> harness-review-reviewer
+-> independent reviewer child session
+-> codea-reviewer-submit
+-> requests/change-analysis-proposal.json + Reviewer Host authority receipt
+-> Runtime analysis certify
+
+FINDINGS
+-> harness-review-reviewer
+-> independent reviewer child session
+-> codea-reviewer-submit
+-> requests/finding-proposals.json + Reviewer Host authority receipt
+-> Runtime review certify-findings
+```
+
+如果 Reviewer 无法 resolve/start/invoke/complete，child session crash/cancel，或者没有产出可供 Runtime 校验的有效 proposal，固定输出并立即停止：
 
 ```text
 REVIEWER_UNAVAILABLE
@@ -39,8 +59,8 @@ MANUAL_ACTION_REQUIRED
 HARD STOP
 ```
 
-此状态之后不得继续 analysis certification、review planning/dispatch、finding certification 或 report publication，也不得由 Main Agent / Orchestrator 生成 semantic proposal 作为 fallback。
+此状态之后不得继续 analysis certification、review planning/selection/units/dispatch、finding certification 或 report publication，也不得由 Main Agent / Orchestrator 生成 semantic proposal 作为 fallback。
 
 ---
 
-`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行。
+`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行；涉及 Reviewer semantic phase 时，必须同时受上述 1.6.4 Host binding 覆盖。
