@@ -1,6 +1,10 @@
 package reviewprogress
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func Test164Task3FreshRunsAreIsolated(t *testing.T) {
 	root := t.TempDir()
@@ -65,12 +69,8 @@ func Test164Task3RuntimeEventsAreMonotonicAndDisplayable(t *testing.T) {
 
 func createTask3RunDir(t *testing.T, root, runID string) {
 	t.Helper()
-	rel, err := Path(runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Path returns the progress file; Begin only requires its owning run directory.
-	if err := ensureDirForTask3Test(root, rel); err != nil {
-		t.Fatal(err)
+	runDir := filepath.Join(root, ".code-harness", "runs", runID)
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("create run dir %s: %v", runID, err)
 	}
 }
