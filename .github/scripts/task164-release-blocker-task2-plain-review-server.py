@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -57,31 +58,40 @@ SNAPSHOT = (
     "Write-Output 'TASK164_PLAIN_STAGE_SNAPSHOT PASS'"
 )
 
-REVIEWER = r'''$run=(Get-Content -Raw '.task164-run-id').Trim();
-$input="runId=$run phase=CHANGE_ANALYSIS snapshotPath=.code-harness/runs/$run/analysis/change-set.json proposalPath=.code-harness/runs/$run/requests/change-analysis-proposal.json. Use codea-reviewer-submit exactly once.";
+HARD_STOP = r'''$run=(Get-Content -Raw '.task164-run-id').Trim();
+$proposal=".code-harness/runs/$run/requests/change-analysis-proposal.json";
+$snapshot=Get-Content -Raw ".code-harness/runs/$run/analysis/change-set.json" | ConvertFrom-Json;
+$cert=[ordered]@{runId=$run;snapshotPath=".code-harness/runs/$run/analysis/change-set.json";snapshotSha256=[string]$snapshot.snapshotSha256;proposalPath=$proposal;intent=[ordered]@{mode='FULL'}};
+$certJson=$cert|ConvertTo-Json -Depth 20 -Compress;
+[IO.File]::WriteAllText(".code-harness/runs/$run/requests/analysis-certify-request.json",$certJson,[Text.UTF8Encoding]::new($false));
 $ErrorActionPreference='Continue';
-$reviewerRaw = (& opencode run --command harness-review-reviewer --model mock/reviewer-e2e --format json --title task164-plain-reviewer $input 2>&1 | Out-String);
-$reviewerExit = $LASTEXITCODE;
+$rt = (& ./.code-harness/bin/codea-dcep-tools.exe analysis certify --input ".code-harness/runs/$run/requests/analysis-certify-request.json" 2>&1 | Out-String);
+$rtExit=$LASTEXITCODE;
 $ErrorActionPreference='Stop';
-[IO.File]::WriteAllText('.task164-reviewer-transcript.jsonl',$reviewerRaw,[Text.UTF8Encoding]::new($false));
+if ($rtExit -eq 0) { throw "Reviewer unavailable path unexpectedly certified analysis`n$rt" };
+foreach($marker in @('REVIEWER_UNAVAILABLE','MANUAL_ACTION_REQUIRED','HARD STOP')) { if ($rt -notmatch [regex]::Escape($marker)) { throw "missing hard-stop marker $marker`n$rt" } };
+foreach($authority in @('analysis/change-analysis.json','analysis/change-analysis.cert.json','analysis/review-options.json','analysis/review-scope.json','analysis/review-units.json','analysis/rule-dispatch.json','analysis/certified-findings.json','analysis/certified-findings.cert.json','review.md')) { if (Test-Path ".code-harness/runs/$run/$authority") { throw "Reviewer unavailable path published downstream authority $authority" } };
+Write-Output $rt; Write-Output 'TASK164_PLAIN_REVIEW_REVIEWER_UNAVAILABLE_HARD_STOP PASS' '''
+
+PREFLIGHT = r'''$ErrorActionPreference='Continue';
+$inventory = (& opencode agent list 2>&1 | Out-String);
+$inventoryExit=$LASTEXITCODE;
+$ErrorActionPreference='Stop';
+if ($inventoryExit -ne 0 -or $inventory -notmatch '(?m)^reviewer\b') {
+''' + HARD_STOP + r'''
+} else {
+  Write-Output $inventory;
+  Write-Output 'TASK164_PLAIN_STAGE_REVIEWER_PREFLIGHT PASS';
+}'''
+
+REVIEWER_CHECK = r'''$run=(Get-Content -Raw '.task164-run-id').Trim();
 $proposal=".code-harness/runs/$run/requests/change-analysis-proposal.json";
 $receipt=".code-harness/runs/$run/requests/change-analysis-reviewer-authority.json";
-if ($reviewerExit -ne 0 -or $reviewerRaw -notmatch '"subagent_type":"reviewer"' -or !(Test-Path $proposal -PathType Leaf) -or !(Test-Path $receipt -PathType Leaf)) {
-  $snapshot=Get-Content -Raw ".code-harness/runs/$run/analysis/change-set.json" | ConvertFrom-Json;
-  $cert=[ordered]@{runId=$run;snapshotPath=".code-harness/runs/$run/analysis/change-set.json";snapshotSha256=[string]$snapshot.snapshotSha256;proposalPath=$proposal;intent=[ordered]@{mode='FULL'}};
-  $certJson=$cert|ConvertTo-Json -Depth 20 -Compress;
-  [IO.File]::WriteAllText(".code-harness/runs/$run/requests/analysis-certify-request.json",$certJson,[Text.UTF8Encoding]::new($false));
-  $ErrorActionPreference='Continue';
-  $rt = (& ./.code-harness/bin/codea-dcep-tools.exe analysis certify --input ".code-harness/runs/$run/requests/analysis-certify-request.json" 2>&1 | Out-String);
-  $rtExit=$LASTEXITCODE;
-  $ErrorActionPreference='Stop';
-  if ($rtExit -eq 0) { throw "Reviewer unavailable path unexpectedly certified analysis`n$rt" };
-  foreach($marker in @('REVIEWER_UNAVAILABLE','MANUAL_ACTION_REQUIRED','HARD STOP')) { if ($rt -notmatch [regex]::Escape($marker)) { throw "missing hard-stop marker $marker`n$rt" } };
-  foreach($authority in @('analysis/change-analysis.json','analysis/change-analysis.cert.json','analysis/review-options.json','analysis/review-scope.json','analysis/review-units.json','analysis/rule-dispatch.json','analysis/certified-findings.json','analysis/certified-findings.cert.json','review.md')) { if (Test-Path ".code-harness/runs/$run/$authority") { throw "Reviewer unavailable path published downstream authority $authority" } };
-  Write-Output $reviewerRaw; Write-Output $rt; Write-Output 'TASK164_PLAIN_REVIEW_REVIEWER_UNAVAILABLE_HARD_STOP PASS'; exit 0
-}
-Write-Output $reviewerRaw;
-Write-Output 'TASK164_PLAIN_STAGE_REVIEWER PASS' '''
+if (!(Test-Path $proposal -PathType Leaf) -or !(Test-Path $receipt -PathType Leaf)) {
+''' + HARD_STOP + r'''
+} else {
+  Write-Output 'TASK164_PLAIN_STAGE_REVIEWER PASS';
+}'''
 
 CERTIFY = (
     "$run=(Get-Content -Raw '.task164-run-id').Trim(); "
@@ -105,6 +115,11 @@ OPTIONS = (
     "$options=Get-Content -Raw \".code-harness/runs/$run/analysis/review-options.json\" | ConvertFrom-Json; "
     "Write-Output ('TASK164_PLAIN_STAGE_REVIEW_OPTIONS PASS decision=' + [string]$options.decision)"
 )
+
+
+def extract_run(text: str) -> str:
+    match = re.search(r"TASK164_PLAIN_STAGE_BEGIN PASS run=(review-[A-Za-z0-9_-]+)", text)
+    return match.group(1) if match else ""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -147,11 +162,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def respond_tool(self, body: dict[str, Any], name: str, args: dict[str, Any]) -> None:
         base = completion_base(body)
-        call = {
-            "id": "call_" + uuid.uuid4().hex,
-            "type": "function",
-            "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
-        }
+        call = {"id": "call_" + uuid.uuid4().hex, "type": "function", "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)}}
         if body.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -186,6 +197,7 @@ class Handler(BaseHTTPRequestHandler):
         names = [str(t.get("function", {}).get("name", "")) for t in tools]
         self.append_log({"toolNames": names, "messages": messages})
 
+        # Reviewer child session: submit the semantic proposal through the real Host tool.
         if "phase=CHANGE_ANALYSIS" in text:
             if any(marker in text for marker in ("REVIEWER_PROPOSAL_SUBMITTED", "REVIEWER_MALFORMED_OUTPUT", "MAIN_AGENT_REVIEWER_FALLBACK_FORBIDDEN")):
                 self.respond_text(body, "TASK164_REVIEWER_SUBMISSION_COMPLETE")
@@ -202,23 +214,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_text(body, "REVIEWER_SUBMISSION_TOOL_UNAVAILABLE")
                 return
             run = ""
-            for token in text.replace("\n", " ").split():
-                if token.startswith("runId="):
-                    run = token.split("=", 1)[1].strip().strip(".,")
-                    break
+            match = re.search(r"runId=([^\s.,]+)", text)
+            if match:
+                run = match.group(1)
             proposal = {
                 "changedFileRoles": [{"path": "src/main/resources/application.yml", "role": "YamlConfig"}],
-                "affectedControllers": [],
-                "callChains": [],
-                "symbolLocations": [],
-                "resourceRelations": [],
-                "externalDependencies": [],
-                "riskAreas": [],
-                "reviewCoverage": {
-                    "status": "COMPLETE",
-                    "reviewedFiles": [{"path": "src/main/resources/application.yml", "role": "YamlConfig", "reason": "CHANGED"}],
-                    "unresolvedSymbols": [],
-                },
+                "affectedControllers": [], "callChains": [], "symbolLocations": [], "resourceRelations": [],
+                "externalDependencies": [], "riskAreas": [],
+                "reviewCoverage": {"status": "COMPLETE", "reviewedFiles": [{"path": "src/main/resources/application.yml", "role": "YamlConfig", "reason": "CHANGED"}], "unresolvedSymbols": []},
             }
             self.respond_tool(body, submit, {"kind": "change-analysis", "runId": run, "proposal": json.dumps(proposal, separators=(",", ":"))})
             return
@@ -229,20 +232,41 @@ class Handler(BaseHTTPRequestHandler):
         if "TASK164_PLAIN_REVIEW_REVIEWER_UNAVAILABLE_HARD_STOP PASS" in text:
             self.respond_text(body, "REVIEWER_UNAVAILABLE\nMANUAL_ACTION_REQUIRED\nHARD STOP")
             return
-        stages = [
-            ("TASK164_PLAIN_STAGE_BEGIN PASS", BEGIN, "Start Runtime review run"),
-            ("TASK164_PLAIN_STAGE_SNAPSHOT PASS", SNAPSHOT, "Create canonical Runtime snapshot"),
-            ("TASK164_PLAIN_STAGE_REVIEWER PASS", REVIEWER, "Delegate semantic analysis to independent Reviewer"),
-            ("TASK164_PLAIN_STAGE_RUNTIME_CERTIFY PASS", CERTIFY, "Runtime certify Reviewer proposal"),
-            ("TASK164_PLAIN_STAGE_REVIEW_OPTIONS PASS", OPTIONS, "Build Runtime review options"),
-        ]
-        for marker, command, description in stages:
-            if marker not in text:
-                if "bash" not in names:
-                    self.respond_text(body, "TASK164_E2E_BASH_TOOL_UNAVAILABLE")
-                    return
-                self.respond_tool(body, "bash", {"command": command, "description": description})
+
+        if "TASK164_PLAIN_STAGE_BEGIN PASS" not in text:
+            self.respond_tool(body, "bash", {"command": BEGIN, "description": "Start Runtime review run"})
+            return
+        if "TASK164_PLAIN_STAGE_SNAPSHOT PASS" not in text:
+            self.respond_tool(body, "bash", {"command": SNAPSHOT, "description": "Create canonical Runtime snapshot"})
+            return
+        if "TASK164_PLAIN_STAGE_REVIEWER_PREFLIGHT PASS" not in text:
+            self.respond_tool(body, "bash", {"command": PREFLIGHT, "description": "Verify Reviewer Host is invokable"})
+            return
+        if "TASK164_PLAIN_REVIEW_TASK_REQUEST" not in text:
+            if "task" not in names:
+                self.respond_text(body, "TASK164_REVIEWER_TASK_TOOL_UNAVAILABLE")
                 return
+            run = extract_run(text)
+            if not run:
+                self.respond_text(body, "TASK164_REVIEW_RUN_ID_UNAVAILABLE")
+                return
+            prompt = (
+                f"TASK164_PLAIN_REVIEW_TASK_REQUEST runId={run} phase=CHANGE_ANALYSIS "
+                f"snapshotPath=.code-harness/runs/{run}/analysis/change-set.json "
+                f"proposalPath=.code-harness/runs/{run}/requests/change-analysis-proposal.json. "
+                "Execute the Reviewer semantic proposal phase and use codea-reviewer-submit exactly once."
+            )
+            self.respond_tool(body, "task", {"description": "Independent Reviewer analysis", "prompt": prompt, "subagent_type": "reviewer"})
+            return
+        if "TASK164_PLAIN_STAGE_REVIEWER PASS" not in text:
+            self.respond_tool(body, "bash", {"command": REVIEWER_CHECK, "description": "Verify Reviewer proposal and Host receipt"})
+            return
+        if "TASK164_PLAIN_STAGE_RUNTIME_CERTIFY PASS" not in text:
+            self.respond_tool(body, "bash", {"command": CERTIFY, "description": "Runtime certify Reviewer proposal"})
+            return
+        if "TASK164_PLAIN_STAGE_REVIEW_OPTIONS PASS" not in text:
+            self.respond_tool(body, "bash", {"command": OPTIONS, "description": "Build Runtime review options"})
+            return
         self.respond_text(body, "TASK164_PLAIN_HARNESS_REVIEW_COMPLETE")
 
 
