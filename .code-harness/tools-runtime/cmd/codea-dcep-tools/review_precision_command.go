@@ -30,6 +30,8 @@ func runReview160(args []string) error {
 			return runReviewBegin162(args[1:])
 		case "progress":
 			return runReviewProgress164(args[1:])
+		case "reviewer-unavailable":
+			return runReviewReviewerUnavailable164(args[1:])
 		case "units":
 			return runReviewUnits160(args[1:])
 		case "dispatch":
