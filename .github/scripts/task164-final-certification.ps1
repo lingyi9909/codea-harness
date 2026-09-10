@@ -183,27 +183,27 @@ function Assert-ReleaseArtifacts {
                 }
             }
 
-            $host = $manifest.hostAgents.reviewer
-            if ($null -eq $host) { throw "$kind Reviewer Host metadata missing" }
-            if ([string]$host.path -cne '.opencode/agents/reviewer.md' -or
-                [string]$host.upgradeSource -cne 'host/.opencode/agents/reviewer.md' -or
-                [string]$host.command -cne '.opencode/commands/harness-review-reviewer.md' -or
-                [string]$host.commandUpgradeSource -cne 'host/.opencode/commands/harness-review-reviewer.md' -or
-                [string]$host.submissionTool -cne '.opencode/tools/codea-reviewer-submit.ts' -or
-                [string]$host.submissionToolUpgradeSource -cne 'host/.opencode/tools/codea-reviewer-submit.ts') {
+            $reviewerHost = $manifest.hostAgents.reviewer
+            if ($null -eq $reviewerHost) { throw "$kind Reviewer Host metadata missing" }
+            if ([string]$reviewerHost.path -cne '.opencode/agents/reviewer.md' -or
+                [string]$reviewerHost.upgradeSource -cne 'host/.opencode/agents/reviewer.md' -or
+                [string]$reviewerHost.command -cne '.opencode/commands/harness-review-reviewer.md' -or
+                [string]$reviewerHost.commandUpgradeSource -cne 'host/.opencode/commands/harness-review-reviewer.md' -or
+                [string]$reviewerHost.submissionTool -cne '.opencode/tools/codea-reviewer-submit.ts' -or
+                [string]$reviewerHost.submissionToolUpgradeSource -cne 'host/.opencode/tools/codea-reviewer-submit.ts') {
                 throw "$kind Reviewer Host path metadata mismatch"
             }
 
             if ($kind -eq 'install') {
                 $hostRoot = $dest
-                $hostPaths = @([string]$host.path,[string]$host.command,[string]$host.submissionTool)
+                $hostPaths = @([string]$reviewerHost.path,[string]$reviewerHost.command,[string]$reviewerHost.submissionTool)
                 $actualHostFiles = @(Get-ChildItem (Join-Path $dest '.opencode') -Recurse -Force -File)
                 $actualHostRel = @($actualHostFiles | ForEach-Object {
                     [IO.Path]::GetRelativePath($dest,$_.FullName).Replace('\','/')
                 } | Sort-Object)
             } else {
                 $hostRoot = $releaseRoot
-                $hostPaths = @([string]$host.upgradeSource,[string]$host.commandUpgradeSource,[string]$host.submissionToolUpgradeSource)
+                $hostPaths = @([string]$reviewerHost.upgradeSource,[string]$reviewerHost.commandUpgradeSource,[string]$reviewerHost.submissionToolUpgradeSource)
                 $actualHostFiles = @(
                     foreach ($file in $allReleaseFiles) {
                         $rel = [IO.Path]::GetRelativePath($releaseRoot,$file.FullName).Replace('\','/')
@@ -219,9 +219,9 @@ function Assert-ReleaseArtifacts {
                 throw "$kind Reviewer Host inventory mismatch actual=$($actualHostRel -join ',')"
             }
             $hostChecks = @(
-                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[0]); Hash=[string]$host.sha256; Name='reviewer' },
-                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[1]); Hash=[string]$host.commandSha256; Name='command' },
-                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[2]); Hash=[string]$host.submissionToolSha256; Name='submission-tool' }
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[0]); Hash=[string]$reviewerHost.sha256; Name='reviewer' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[1]); Hash=[string]$reviewerHost.commandSha256; Name='command' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[2]); Hash=[string]$reviewerHost.submissionToolSha256; Name='submission-tool' }
             )
             foreach ($check in $hostChecks) {
                 if (-not (Test-Path $check.Path -PathType Leaf)) { throw "$kind Reviewer Host $($check.Name) missing" }
@@ -237,9 +237,9 @@ function Assert-ReleaseArtifacts {
                 sha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
                 size = (Get-Item $zip).Length
                 reviewerHost = [ordered]@{
-                    agentSha256 = [string]$host.sha256
-                    commandSha256 = [string]$host.commandSha256
-                    submissionToolSha256 = [string]$host.submissionToolSha256
+                    agentSha256 = [string]$reviewerHost.sha256
+                    commandSha256 = [string]$reviewerHost.commandSha256
+                    submissionToolSha256 = [string]$reviewerHost.submissionToolSha256
                 }
             }
         } finally {
