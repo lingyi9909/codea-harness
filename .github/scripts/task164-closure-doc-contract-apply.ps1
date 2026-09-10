@@ -14,7 +14,8 @@ function Patch-TextFile([string]$RelativePath, [hashtable]$Replacements, [string
     foreach ($entry in $Replacements.GetEnumerator()) {
         $old = [string]$entry.Key
         $new = [string]$entry.Value
-        if (-not $text.Contains($old)) { throw "expected patch anchor missing in ${RelativePath}: $old" }
+        $count = ([regex]::Matches($text, [regex]::Escape($old))).Count
+        if ($count -ne 1) { throw "expected exactly one patch anchor in ${RelativePath}; count=${count}; anchor=$old" }
         $text = $text.Replace($old, $new)
     }
     $text = $text.TrimEnd("`r","`n") + "`n`n" + $AppendBlock.Trim() + "`n"
@@ -47,8 +48,8 @@ The Main Agent / Orchestrator may create only same-run `requests/**` request fil
 OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.
 '@
 
-$agentsReviewBegin = "codea-dcep-tools.exe review begin`ncodea-dcep-tools.exe analysis snapshot"
-$agentsReviewBeginNew = "codea-dcep-tools.exe review begin`ncodea-dcep-tools.exe review progress --run-id <runId>`ncodea-dcep-tools.exe review reviewer-unavailable --run-id <runId>`ncodea-dcep-tools.exe analysis snapshot"
+$agentsReviewBegin = 'codea-dcep-tools.exe review begin'
+$agentsReviewBeginNew = "codea-dcep-tools.exe review begin`ncodea-dcep-tools.exe review progress --run-id <runId>`ncodea-dcep-tools.exe review reviewer-unavailable --run-id <runId>"
 Patch-TextFile '.code-harness/AGENTS.md' @{
     $agentsReviewBegin = $agentsReviewBeginNew
     '- Reviewer：消费 Runtime Canonical ChangeSet Snapshot，负责 Code Navigation、semantic ChangeAnalysis Proposal、Review Coverage 与 Finding Proposal；不拥有 Git ChangeSet deterministic fact authority。' = '- Reviewer：消费 Runtime Canonical ChangeSet Snapshot，只负责 Code Navigation、semantic ChangeAnalysis Proposal、Review Coverage 与 Finding Proposal；不拥有 Git ChangeSet deterministic fact authority，也不拥有整个 Review orchestration。'
