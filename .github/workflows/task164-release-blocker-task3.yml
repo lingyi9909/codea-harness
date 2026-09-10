@@ -52,6 +52,24 @@ jobs:
           }
           Write-Host "TASK3_SCOPE_GUARD PASS ($($changed.Count) files)"
 
+      - name: Prepare pinned ast-grep fixture
+        shell: pwsh
+        run: |
+          $astVersion = '0.42.1'
+          $astExpected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $astZip = Join-Path $env:RUNNER_TEMP 'ast-grep-164-task3.zip'
+          $astDir = Join-Path $env:RUNNER_TEMP 'ast-grep-164-task3'
+          Remove-Item -Recurse -Force $astDir -ErrorAction SilentlyContinue
+          Invoke-WebRequest -Uri "https://github.com/ast-grep/ast-grep/releases/download/$astVersion/app-x86_64-pc-windows-msvc.zip" -OutFile $astZip
+          $astActual = (Get-FileHash -Algorithm SHA256 $astZip).Hash.ToLowerInvariant()
+          if ($astActual -ne $astExpected) { throw "ast-grep checksum mismatch: $astActual" }
+          Expand-Archive -Path $astZip -DestinationPath $astDir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $astDir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          $versionOut = (& '.code-harness/bin/ast-grep.exe' --version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $versionOut -notmatch '0\.42\.1') { throw "ast-grep smoke failed: $versionOut" }
+          Write-Host "TASK3_PINNED_AST_GREP PASS version=$astVersion sha256=$astExpected"
+
       - name: Task 3 command progress contracts
         shell: pwsh
         working-directory: .code-harness/tools-runtime
