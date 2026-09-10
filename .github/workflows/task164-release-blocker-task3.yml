@@ -11,7 +11,7 @@ permissions:
 jobs:
   review-progress:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,6 +29,29 @@ jobs:
           git merge-base --is-ancestor 8e3da6208bda755aa470519b8d191cc577eb99d7 HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Task 3 is not based on accepted Task 2 baseline' }
 
+      - name: Task 3 scope guard
+        shell: pwsh
+        run: |
+          $base = '8e3da6208bda755aa470519b8d191cc577eb99d7'
+          $allowedExact = @(
+            '.code-harness/bootstrap.md',
+            '.code-harness/tools-runtime/cmd/codea-dcep-tools/analysis_command.go',
+            '.code-harness/tools-runtime/cmd/codea-dcep-tools/report.go',
+            '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_precision_command.go',
+            '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_progress_command.go',
+            '.code-harness/tools-runtime/internal/reviewprogress/progress.go',
+            '.github/workflows/task164-release-blocker-task3.yml'
+          )
+          $changed = @(git diff --name-only "$base...HEAD")
+          if ($LASTEXITCODE -ne 0) { throw 'Task 3 scope diff failed' }
+          foreach ($path in $changed) {
+            $allowed = $allowedExact -contains $path
+            if ($path -like '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_progress*_task3_test.go') { $allowed = $true }
+            if ($path -like '.code-harness/tools-runtime/internal/reviewprogress/*task3_test.go') { $allowed = $true }
+            if (-not $allowed) { throw "Task 3 scope violation: $path" }
+          }
+          Write-Host "TASK3_SCOPE_GUARD PASS ($($changed.Count) files)"
+
       - name: Task 3 command progress contracts
         shell: pwsh
         working-directory: .code-harness/tools-runtime
@@ -42,3 +65,25 @@ jobs:
         run: |
           go test -count=1 ./internal/reviewprogress -run '^Test164Task3' -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Fresh full Go test
+        shell: pwsh
+        working-directory: .code-harness/tools-runtime
+        run: |
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Fresh Go vet
+        shell: pwsh
+        working-directory: .code-harness/tools-runtime
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exact HEAD certification
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          $expected = '${{ github.sha }}'
+          if ($actual -ne $expected) { throw "Exact HEAD mismatch: actual=$actual expected=$expected" }
+          Write-Host "TASK3_EXACT_HEAD PASS $actual"
