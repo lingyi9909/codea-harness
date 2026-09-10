@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +26,21 @@ def flatten(value: Any) -> str:
     if isinstance(value, dict):
         return "\n".join(f"{key}:{flatten(item)}" for key, item in value.items())
     return str(value)
+
+
+def message_text(value: Any) -> str:
+    """Return user-visible text from either string or content-block messages."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "\n".join(message_text(item) for item in value)
+    if isinstance(value, dict):
+        if isinstance(value.get("text"), str):
+            return value["text"]
+        if "content" in value:
+            return message_text(value["content"])
+        return ""
+    return ""
 
 
 def completion_base(body: dict[str, Any]) -> dict[str, Any]:
@@ -120,9 +136,15 @@ class Handler(BaseHTTPRequestHandler):
         ])
         names = [str(item.get("function", {}).get("name", "")) for item in tools]
         self.append_log({"scenario": self.scenario, "messages": messages, "toolNames": names})
+        with self.server.request_lock:  # type: ignore[attr-defined]
+            self.server.request_count += 1  # type: ignore[attr-defined]
+            request_count = self.server.request_count  # type: ignore[attr-defined]
+        if request_count > 32:
+            self.respond_text(body, f"TASK2_ENTRY_REQUEST_LIMIT_EXCEEDED count={request_count} HARD STOP")
+            return
 
         submit = next((name for name in names if "reviewer" in name.lower() and "submit" in name.lower()), "")
-        is_root = any(item.get("role") == "user" and flatten(item.get("content", "")).strip() == "harness review" for item in messages)
+        is_root = any(item.get("role") == "user" and message_text(item.get("content", "")).strip() == "harness review" for item in messages)
         is_reviewer = not is_root and submit != "" and "Reviewer 是只读 Agent" in system_text
         if is_reviewer:
             if re.search(r"REVIEWER_PROPOSAL_SUBMITTED kind=change-analysis\b", tool_result_text):
@@ -163,7 +185,7 @@ class Handler(BaseHTTPRequestHandler):
         run_match = re.search(r"TASK2_ENTRY_REVIEW_BEGIN runId=(review-[0-9a-f]+)", tool_result_text)
         run_id = run_match.group(1) if run_match else ""
         if "TASK2_ENTRY_STAGE_00 PASS" not in tool_result_text:
-            command = "$paths=@('.code-harness/AGENTS.md','.code-harness/agents/orchestrator.md','.code-harness/contracts/reviewer-host-contract.md'); foreach($p in $paths){Get-Content -Raw $p}; Write-Output 'TASK2_ENTRY_STAGE_00 PASS'"
+            command = "$paths=@('.code-harness/AGENTS.md','.code-harness/agents/orchestrator.md','.code-harness/contracts/reviewer-host-contract.md'); foreach($p in $paths){$content=Get-Content -Raw $p; if([string]::IsNullOrWhiteSpace($content)){throw ('empty packaged contract '+$p)}; $hash=(Get-FileHash -Algorithm SHA256 $p).Hash.ToLowerInvariant(); Write-Output ('TASK2_ENTRY_CONTRACT_READ path='+$p+' bytes='+[Text.Encoding]::UTF8.GetByteCount($content)+' sha256='+$hash)}; Write-Output 'TASK2_ENTRY_STAGE_00 PASS'"
             self.respond_tool(body, bash, {"command": command, "description": "Read packaged review routing and Reviewer host contracts"})
             return
         if "TASK2_ENTRY_STAGE_01 PASS" not in tool_result_text:
@@ -242,6 +264,8 @@ def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.log_path = args.log  # type: ignore[attr-defined]
     server.scenario = args.scenario  # type: ignore[attr-defined]
+    server.request_count = 0  # type: ignore[attr-defined]
+    server.request_lock = threading.Lock()  # type: ignore[attr-defined]
     server.serve_forever()
 
 

@@ -138,9 +138,10 @@ function Invoke-EntryScenario([ValidateSet('positive','disabled')][string]$Scena
 
         Push-Location $fixture
         try {
-            $userPrompt = 'harness review'
             $ErrorActionPreference = 'Continue'
-            $raw = (& opencode run --format json --auto --model task2-entry-local/task2-entry $userPrompt 2>&1 | Out-String)
+            # OpenCode quotes each positional argument that already contains a
+            # space. Two tokens preserve the user's exact top-level text.
+            $raw = (& opencode run --format json --auto --model task2-entry-local/task2-entry harness review 2>&1 | Out-String)
             $exit = $LASTEXITCODE
             $ErrorActionPreference = 'Stop'
         }
@@ -148,9 +149,28 @@ function Invoke-EntryScenario([ValidateSet('positive','disabled')][string]$Scena
         Write-Utf8NoBom $transcript $raw
         if ($exit -ne 0) { throw "top-level OpenCode $Scenario harness review failed exit=${exit}:`n$raw" }
 
-        $modelEvidence = if (Test-Path $modelLog) { Get-Content -Raw $modelLog } else { '' }
-        if ($modelEvidence -notmatch '"role": "user"' -or $modelEvidence -notmatch '"content": "harness review"') {
-            throw "provider did not receive literal top-level user prompt harness review"
+        $modelRequests = @(
+            if (Test-Path $modelLog) {
+                foreach ($line in @(Get-Content $modelLog)) {
+                    if (-not [string]::IsNullOrWhiteSpace($line)) { $line | ConvertFrom-Json }
+                }
+            }
+        )
+        $modelUserTexts = @(
+            foreach ($request in $modelRequests) {
+                foreach ($message in @($request.messages | Where-Object { $_.role -eq 'user' })) {
+                    if ($message.content -is [string]) { [string]$message.content; continue }
+                    foreach ($block in @($message.content)) {
+                        if ($block -is [string]) { [string]$block }
+                        elseif (-not [string]::IsNullOrWhiteSpace([string]$block.text)) { [string]$block.text }
+                    }
+                }
+            }
+        )
+        if ($modelUserTexts -notcontains 'harness review') {
+            $compactUsers = @($modelUserTexts | Select-Object -First 12 | ForEach-Object { if ($_.Length -gt 200) { $_.Substring(0, 200) + '...' } else { $_ } })
+            $compactTools = @($modelRequests | ForEach-Object { @($_.toolNames) } | Sort-Object -Unique)
+            throw "provider did not receive literal top-level user prompt harness review; requests=$($modelRequests.Count); userTexts=$($compactUsers -join ' || '); tools=$($compactTools -join ',')"
         }
         $runMatch = [regex]::Match($raw, 'TASK2_ENTRY_REVIEW_BEGIN runId=(?<id>review-[0-9a-f]+)')
         if (-not $runMatch.Success) { throw "top-level entry did not expose Runtime fresh runId:`n$raw" }
