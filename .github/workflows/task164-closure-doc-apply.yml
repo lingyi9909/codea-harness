@@ -17,7 +17,7 @@ jobs:
         with:
           ref: release/1.6.4-final-certification
           fetch-depth: 0
-      - name: Apply exact 1.6.4 agent contract patch
+      - name: Apply exact 1.6.4 agent contract and install UX patch
         shell: pwsh
         run: pwsh -NoProfile -File ./.github/scripts/task164-closure-doc-contract-apply.ps1
       - name: Verify and commit patch
@@ -31,6 +31,6 @@ jobs:
           }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .code-harness/AGENTS.md .code-harness/bootstrap.md .code-harness/agents/orchestrator.md .code-harness/contracts/reviewer-host-contract.md
-          git commit -m 'fix: align 1.6.4 review agent authority contract'
+          git add .code-harness/AGENTS.md .code-harness/bootstrap.md .code-harness/agents/orchestrator.md .code-harness/contracts/reviewer-host-contract.md README.md
+          git commit -m 'fix: align 1.6.4 review agent authority and install UX'
           git push origin HEAD:release/1.6.4-final-certification
