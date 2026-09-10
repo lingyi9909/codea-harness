@@ -1,11 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"codea-harness-tools/internal/report"
+	"codea-harness-tools/internal/reviewselection"
 )
 
 func installTask164PinnedNavigation(t *testing.T, testFile string) {
@@ -26,7 +30,52 @@ func installTask164PinnedNavigation(t *testing.T, testFile string) {
 
 func prepareTask164FindingCertification(t *testing.T, withAuthority bool) string {
 	t.Helper()
-	options := task153BuildReviewOptions(t)
+	analysisPath := setupTask4ReviewContextProject(t)
+	// Finding certification resolves every declared symbol through pinned
+	// navigation. Materialize the chain before sealing the snapshot so its
+	// source bytes and Git identity agree with the analysis fixture.
+	for name, source := range map[string]string{
+		"OrderController.java": `package com.example.order;
+public class OrderController {
+    private OrderService service;
+    public void approve() { service.approve(); }
+}
+`,
+		"OrderService.java": `package com.example.order;
+public interface OrderService {
+    void approve();
+}
+`,
+		"OrderServiceImpl.java": `package com.example.order;
+public class OrderServiceImpl {
+    private OrderMapper mapper;
+    public void approve() { mapper.updateStatus(); }
+}
+`,
+		"OrderMapper.java": `package com.example.order;
+public interface OrderMapper {
+    void updateStatus();
+}
+`,
+	} {
+		writeFile(t, filepath.Join("src", "main", "java", "com", "example", "order", name), source)
+	}
+	writeFile(t, filepath.Join("src", "main", "resources", "mapper", "OrderMapper.xml"), `<mapper namespace="com.example.order.OrderMapper"><update id="updateStatus">UPDATE orders SET status = 'APPROVED'</update></mapper>`)
+	installTask153ReviewContextAuthoritySchemas(t)
+	installTask153ReviewSelectionSchemas(t)
+	prepareCommittedCertifiedAnalysisFixture153(t, "run-task4-review", analysisPath)
+	optionsRequest := writeQueryRequest(t, "run-task4-review", "review-options-request.json", `{"runId":"run-task4-review","changeAnalysisPath":".code-harness/runs/run-task4-review/analysis/change-analysis.json"}`)
+	if err := run([]string{"review", "options", "--input", optionsRequest}); err != nil {
+		t.Fatalf("review options fixture: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(".code-harness", "runs", "run-task4-review", "analysis", "review-options.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var options reviewselection.Options
+	if err := json.Unmarshal(data, &options); err != nil {
+		t.Fatal(err)
+	}
 	if len(options.AutoSelectionIDs) != 1 {
 		t.Fatalf("fixture must produce one AUTO_SINGLE selection: %+v", options)
 	}
@@ -62,6 +111,43 @@ func prepareTask164FindingCertification(t *testing.T, withAuthority bool) string
 	return request
 }
 
+func writeTask164ReportTransport(t *testing.T, runID string) string {
+	t.Helper()
+	transport := writeReportTransport153(t, runID)
+	data, err := os.ReadFile(transport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req report.ReviewRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		t.Fatal(err)
+	}
+	// Echo the Runtime-selected scope; retain the hostile transport metadata
+	// so the report test still proves it cannot replace certified authority.
+	scopeBytes, err := os.ReadFile(filepath.Join(".code-harness", "runs", runID, "analysis", "review-scope.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scope struct {
+		Mode               string               `json:"mode"`
+		Target             *report.ReviewTarget `json:"target"`
+		ScopedFiles        []string             `json:"scopedFiles"`
+		SelectedCallChains []report.CallChain   `json:"selectedCallChains"`
+	}
+	if err := json.Unmarshal(scopeBytes, &scope); err != nil {
+		t.Fatal(err)
+	}
+	req.Mode, req.Target = scope.Mode, scope.Target
+	req.Scope.ScopedFiles = scope.ScopedFiles
+	req.Coverage.CallChains = scope.SelectedCallChains
+	data, err = json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, transport, string(data))
+	return transport
+}
+
 func Test164FindingCertificationRequiresReviewerHostAuthority(t *testing.T) {
 	withTempProject(t)
 	request := prepareTask164FindingCertification(t, false)
@@ -87,7 +173,7 @@ func Test164ReviewerCertifiedEmptyFindingsDrivePassedReport(t *testing.T) {
 	if err := run([]string{"review", "certify-findings", "--input", request}); err != nil {
 		t.Fatalf("Reviewer-authorized finding certification failed: %v", err)
 	}
-	transport := writeReportTransport153(t, "run-task4-review")
+	transport := writeTask164ReportTransport(t, "run-task4-review")
 	if err := run([]string{"report", "review", "--input", transport}); err != nil {
 		t.Fatalf("report must consume Runtime-certified Reviewer findings: %v", err)
 	}
@@ -96,7 +182,7 @@ func Test164ReviewerCertifiedEmptyFindingsDrivePassedReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(out)
-	if !strings.Contains(text, "PASSED") {
+	if !strings.Contains(text, "| 评审结果 | ✅ 通过 |") || !strings.Contains(text, "| 问题数量 | 0 |") {
 		t.Fatalf("zero Runtime-certified Reviewer findings must drive PASSED report: %s", text)
 	}
 	for _, bad := range []string{"agent-version", "agent-base", "agent-head", "src/main/java/Evil.java"} {

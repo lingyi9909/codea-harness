@@ -24,7 +24,7 @@ func TestReportReviewWritesArtifactAndDeletesTransport(t *testing.T) {
 		t.Fatalf("prepare Runtime-certified Reviewer findings: %v", err)
 	}
 	runID := "run-task4-review"
-	reportInput := writeReportTransport153(t, runID)
+	reportInput := writeTask164ReportTransport(t, runID)
 	if err := run([]string{"report", "review", "--input", reportInput}); err != nil {
 		t.Fatal(err)
 	}
