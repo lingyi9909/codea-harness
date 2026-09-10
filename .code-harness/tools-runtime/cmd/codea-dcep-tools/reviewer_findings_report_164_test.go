@@ -8,6 +8,22 @@ import (
 	"testing"
 )
 
+func installTask164PinnedNavigation(t *testing.T, testFile string) {
+	t.Helper()
+	source := filepath.Clean(filepath.Join(filepath.Dir(testFile), "..", "..", "..", "bin", "ast-grep.exe"))
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("read packaged pinned ast-grep fixture %s: %v", source, err)
+	}
+	target := filepath.Join(".code-harness", "bin", "ast-grep.exe")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("create pinned navigation fixture directory: %v", err)
+	}
+	if err := os.WriteFile(target, data, 0o755); err != nil {
+		t.Fatalf("install pinned ast-grep fixture: %v", err)
+	}
+}
+
 func prepareTask164FindingCertification(t *testing.T, withAuthority bool) string {
 	t.Helper()
 	options := task153BuildReviewOptions(t)
@@ -26,7 +42,9 @@ func prepareTask164FindingCertification(t *testing.T, withAuthority bool) string
 		copyTask153CommandContract(t, ".", name)
 	}
 	_, testFile, _, ok := runtime.Caller(0)
-	if !ok { t.Fatal("locate Task 1.6.4 finding fixture source") }
+	if !ok {
+		t.Fatal("locate Task 1.6.4 finding fixture source")
+	}
 	installTask160DispatchFramework(t, filepath.Dir(testFile))
 	if err := run([]string{"review", "units", "--run-id", "run-task4-review"}); err != nil {
 		t.Fatalf("review units fixture: %v", err)
@@ -37,6 +55,7 @@ func prepareTask164FindingCertification(t *testing.T, withAuthority bool) string
 	proposalRel := ".code-harness/runs/run-task4-review/requests/finding-proposals.json"
 	writeFile(t, filepath.FromSlash(proposalRel), "[]\n")
 	if withAuthority {
+		installTask164PinnedNavigation(t, testFile)
 		writeReviewerAuthorityTestReceipt(t, ".", "run-task4-review", "findings", proposalRel)
 	}
 	request := writeQueryRequest(t, "run-task4-review", "finding-certify-reviewer.json", `{"runId":"run-task4-review","proposalsPath":"`+proposalRel+`"}`)
@@ -73,7 +92,9 @@ func Test164ReviewerCertifiedEmptyFindingsDrivePassedReport(t *testing.T) {
 		t.Fatalf("report must consume Runtime-certified Reviewer findings: %v", err)
 	}
 	out, err := os.ReadFile(filepath.Join(".code-harness", "runs", "run-task4-review", "review.md"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	text := string(out)
 	if !strings.Contains(text, "PASSED") {
 		t.Fatalf("zero Runtime-certified Reviewer findings must drive PASSED report: %s", text)
