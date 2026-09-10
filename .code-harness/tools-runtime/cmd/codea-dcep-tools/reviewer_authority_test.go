@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	analysisruntime "codea-harness-tools/internal/analysis"
@@ -23,16 +24,18 @@ func writeReviewerAuthorityTestReceipt(t *testing.T, root, runID, kind, proposal
 	if kind == "findings" {
 		receiptName = "finding-reviewer-authority.json"
 	}
+	sessionID := "ses_test_reviewer_child_" + runID
+	messageID := "msg_test_reviewer_message_" + runID
 	receipt := map[string]any{
-		"version": 1,
-		"host": "opencode",
-		"source": "opencode-tool-context",
-		"runId": runID,
-		"proposalKind": kind,
-		"agent": "reviewer",
-		"sessionId": "test-reviewer-child-" + runID,
-		"messageId": "test-reviewer-message-" + runID,
-		"proposalPath": proposalRel,
+		"version":        1,
+		"host":           "opencode",
+		"source":         "opencode-tool-context",
+		"runId":          runID,
+		"proposalKind":   kind,
+		"agent":          "reviewer",
+		"sessionId":      sessionID,
+		"messageId":      messageID,
+		"proposalPath":   proposalRel,
 		"proposalSha256": hex.EncodeToString(sum[:]),
 	}
 	b, err := json.MarshalIndent(receipt, "", "  ")
@@ -40,6 +43,59 @@ func writeReviewerAuthorityTestReceipt(t *testing.T, root, runID, kind, proposal
 		t.Fatal(err)
 	}
 	mustWrite153Cmd(t, filepath.Join(root, ".code-harness", "runs", runID, "requests", receiptName), string(append(b, '\n')))
+	installReviewerAuthorityExportShim(t, runID, kind, sessionID, messageID, proposalBytes)
+}
+
+func installReviewerAuthorityExportShim(t *testing.T, runID, kind, sessionID, messageID string, proposalBytes []byte) {
+	t.Helper()
+	userMessageID := "msg_test_reviewer_user_" + runID
+	exported := map[string]any{
+		"info": map[string]any{
+			"id":       sessionID,
+			"parentID": "ses_test_parent_" + runID,
+		},
+		"messages": []any{
+			map[string]any{
+				"info":  map[string]any{"id": userMessageID, "role": "user", "agent": "reviewer"},
+				"parts": []any{},
+			},
+			map[string]any{
+				"info": map[string]any{"id": messageID, "role": "assistant", "parentID": userMessageID},
+				"parts": []any{map[string]any{
+					"type": "tool",
+					"tool": "codea-reviewer-submit",
+					"state": map[string]any{
+						"status": "completed",
+						"input":  map[string]any{"kind": kind, "runId": runID, "proposal": string(proposalBytes)},
+					},
+				}},
+			},
+		},
+	}
+	exportBytes, err := json.Marshal(exported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shimDir := t.TempDir()
+	exportPath := filepath.Join(shimDir, "session-export.json")
+	if err := os.WriteFile(exportPath, exportBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unixShim := filepath.Join(shimDir, "opencode")
+	if err := os.WriteFile(unixShim, []byte("#!/bin/sh\ncat \"$CODEA_TEST_OPENCODE_EXPORT\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	windowsShim := filepath.Join(shimDir, "opencode.cmd")
+	if err := os.WriteFile(windowsShim, []byte("@echo off\r\ntype \"%CODEA_TEST_OPENCODE_EXPORT%\"\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(unixShim, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("CODEA_TEST_OPENCODE_EXPORT", exportPath)
+	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 // canonicalAnalysisCertifyRequestFromExistingTest converts a previously
@@ -98,10 +154,10 @@ func canonicalAnalysisCertifyRequestFromExistingTest(t *testing.T, root, runID, 
 	snapshotRel := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-set.json"))
 	mustWrite153Cmd(t, filepath.Join(root, filepath.FromSlash(snapshotRel)), string(snapshotBytes))
 	return analysisruntime.CertifyRequest{
-		RunID: runID,
-		ProposalPath: proposalRel,
-		SnapshotPath: snapshotRel,
+		RunID:          runID,
+		ProposalPath:   proposalRel,
+		SnapshotPath:   snapshotRel,
 		SnapshotSHA256: snapshot.SnapshotSHA256,
-		Intent: intent,
+		Intent:         intent,
 	}
 }
