@@ -38,8 +38,10 @@ jobs:
           foreach ($path in @(
             '.github/scripts/task164-final-certification.ps1',
             '.github/scripts/task164-release-package.ps1',
+            '.github/scripts/task164-install.ps1',
             '.github/scripts/task164-closure-opencode-resolved-contract.ps1',
             '.github/scripts/task164-closure-agent-contract.ps1',
+            '.github/scripts/task164-closure-install-e2e.ps1',
             '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
             '.github/scripts/task164-task4-progress-interruption-e2e.ps1',
             '.github/scripts/task163-task3-active-contract-regression.ps1',
@@ -74,6 +76,10 @@ jobs:
           pwsh -NoProfile -File ./.github/scripts/task164-release-package.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pwsh -NoProfile -File ./.github/scripts/task164-closure-opencode-resolved-contract.ps1
+
+      - name: Closure - First install safety
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task164-closure-install-e2e.ps1
 
       - name: Closure RED/GREEN - Agent contract consistency
         shell: pwsh
