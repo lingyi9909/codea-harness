@@ -88,10 +88,12 @@ def main() -> int:
         require(script, marker, "Task 3 final-head evidence", failures)
 
     # Retained full product review/report regression and final exact-head gates
-    # remain part of certification.
+    # remain part of certification. These assertions follow the production
+    # wrapper used by this script instead of depending on an implementation
+    # detail inside Invoke-Go itself.
     require(script, ".github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1", "full review.md regression", failures)
-    require(script, "go','test','-count=1','./...'", "fresh full Go regression", failures)
-    require(script, "go','vet','./...'", "fresh go vet", failures)
+    require(script, "Invoke-Go @('test','-count=1','./...')", "fresh full Go regression", failures)
+    require(script, "Invoke-Go @('vet','./...')", "fresh go vet", failures)
     require(script, "TASK164_FINAL_ARTIFACTS PASS", "release artifact hashes", failures)
     require(script, "TASK164_FINAL_EXACT_HEAD PASS", "final exact HEAD", failures)
 
