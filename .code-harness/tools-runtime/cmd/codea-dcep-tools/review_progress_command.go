@@ -26,6 +26,38 @@ func runReviewProgress164(args []string) error {
 	return writeJSONAndStatus(state, true)
 }
 
+// runReviewReviewerUnavailable164 is a failure-only Runtime boundary used when
+// the OpenCode Reviewer Host cannot resolve, start, invoke, or complete the
+// independent Reviewer child session. The caller cannot choose a stage or a
+// result: Runtime reads the current stage and only permits the two stages that
+// actually depend on a live Reviewer. This signal can deny authority, but it
+// can never manufacture PASS or advance the review lifecycle.
+func runReviewReviewerUnavailable164(args []string) error {
+	fs := flag.NewFlagSet("review reviewer-unavailable", flag.ContinueOnError)
+	runID := fs.String("run-id", "", "Runtime review run id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	hardStop := errors.New("REVIEWER_UNAVAILABLE\nMANUAL_ACTION_REQUIRED\nHARD STOP")
+	canonicalRunID := strings.TrimSpace(*runID)
+	if fs.NArg() != 0 || canonicalRunID == "" || canonicalRunID != *runID {
+		return errors.Join(hardStop, errors.New("REVIEWER_RUN_ID_REQUIRED: review reviewer-unavailable requires canonical --run-id"))
+	}
+	state, err := reviewprogress.Read(".", canonicalRunID)
+	if err != nil {
+		return errors.Join(hardStop, fmt.Errorf("REVIEW_PROGRESS_READ_FAILED: %w", err))
+	}
+	if state.Status == reviewprogress.StatusFailed && state.FailureCode == "REVIEWER_UNAVAILABLE" &&
+		(state.FailureStage == reviewprogress.StageChangeAnalysis || state.FailureStage == reviewprogress.StageReviewExecution) {
+		return hardStop
+	}
+	if state.Status != reviewprogress.StatusRunning ||
+		(state.CurrentStage != reviewprogress.StageChangeAnalysis && state.CurrentStage != reviewprogress.StageReviewExecution) {
+		return errors.Join(hardStop, fmt.Errorf("REVIEWER_STAGE_REQUIRED: current=%s status=%s", state.CurrentStage, state.Status))
+	}
+	return failReviewProgressStage164(canonicalRunID, state.CurrentStage, "REVIEWER_UNAVAILABLE", hardStop)
+}
+
 // advanceReviewProgressStage164 keeps historical direct Runtime commands
 // backward-compatible: commands only participate in Task 3 progress when the
 // same run already owns a Runtime review-progress state. Once such state
