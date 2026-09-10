@@ -7,11 +7,12 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   reviewer-host-authority:
     runs-on: windows-latest
-    timeout-minutes: 55
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,19 +47,37 @@ jobs:
         run: |
           foreach ($script in @(
             './.github/scripts/task164-release-blocker-task2-e2e.ps1',
-            './.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1'
+            './.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1',
+            './.github/scripts/task164-release-blocker-task2-upgrade-e2e.ps1',
+            './.github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1'
           )) {
             $errors = $null
             $tokens = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)
             if ($errors.Count -ne 0) { $errors | Format-List | Out-String | Write-Error; exit 1 }
           }
+          python -m py_compile ./.github/scripts/task164-release-blocker-task2-plain-review-server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output 'TASK164_TASK2_E2E_SCRIPT_PARSE PASS'
 
       - name: Build exact-head 1.6.4 package
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./.github/scripts/task164-release-package.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exact packaged 1.6.3 to official 1.6.4 Reviewer Host upgrade and rollback E2E
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-upgrade-e2e.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Real packaged top-level harness review E2E
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Real packaged OpenCode Reviewer E2E
@@ -123,6 +142,9 @@ jobs:
             '.code-harness/tools/codea-reviewer-submit.ts',
             '.github/scripts/task164-release-blocker-task2-e2e.ps1',
             '.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1',
+            '.github/scripts/task164-release-blocker-task2-upgrade-e2e.ps1',
+            '.github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1',
+            '.github/scripts/task164-release-blocker-task2-plain-review-server.py',
             '.github/scripts/task164-release-blocker-task2-red.ps1',
             '.github/scripts/task164-release-blocker-task2-reverify-red.ps1',
             '.github/scripts/task164-release-package.ps1',
