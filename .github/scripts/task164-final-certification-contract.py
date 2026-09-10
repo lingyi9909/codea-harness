@@ -24,8 +24,8 @@ def main() -> int:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     failures: list[str] = []
 
-    # Final certification must freeze the accepted repair Task 3 HEAD, not the
-    # superseded pre-repair certification baseline.
+    # Final certification freezes the accepted repair Task 3 HEAD. Task 4 may
+    # change only final-certification/evidence code above that frozen baseline.
     require(script, f"$base = '{ACCEPTED_TASK3}'", "accepted Task 3 baseline", failures)
     forbid(script, "$base = '48158a74a5cbec61ac8936e1c65901013e757101'", "stale final baseline", failures)
 
@@ -49,17 +49,32 @@ def main() -> int:
         ".github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1",
         ".github/scripts/task164-release-blocker-task2-e2e.ps1",
         ".github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1",
+        ".github/scripts/task164-task4-packaged-plain-review-e2e.ps1",
     ):
         require(script, path, "Gate B/C Reviewer E2E", failures)
     for marker in (
         "TASK164_TASK2_TOP_LEVEL_REVIEW_CHAIN PASS",
         "TASK164_TASK2_TOP_LEVEL_DISABLED_HARD_STOP PASS",
         "TASK164_RELEASE_BLOCKER_TASK2_E2E PASS",
+        "TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS",
+        "TASK164_TASK4_INDEPENDENT_REVIEWER_BOTH_PHASES PASS",
+        "TASK164_TASK4_RUNTIME_PROGRESS_TERMINAL PASS",
+        "TASK164_TASK4_REVIEW_MD PASS",
+        "TASK164_TASK4_GATE_B PASS",
     ):
         require(script, marker, "Gate B/C evidence", failures)
 
-    # Gate D / Task 3 authority: rerun Runtime-owned progress contracts and
-    # publish the accepted markers from this exact final candidate.
+    # Gate D: a controlled packaged interruption must fail the exact Runtime
+    # stage and prove all later stages are BLOCKED, without review.md.
+    require(script, ".github/scripts/task164-task4-progress-interruption-e2e.ps1", "Gate D interruption E2E", failures)
+    for marker in (
+        "TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS",
+        "TASK164_TASK4_DOWNSTREAM_BLOCKED PASS",
+        "TASK164_TASK4_GATE_D PASS",
+    ):
+        require(script, marker, "Gate D evidence", failures)
+
+    # Task 3 authority is re-run, not inherited from a previous green run.
     require(script, "./internal/reviewprogress", "Task 3 Runtime progress tests", failures)
     require(script, "^Test164Task3", "Task 3 targeted tests", failures)
     for marker in (
@@ -73,17 +88,22 @@ def main() -> int:
         require(script, marker, "Task 3 final-head evidence", failures)
 
     # Retained full product review/report regression and final exact-head gates
-    # must remain part of certification.
+    # remain part of certification.
     require(script, ".github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1", "full review.md regression", failures)
     require(script, "go','test','-count=1','./...'", "fresh full Go regression", failures)
     require(script, "go','vet','./...'", "fresh go vet", failures)
     require(script, "TASK164_FINAL_ARTIFACTS PASS", "release artifact hashes", failures)
     require(script, "TASK164_FINAL_EXACT_HEAD PASS", "final exact HEAD", failures)
 
-    # The workflow itself must enforce this contract before running the long
-    # certification script so future gate drift fails early.
+    # The workflow must enforce the contract before the long run and provide
+    # Actions read access / token needed for the official 1.6.3 artifact fetch.
     require(workflow, "task164-final-certification-contract.py", "workflow contract gate", failures)
     require(workflow, "TASK164_FINAL_CONTRACT PASS", "workflow contract marker", failures)
+    require(workflow, "actions: read", "official artifact Actions permission", failures)
+    require(workflow, "GH_TOKEN: ${{ github.token }}", "official artifact token", failures)
+    require(workflow, "task164-task4-packaged-plain-review-e2e.ps1", "Task 4 PowerShell parse gate", failures)
+    require(workflow, "task164-task4-progress-interruption-e2e.ps1", "Task 4 interruption parse gate", failures)
+    require(workflow, "task164-task4-plain-review-server.py", "Task 4 model py_compile gate", failures)
 
     if failures:
         print("TASK164_FINAL_CONTRACT FAIL")
