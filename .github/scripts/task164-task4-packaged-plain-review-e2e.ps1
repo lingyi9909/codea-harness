@@ -268,7 +268,8 @@ try {
     $literalSeen = $false
     foreach ($request in $modelRequests) {
         foreach ($message in @($request.messages | Where-Object { $_.role -eq 'user' })) {
-            if (([string](if ($message.content -is [string]) { $message.content } else { '' })).Trim() -eq 'harness review') { $literalSeen = $true }
+            $messageText = if ($message.content -is [string]) { [string]$message.content } else { '' }
+            if ($messageText.Trim() -eq 'harness review') { $literalSeen = $true }
             foreach ($block in @($message.content)) {
                 if ($block -isnot [string] -and [string]$block.text -eq 'harness review') { $literalSeen = $true }
             }
