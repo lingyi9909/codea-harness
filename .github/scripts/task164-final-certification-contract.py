@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / ".github/scripts/task164-final-certification.ps1"
 WORKFLOW_PATH = ROOT / ".github/workflows/task164-final-certification.yml"
+TASK4_REVIEW_PATH = ROOT / ".github/scripts/task164-task4-packaged-plain-review-e2e.ps1"
 
 ACCEPTED_TASK3 = "ffedb2a273dc714db080dc2115f189f20d55b227"
 
@@ -22,6 +23,7 @@ def forbid(text: str, needle: str, label: str, failures: list[str]) -> None:
 def main() -> int:
     script = SCRIPT_PATH.read_text(encoding="utf-8")
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    task4_review = TASK4_REVIEW_PATH.read_text(encoding="utf-8")
     failures: list[str] = []
 
     # Final certification freezes the accepted repair Task 3 HEAD. Task 4 may
@@ -64,6 +66,13 @@ def main() -> int:
     ):
         require(script, marker, "Gate B/C evidence", failures)
 
+    # PowerShell permits `if` as a statement but not as a parenthesized command
+    # inside a cast. This escaped the parser gate and failed only after the real
+    # packaged review had already completed. Keep the provider-log assertion,
+    # but require a statement assignment that is valid in Windows PowerShell.
+    forbid(task4_review, "[string](if (", "Task 4 provider literal-prompt assertion", failures)
+    require(task4_review, "$messageText = if ($message.content -is [string])", "Task 4 provider message normalization", failures)
+
     # Gate D: a controlled packaged interruption must fail the exact Runtime
     # stage and prove all later stages are BLOCKED, without review.md.
     require(script, ".github/scripts/task164-task4-progress-interruption-e2e.ps1", "Gate D interruption E2E", failures)
@@ -87,11 +96,43 @@ def main() -> int:
     ):
         require(script, marker, "Task 3 final-head evidence", failures)
 
-    # Retained full product review/report regression and final exact-head gates
-    # remain part of certification. These assertions follow the production
-    # wrapper used by this script instead of depending on an implementation
-    # detail inside Invoke-Go itself.
-    require(script, ".github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1", "full review.md regression", failures)
+    # Gate E keeps USER_SELECTION authority, but old 1.6.2/1.6.3 real-Agent
+    # fixtures predate the accepted Task 2 Reviewer receipt and now correctly
+    # fail closed with REVIEWER_UNAVAILABLE. Do not weaken Runtime authority or
+    # edit accepted historical fixtures merely to make those obsolete drivers
+    # green. Re-run the current authority tests and active hard-stop contract.
+    require(script, "Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice", "USER_SELECTION target preservation", failures)
+    require(script, "Test153ReviewSelectRejectsRehashedOptionSetDeletion", "USER_SELECTION optionsHash authority", failures)
+    require(script, ".github/scripts/task163-task3-active-contract-regression.ps1", "USER_SELECTION active hard-stop contract", failures)
+    for stale in (
+        ".github/scripts/task163-task3-negative-control.ps1",
+        ".github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1",
+        ".github/scripts/task162-review-reliability-task1-real-agent-e2e-v2.ps1",
+        ".github/scripts/task162-review-reliability-task2-real-agent-e2e.ps1",
+        ".github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1",
+    ):
+        forbid(script, stale, "pre-Reviewer-authority real-Agent gate", failures)
+
+    # The current packaged full review is the retained review.md regression:
+    # it enters through literal `harness review`, proves two independent
+    # Reviewer child sessions, Runtime 8/8 terminal state and canonical report.
+    require(script, "TASK164_TASK4_REVIEW_MD PASS", "full review.md regression", failures)
+    require(script, "TASK164_TASK4_INDEPENDENT_REVIEWER_BOTH_PHASES PASS", "current Reviewer authority review regression", failures)
+
+    # Upgrade V2 Runtime tests remain retained. The old 1.6.3 package checker
+    # assumed every file under .code-harness-upgrade belonged to managedFiles;
+    # Task 2 intentionally adds transactionally staged host/ resources governed
+    # by hostAgents metadata instead. Final certification must validate both
+    # inventories rather than treating host payload as framework managedFiles.
+    require(script, "./internal/upgrade", "retained Upgrade V2 Runtime tests", failures)
+    forbid(script, ".github/scripts/task163-task4-package-regression.ps1", "pre-host-registration package inventory gate", failures)
+    require(script, "hostAgents", "Reviewer Host package metadata verification", failures)
+    require(script, "upgradeSource", "Reviewer Host staged-source verification", failures)
+    forbid(script, "if (@($manifest.managedFiles.PSObject.Properties).Count -ne $files.Count)", "legacy all-files managed inventory count", failures)
+
+    # Fresh full product verification and final exact-head gates remain part of
+    # certification. These assertions follow the production wrapper used by
+    # this script instead of depending on implementation detail in Invoke-Go.
     require(script, "Invoke-Go @('test','-count=1','./...')", "fresh full Go regression", failures)
     require(script, "Invoke-Go @('vet','./...')", "fresh go vet", failures)
     require(script, "TASK164_FINAL_ARTIFACTS PASS", "release artifact hashes", failures)
