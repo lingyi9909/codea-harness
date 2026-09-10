@@ -16,6 +16,7 @@ import (
 	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/requestcontract"
 	"codea-harness-tools/internal/reviewauthority"
+	"codea-harness-tools/internal/reviewprogress"
 	"codea-harness-tools/internal/schema"
 )
 
@@ -70,15 +71,16 @@ func runAnalysisSnapshot162(args []string) error {
 	if strings.TrimSpace(req.BaseRef) == "" { return errors.New("ChangeSet snapshot request requires baseRef") }
 
 	snapshot, err := changeset.Compute(".", req.BaseRef, req.IncludeWorkingTree)
-	if err != nil { return err }
+	if err != nil { return failSnapshotProgress164(req.RunID, err) }
 	artifactBytes, err := changeset.CanonicalBytes(snapshot)
-	if err != nil { return err }
+	if err != nil { return failSnapshotProgress164(req.RunID, err) }
 	schemaBytes, err := os.ReadFile(filepath.Join(".code-harness", "contracts", "change-set.schema.json"))
-	if err != nil { return fmt.Errorf("read ChangeSet snapshot schema: %w", err) }
-	if err := schema.ValidateJSON(schemaBytes, artifactBytes); err != nil { return fmt.Errorf("validate ChangeSet snapshot: %w", err) }
+	if err != nil { return failSnapshotProgress164(req.RunID, fmt.Errorf("read ChangeSet snapshot schema: %w", err)) }
+	if err := schema.ValidateJSON(schemaBytes, artifactBytes); err != nil { return failSnapshotProgress164(req.RunID, fmt.Errorf("validate ChangeSet snapshot: %w", err)) }
 
 	artifactPath := filepath.Join(".code-harness", "runs", req.RunID, "analysis", "change-set.json")
-	if err := atomicWriteAnalysis153(artifactPath, artifactBytes); err != nil { return err }
+	if err := atomicWriteAnalysis153(artifactPath, artifactBytes); err != nil { return failSnapshotProgress164(req.RunID, err) }
+	if err := advanceSnapshotProgress164(req.RunID, artifactPath); err != nil { return err }
 	return writeJSONAndStatus(map[string]any{
 		"status": "SNAPSHOT_READY",
 		"runId": req.RunID,
@@ -88,6 +90,35 @@ func runAnalysisSnapshot162(args []string) error {
 		"mergeBase": snapshot.MergeBase,
 		"headCommit": snapshot.HeadCommit,
 	}, true)
+}
+
+func failSnapshotProgress164(runID string, cause error) error {
+	if cause == nil || strings.TrimSpace(runID) == "" {
+		return cause
+	}
+	if _, err := reviewprogress.Read(".", runID); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return cause
+		}
+		return errors.Join(cause, fmt.Errorf("SNAPSHOT_PROGRESS_READ_FAILED: %w", err))
+	}
+	if _, err := reviewprogress.Fail(".", runID, reviewprogress.StageSnapshot, "SNAPSHOT_CAPTURE_FAILED"); err != nil {
+		return errors.Join(cause, fmt.Errorf("SNAPSHOT_PROGRESS_FAIL_FAILED: %w", err))
+	}
+	return cause
+}
+
+func advanceSnapshotProgress164(runID, artifactPath string) error {
+	if _, err := reviewprogress.Read(".", runID); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("SNAPSHOT_PROGRESS_READ_FAILED: %w", err)
+	}
+	if _, err := reviewprogress.Advance(".", runID, reviewprogress.StageSnapshot, filepath.ToSlash(artifactPath)); err != nil {
+		return fmt.Errorf("SNAPSHOT_PROGRESS_ADVANCE_FAILED: %w", err)
+	}
+	return nil
 }
 
 func runAnalysisInventory(args []string) error {
