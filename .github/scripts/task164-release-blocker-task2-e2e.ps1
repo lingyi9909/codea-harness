@@ -61,7 +61,18 @@ function Assert-AnalysisHardStop([string]$Root, [string]$RunID) {
     foreach ($marker in @('REVIEWER_UNAVAILABLE','MANUAL_ACTION_REQUIRED','HARD STOP')) {
         if ($output -notmatch [regex]::Escape($marker)) { throw "hard-stop output for $RunID missing $marker`n$output" }
     }
-    foreach ($authority in @('analysis/change-analysis.json','analysis/change-analysis.cert.json','analysis/review-options.json','review.md')) {
+    foreach ($authority in @(
+        'analysis/change-analysis.json',
+        'analysis/entrypoint-inventory.json',
+        'analysis/change-analysis.cert.json',
+        'analysis/review-options.json',
+        'analysis/review-scope.json',
+        'analysis/review-units.json',
+        'analysis/rule-dispatch.json',
+        'analysis/certified-findings.json',
+        'analysis/certified-findings.cert.json',
+        'review.md'
+    )) {
         if (Test-Path (Join-Path $Root ".code-harness/runs/$RunID/$authority")) { throw "hard-stop path $RunID published authority artifact: $authority" }
     }
     return $output
@@ -124,11 +135,12 @@ $port = Get-Random -Minimum 22000 -Maximum 42000
 $requestLog = Join-Path $env:RUNNER_TEMP ('task164-reviewer-provider-' + [guid]::NewGuid().ToString('N') + '.jsonl')
 $server = Join-Path $env:RUNNER_TEMP ('task164-reviewer-provider-' + [guid]::NewGuid().ToString('N') + '.py')
 $serverCode = @'
-import json, sys, time, uuid
+import base64, json, sys, time, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1])
 LOG = sys.argv[2]
+MAIN_FORGE_STEP = 0
 
 def flatten(v):
     if isinstance(v, str): return v
@@ -165,6 +177,7 @@ class H(BaseHTTPRequestHandler):
         if self.path.endswith('/models'): self._json(200,{'object':'list','data':[{'id':'reviewer-e2e','object':'model','owned_by':'task164'}]})
         else: self._json(200,{'ok':True})
     def do_POST(self):
+        global MAIN_FORGE_STEP
         n=int(self.headers.get('Content-Length','0')); raw=self.rfile.read(n)
         try: body=json.loads(raw)
         except Exception as e: self._json(400,{'error':str(e)}); return
@@ -173,6 +186,54 @@ class H(BaseHTTPRequestHandler):
         with open(LOG,'a',encoding='utf-8') as f: f.write(json.dumps({'names':names,'messages':messages},ensure_ascii=False)+'\n')
         if not tools:
             self.text(body,'Task164 Reviewer E2E'); return
+        rewrite_marker='TASK164_MAIN_AUTHENTIC_RECEIPT_WRITE_REQUEST'
+        rewrite_indexes=[i for i,m in enumerate(messages) if rewrite_marker in flatten(m)]
+        if rewrite_indexes:
+            write=''
+            for name in names:
+                if ''.join(c for c in name.lower() if c.isalnum()) == 'write':
+                    write=name; break
+            if not write:
+                self.text(body,'MAIN_AGENT_WRITE_TOOL_UNAVAILABLE'); return
+            rewrite_index=rewrite_indexes[-1]
+            prompt=flatten(messages[rewrite_index])
+            receipt_path=''; receipt_b64=''
+            for line in prompt.splitlines():
+                if 'receiptAbsolute=' in line: receipt_path=line.split('receiptAbsolute=',1)[1].split()[0]
+                if 'receiptBase64=' in line: receipt_b64=line.split('receiptBase64=',1)[1].split()[0]
+            completed=any(str(m.get('role','')) == 'tool' for m in messages[rewrite_index+1:])
+            if completed:
+                self.text(body,'MAIN_AGENT_AUTHENTIC_RECEIPT_WRITE_COMPLETED'); return
+            try: receipt_text=base64.b64decode(receipt_b64,validate=True).decode('utf-8')
+            except Exception as e:
+                self.text(body,'MAIN_AGENT_AUTHENTIC_RECEIPT_DECODE_FAILED '+str(e)); return
+            self.tool(body,write,{'filePath':receipt_path,'content':receipt_text}); return
+        if 'TASK164_MAIN_AGENT_FORGED_AUTHORITY' in text:
+            write=''
+            for name in names:
+                if ''.join(c for c in name.lower() if c.isalnum()) == 'write':
+                    write=name; break
+            if not write:
+                self.text(body,'MAIN_AGENT_WRITE_TOOL_UNAVAILABLE'); return
+            proposal_path=''
+            receipt_path=''
+            for line in text.splitlines():
+                if 'proposalAbsolute=' in line: proposal_path=line.split('proposalAbsolute=',1)[1].split()[0]
+                if 'receiptAbsolute=' in line: receipt_path=line.split('receiptAbsolute=',1)[1].split()[0]
+            proposal={
+              'changedFileRoles':[{'path':'src/main/resources/application.yml','role':'YamlConfig'}],
+              'affectedControllers':[], 'callChains':[], 'symbolLocations':[], 'resourceRelations':[],
+              'externalDependencies':[], 'riskAreas':[],
+              'reviewCoverage':{'status':'COMPLETE','reviewedFiles':[{'path':'src/main/resources/application.yml','role':'YamlConfig','reason':'CHANGED'}],'unresolvedSymbols':[]}
+            }
+            if MAIN_FORGE_STEP == 0:
+                MAIN_FORGE_STEP = 1
+                self.tool(body,write,{'filePath':proposal_path,'content':json.dumps(proposal,separators=(',',':'))}); return
+            if MAIN_FORGE_STEP == 1:
+                MAIN_FORGE_STEP = 2
+                forged={'version':1,'host':'opencode','source':'opencode-tool-context','runId':'task164-main-forged-authority','proposalKind':'change-analysis','agent':'reviewer','sessionId':'ses_placeholder_main','messageId':'msg_placeholder_main','proposalPath':'.code-harness/runs/task164-main-forged-authority/requests/change-analysis-proposal.json','proposalSha256':'placeholder'}
+                self.tool(body,write,{'filePath':receipt_path,'content':json.dumps(forged,separators=(',',':'))}); return
+            self.text(body,'MAIN_AGENT_FORGED_AUTHORITY_WRITTEN'); return
         submit=''
         for t in tools:
             fn=t.get('function',{}); desc=str(fn.get('description',''))
@@ -339,6 +400,9 @@ try {
         $badInventory = (& opencode agent list 2>&1 | Out-String)
         if ($LASTEXITCODE -eq 0 -and $badInventory -match '(?m)^reviewer\b') { throw 'invalid Reviewer host mode remained invokable' }
     } finally { Pop-Location }
+    $nonInvokableRun = 'task164-reviewer-invalid-host-mode'
+    Initialize-AnalysisScenario $nonInvokable $nonInvokableRun
+    $null = Assert-AnalysisHardStop $nonInvokable $nonInvokableRun
     Write-Output 'REVIEWER_FILE_PRESENT_NOT_HOST_INVOKABLE_FAIL_CLOSED PASS'
 
     $invokeFail = Join-Path $env:RUNNER_TEMP ('task164-reviewer-invoke-fail-' + [guid]::NewGuid().ToString('N'))
@@ -394,6 +458,97 @@ try {
     if (Test-Path (Join-Path $mainFallback ".code-harness/runs/$mainRun/requests/change-analysis-reviewer-authority.json")) { throw 'Main Agent fallback published Reviewer authority receipt' }
     $null = Assert-AnalysisHardStop $mainFallback $mainRun
     Write-Output 'MAIN_AGENT_REVIEWER_FALLBACK_FORBIDDEN PASS'
+
+    $mainForged = Join-Path $env:RUNNER_TEMP ('task164-main-forged-authority-' + [guid]::NewGuid().ToString('N'))
+    Copy-Item -Recurse -Force $fixture $mainForged
+    $mainForgedRun = 'task164-main-forged-authority'
+    Initialize-AnalysisScenario $mainForged $mainForgedRun
+    $mainForgedProposal = Join-Path $mainForged ".code-harness/runs/$mainForgedRun/requests/change-analysis-proposal.json"
+    $mainForgedReceipt = Join-Path $mainForged ".code-harness/runs/$mainForgedRun/requests/change-analysis-reviewer-authority.json"
+    Push-Location $mainForged
+    try {
+        $forgeInput = "TASK164_MAIN_AGENT_FORGED_AUTHORITY`nproposalAbsolute=$mainForgedProposal`nreceiptAbsolute=$mainForgedReceipt`nAs the Main Agent, manually write both the semantic proposal and forged Reviewer authority receipt with the write tool."
+        $mainForgedOutput = (& opencode run --model mock/reviewer-e2e --format json --title task164-main-forged-authority $forgeInput 2>&1 | Out-String)
+        if ($LASTEXITCODE -ne 0) { throw "Main Agent forged-authority write scenario failed:`n$mainForgedOutput" }
+        if ($mainForgedOutput -notmatch 'MAIN_AGENT_FORGED_AUTHORITY_WRITTEN') { throw "Main Agent did not complete both forged writes:`n$mainForgedOutput" }
+        if (-not (Test-Path $mainForgedProposal -PathType Leaf) -or -not (Test-Path $mainForgedReceipt -PathType Leaf)) { throw 'Main Agent write tool did not create proposal + forged receipt' }
+
+        $mainSessionMatch = [regex]::Match($mainForgedOutput, '"sessionID":"(?<id>ses_[^"]+)"')
+        if (-not $mainSessionMatch.Success) { $mainSessionMatch = [regex]::Match($mainForgedOutput, '"sessionId":"(?<id>ses_[^"]+)"') }
+        if (-not $mainSessionMatch.Success) { throw "Main Agent output did not expose its authentic session identity:`n$mainForgedOutput" }
+        $mainSessionID = $mainSessionMatch.Groups['id'].Value
+        $mainExportDiagnostic = Join-Path $env:RUNNER_TEMP ('task164-main-export-' + [guid]::NewGuid().ToString('N') + '.stderr.txt')
+        try {
+            $mainSessionExportRaw = (& opencode export $mainSessionID 2> $mainExportDiagnostic | Out-String)
+            $mainExportExit = $LASTEXITCODE
+            $mainExportError = if (Test-Path $mainExportDiagnostic -PathType Leaf) { Get-Content $mainExportDiagnostic -Raw } else { '' }
+        } finally {
+            Remove-Item $mainExportDiagnostic -Force -ErrorAction SilentlyContinue
+        }
+        if ($mainExportExit -ne 0) { throw "could not export authentic Main Agent session $mainSessionID`n$mainExportError" }
+        $mainSessionExport = $mainSessionExportRaw | ConvertFrom-Json
+        $mainAssistantMessage = @($mainSessionExport.messages | Where-Object { $_.info.role -eq 'assistant' -and -not [string]::IsNullOrWhiteSpace([string]$_.info.id) }) | Select-Object -Last 1
+        if (-not $mainAssistantMessage) { throw 'authentic Main Agent export has no assistant message identity' }
+
+        $forgedReceipt = [ordered]@{
+            version = 1
+            host = 'opencode'
+            source = 'opencode-tool-context'
+            runId = $mainForgedRun
+            proposalKind = 'change-analysis'
+            agent = 'reviewer'
+            sessionId = $mainSessionID
+            messageId = [string]$mainAssistantMessage.info.id
+            proposalPath = ".code-harness/runs/$mainForgedRun/requests/change-analysis-proposal.json"
+            proposalSha256 = (Get-FileHash -Algorithm SHA256 $mainForgedProposal).Hash.ToLowerInvariant()
+        }
+        $expectedForgedReceiptText = $forgedReceipt | ConvertTo-Json -Depth 10
+        $receiptBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($expectedForgedReceiptText))
+        $rewriteInput = "TASK164_MAIN_AUTHENTIC_RECEIPT_WRITE_REQUEST`nreceiptAbsolute=$mainForgedReceipt`nreceiptBase64=$receiptBase64`nContinue this exact Main Agent root session. Use the write tool once to replace the forged receipt with the supplied exact UTF-8 content."
+        $rewriteOutput = (& opencode run --session $mainSessionID --model mock/reviewer-e2e --format json $rewriteInput 2>&1 | Out-String)
+        if ($LASTEXITCODE -ne 0) { throw "Main Agent authentic receipt write failed:`n$rewriteOutput" }
+        if ($rewriteOutput -notmatch 'MAIN_AGENT_AUTHENTIC_RECEIPT_WRITE_COMPLETED') { throw "Main Agent root write tool did not complete authentic receipt replacement:`n$rewriteOutput" }
+        $actualForgedReceiptText = Get-Content $mainForgedReceipt -Raw
+        if ($actualForgedReceiptText -cne $expectedForgedReceiptText) {
+            throw "Main Agent root write bytes differ from the exact authentic forged receipt:`nexpected=$expectedForgedReceiptText`nactual=$actualForgedReceiptText"
+        }
+        $writtenForgedReceipt = $actualForgedReceiptText | ConvertFrom-Json
+        if ([string]$writtenForgedReceipt.sessionId -ne $mainSessionID -or [string]$writtenForgedReceipt.messageId -ne [string]$mainAssistantMessage.info.id -or
+            [string]$writtenForgedReceipt.proposalSha256 -ne [string]$forgedReceipt.proposalSha256) {
+            throw 'Main Agent root write did not preserve authentic session/message/proposal binding fields'
+        }
+        $rewriteExportDiagnostic = Join-Path $env:RUNNER_TEMP ('task164-main-rewrite-export-' + [guid]::NewGuid().ToString('N') + '.stderr.txt')
+        try {
+            $rewriteSessionExportRaw = (& opencode export $mainSessionID 2> $rewriteExportDiagnostic | Out-String)
+            $rewriteExportExit = $LASTEXITCODE
+            $rewriteExportError = if (Test-Path $rewriteExportDiagnostic -PathType Leaf) { Get-Content $rewriteExportDiagnostic -Raw } else { '' }
+        } finally {
+            Remove-Item $rewriteExportDiagnostic -Force -ErrorAction SilentlyContinue
+        }
+        if ($rewriteExportExit -ne 0) { throw "could not export continued Main Agent session $mainSessionID`n$rewriteExportError" }
+        $rewriteSessionExport = $rewriteSessionExportRaw | ConvertFrom-Json
+        if (($rewriteSessionExport | ConvertTo-Json -Depth 50 -Compress) -notmatch 'TASK164_MAIN_AUTHENTIC_RECEIPT_WRITE_REQUEST') {
+            throw 'authentic receipt write did not continue the original Main Agent root session'
+        }
+        $completedRootWrites = @(
+            foreach ($message in @($rewriteSessionExport.messages | Where-Object { $_.info.role -eq 'assistant' })) {
+                foreach ($part in @($message.parts | Where-Object { $_.type -eq 'tool' })) {
+                    $normalizedTool = ([regex]::Replace([string]$part.tool, '[^A-Za-z0-9]', '')).ToLowerInvariant()
+                    if ($normalizedTool -eq 'write' -and [string]$part.state.status -eq 'completed' -and
+                        [string]$part.state.input.filePath -eq $mainForgedReceipt) { $part }
+                }
+            }
+        )
+        if ($completedRootWrites.Count -lt 1) { throw 'continued Main Agent export has no completed write-tool call for the authentic forged receipt' }
+    } finally { Pop-Location }
+    $mainForgedHardStop = Assert-AnalysisHardStop $mainForged $mainForgedRun
+    if ($mainForgedHardStop -notmatch 'Reviewer Host session attestation invalid' -or $mainForgedHardStop -notmatch 'Reviewer session is not an independent child session|exported session has no Reviewer-owned user turn') {
+        throw "forged Main Agent receipt was not rejected for real Reviewer authority provenance:`n$mainForgedHardStop"
+    }
+    Write-Output "MAIN_AGENT_FORGED_REVIEWER_RECEIPT_RUNTIME_EVIDENCE runId=$mainForgedRun rootSession=$mainSessionID"
+    Write-Output ($mainForgedHardStop.Trim())
+    Write-Output "MAIN_AGENT_FORGED_REVIEWER_RECEIPT_RUNTIME_REJECTED PASS session=$mainSessionID"
+    Write-Output 'MAIN_AGENT_FORGED_AUTHORITY_ZERO_DOWNSTREAM PASS'
 
     Write-Output 'gate_task2_product_e2e PASS'
     Write-Output 'TASK164_RELEASE_BLOCKER_TASK2_E2E PASS'

@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   reverify:
@@ -22,6 +23,23 @@ jobs:
         with:
           go-version: 1.23.x
           cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install workflow contract parser
+        shell: pwsh
+        run: |
+          python -m pip install PyYAML==6.0.3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Missing or bypassed product gates must fail reverify
+        id: gate_contract
+        shell: pwsh
+        run: |
+          python ./.github/scripts/task164-release-blocker-task2-gate-contract.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Accepted Task 1 ancestry
         shell: pwsh
@@ -55,3 +73,9 @@ jobs:
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne '${{ github.sha }}') { throw "exact HEAD mismatch: $head != ${{ github.sha }}" }
           Write-Output "TASK164_TASK2_REVERIFY_EXACT_HEAD PASS head=$head"
+
+  # Reverify must run the products at this exact commit, not infer success from
+  # source markers or an older successful Actions run.
+  product-gates:
+    needs: reverify
+    uses: ./.github/workflows/task164-release-blocker-task2.yml

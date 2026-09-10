@@ -4,6 +4,7 @@ on:
   push:
     branches: [release/1.6.4-final-certification]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -27,6 +28,18 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+
+      - name: Install workflow contract parser
+        shell: pwsh
+        run: |
+          python -m pip install PyYAML==6.0.3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Required Task 2 product gates and removal negatives
+        shell: pwsh
+        run: |
+          python ./.github/scripts/task164-release-blocker-task2-gate-contract.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Exact accepted-base ancestry guard
         shell: pwsh
@@ -66,7 +79,8 @@ jobs:
           pwsh -NoProfile -File ./.github/scripts/task164-release-package.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Exact packaged 1.6.3 to official 1.6.4 Reviewer Host upgrade and rollback E2E
+      - name: Exact packaged 1.6.3 upgrade and partial Host apply rollback E2E
+        id: packaged_upgrade
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,25 +88,29 @@ jobs:
           pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-upgrade-e2e.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Real packaged top-level harness review E2E
+      - name: Packaged top-level harness review and disabled Reviewer E2E
+        id: top_level_review
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Real packaged OpenCode Reviewer E2E
+        id: reviewer_authority
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-e2e.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Real Reviewer session cancel fail-closed E2E
+        id: session_cancel
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Fresh Runtime authority regressions
+        id: runtime_authority_regression
         shell: pwsh
         working-directory: .code-harness/tools-runtime
         run: |
@@ -101,6 +119,7 @@ jobs:
           Write-Output 'TASK164_TASK2_RUNTIME_AUTHORITY_REGRESSION PASS'
 
       - name: Fresh full Go regression
+        id: full_go_test
         shell: pwsh
         working-directory: .code-harness/tools-runtime
         run: |
@@ -109,6 +128,7 @@ jobs:
           Write-Output 'TASK164_TASK2_FULL_GO_TEST PASS'
 
       - name: Fresh go vet
+        id: go_vet
         shell: pwsh
         working-directory: .code-harness/tools-runtime
         run: |
@@ -117,45 +137,18 @@ jobs:
           Write-Output 'TASK164_TASK2_GO_VET PASS'
 
       - name: Task 2 scope and exact HEAD
+        id: scope_exact_head
         shell: pwsh
         run: |
-          $accepted = '51ad4cbc32008e388fc7a2564dbd5e518d04d9ae'
-          $allowed = @(
-            '.code-harness/bootstrap.md',
-            '.code-harness/contracts/reviewer-host-contract.md',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/analysis_certify_canonical_162_hotfix_test.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/analysis_certify_test.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/analysis_command.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/certified_analysis_fixture_153_test.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/chain_edit_intent_authority_153_test.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/report.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/report_certified_153_test.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/report_certified_findings_164.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/report_test.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_precision_command.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/reviewer_authority_test.go',
-            '.code-harness/tools-runtime/cmd/codea-dcep-tools/reviewer_findings_report_164_test.go',
-            '.code-harness/tools-runtime/internal/reviewauthority/authority.go',
-            '.code-harness/tools-runtime/internal/upgrade/reviewer_host_164.go',
-            '.code-harness/tools-runtime/internal/upgrade/task164_reviewer_host_upgrade_test.go',
-            '.code-harness/tools-runtime/internal/upgrade/upgrade.go',
-            '.code-harness/tools/codea-reviewer-submit.ts',
-            '.github/scripts/task164-release-blocker-task2-e2e.ps1',
-            '.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1',
-            '.github/scripts/task164-release-blocker-task2-upgrade-e2e.ps1',
-            '.github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1',
-            '.github/scripts/task164-release-blocker-task2-plain-review-server.py',
-            '.github/scripts/task164-release-blocker-task2-red.ps1',
-            '.github/scripts/task164-release-blocker-task2-reverify-red.ps1',
-            '.github/scripts/task164-release-package.ps1',
-            '.github/workflows/task164-release-blocker-task2-red.yml',
-            '.github/workflows/task164-release-blocker-task2-reverify-red.yml',
-            '.github/workflows/task164-release-blocker-task2.yml'
-          )
-          $changed = @(git diff --name-only "$accepted...HEAD")
-          $unexpected = @($changed | Where-Object { $_ -notin $allowed })
-          if ($unexpected.Count -gt 0) { throw "Task 2 scope expanded: $($unexpected -join ', ')" }
-          $head = (git rev-parse HEAD).Trim()
-          if ($head -ne '${{ github.sha }}') { throw "exact HEAD mismatch: $head != ${{ github.sha }}" }
-          Write-Output "TASK164_RELEASE_BLOCKER_TASK2_SCOPE PASS files=$($changed.Count)"
-          Write-Output "TASK164_RELEASE_BLOCKER_TASK2_EXACT_HEAD PASS head=$head"
+          pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-scope-self-test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File ./.github/scripts/task164-release-blocker-task2-scope.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Preserve top-level OpenCode session evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task164-task2-entry-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/task164-task2-entry-evidence/
+          if-no-files-found: warn
