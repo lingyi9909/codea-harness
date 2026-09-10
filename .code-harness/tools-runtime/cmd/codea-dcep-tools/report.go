@@ -14,6 +14,7 @@ import (
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/report"
 	"codea-harness-tools/internal/requestcontract"
+	"codea-harness-tools/internal/reviewprogress"
 	"codea-harness-tools/internal/reviewscope"
 )
 
@@ -45,56 +46,62 @@ func runReviewReport(args []string) error {
 	if err != nil {
 		return errors.New("review report input must be under .code-harness/runs/<runId>/requests")
 	}
+	failReport := func(err error) error {
+		return failReviewProgressStage164(runID, reviewprogress.StageReport, "REPORT_FAILED", err)
+	}
 	if err := verifyReviewTransportPath153(runID, cleanInput); err != nil {
-		return err
+		return failReport(err)
 	}
 	data, err := os.ReadFile(cleanInput)
 	if err != nil {
-		return fmt.Errorf("read review report request: %w", err)
+		return failReport(fmt.Errorf("read review report request: %w", err))
 	}
 	if err := requestcontract.Validate("report-review-request.schema.json", data); err != nil {
-		return fmt.Errorf("REPORT_REVIEW_REQUEST_SCHEMA_INVALID: %w", err)
+		return failReport(fmt.Errorf("REPORT_REVIEW_REQUEST_SCHEMA_INVALID: %w", err))
 	}
 	proposal, err := decodeReviewTransport153(data)
 	if err != nil {
-		return err
+		return failReport(err)
 	}
 	if proposal.RunID != runID {
-		return fmt.Errorf("REVIEW_REPORT_RUN_ID_MISMATCH: body runId %q path runId %q", proposal.RunID, runID)
+		return failReport(fmt.Errorf("REVIEW_REPORT_RUN_ID_MISMATCH: body runId %q path runId %q", proposal.RunID, runID))
 	}
 
 	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json"))
 	certified, cert, err := analysisruntime.LoadCertified(".", analysisPath)
 	if err != nil {
-		return err
+		return failReport(err)
 	}
 	certifiedJSON, err := json.Marshal(certified)
 	if err != nil {
-		return fmt.Errorf("encode Certified ChangeAnalysis for report: %w", err)
+		return failReport(fmt.Errorf("encode Certified ChangeAnalysis for report: %w", err))
 	}
 	selectionJSON, err := reviewSelectionProposal153(proposal)
 	if err != nil {
-		return err
+		return failReport(err)
 	}
 	verifiedScope, err := reviewscope.Verify(selectionJSON, certifiedJSON)
 	if err != nil {
-		return err
+		return failReport(err)
 	}
 	machine, err := reviewscope.ComputeCoverageFromAnalysis(verifiedScope, certifiedJSON)
 	if err != nil {
-		return err
+		return failReport(err)
 	}
 
 	authoritative := buildCertifiedReviewRequest153(proposal, certified, cert, verifiedScope, machine)
 	if err := applyCertifiedFindingAuthority164(runID, cert, &authoritative); err != nil {
-		return err
+		return failReport(err)
 	}
 	path, err := report.Write(".", authoritative)
 	if err != nil {
-		return err
+		return failReport(err)
 	}
 	if err := os.Remove(cleanInput); err != nil {
-		return fmt.Errorf("remove review report transport after success: %w", err)
+		return failReport(fmt.Errorf("remove review report transport after success: %w", err))
+	}
+	if err := advanceReviewProgressStage164(runID, reviewprogress.StageReport, filepath.ToSlash(path)); err != nil {
+		return err
 	}
 	return reportPathJSON(path)
 }
