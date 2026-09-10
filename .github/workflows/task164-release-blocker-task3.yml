@@ -1,0 +1,37 @@
+name: task164-release-blocker-task3
+
+on:
+  push:
+    branches: [release/1.6.4-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review-progress:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Accepted Task 2 ancestry
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 8e3da6208bda755aa470519b8d191cc577eb99d7 HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Task 3 is not based on accepted Task 2 baseline' }
+
+      - name: Task 3 review progress RED contract
+        shell: pwsh
+        working-directory: .code-harness/tools-runtime
+        run: |
+          go test -count=1 ./cmd/codea-dcep-tools -run '^Test164Task3ReviewBeginCreatesRuntimeOwnedProgress$' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
