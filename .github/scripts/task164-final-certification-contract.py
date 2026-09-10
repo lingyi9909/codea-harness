@@ -73,6 +73,11 @@ def main() -> int:
     forbid(task4_review, "[string](if (", "Task 4 provider literal-prompt assertion", failures)
     require(task4_review, "$messageText = if ($message.content -is [string])", "Task 4 provider message normalization", failures)
 
+    # PowerShell automatic variables are case-insensitive. `$Host` is a
+    # read-only automatic variable, so assigning to `$host` fails only at
+    # runtime. Keep release artifact verification away from that reserved name.
+    forbid(script.lower(), "$host =", "PowerShell reserved Host variable", failures)
+
     # Gate D: a controlled packaged interruption must fail the exact Runtime
     # stage and prove all later stages are BLOCKED, without review.md.
     require(script, ".github/scripts/task164-task4-progress-interruption-e2e.ps1", "Gate D interruption E2E", failures)
