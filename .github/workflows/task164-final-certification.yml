@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   final-certification:
@@ -37,6 +38,8 @@ jobs:
           foreach ($path in @(
             '.github/scripts/task164-final-certification.ps1',
             '.github/scripts/task164-release-package.ps1',
+            '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
+            '.github/scripts/task164-task4-progress-interruption-e2e.ps1',
             '.github/scripts/task163-task3-active-contract-regression.ps1',
             '.github/scripts/task163-task3-negative-control.ps1',
             '.github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1',
@@ -48,6 +51,8 @@ jobs:
             if (@($errors).Count -ne 0) { throw "PowerShell parse failed: $path $errors" }
           }
           python -m py_compile .github/scripts/task164-final-certification-contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m py_compile .github/scripts/task164-task4-plain-review-server.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m py_compile .github/scripts/task163-task3/mock_openai_server.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -68,6 +73,8 @@ jobs:
 
       - name: Run Codea Harness 1.6.4 Final Certification
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: pwsh -NoProfile -File ./.github/scripts/task164-final-certification.ps1
 
       - name: Upload complete certification evidence
