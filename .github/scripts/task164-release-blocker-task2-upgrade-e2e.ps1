@@ -37,7 +37,9 @@ function Assert-Exact163([string]$Root) {
 function Initialize-ProjectState([string]$Root) {
     $target = Join-Path $Root '.code-harness'
     $template = Get-Content (Join-Path $target 'harness.template.yaml') -Raw
-    [IO.File]::WriteAllText((Join-Path $target 'harness.yaml'), $template, [Text.UTF8Encoding]::new($false))
+    $config = $template.Replace('module: ""', 'module: "task164-upgrade-e2e"').Replace('baseRef: ""', 'baseRef: HEAD')
+    if ($config -notmatch '(?m)^\s*baseRef:\s+HEAD\s*$') { throw 'failed to materialize valid 1.6.3 review.baseRef' }
+    [IO.File]::WriteAllText((Join-Path $target 'harness.yaml'), $config, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $target 'project.md'), "task164-upgrade-e2e`n", [Text.UTF8Encoding]::new($false))
 }
 
