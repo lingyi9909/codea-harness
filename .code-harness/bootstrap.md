@@ -51,7 +51,15 @@ FINDINGS
 -> Runtime review certify-findings
 ```
 
-如果 Reviewer 无法 resolve/start/invoke/complete，child session crash/cancel，或者没有产出可供 Runtime 校验的有效 proposal，固定输出并立即停止：
+如果 Reviewer 无法 resolve/start/invoke/complete，child session crash/cancel，或者没有产出可供 Runtime 校验的有效 proposal，OpenCode Host 必须先调用唯一的 failure-only Runtime 信号：
+
+```text
+codea-dcep-tools.exe review reviewer-unavailable --run-id <runId>
+```
+
+该命令不接受 `--stage`、自定义 failure code、advance 或 complete 参数。Runtime 必须自行读取当前 review progress，并且只允许当前 `CHANGE_ANALYSIS` 或 `REVIEW_EXECUTION` 失败为 `REVIEWER_UNAVAILABLE`；它不能产生 PASS、不能推进阶段、不能修改其他阶段。
+
+命令返回后固定输出并立即停止：
 
 ```text
 REVIEWER_UNAVAILABLE
@@ -59,7 +67,7 @@ MANUAL_ACTION_REQUIRED
 HARD STOP
 ```
 
-此状态之后不得继续 analysis certification、review planning/selection/units/dispatch、finding certification 或 report publication，也不得由 Main Agent / Orchestrator 生成 semantic proposal 作为 fallback。
+Host failure 上报后不得继续 Runtime `analysis certify` 或 `review certify-findings`，也不得继续 review planning/selection/units/dispatch、finding certification 或 report publication；不得由 Main Agent / Orchestrator 生成 semantic proposal 作为 fallback。可再次调用只读 `review progress --run-id <runId>` 展示 Runtime 已记录的失败事件，但不得尝试恢复或跳过失败阶段。
 
 ## Runtime Review Progress Gate（1.6.4 Task 3）
 
@@ -83,7 +91,7 @@ Runtime command failure -> 当前 stage FAILED，后续 stage BLOCKED
 Runtime terminal success -> REPORT SUCCEEDED
 ```
 
-`review progress` 是严格只读接口。不得向 Agent、Reviewer 或 prompt 暴露任何 progress advance/fail/complete mutation 命令；阶段推进只能发生在 snapshot、Reviewer authority verification、certification、planning/dispatch、finding certification、report publication 等既有 Runtime-owned 成功/失败边界内部。
+`review progress` 是严格只读接口。不得向 Agent、Reviewer 或 prompt 暴露任何 progress advance/complete 或任意 fail mutation 命令；阶段推进只能发生在 snapshot、Reviewer authority verification、certification、planning/dispatch、finding certification、report publication 等既有 Runtime-owned 成功/失败边界内部。唯一例外是上述 `review reviewer-unavailable` failure-only Host 信号：它没有成功权威，只能要求 Runtime 对当前 Reviewer-dependent stage 执行 fail-closed。
 
 ---
 
