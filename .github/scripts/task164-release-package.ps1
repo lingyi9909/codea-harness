@@ -38,21 +38,19 @@ function New-ReviewerHostAgent([string]$Destination) {
     $body = $match.Groups['body'].Value
     $hostText = @"
 ---
-description: Codea Harness independent semantic Reviewer. Produces requests-only proposals; Runtime owns certification and report authority.
+description: Codea Harness independent semantic Reviewer. Produces same-run proposals only through codea-reviewer-submit; Runtime owns certification and report authority.
 mode: subagent
-permissions:
-  - action: edit
-    resource: "*"
-    effect: deny
-  - action: edit
-    resource: ".code-harness/runs/*/requests/**"
-    effect: allow
-  - action: shell
-    resource: "*"
-    effect: deny
-  - action: subagent
-    resource: "*"
-    effect: deny
+permission:
+  "*": deny
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
+  edit: deny
+  bash: deny
+  task: deny
+  external_directory: deny
+  codea-reviewer-submit: allow
 ---
 $body
 "@
@@ -66,7 +64,7 @@ function New-ReviewerHostCommand([string]$Destination) {
 ---
 description: Delegate one Codea Harness semantic review phase to the independent Reviewer child session.
 agent: reviewer
-subagent: true
+subtask: true
 ---
 
 Execute only the requested Codea Harness Reviewer semantic proposal phase.
@@ -147,6 +145,6 @@ foreach ($kind in @('install','upgrade')) {
 }
 Write-Output 'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4'
 Write-Output 'REVIEWER_HOST_PACKAGE_REGISTRATION PASS path=.opencode/agents/reviewer.md mode=subagent'
-Write-Output 'REVIEWER_HOST_COMMAND_REGISTRATION PASS command=.opencode/commands/harness-review-reviewer.md subagent=true'
+Write-Output 'REVIEWER_HOST_COMMAND_REGISTRATION PASS command=.opencode/commands/harness-review-reviewer.md subtask=true'
 Write-Output 'REVIEWER_HOST_TOOL_REGISTRATION PASS tool=.opencode/tools/codea-reviewer-submit.ts'
 Write-Output 'REVIEWER_HOST_UPGRADE_STAGED_TRANSACTION PASS source=.code-harness-upgrade/host/.opencode'
