@@ -1,0 +1,86 @@
+name: task164-closure-product-e2e
+
+on:
+  push:
+    branches: [release/1.6.4-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  closure-product-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Parse Closure scripts
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            '.github/scripts/task164-release-package.ps1',
+            '.github/scripts/task164-install.ps1',
+            '.github/scripts/task164-closure-opencode-resolved-contract.ps1',
+            '.github/scripts/task164-closure-install-e2e.ps1',
+            '.github/scripts/task164-closure-agent-contract.ps1',
+            '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
+            '.github/scripts/task164-task4-progress-interruption-e2e.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
+            if (@($errors).Count -ne 0) { throw "PowerShell parse failed: $path $errors" }
+          }
+          python -m py_compile .github/scripts/task164-task4-plain-review-server.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_CLOSURE_PRODUCT_PARSE PASS'
+
+      - name: Install pinned OpenCode 1.18.25
+        shell: pwsh
+        run: |
+          npm install -g opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (& opencode --version | Out-String).Trim()
+          if ($version -notmatch '1\.18\.25') { throw "unexpected OpenCode version: $version" }
+          Write-Output "TASK164_CLOSURE_OPENCODE_PIN PASS version=$version"
+
+      - name: Build exact-head package
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task164-release-package.ps1
+
+      - name: Verify resolved Reviewer Host and command
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task164-closure-opencode-resolved-contract.ps1
+
+      - name: Verify first install and Host collision safety
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task164-closure-install-e2e.ps1
+
+      - name: Verify Agent authority contract consistency
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task164-closure-agent-contract.ps1
+
+      - name: Positive literal harness review product E2E
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task164-task4-packaged-plain-review-e2e.ps1
+
+      - name: Reviewer interruption product E2E
+        shell: pwsh
+        run: pwsh -NoProfile -File ./.github/scripts/task164-task4-progress-interruption-e2e.ps1
