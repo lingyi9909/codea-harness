@@ -1,0 +1,92 @@
+name: task164-permission-order-patch
+
+on:
+  push:
+    branches: [release/1.6.4-final-certification]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/1.6.4-final-certification
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Apply ordered permission fix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+
+          $positive = '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1'
+          $interrupt = '.github/scripts/task164-task4-progress-interruption-e2e.ps1'
+
+          $p = [IO.File]::ReadAllText((Resolve-Path $positive))
+          $anchor = "    permission = @{"
+          $first = $p.IndexOf($anchor, [StringComparison]::Ordinal)
+          $last = $p.LastIndexOf($anchor, [StringComparison]::Ordinal)
+          if ($first -lt 0 -or $first -ne $last) { throw "positive permission anchor must be unique" }
+          $p = $p.Substring(0, $first) + "    permission = [ordered]@{" + $p.Substring($first + $anchor.Length)
+          [IO.File]::WriteAllText((Resolve-Path $positive), $p, (New-Object Text.UTF8Encoding($false)))
+
+          $i = [IO.File]::ReadAllText((Resolve-Path $interrupt))
+          $old = "permission = @{ '*' = 'deny'; read = 'allow'; edit = 'allow'; bash = 'allow'; task = 'allow' }"
+          $new = "permission = [ordered]@{ '*' = 'deny'; read = 'allow'; edit = 'allow'; bash = 'allow'; task = 'allow' }"
+          $first = $i.IndexOf($old, [StringComparison]::Ordinal)
+          $last = $i.LastIndexOf($old, [StringComparison]::Ordinal)
+          if ($first -lt 0 -or $first -ne $last) { throw "interruption permission anchor must be unique" }
+          $i = $i.Substring(0, $first) + $new + $i.Substring($first + $old.Length)
+          [IO.File]::WriteAllText((Resolve-Path $interrupt), $i, (New-Object Text.UTF8Encoding($false)))
+
+          foreach ($path in @($positive, $interrupt)) {
+            $tokens = $null
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
+            if (@($errors).Count -ne 0) { throw "PowerShell parse failed: $path $errors" }
+          }
+
+          $positiveText = [IO.File]::ReadAllText((Resolve-Path $positive))
+          $interruptText = [IO.File]::ReadAllText((Resolve-Path $interrupt))
+          if (-not $positiveText.Contains("permission = [ordered]@{")) { throw 'positive ordered permission missing' }
+          if (-not $interruptText.Contains("permission = [ordered]@{")) { throw 'interruption ordered permission missing' }
+          Write-Output 'TASK164_PERMISSION_ORDER_PATCH PASS'
+
+      - name: Verify contract and self-delete
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python ./.github/scripts/task164-final-certification-contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/task164-permission-order-patch.yml
+
+          $changed = @(& git diff --name-only HEAD)
+          $expected = @(
+            '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
+            '.github/scripts/task164-task4-progress-interruption-e2e.ps1',
+            '.github/workflows/task164-permission-order-patch.yml'
+          )
+          foreach ($path in $changed) {
+            if ($path -cnotin $expected) { throw "unexpected patch scope: $path" }
+          }
+          foreach ($path in $expected) {
+            if ($path -cnotin $changed) { throw "expected patch path missing: $path" }
+          }
+
+          git add .github/scripts/task164-task4-packaged-plain-review-e2e.ps1 .github/scripts/task164-task4-progress-interruption-e2e.ps1
+          git commit -m 'fix: stabilize OpenCode tool permission order'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin HEAD:release/1.6.4-final-certification
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'TASK164_PERMISSION_ORDER_COMMIT PASS'
