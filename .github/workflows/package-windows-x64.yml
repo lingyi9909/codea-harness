@@ -272,19 +272,24 @@ jobs:
         shell: pwsh
         run: |
           $head = (git rev-parse HEAD).Trim()
-          $accepted = '6aa5d9dad0623cd60a845360c9b20ab153921e87'
-          git merge-base --is-ancestor $accepted $head
-          $ancestorExit = $LASTEXITCODE
+          $accepted = '439d9618591657b80d4670f1d9f3b5909d378447'
+          $integration = '51d3dcdcfdf0e17ec686206e48268c54995d3f4a'
+          git merge-base --is-ancestor $accepted $integration
+          $acceptedExit = $LASTEXITCODE
           $global:LASTEXITCODE = 0
-          if ($ancestorExit -ne 0) { throw "accepted 1.6.4 release candidate is not an ancestor of main: accepted=$accepted head=$head" }
-          $changed = @(& git diff --name-only "$accepted..$head")
-          if ($LASTEXITCODE -ne 0) { throw 'cannot inspect 1.6.4 main closeout scope' }
-          $allowed = @('.github/workflows/package-windows-x64.yml')
-          foreach ($path in $changed) {
-            if ($path -cnotin $allowed) { throw "unapproved 1.6.4 main closeout change: $path" }
+          if ($acceptedExit -ne 0) { throw "certified 1.6.4 head is not an ancestor of integration merge: accepted=$accepted integration=$integration" }
+          git merge-base --is-ancestor $integration $head
+          $integrationExit = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($integrationExit -ne 0) { throw "approved 1.6.4 integration merge is not an ancestor of main: integration=$integration head=$head" }
+          $postIntegrationChanged = @(& git diff --name-only "$integration..$head")
+          if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-integration closeout scope' }
+          $allowedPostIntegration = @('.github/workflows/package-windows-x64.yml')
+          foreach ($path in $postIntegrationChanged) {
+            if ($path -cnotin $allowedPostIntegration) { throw "unapproved post-integration closeout change: $path" }
           }
           if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.6.4') { throw 'repository VERSION mismatch' }
-          Write-Output "PACKAGE_WINDOWS_X64_164_MAIN_SCOPE PASS accepted=$accepted head=$head files=$($changed.Count)"
+          Write-Output "PACKAGE_WINDOWS_X64_164_MAIN_SCOPE PASS accepted=$accepted integration=$integration head=$head closeoutFiles=$($postIntegrationChanged.Count)"
 
       - name: Build 1.6.4 official main package
         if: steps.release.outputs.version == '1.6.4' && github.ref == 'refs/heads/main'
@@ -348,7 +353,7 @@ jobs:
             version = '1.6.4'
             status = 'PASS'
             exactHeadSha = $head
-            acceptedReleaseCandidate = '6aa5d9dad0623cd60a845360c9b20ab153921e87'
+            acceptedReleaseCandidate = '439d9618591657b80d4670f1d9f3b5909d378447'
             workflowRunId = $env:GITHUB_RUN_ID
             artifacts = $artifactRecord
             runtime = [ordered]@{ sha256 = $runtimeHash; size = (Get-Item $runtime).Length }
