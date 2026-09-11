@@ -96,3 +96,27 @@ Runtime terminal success -> REPORT SUCCEEDED
 ---
 
 `bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行；涉及 Reviewer semantic phase 时，必须同时受上述 1.6.4 Host binding 和 Runtime Review Progress Gate 覆盖。
+
+## 1.6.4 Review Host Authority Flow
+
+The only supported product-level review ownership is:
+
+```text
+Main Agent / Orchestrator
+→ review begin
+→ Runtime snapshot
+→ independent Reviewer CHANGE_ANALYSIS
+→ Runtime certification
+→ Runtime planning
+→ independent Reviewer FINDINGS
+→ Runtime finding certification
+→ Runtime report
+```
+
+Reviewer owns only the two semantic proposal phases: `CHANGE_ANALYSIS` and `FINDINGS`. Reviewer does not own routing, Runtime execution, certification, planning, progress, final report rendering, or failure recovery.
+
+Main Agent / Orchestrator owns routing, Runtime invocation, Reviewer delegation, Runtime progress rendering, and fail-closed handling. It must use the official Runtime commands `review progress --run-id <runId>` to render `events[].display` and `review reviewer-unavailable --run-id <runId>` when the independent Reviewer Host cannot produce a valid same-run proposal.
+
+The Main Agent / Orchestrator may create only same-run `requests/**` request files. Reviewer proposals must enter the same run only through `codea-reviewer-submit`. `analysis/**`, `review.md`, and `.code-harness/chains/**` remain Runtime/Framework-owned. No semantic fallback to the Main Agent is permitted when Reviewer fails.
+
+OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.

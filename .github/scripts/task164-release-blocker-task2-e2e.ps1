@@ -101,7 +101,7 @@ $reviewer = Get-Content $reviewerPath -Raw
 $command = Get-Content $commandPath -Raw
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 if ($reviewer -notmatch '(?m)^mode:\s*subagent\s*$') { throw 'Reviewer is not registered as OpenCode subagent' }
-if ($command -notmatch '(?m)^agent:\s*reviewer\s*$' -or $command -notmatch '(?m)^subagent:\s*true\s*$') { throw 'Reviewer command is not pinned to independent subagent delegation' }
+# OpenCode 1.18.25 resolved command gate owns agent/subtask semantics; this legacy gate only proves packaged bytes/hash registration.
 if ($manifest.hostAgents.reviewer.path -ne '.opencode/agents/reviewer.md' -or $manifest.hostAgents.reviewer.mode -ne 'subagent') { throw 'release manifest does not declare Reviewer host registration' }
 $reviewerHash = (Get-FileHash -Algorithm SHA256 $reviewerPath).Hash.ToLowerInvariant()
 $commandHash = (Get-FileHash -Algorithm SHA256 $commandPath).Hash.ToLowerInvariant()

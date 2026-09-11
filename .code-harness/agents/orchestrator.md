@@ -11,10 +11,10 @@ version: 9
 | 意图 | Agent / Skill | READY |
 |---|---|---|
 | `harness init` | Project Adapter | 否 |
-| `harness review` | Reviewer | 否 |
-| `harness review list` | Reviewer（LIST） | 否 |
-| `harness review <Class>` | Reviewer（TARGETED CLASS） | 否 |
-| `harness review <Class.method>` | Reviewer（TARGETED METHOD） | 否 |
+| `harness review` | Orchestrator → Runtime + independent Reviewer phases | 否 |
+| `harness review list` | Orchestrator → Runtime + independent Reviewer phases（LIST） | 否 |
+| `harness review <Class>` | Orchestrator → Runtime + independent Reviewer phases（TARGETED CLASS） | 否 |
+| `harness review <Class.method>` | Orchestrator → Runtime + independent Reviewer phases（TARGETED METHOD） | 否 |
 | `harness api-doc <target>` | API Doc Agent → discover-api → generate-api-doc | 否 |
 | `harness chain list` | Orchestrator → validate-chain | 否 |
 | `harness chain show <id\|target>` | Orchestrator → validate-chain | 否 |
@@ -993,3 +993,27 @@ report review
 不得自动构造 FULL，不得自动构造 TARGETED，也不得默认 LIST/ALL。用户下一条消息选择“全部评审”时才构造当前 `optionsHash` 绑定的 FULL selection；选择一个或多个 C1..Cn 时才构造 TARGETED selection；明确选择仅查看调用链时才构造 LIST。空选择/取消必须 STOP。若下一条用户消息到达时 current optionsHash / same-run authority 已 stale，必须 fail closed 或重建 options，禁止复用旧选择。
 
 该 Gate 是 Agent/Orchestrator turn 行为约束；不得声称 Controlled Runtime 能密码学证明某个 selection 是真实用户输入。Runtime 原有 optionsHash、selectionId、scope verification 仍负责机器 authority。
+
+## 1.6.4 Review Host Authority Flow
+
+The only supported product-level review ownership is:
+
+```text
+Main Agent / Orchestrator
+→ review begin
+→ Runtime snapshot
+→ independent Reviewer CHANGE_ANALYSIS
+→ Runtime certification
+→ Runtime planning
+→ independent Reviewer FINDINGS
+→ Runtime finding certification
+→ Runtime report
+```
+
+Reviewer owns only the two semantic proposal phases: `CHANGE_ANALYSIS` and `FINDINGS`. Reviewer does not own routing, Runtime execution, certification, planning, progress, final report rendering, or failure recovery.
+
+Main Agent / Orchestrator owns routing, Runtime invocation, Reviewer delegation, Runtime progress rendering, and fail-closed handling. It must use the official Runtime commands `review progress --run-id <runId>` to render `events[].display` and `review reviewer-unavailable --run-id <runId>` when the independent Reviewer Host cannot produce a valid same-run proposal.
+
+The Main Agent / Orchestrator may create only same-run `requests/**` request files. Reviewer proposals must enter the same run only through `codea-reviewer-submit`. `analysis/**`, `review.md`, and `.code-harness/chains/**` remain Runtime/Framework-owned. No semantic fallback to the Main Agent is permitted when Reviewer fails.
+
+OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.
