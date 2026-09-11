@@ -39,8 +39,8 @@ jobs:
           [IO.File]::WriteAllText((Resolve-Path $positive), $p, (New-Object Text.UTF8Encoding($false)))
 
           $i = [IO.File]::ReadAllText((Resolve-Path $interrupt))
-          $old = "permission = @{ '*' = 'deny'; read = 'allow'; edit = 'allow'; bash = 'allow'; task = 'allow' }"
-          $new = "permission = [ordered]@{ '*' = 'deny'; read = 'allow'; edit = 'allow'; bash = 'allow'; task = 'allow' }"
+          $old = "permission = @{ '*'='deny'; read='allow'; edit='allow'; bash='allow'; task='allow' }"
+          $new = "permission = [ordered]@{ '*'='deny'; read='allow'; edit='allow'; bash='allow'; task='allow' }"
           $first = $i.IndexOf($old, [StringComparison]::Ordinal)
           $last = $i.LastIndexOf($old, [StringComparison]::Ordinal)
           if ($first -lt 0 -or $first -ne $last) { throw "interruption permission anchor must be unique" }
