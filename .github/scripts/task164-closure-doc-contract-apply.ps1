@@ -22,6 +22,37 @@ function Patch-TextFile([string]$RelativePath, [hashtable]$Replacements, [string
     [IO.File]::WriteAllText($path, $text, $utf8)
 }
 
+function Patch-AgentsRuntimeAllowlist {
+    $path = Join-Path $repoRoot '.code-harness/AGENTS.md'
+    $text = [IO.File]::ReadAllText($path)
+    if ($text.Contains('codea-dcep-tools.exe review progress --run-id <runId>') -and $text.Contains('codea-dcep-tools.exe review reviewer-unavailable --run-id <runId>')) { return }
+    $start = $text.IndexOf('## 受控 Tool Runtime', [StringComparison]::Ordinal)
+    $end = $text.IndexOf('## Upgrade 规则', $start, [StringComparison]::Ordinal)
+    if ($start -lt 0 -or $end -le $start) { throw 'AGENTS Runtime allowlist section not found' }
+    $before = $text.Substring(0, $start)
+    $section = $text.Substring($start, $end - $start)
+    $after = $text.Substring($end)
+    $pattern = '(?m)^codea-dcep-tools\.exe review begin\r?$'
+    $matches = [regex]::Matches($section, $pattern)
+    if ($matches.Count -ne 1) { throw "expected exactly one review begin in AGENTS Runtime allowlist; count=$($matches.Count)" }
+    $replacement = "codea-dcep-tools.exe review begin`ncodea-dcep-tools.exe review progress --run-id <runId>`ncodea-dcep-tools.exe review reviewer-unavailable --run-id <runId>"
+    $section = [regex]::Replace($section, $pattern, $replacement, 1)
+    [IO.File]::WriteAllText($path, $before + $section + $after, $utf8)
+}
+
+function Patch-Task2StaleCommandTextGate {
+    $path = Join-Path $repoRoot '.github/scripts/task164-release-blocker-task2-e2e.ps1'
+    $text = [IO.File]::ReadAllText($path)
+    $old = "if (`$command -notmatch '(?m)^agent:\\s*reviewer\\s*`$' -or `$command -notmatch '(?m)^subagent:\\s*true\\s*`$') { throw 'Reviewer command is not pinned to independent subagent delegation' }"
+    if (-not $text.Contains($old)) {
+        if ($text.Contains('OpenCode 1.18.25 resolved command gate owns agent/subtask semantics')) { return }
+        throw 'Task2 stale subagent text gate anchor not found'
+    }
+    $new = "# OpenCode 1.18.25 resolved command gate owns agent/subtask semantics; this legacy gate only proves packaged bytes/hash registration."
+    $text = $text.Replace($old, $new)
+    [IO.File]::WriteAllText($path, $text, $utf8)
+}
+
 function Patch-ReadmeInstall {
     $path = Join-Path $repoRoot 'README.md'
     $text = [IO.File]::ReadAllText($path)
@@ -128,10 +159,8 @@ The Main Agent / Orchestrator may create only same-run `requests/**` request fil
 OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.
 '@
 
-$agentsReviewBegin = 'codea-dcep-tools.exe review begin'
-$agentsReviewBeginNew = "codea-dcep-tools.exe review begin`ncodea-dcep-tools.exe review progress --run-id <runId>`ncodea-dcep-tools.exe review reviewer-unavailable --run-id <runId>"
+Patch-AgentsRuntimeAllowlist
 Patch-TextFile '.code-harness/AGENTS.md' @{
-    $agentsReviewBegin = $agentsReviewBeginNew
     '- Reviewer：消费 Runtime Canonical ChangeSet Snapshot，负责 Code Navigation、semantic ChangeAnalysis Proposal、Review Coverage 与 Finding Proposal；不拥有 Git ChangeSet deterministic fact authority。' = '- Reviewer：消费 Runtime Canonical ChangeSet Snapshot，只负责 Code Navigation、semantic ChangeAnalysis Proposal、Review Coverage 与 Finding Proposal；不拥有 Git ChangeSet deterministic fact authority，也不拥有整个 Review orchestration。'
     '- Orchestrator：路由、触发 Runtime Snapshot/Certification、Review Coverage/审批门禁、API target selection、Chain Management、Agent 交接、测试修复轮次；不得独立重算 Git ChangeSet。' = '- Orchestrator：拥有 Review 路由、Runtime 调用、Reviewer delegation、Runtime progress 展示与 fail-closed 处理，并继续负责 Review Coverage/审批门禁、API target selection、Chain Management、Agent 交接、测试修复轮次；不得独立重算 Git ChangeSet。'
 } $canonical
@@ -147,6 +176,8 @@ Patch-TextFile '.code-harness/agents/orchestrator.md' @{
 
 Patch-TextFile '.code-harness/contracts/reviewer-host-contract.md' @{} $canonical
 Patch-ReadmeInstall
+Patch-Task2StaleCommandTextGate
 
 Write-Output 'TASK164_CLOSURE_DOC_PATCH_APPLIED PASS'
 Write-Output 'TASK164_CLOSURE_README_INSTALL_UX PASS'
+Write-Output 'TASK164_TASK2_STALE_COMMAND_TEXT_GATE_REMOVED PASS'
