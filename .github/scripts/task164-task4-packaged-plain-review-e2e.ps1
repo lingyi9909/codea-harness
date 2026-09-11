@@ -216,7 +216,7 @@ try {
             if (-not [string]::IsNullOrWhiteSpace($line)) { $line | ConvertFrom-Json }
         }
     )
-    $toolResponses = @($modelEntries | Where-Object { $_.responseType -eq 'tool' })
+    $toolResponses = @($modelEntries | Where-Object { $_.PSObject.Properties.Name -contains 'responseType' -and [string]$_.responseType -eq 'tool' })
     $bashCalls = @($toolResponses | Where-Object { $_.tool -eq 'bash' })
     $writeCalls = @($toolResponses | Where-Object { $_.tool -eq 'write' })
     $taskCalls = @($toolResponses | Where-Object { $_.tool -eq 'task' })
@@ -247,7 +247,7 @@ try {
     if ($progressSourceEntries.Count -lt 4) { throw 'model log does not prove progress text was derived from Runtime progress results' }
     foreach ($display in $expectedPass) {
         $sourceCount = @($progressSourceEntries | Where-Object { ([string]$_.content).Contains($display) }).Count
-        $finalTextCount = @($modelEntries | Where-Object { $_.responseType -eq 'text' -and ([string]$_.content).Contains($display) }).Count
+        $finalTextCount = @($modelEntries | Where-Object { $_.PSObject.Properties.Name -contains 'responseType' -and [string]$_.responseType -eq 'text' -and ([string]$_.content).Contains($display) }).Count
         if (($sourceCount + $finalTextCount) -lt 1) { throw "Runtime-derived progress source missing for transcript display: $display" }
     }
     Write-Output 'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS'
