@@ -39,15 +39,22 @@ jobs:
         run: |
           go mod download
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git diff --exit-code -- go.mod go.sum
-          if ($LASTEXITCODE -ne 0) { throw 'module bootstrap changed locked dependencies' }
-          Write-Output 'TASK170_MODULE_BOOTSTRAP PASS existing-lock-only=true'
-      - name: Verify accepted 1.6.4.final lineage
+          git restore --source=HEAD -- go.mod go.sum
+          $moduleStatus = @(git status --short -- go.mod go.sum)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($moduleStatus.Count -ne 0) { throw "module bootstrap left locked files dirty: $($moduleStatus -join '; ')" }
+          Write-Output 'TASK170_MODULE_BOOTSTRAP PASS existing-lock-only=true tracked-files-restored=true'
+      - name: Verify accepted 1.6.4.final lineage and clean baseline
         shell: pwsh
         run: |
           git merge-base --is-ancestor 439d9618591657b80d4670f1d9f3b5909d378447 HEAD
           if ($LASTEXITCODE -ne 0) { throw '1.7 branch is not based on accepted 1.6.4.final' }
-          Write-Output "TASK170_BASELINE PASS head=$((git rev-parse HEAD).Trim())"
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $status = @(git status --short)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($status.Count -ne 0) { throw "baseline working tree is not clean: $($status -join '; ')" }
+          Write-Output "TASK170_BASELINE PASS head=$head status=clean"
       - name: Download accepted 1.6.4.final release candidate
         uses: actions/download-artifact@v4
         with:
@@ -98,11 +105,14 @@ jobs:
           GOPROXY: off
           GOSUMDB: off
         run: go test ./internal/schema ./internal/knowledge ./internal/nav -run Test170 -count=1
-      - name: No committed dependency drift
+      - name: Verify zero dependency drift after offline T1 gates
         shell: pwsh
         run: |
+          git diff --exit-code -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'offline T1 gates changed go.mod/go.sum' }
           git diff --exit-code 439d9618591657b80d4670f1d9f3b5909d378447 HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
           if ($LASTEXITCODE -ne 0) { throw 'T1 committed changes to go.mod/go.sum' }
+          Write-Output 'TASK170_DEPENDENCY_DRIFT PASS working-tree=clean committed=unchanged'
       - name: Full Go regression
         id: full-regression
         working-directory: .code-harness/tools-runtime
