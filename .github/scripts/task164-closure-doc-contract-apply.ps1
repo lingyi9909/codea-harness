@@ -43,13 +43,12 @@ function Patch-AgentsRuntimeAllowlist {
 function Patch-Task2StaleCommandTextGate {
     $path = Join-Path $repoRoot '.github/scripts/task164-release-blocker-task2-e2e.ps1'
     $text = [IO.File]::ReadAllText($path)
-    $old = "if (`$command -notmatch '(?m)^agent:\\s*reviewer\\s*`$' -or `$command -notmatch '(?m)^subagent:\\s*true\\s*`$') { throw 'Reviewer command is not pinned to independent subagent delegation' }"
-    if (-not $text.Contains($old)) {
-        if ($text.Contains('OpenCode 1.18.25 resolved command gate owns agent/subtask semantics')) { return }
-        throw 'Task2 stale subagent text gate anchor not found'
-    }
-    $new = "# OpenCode 1.18.25 resolved command gate owns agent/subtask semantics; this legacy gate only proves packaged bytes/hash registration."
-    $text = $text.Replace($old, $new)
+    if ($text.Contains('OpenCode 1.18.25 resolved command gate owns agent/subtask semantics')) { return }
+    $pattern = '(?m)^if \(\$command -notmatch .*subagent.*\r?$'
+    $matches = [regex]::Matches($text, $pattern)
+    if ($matches.Count -ne 1) { throw "Task2 stale subagent text gate match count=$($matches.Count)" }
+    $new = '# OpenCode 1.18.25 resolved command gate owns agent/subtask semantics; this legacy gate only proves packaged bytes/hash registration.'
+    $text = [regex]::Replace($text, $pattern, $new, 1)
     [IO.File]::WriteAllText($path, $text, $utf8)
 }
 
