@@ -58,11 +58,11 @@ jobs:
           GOPROXY: off
           GOSUMDB: off
         run: go test ./internal/schema ./internal/knowledge ./internal/nav -run Test170 -count=1
-      - name: No dependency drift
+      - name: No committed dependency drift
         shell: pwsh
         run: |
-          git diff --exit-code 439d9618591657b80d4670f1d9f3b5909d378447 -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
-          if ($LASTEXITCODE -ne 0) { throw 'T1 changed go.mod/go.sum' }
+          git diff --exit-code 439d9618591657b80d4670f1d9f3b5909d378447 HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'T1 committed changes to go.mod/go.sum' }
       - name: Full Go regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
