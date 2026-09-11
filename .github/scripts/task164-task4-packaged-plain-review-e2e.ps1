@@ -146,7 +146,12 @@ try {
     if ($raw.Contains('TASK4_STAGE_')) { throw 'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY: private TASK4_STAGE markers leaked into product transcript' }
 
     $runDirs = @(Get-ChildItem (Join-Path $fixture '.code-harness/runs') -Directory)
-    if ($runDirs.Count -ne 1) { throw "Task 4 must create exactly one fresh review run; found=$($runDirs.Name -join ',')" }
+    if ($runDirs.Count -ne 1) {
+        $runNames = @($runDirs | ForEach-Object { [string]$_.Name })
+        $modelText = ''
+        if (Test-Path $modelLog -PathType Leaf) { $modelText = Get-Content -Raw $modelLog }
+        throw "Task 4 must create exactly one fresh review run; count=$($runDirs.Count); found=$($runNames -join ',')`nTRANSCRIPT:`n$raw`nMODEL_LOG:`n$modelText"
+    }
     $runId = $runDirs[0].Name
     if ($runId -notmatch '^review-[0-9a-f]+$') { throw "unexpected review run id: $runId" }
     $runRoot = $runDirs[0].FullName
