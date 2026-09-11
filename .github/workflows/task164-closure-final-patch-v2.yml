@@ -32,7 +32,12 @@ jobs:
             $old = "models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; limit = @{ context = 200000; output = 4096 } } }"
             $new = "models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; tool_call = `$true; limit = @{ context = 200000; output = 4096 } } }"
             if (-not $text.Contains($old)) { throw "tool_call anchor missing: $path" }
-            [IO.File]::WriteAllText($resolved, $text.Replace($old,$new), $utf8)
+            $text = $text.Replace($old,$new)
+            $oldStageExpr = '$raw.Contains(''TASK4_STAGE_'')'
+            $newStageExpr = '$raw.Contains((''TASK4'' + ''_STAGE_''))'
+            if (-not $text.Contains($oldStageExpr)) { throw "prompt-only stage audit anchor missing: $path" }
+            $text = $text.Replace($oldStageExpr,$newStageExpr)
+            [IO.File]::WriteAllText($resolved, $text, $utf8)
           }
 
           $finalPath = '.github/scripts/task164-final-certification.ps1'
