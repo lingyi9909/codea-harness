@@ -111,7 +111,12 @@ try {
     if ($raw.Contains('TASK4_STAGE_')) { throw 'prompt-only stage markers leaked into interruption transcript' }
 
     $runDirs = @(Get-ChildItem (Join-Path $fixture '.code-harness/runs') -Directory)
-    if ($runDirs.Count -ne 1) { throw "interruption must create exactly one Runtime run; found=$($runDirs.Name -join ',')" }
+    if ($runDirs.Count -ne 1) {
+        $runNames = @($runDirs | ForEach-Object { [string]$_.Name })
+        $modelText = ''
+        if (Test-Path $modelLog -PathType Leaf) { $modelText = Get-Content -Raw $modelLog }
+        throw "interruption must create exactly one Runtime run; count=$($runDirs.Count); found=$($runNames -join ',')`nTRANSCRIPT:`n$raw`nMODEL_LOG:`n$modelText"
+    }
     $runId = $runDirs[0].Name
     $runRoot = $runDirs[0].FullName
     $progressPath = Join-Path $runRoot 'runtime/review-progress.json'
@@ -173,7 +178,7 @@ try {
             if (-not [string]::IsNullOrWhiteSpace($line)) { $line | ConvertFrom-Json }
         }
     )
-    $toolResponses = @($modelEntries | Where-Object { $_.responseType -eq 'tool' })
+    $toolResponses = @($modelEntries | Where-Object { $_.PSObject.Properties.Name -contains 'responseType' -and [string]$_.responseType -eq 'tool' })
     $taskCalls = @($toolResponses | Where-Object { $_.tool -eq 'task' })
     if ($taskCalls.Count -ne 1 -or [string]$taskCalls[0].arguments.subagent_type -ne 'reviewer') {
         throw 'interruption must attempt exactly one independent Reviewer delegation and no fallback task'
