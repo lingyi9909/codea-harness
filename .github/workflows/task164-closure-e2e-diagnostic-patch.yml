@@ -1,0 +1,52 @@
+name: task164-closure-e2e-diagnostic-patch
+
+on:
+  push:
+    branches: [release/1.6.4-final-certification]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/1.6.4-final-certification
+          fetch-depth: 0
+      - name: Patch exact diagnostic assertion
+        shell: pwsh
+        run: |
+          $path = '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1'
+          $text = [IO.File]::ReadAllText((Resolve-Path $path))
+          $old = '    if ($runDirs.Count -ne 1) { throw "Task 4 must create exactly one fresh review run; found=$($runDirs.Name -join '','')" }'
+          $new = @'
+              if ($runDirs.Count -ne 1) {
+                  $runNames = @($runDirs | ForEach-Object { [string]$_.Name })
+                  $modelText = ''
+                  if (Test-Path $modelLog -PathType Leaf) { $modelText = Get-Content -Raw $modelLog }
+                  throw "Task 4 must create exactly one fresh review run; count=$($runDirs.Count); found=$($runNames -join ',')`nTRANSCRIPT:`n$raw`nMODEL_LOG:`n$modelText"
+              }
+          '@
+          $new = ($new -split "`r?`n" | ForEach-Object { $_ -replace '^              ', '    ' }) -join "`n"
+          if ($text.Contains($old)) {
+            $text = $text.Replace($old, $new)
+            [IO.File]::WriteAllText((Resolve-Path $path), $text, [Text.UTF8Encoding]::new($false))
+          } elseif (-not $text.Contains('Task 4 must create exactly one fresh review run; count=')) {
+            throw 'diagnostic patch anchor not found'
+          }
+      - name: Parse and commit
+        shell: pwsh
+        run: |
+          $tokens=$null; $errors=$null
+          $null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1').Path,[ref]$tokens,[ref]$errors)
+          if (@($errors).Count -ne 0) { throw $errors }
+          if (-not (git status --porcelain)) { exit 0 }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/scripts/task164-task4-packaged-plain-review-e2e.ps1
+          git commit -m 'test: expose product E2E run diagnostics'
+          git push origin HEAD:release/1.6.4-final-certification
