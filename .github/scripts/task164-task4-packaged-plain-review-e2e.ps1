@@ -109,7 +109,7 @@ $config = @{
             models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; tool_call = $true; limit = @{ context = 200000; output = 4096 } } }
         }
     }
-    permission = @{
+    permission = [ordered]@{
         '*' = 'deny'
         read = 'allow'
         edit = 'allow'

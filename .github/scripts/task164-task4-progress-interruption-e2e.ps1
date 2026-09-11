@@ -77,7 +77,7 @@ $config = @{
             models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; tool_call = $true; limit = @{ context = 200000; output = 4096 } } }
         }
     }
-    permission = @{ '*'='deny'; read='allow'; edit='allow'; bash='allow'; task='allow' }
+    permission = [ordered]@{ '*'='deny'; read='allow'; edit='allow'; bash='allow'; task='allow' }
 } | ConvertTo-Json -Depth 20
 Write-Utf8NoBom (Join-Path $fixture 'opencode.json') $config
 
