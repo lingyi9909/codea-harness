@@ -89,8 +89,12 @@ jobs:
           if ($guardRegex.Matches($final).Count -ne 1) { throw 'final Runtime freeze guard anchor must be unique' }
           $final = $guardRegex.Replace($final, $guardReplacement, 1)
 
-          $packagePattern = '(?s)    Invoke-Gate ''packageBuild'' \{\n        Invoke-Script ''\.github/scripts/task164-release-package\.ps1''\n    \} @\(''TASK164_RELEASE_PACKAGE_BUILD PASS version=1\.6\.4''\)\n\n    if \(Test-Path ''\.code-harness/bin/ast-grep\.exe''\) \{'
-          $packageLines = @(
+          $oldPackage = @(
+            "    Invoke-Gate 'packageBuild' {",
+            "        Invoke-Script '.github/scripts/task164-release-package.ps1'",
+            "    } @('TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4')"
+          ) -join "`n"
+          $newPackage = @(
             "    Invoke-Gate 'packageBuild' {",
             "        Invoke-Script '.github/scripts/task164-release-package.ps1'",
             '    } @(',
@@ -118,14 +122,10 @@ jobs:
             '',
             "    Invoke-Gate 'closureAgentContract' {",
             "        Invoke-Script '.github/scripts/task164-closure-agent-contract.ps1'",
-            "    } @('HARNESS_164_AGENT_CONTRACT_CONSISTENT PASS')",
-            '',
-            "    if (Test-Path '.code-harness/bin/ast-grep.exe') {"
-          )
-          $packageReplacement = $packageLines -join "`n"
-          $packageRegex = [regex]::new($packagePattern)
-          if ($packageRegex.Matches($final).Count -ne 1) { throw 'final package/preflight anchor must be unique' }
-          $final = $packageRegex.Replace($final, $packageReplacement, 1)
+            "    } @('HARNESS_164_AGENT_CONTRACT_CONSISTENT PASS')"
+          ) -join "`n"
+          if (([regex]::Matches($final,[regex]::Escape($oldPackage))).Count -ne 1) { throw 'final package gate anchor must be unique' }
+          $final = $final.Replace($oldPackage, $newPackage)
 
           $positiveAnchor = "        'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',"
           $positivePrefix = @(
