@@ -21,6 +21,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $utf8 = [Text.UTF8Encoding]::new($false)
 
           foreach ($path in @(
             '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
@@ -31,162 +32,132 @@ jobs:
             $old = "models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; limit = @{ context = 200000; output = 4096 } } }"
             $new = "models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; tool_call = `$true; limit = @{ context = 200000; output = 4096 } } }"
             if (-not $text.Contains($old)) { throw "tool_call model anchor not found: $path" }
-            $text = $text.Replace($old, $new)
-            [IO.File]::WriteAllText($resolved, $text, [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($resolved, $text.Replace($old, $new), $utf8)
           }
 
           $finalPath = '.github/scripts/task164-final-certification.ps1'
           $final = [IO.File]::ReadAllText((Resolve-Path $finalPath)).Replace("`r`n","`n")
-          $final = $final.Replace("`$base = 'ffedb2a273dc714db080dc2115f189f20d55b227'", "`$base = '6605916b4929434ea3362ab5b4fc6325ca117a2f'")
+          $oldBase = "`$base = 'ffedb2a273dc714db080dc2115f189f20d55b227'"
+          $newBase = "`$base = '6605916b4929434ea3362ab5b4fc6325ca117a2f'"
+          if (-not $final.Contains($oldBase)) { throw 'Closure base anchor not found' }
+          $final = $final.Replace($oldBase, $newBase)
+          if (-not $final.Contains('        acceptedTask3Baseline = $base')) { throw 'checklist baseline anchor not found' }
           $final = $final.Replace('        acceptedTask3Baseline = $base', '        closureHotfixBase = $base')
 
           $allowedPattern = '(?s)    \$allowed = @\(\n.*?\n    \)\n    foreach \(\$path in \$changed\) \{'
-          $allowedReplacement = @'
-    $allowed = @(
-        '.code-harness/AGENTS.md',
-        '.code-harness/bootstrap.md',
-        '.code-harness/agents/orchestrator.md',
-        '.code-harness/contracts/reviewer-host-contract.md',
-        '.github/scripts/task164-closure-opencode-resolved-contract.ps1',
-        '.github/scripts/task164-closure-install-e2e.ps1',
-        '.github/scripts/task164-closure-agent-contract.ps1',
-        '.github/scripts/task164-install.ps1',
-        '.github/scripts/task164-release-package.ps1',
-        '.github/scripts/task164-release-blocker-task2-e2e.ps1',
-        '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
-        '.github/scripts/task164-task4-plain-review-server.py',
-        '.github/scripts/task164-task4-progress-interruption-e2e.ps1',
-        '.github/workflows/task164-closure-product-e2e.yml',
-        '.github/workflows/task164-final-certification.yml',
-        '.github/scripts/task164-final-certification-contract.py',
-        '.github/scripts/task164-final-certification.ps1',
-        'README.md',
-        'docs/superpowers/plans/2026-09-11-codea-harness-1.6.4-final-certification-closure-hotfix-plan.md'
-    )
-    foreach ($path in $changed) {
-'@
-          $allowedReplacement = $allowedReplacement.Replace("`r`n","`n").TrimEnd("`n")
+          $allowedLines = @(
+            '    $allowed = @(',
+            "        '.code-harness/AGENTS.md',",
+            "        '.code-harness/bootstrap.md',",
+            "        '.code-harness/agents/orchestrator.md',",
+            "        '.code-harness/contracts/reviewer-host-contract.md',",
+            "        '.github/scripts/task164-closure-opencode-resolved-contract.ps1',",
+            "        '.github/scripts/task164-closure-install-e2e.ps1',",
+            "        '.github/scripts/task164-closure-agent-contract.ps1',",
+            "        '.github/scripts/task164-install.ps1',",
+            "        '.github/scripts/task164-release-package.ps1',",
+            "        '.github/scripts/task164-release-blocker-task2-e2e.ps1',",
+            "        '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',",
+            "        '.github/scripts/task164-task4-plain-review-server.py',",
+            "        '.github/scripts/task164-task4-progress-interruption-e2e.ps1',",
+            "        '.github/workflows/task164-closure-product-e2e.yml',",
+            "        '.github/workflows/task164-final-certification.yml',",
+            "        '.github/scripts/task164-final-certification-contract.py',",
+            "        '.github/scripts/task164-final-certification.ps1',",
+            "        'README.md',",
+            "        'docs/superpowers/plans/2026-09-11-codea-harness-1.6.4-final-certification-closure-hotfix-plan.md'",
+            '    )',
+            '    foreach ($path in $changed) {'
+          )
+          $allowedReplacement = $allowedLines -join "`n"
           $allowedRegex = [regex]::new($allowedPattern)
           if ($allowedRegex.Matches($final).Count -ne 1) { throw 'final scope allowlist anchor must be unique' }
           $final = $allowedRegex.Replace($final, $allowedReplacement, 1)
 
-          $oldGuard = @'
-    $acceptedProductChanges = @($changed | Where-Object { $_ -like '.code-harness/*' })
-    if ($acceptedProductChanges.Count -ne 0) {
-        throw "Accepted Task 1-3 product scope changed during Task 4: $($acceptedProductChanges -join ',')"
-    }
-    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count) acceptedTask3=$base"
-'@
-          $newGuard = @'
-    $runtimeGoChanges = @($changed | Where-Object {
-        $_ -like '.code-harness/tools-runtime/*' -and ([string]$_).EndsWith('.go',[StringComparison]::OrdinalIgnoreCase)
-    })
-    if ($runtimeGoChanges.Count -ne 0) {
-        throw "Runtime Go implementation changed during Closure: $($runtimeGoChanges -join ',')"
-    }
-    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count) closureHotfixBase=$base"
-'@
-          $oldGuard = $oldGuard.Replace("`r`n","`n").TrimEnd("`n")
-          $newGuard = $newGuard.Replace("`r`n","`n").TrimEnd("`n")
-          if (-not $final.Contains($oldGuard)) { throw 'final Runtime freeze guard anchor not found' }
-          $final = $final.Replace($oldGuard, $newGuard)
+          $guardPattern = '(?s)    \$acceptedProductChanges = @\(\$changed \| Where-Object \{ \$_ -like ''\.code-harness/\*'' \}\)\n    if \(\$acceptedProductChanges\.Count -ne 0\) \{.*?\n    \}\n    Write-Output "TASK164_FINAL_SCOPE PASS head=\$head files=\$\(\$changed\.Count\) acceptedTask3=\$base"'
+          $guardLines = @(
+            '    $runtimeGoChanges = @($changed | Where-Object {',
+            "        `$_ -like '.code-harness/tools-runtime/*' -and ([string]`$_).EndsWith('.go',[StringComparison]::OrdinalIgnoreCase)",
+            '    })',
+            '    if ($runtimeGoChanges.Count -ne 0) {',
+            '        throw "Runtime Go implementation changed during Closure: $($runtimeGoChanges -join '','')"',
+            '    }',
+            '    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count) closureHotfixBase=$base"'
+          )
+          $guardReplacement = $guardLines -join "`n"
+          $guardRegex = [regex]::new($guardPattern)
+          if ($guardRegex.Matches($final).Count -ne 1) { throw 'final Runtime freeze guard anchor must be unique' }
+          $final = $guardRegex.Replace($final, $guardReplacement, 1)
 
-          $oldPackage = @'
-    Invoke-Gate 'packageBuild' {
-        Invoke-Script '.github/scripts/task164-release-package.ps1'
-    } @('TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4')
+          $packagePattern = '(?s)    Invoke-Gate ''packageBuild'' \{\n        Invoke-Script ''\.github/scripts/task164-release-package\.ps1''\n    \} @\(''TASK164_RELEASE_PACKAGE_BUILD PASS version=1\.6\.4''\)\n\n    if \(Test-Path ''\.code-harness/bin/ast-grep\.exe''\) \{'
+          $packageLines = @(
+            "    Invoke-Gate 'packageBuild' {",
+            "        Invoke-Script '.github/scripts/task164-release-package.ps1'",
+            '    } @(',
+            "        'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4',",
+            "        'INSTALL_SAFE_ENTRYPOINT_PACKAGED PASS file=install.ps1'",
+            '    )',
+            '',
+            "    Invoke-Gate 'closureResolvedReviewerHost' {",
+            "        Invoke-Script '.github/scripts/task164-closure-opencode-resolved-contract.ps1'",
+            '    } @(',
+            "        'OPENCODE_11825_REVIEWER_PERMISSION_RESOLVED PASS',",
+            "        'OPENCODE_11825_REVIEWER_COMMAND_SUBTASK_RESOLVED PASS',",
+            "        'REVIEWER_BASH_DENIED PASS',",
+            "        'REVIEWER_TASK_DENIED PASS',",
+            "        'REVIEWER_RUNTIME_ARTIFACT_WRITE_DENIED PASS',",
+            "        'REVIEWER_SUBMIT_TOOL_ALLOWED PASS'",
+            '    )',
+            '',
+            "    Invoke-Gate 'closureInstallSafety' {",
+            "        Invoke-Script '.github/scripts/task164-closure-install-e2e.ps1'",
+            '    } @(',
+            "        'INSTALL_REVIEWER_HOST_RESOURCES PASS',",
+            "        'INSTALL_EXISTING_OPENCODE_CONFLICT_FAIL_CLOSED PASS'",
+            '    )',
+            '',
+            "    Invoke-Gate 'closureAgentContract' {",
+            "        Invoke-Script '.github/scripts/task164-closure-agent-contract.ps1'",
+            "    } @('HARNESS_164_AGENT_CONTRACT_CONSISTENT PASS')",
+            '',
+            "    if (Test-Path '.code-harness/bin/ast-grep.exe') {"
+          )
+          $packageReplacement = $packageLines -join "`n"
+          $packageRegex = [regex]::new($packagePattern)
+          if ($packageRegex.Matches($final).Count -ne 1) { throw 'final package/preflight anchor must be unique' }
+          $final = $packageRegex.Replace($final, $packageReplacement, 1)
 
-    if (Test-Path '.code-harness/bin/ast-grep.exe') {
-'@
-          $newPackage = @'
-    Invoke-Gate 'packageBuild' {
-        Invoke-Script '.github/scripts/task164-release-package.ps1'
-    } @(
-        'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4',
-        'INSTALL_SAFE_ENTRYPOINT_PACKAGED PASS file=install.ps1'
-    )
+          $positiveAnchor = "        'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',"
+          $positivePrefix = @(
+            "        'OPENCODE_RUNTIME_PROGRESS_RENDERED PASS',",
+            "        'OPENCODE_RUNTIME_PROGRESS_1_TO_8 PASS',",
+            "        'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS',",
+            $positiveAnchor
+          ) -join "`n"
+          if (([regex]::Matches($final,[regex]::Escape($positiveAnchor))).Count -ne 1) { throw 'positive marker anchor must be unique' }
+          $final = $final.Replace($positiveAnchor, $positivePrefix)
 
-    Invoke-Gate 'closureResolvedReviewerHost' {
-        Invoke-Script '.github/scripts/task164-closure-opencode-resolved-contract.ps1'
-    } @(
-        'OPENCODE_11825_REVIEWER_PERMISSION_RESOLVED PASS',
-        'OPENCODE_11825_REVIEWER_COMMAND_SUBTASK_RESOLVED PASS',
-        'REVIEWER_BASH_DENIED PASS',
-        'REVIEWER_TASK_DENIED PASS',
-        'REVIEWER_RUNTIME_ARTIFACT_WRITE_DENIED PASS',
-        'REVIEWER_SUBMIT_TOOL_ALLOWED PASS'
-    )
-
-    Invoke-Gate 'closureInstallSafety' {
-        Invoke-Script '.github/scripts/task164-closure-install-e2e.ps1'
-    } @(
-        'INSTALL_REVIEWER_HOST_RESOURCES PASS',
-        'INSTALL_EXISTING_OPENCODE_CONFLICT_FAIL_CLOSED PASS'
-    )
-
-    Invoke-Gate 'closureAgentContract' {
-        Invoke-Script '.github/scripts/task164-closure-agent-contract.ps1'
-    } @('HARNESS_164_AGENT_CONTRACT_CONSISTENT PASS')
-
-    if (Test-Path '.code-harness/bin/ast-grep.exe') {
-'@
-          $oldPackage = $oldPackage.Replace("`r`n","`n").TrimEnd("`n")
-          $newPackage = $newPackage.Replace("`r`n","`n").TrimEnd("`n")
-          if (-not $final.Contains($oldPackage)) { throw 'final package/preflight anchor not found' }
-          $final = $final.Replace($oldPackage, $newPackage)
-
-          $oldPositive = @'
-        'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',
-        'TASK164_TASK4_INDEPENDENT_REVIEWER_BOTH_PHASES PASS',
-        'TASK164_TASK4_RUNTIME_PROGRESS_TERMINAL PASS',
-        'TASK164_TASK4_REVIEW_MD PASS',
-        'TASK164_TASK4_GATE_B PASS'
-'@
-          $newPositive = @'
-        'OPENCODE_RUNTIME_PROGRESS_RENDERED PASS',
-        'OPENCODE_RUNTIME_PROGRESS_1_TO_8 PASS',
-        'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS',
-        'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',
-        'TASK164_TASK4_INDEPENDENT_REVIEWER_BOTH_PHASES PASS',
-        'TASK164_TASK4_RUNTIME_PROGRESS_TERMINAL PASS',
-        'TASK164_TASK4_REVIEW_MD PASS',
-        'TASK164_TASK4_GATE_B PASS'
-'@
-          $oldPositive = $oldPositive.Replace("`r`n","`n").TrimEnd("`n")
-          $newPositive = $newPositive.Replace("`r`n","`n").TrimEnd("`n")
-          if (-not $final.Contains($oldPositive)) { throw 'positive marker anchor not found' }
-          $final = $final.Replace($oldPositive, $newPositive)
-
-          $oldInterrupt = @'
-        'TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS',
-        'TASK164_TASK4_DOWNSTREAM_BLOCKED PASS',
-        'TASK164_TASK4_GATE_D PASS'
-'@
-          $newInterrupt = @'
-        'OPENCODE_INTERRUPTION_STAGE_VISIBLE PASS',
-        'OPENCODE_INTERRUPTION_LATER_STAGES_BLOCKED PASS',
-        'TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS',
-        'TASK164_TASK4_DOWNSTREAM_BLOCKED PASS',
-        'TASK164_TASK4_GATE_D PASS'
-'@
-          $oldInterrupt = $oldInterrupt.Replace("`r`n","`n").TrimEnd("`n")
-          $newInterrupt = $newInterrupt.Replace("`r`n","`n").TrimEnd("`n")
-          if (-not $final.Contains($oldInterrupt)) { throw 'interruption marker anchor not found' }
-          $final = $final.Replace($oldInterrupt, $newInterrupt)
-          [IO.File]::WriteAllText((Resolve-Path $finalPath), $final, [Text.UTF8Encoding]::new($false))
+          $interruptAnchor = "        'TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS',"
+          $interruptPrefix = @(
+            "        'OPENCODE_INTERRUPTION_STAGE_VISIBLE PASS',",
+            "        'OPENCODE_INTERRUPTION_LATER_STAGES_BLOCKED PASS',",
+            $interruptAnchor
+          ) -join "`n"
+          if (([regex]::Matches($final,[regex]::Escape($interruptAnchor))).Count -ne 1) { throw 'interruption marker anchor must be unique' }
+          $final = $final.Replace($interruptAnchor, $interruptPrefix)
+          [IO.File]::WriteAllText((Resolve-Path $finalPath), $final, $utf8)
 
           $contractPath = '.github/scripts/task164-final-certification-contract.py'
           $contract = [IO.File]::ReadAllText((Resolve-Path $contractPath))
           $contractAnchor = '    forbid(task4_review, "TASK4_STAGE_", "prompt-only positive progress", failures)'
-          $contractInsert = @'
-    require(task4_review, "tool_call = $true", "positive custom model tool capability", failures)
-    require(interruption, "tool_call = $true", "interruption custom model tool capability", failures)
-    forbid(task4_review, "TASK4_STAGE_", "prompt-only positive progress", failures)
-'@
-          $contractInsert = $contractInsert.Replace("`r`n","`n").TrimEnd("`n")
+          $contractLines = @(
+            '    require(task4_review, "tool_call = $true", "positive custom model tool capability", failures)',
+            '    require(interruption, "tool_call = $true", "interruption custom model tool capability", failures)',
+            $contractAnchor
+          )
           if (-not $contract.Contains($contractAnchor)) { throw 'final contract tool capability anchor not found' }
-          $contract = $contract.Replace($contractAnchor, $contractInsert)
-          [IO.File]::WriteAllText((Resolve-Path $contractPath), $contract, [Text.UTF8Encoding]::new($false))
+          $contract = $contract.Replace($contractAnchor, ($contractLines -join "`n"))
+          [IO.File]::WriteAllText((Resolve-Path $contractPath), $contract, $utf8)
 
       - name: Verify and commit exact patch
         shell: pwsh
