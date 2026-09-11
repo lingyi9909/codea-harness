@@ -213,7 +213,7 @@ jobs:
           if ([string]$checklist.version -ne '1.6.3') { throw '1.6.3 certification checklist version mismatch' }
           if ([string]$checklist.exactHeadSha -ne $certifiedHead) { throw '1.6.3 certification checklist exact HEAD mismatch' }
           foreach ($kind in @('install','upgrade')) {
-            $zip = "codea-harness-1.6.3-windows-x64-$kind.zip"
+            $zip = Join-Path $root "codea-harness-1.6.3-windows-x64-$kind.zip"
             if (-not (Test-Path $zip -PathType Leaf)) { throw "missing certified $kind ZIP" }
             $actualHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
             $expectedHash = [string]$checklist.artifacts.$kind.sha256
