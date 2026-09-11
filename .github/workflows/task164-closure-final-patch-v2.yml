@@ -70,12 +70,13 @@ jobs:
           ) -join "`n"
           $allowedRegex = [regex]::new($allowedPattern)
           if ($allowedRegex.Matches($final).Count -ne 1) { throw 'scope allowlist anchor not unique' }
-          $final = $allowedRegex.Replace($final,$allowedLines,1)
+          $allowedMatch = $allowedRegex.Match($final)
+          $final = $final.Substring(0,$allowedMatch.Index) + $allowedLines + $final.Substring($allowedMatch.Index + $allowedMatch.Length)
 
           $guardPattern = '(?s)    \$acceptedProductChanges = @\(\$changed \| Where-Object \{ \$_ -like ''\.code-harness/\*'' \}\)\n    if \(\$acceptedProductChanges\.Count -ne 0\) \{.*?\n    \}\n    Write-Output "TASK164_FINAL_SCOPE PASS head=\$head files=\$\(\$changed\.Count\) acceptedTask3=\$base"'
           $guardLines = @(
             '    $runtimeGoChanges = @($changed | Where-Object {',
-            "        `$_ -like '.code-harness/tools-runtime/*' -and ([string]`$_).EndsWith('.go',[StringComparison]::OrdinalIgnoreCase)",
+            '        $_ -like ''.code-harness/tools-runtime/*'' -and ([string]$_).EndsWith(''.go'',[StringComparison]::OrdinalIgnoreCase)',
             '    })',
             '    if ($runtimeGoChanges.Count -ne 0) {',
             '        throw "Runtime Go implementation changed during Closure: $($runtimeGoChanges -join '','')"',
@@ -84,7 +85,8 @@ jobs:
           ) -join "`n"
           $guardRegex = [regex]::new($guardPattern)
           if ($guardRegex.Matches($final).Count -ne 1) { throw 'Runtime freeze guard anchor not unique' }
-          $final = $guardRegex.Replace($final,$guardLines,1)
+          $guardMatch = $guardRegex.Match($final)
+          $final = $final.Substring(0,$guardMatch.Index) + $guardLines + $final.Substring($guardMatch.Index + $guardMatch.Length)
 
           $packageEnd = "    } @('TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4')"
           if (-not $final.Contains($packageEnd)) { throw 'package gate end line missing' }
