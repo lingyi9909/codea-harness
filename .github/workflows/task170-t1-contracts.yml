@@ -31,14 +31,17 @@ jobs:
         with:
           go-version: '1.23.10'
           cache-dependency-path: .code-harness/tools-runtime/go.sum
-      - name: Verify approved module cache is complete
+      - name: Bootstrap existing locked modules for hosted CI
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         env:
           GOTOOLCHAIN: local
-          GOPROXY: off
-          GOSUMDB: off
-        run: go mod download
+        run: |
+          go mod download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --exit-code -- go.mod go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'module bootstrap changed locked dependencies' }
+          Write-Output 'TASK170_MODULE_BOOTSTRAP PASS existing-lock-only=true'
       - name: Verify accepted 1.6.4.final lineage
         shell: pwsh
         run: |
@@ -101,6 +104,7 @@ jobs:
           git diff --exit-code 439d9618591657b80d4670f1d9f3b5909d378447 HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
           if ($LASTEXITCODE -ne 0) { throw 'T1 committed changes to go.mod/go.sum' }
       - name: Full Go regression
+        id: full-regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         env:
@@ -111,7 +115,7 @@ jobs:
           go test ./... -count=1 2>&1 | Tee-Object -FilePath full-go-regression.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload full regression evidence
-        if: always()
+        if: always() && steps.full-regression.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: task170-full-go-regression
