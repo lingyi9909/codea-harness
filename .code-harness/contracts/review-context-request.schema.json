@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewContextRequest170",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "phase"],
+  "properties": {
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "phase": {"type": "string", "enum": ["DISCOVERY", "RULES"]}
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewContext170",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "phase", "relations", "checks", "issues", "usage"],
+  "properties": {
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "phase": {"type": "string", "enum": ["DISCOVERY", "RULES"]},
+    "relations": {"type": "array", "items": {"$ref": "#/$defs/relation"}},
+    "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "usage": {"$ref": "#/$defs/usage"}
+  },
+  "$defs": {
+    "reviewRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace", "path", "side", "kind", "ownerFqcn", "name", "parameterTypes"],
+      "properties": {
+        "workspace": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "side": {"type": "string", "enum": ["BASE", "CURRENT"]},
+        "kind": {"type": "string", "enum": ["METHOD", "FIELD", "TYPE", "STATEMENT", "SQL_FRAGMENT"]},
+        "ownerFqcn": {"type": "string"},
+        "name": {"type": "string", "minLength": 1},
+        "parameterTypes": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "sourceRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "startLine", "endLine", "startColumn", "endColumn"],
+      "properties": {
+        "ref": {"$ref": "#/$defs/reviewRef"},
+        "startLine": {"type": "integer", "minimum": 1},
+        "endLine": {"type": "integer", "minimum": 1},
+        "startColumn": {"type": "integer", "minimum": 1},
+        "endColumn": {"type": "integer", "minimum": 1}
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "resolution", "from", "targets", "evidence", "reason", "assumptions"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "enum": ["JAVA_CALL", "SPRING_BINDING", "MYBATIS_STATEMENT", "SQL_INCLUDE", "DUBBO_CONTRACT"]},
+        "resolution": {"type": "string", "enum": ["EXACT", "CONDITIONAL", "AMBIGUOUS", "UNRESOLVED"]},
+        "from": {"$ref": "#/$defs/reviewRef"},
+        "targets": {"type": "array", "items": {"$ref": "#/$defs/reviewRef"}},
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/sourceRange"}},
+        "reason": {"type": "string"},
+        "assumptions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "at", "detail"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "at": {"$ref": "#/$defs/sourceRange"},
+        "detail": {"type": "string"}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewUnitId", "ruleId", "status", "relationIds", "reasons"],
+      "properties": {
+        "reviewUnitId": {"type": "string", "minLength": 1},
+        "ruleId": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "enum": ["READY", "BLOCKED"]},
+        "relationIds": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "candidates", "sourceBytes", "elapsedMillis"],
+      "properties": {
+        "files": {"type": "integer", "minimum": 0},
+        "candidates": {"type": "integer", "minimum": 0},
+        "sourceBytes": {"type": "integer", "minimum": 0},
+        "elapsedMillis": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

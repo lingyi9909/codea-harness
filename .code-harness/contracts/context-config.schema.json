@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContextConfig170",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "projectId", "sources"],
+  "properties": {
+    "version": {"const": 1},
+    "projectId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "teamRoot": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {"not": {"pattern": "^[\\\\/]{2}"}},
+        {"not": {"pattern": "^[A-Za-z][A-Za-z0-9+.-]*://"}}
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/source"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "sources": {"contains": {"properties": {"root": {"const": "TEAM"}}, "required": ["root"]}}
+        },
+        "required": ["sources"]
+      },
+      "then": {"required": ["teamRoot"]}
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "relativeMarkdownPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\\\]+\\.md$",
+      "allOf": [
+        {"not": {"pattern": "^/"}},
+        {"not": {"pattern": "^[A-Za-z]:"}},
+        {"not": {"pattern": ":"}},
+        {"not": {"pattern": "(^|/)\\.\\.(/|$)"}},
+        {"not": {"pattern": "^[A-Za-z][A-Za-z0-9+.-]*://"}}
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "root", "path", "kind", "required"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "root": {"type": "string", "enum": ["PROJECT", "TEAM"]},
+        "path": {"$ref": "#/$defs/relativeMarkdownPath"},
+        "kind": {"type": "string", "enum": ["RULES", "REFERENCE", "EXPERIENCE"]},
+        "required": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "RULES"}}, "required": ["kind"]},
+          "then": {"properties": {"required": {"const": true}}}
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewKnowledge170",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "projectId", "status", "bindingSha256", "sources", "checks", "issues"],
+  "properties": {
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "projectId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "status": {"type": "string", "enum": ["NOT_CONFIGURED", "READY", "PARTIAL", "INVALID"]},
+    "bindingSha256": {"oneOf": [{"const": "ABSENT"}, {"type": "string", "pattern": "^[A-Fa-f0-9]{64}$"}]},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/sourceRecord"}},
+    "checks": {"type": "array", "items": {"$ref": "#/$defs/businessCheck"}},
+    "issues": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "appliesTo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "entryPoints"],
+      "properties": {
+        "paths": {"type": "array", "items": {"type": "string"}},
+        "entryPoints": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "projectId", "status", "version", "owner", "source", "approvalRef", "appliesTo", "supersedes", "exceptions"],
+      "properties": {
+        "ruleId": {"$ref": "#/$defs/id"},
+        "projectId": {"oneOf": [{"const": "*"}, {"$ref": "#/$defs/id"}]},
+        "status": {"type": "string", "enum": ["DRAFT", "ACTIVE", "RETIRED"]},
+        "version": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "approvalRef": {"type": "string", "minLength": 1},
+        "appliesTo": {"$ref": "#/$defs/appliesTo"},
+        "supersedes": {"type": "array", "items": {"$ref": "#/$defs/id"}},
+        "exceptions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "sourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "root", "path", "kind", "required", "status", "reasons"],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/id"},
+        "root": {"type": "string", "enum": ["PROJECT", "TEAM"]},
+        "path": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "enum": ["RULES", "REFERENCE", "EXPERIENCE"]},
+        "required": {"type": "boolean"},
+        "sha256": {"type": "string", "pattern": "^[A-Fa-f0-9]{64}$"},
+        "rule": {"$ref": "#/$defs/rule"},
+        "status": {"type": "string", "enum": ["READY", "BLOCKED", "NOT_APPLICABLE"]},
+        "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "businessCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewUnitId", "ruleKey", "sourceId", "ruleId", "status", "reasons"],
+      "properties": {
+        "reviewUnitId": {"type": "string", "minLength": 1},
+        "ruleKey": {"type": "string", "pattern": "^BUSINESS:[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$"},
+        "sourceId": {"$ref": "#/$defs/id"},
+        "ruleId": {"$ref": "#/$defs/id"},
+        "status": {"type": "string", "enum": ["READY", "BLOCKED"]},
+        "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

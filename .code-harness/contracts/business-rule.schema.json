@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BusinessRule170",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ruleId", "projectId", "status", "version", "owner", "source", "approvalRef", "appliesTo", "supersedes", "exceptions"],
+  "properties": {
+    "ruleId": {"$ref": "#/$defs/id"},
+    "projectId": {
+      "oneOf": [
+        {"const": "*"},
+        {"$ref": "#/$defs/id"}
+      ]
+    },
+    "status": {"type": "string", "enum": ["DRAFT", "ACTIVE", "RETIRED"]},
+    "version": {"type": "string", "minLength": 1},
+    "owner": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1},
+    "approvalRef": {"type": "string", "minLength": 1},
+    "appliesTo": {"$ref": "#/$defs/appliesTo"},
+    "supersedes": {"type": "array", "items": {"$ref": "#/$defs/id"}},
+    "exceptions": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "pathSelector": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {"not": {"pattern": "^/"}},
+        {"not": {"pattern": "^[A-Za-z]:"}},
+        {"not": {"pattern": "(^|/)\\.\\.(/|$)"}},
+        {"not": {"pattern": "[?*\\[\\]{}]"}},
+        {"not": {"pattern": "\\\\"}}
+      ]
+    },
+    "entryPoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*#[A-Za-z_$][A-Za-z0-9_$]*\\([^()]*\\)$"
+    },
+    "appliesTo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "entryPoints"],
+      "properties": {
+        "paths": {"type": "array", "items": {"$ref": "#/$defs/pathSelector"}},
+        "entryPoints": {"type": "array", "items": {"$ref": "#/$defs/entryPoint"}}
+      },
+      "anyOf": [
+        {"properties": {"paths": {"minItems": 1}}},
+        {"properties": {"entryPoints": {"minItems": 1}}}
+      ]
+    }
+  }
+}

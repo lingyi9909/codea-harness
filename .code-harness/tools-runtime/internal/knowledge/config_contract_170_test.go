@@ -23,6 +23,8 @@ func Test170ContextConfigContract(t *testing.T) {
 		[]byte("version: 1\nprojectId: order-service\nprojectId: duplicate\nsources: []\n"),
 		[]byte("version: 1\nsources: []\n"),
 		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: rule-a\n    root: PROJECT\n    path: ../private.md\n    kind: RULES\n    required: true\n"),
+		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: rule-a\n    root: PROJECT\n    path: docs/rule.md\n    kind: RULES\n    required: false\n"),
+		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: team-a\n    root: TEAM\n    path: docs/reference.md\n    kind: REFERENCE\n    required: false\n"),
 	}
 	for _, raw := range cases { if err := schema.ValidateYAML(s, raw); err == nil { t.Fatalf("invalid context config accepted: %s", raw) } }
 }
@@ -41,7 +43,7 @@ func Test170KnowledgeAndChecksJSONContracts(t *testing.T) {
 	if err := schema.ValidateJSON(request, []byte(`{"runId":"review-case","path":"docs"}`)); err == nil { t.Fatal("knowledge request accepted extra field") }
 
 	manifest := readContract170(t, "review-knowledge.schema.json")
-	validManifest := []byte(`{"runId":"review-case","projectId":"order-service","status":"READY","bindingSha256":"abc","sources":[],"checks":[],"issues":[]}`)
+	validManifest := []byte(`{"runId":"review-case","projectId":"order-service","status":"READY","bindingSha256":"0000000000000000000000000000000000000000000000000000000000000000","sources":[],"checks":[],"issues":[]}`)
 	if err := schema.ValidateJSON(manifest, validManifest); err != nil { t.Fatalf("valid knowledge manifest rejected: %v", err) }
 	if err := schema.ValidateJSON(manifest, []byte(`[]`)); err == nil { t.Fatal("knowledge manifest accepted array envelope") }
 

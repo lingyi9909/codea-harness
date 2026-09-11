@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewChecks170",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["reviewUnitId", "ruleId", "status", "reason", "sourceIds"],
+    "properties": {
+      "reviewUnitId": {"type": "string", "minLength": 1},
+      "ruleId": {"type": "string", "minLength": 1},
+      "status": {"type": "string", "enum": ["COMPLETED", "INCOMPLETE"]},
+      "reason": {"type": "string"},
+      "sourceIds": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}, "uniqueItems": true}
+    },
+    "allOf": [
+      {
+        "if": {"properties": {"status": {"const": "INCOMPLETE"}}, "required": ["status"]},
+        "then": {"properties": {"reason": {"minLength": 1}}}
+      }
+    ]
+  }
+}
