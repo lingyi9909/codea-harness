@@ -3,7 +3,7 @@ name: task170-t1-contracts
 on:
   workflow_dispatch:
   push:
-    branches: [feature/1.7]
+    branches: [feature/1.7, feature/1.7-integrated-t1]
     paths:
       - '.code-harness/contracts/**'
       - '.code-harness/tools-runtime/internal/nav/**'
@@ -70,7 +70,16 @@ jobs:
           GOTOOLCHAIN: local
           GOPROXY: off
           GOSUMDB: off
-        run: go test ./... -count=1
+        run: |
+          go test ./... -count=1 2>&1 | Tee-Object -FilePath full-go-regression.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload full regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task170-full-go-regression
+          path: .code-harness/tools-runtime/full-go-regression.log
+          if-no-files-found: error
       - name: Go vet
         working-directory: .code-harness/tools-runtime
         shell: pwsh
