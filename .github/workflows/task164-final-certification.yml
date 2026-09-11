@@ -1,4 +1,5 @@
 name: task164-final-certification
+# Exact-head Closure certification trigger; no behavioral effect.
 
 on:
   push:
