@@ -130,6 +130,8 @@ def main() -> int:
         "TASK164_TASK4_GATE_B PASS",
     ):
         require(script, marker, "positive OpenCode evidence", failures)
+    require(task4_review, "tool_call = $true", "positive custom model tool capability", failures)
+    require(interruption, "tool_call = $true", "interruption custom model tool capability", failures)
     forbid(task4_review, "TASK4_STAGE_", "prompt-only positive progress", failures)
     require(task4_review, "events[].display", "Runtime progress source assertion", failures)
     require(task4_review, "forbidden shell orchestration", "root shell contract audit", failures)

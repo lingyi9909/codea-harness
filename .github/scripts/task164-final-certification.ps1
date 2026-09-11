@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$base = 'ffedb2a273dc714db080dc2115f189f20d55b227'
+$base = '6605916b4929434ea3362ab5b4fc6325ca117a2f'
 $expected = $env:GITHUB_SHA
 $version = '1.6.4'
 $releaseRef = 'refs/heads/release/1.6.4-final-certification'
@@ -20,7 +20,7 @@ function Write-Checklist([string]$Status) {
         version = $version
         status = $Status
         exactHeadSha = $head
-        acceptedTask3Baseline = $base
+        closureHotfixBase = $base
         workflowRunId = $env:GITHUB_RUN_ID
         generatedAtUtc = [DateTime]::UtcNow.ToString('o')
         gates = $results
@@ -91,21 +91,36 @@ function Assert-ReleaseScope {
     $changed = @(& git -C $root diff --name-only "$base..$head")
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Task 4 scope' }
     $allowed = @(
-        '.github/scripts/task164-final-certification-contract.py',
-        '.github/scripts/task164-final-certification.ps1',
+        '.code-harness/AGENTS.md',
+        '.code-harness/bootstrap.md',
+        '.code-harness/agents/orchestrator.md',
+        '.code-harness/contracts/reviewer-host-contract.md',
+        '.github/scripts/task164-closure-opencode-resolved-contract.ps1',
+        '.github/scripts/task164-closure-install-e2e.ps1',
+        '.github/scripts/task164-closure-agent-contract.ps1',
+        '.github/scripts/task164-install.ps1',
+        '.github/scripts/task164-release-package.ps1',
+        '.github/scripts/task164-release-blocker-task2-e2e.ps1',
         '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
         '.github/scripts/task164-task4-plain-review-server.py',
         '.github/scripts/task164-task4-progress-interruption-e2e.ps1',
-        '.github/workflows/task164-final-certification.yml'
+        '.github/workflows/task164-closure-product-e2e.yml',
+        '.github/workflows/task164-final-certification.yml',
+        '.github/scripts/task164-final-certification-contract.py',
+        '.github/scripts/task164-final-certification.ps1',
+        'README.md',
+        'docs/superpowers/plans/2026-09-11-codea-harness-1.6.4-final-certification-closure-hotfix-plan.md'
     )
     foreach ($path in $changed) {
         if ($path -cnotin $allowed) { throw "Unapproved Task 4 scope: $path" }
     }
-    $acceptedProductChanges = @($changed | Where-Object { $_ -like '.code-harness/*' })
-    if ($acceptedProductChanges.Count -ne 0) {
-        throw "Accepted Task 1-3 product scope changed during Task 4: $($acceptedProductChanges -join ',')"
+    $runtimeGoChanges = @($changed | Where-Object {
+        $_ -like '.code-harness/tools-runtime/*' -and ([string]$_).EndsWith('.go',[StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($runtimeGoChanges.Count -ne 0) {
+        throw "Runtime Go implementation changed during Closure: $($runtimeGoChanges -join ',')"
     }
-    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count) acceptedTask3=$base"
+    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count) closureHotfixBase=$base"
 }
 
 function Build-RevokedRCUpgrade {
@@ -306,7 +321,32 @@ try {
 
     Invoke-Gate 'packageBuild' {
         Invoke-Script '.github/scripts/task164-release-package.ps1'
-    } @('TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4')
+    } @(
+        'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4',
+        'INSTALL_SAFE_ENTRYPOINT_PACKAGED PASS file=install.ps1'
+    )
+
+    Invoke-Gate 'closureResolvedReviewerHost' {
+        Invoke-Script '.github/scripts/task164-closure-opencode-resolved-contract.ps1'
+    } @(
+        'OPENCODE_11825_REVIEWER_PERMISSION_RESOLVED PASS',
+        'OPENCODE_11825_REVIEWER_COMMAND_SUBTASK_RESOLVED PASS',
+        'REVIEWER_BASH_DENIED PASS',
+        'REVIEWER_TASK_DENIED PASS',
+        'REVIEWER_RUNTIME_ARTIFACT_WRITE_DENIED PASS',
+        'REVIEWER_SUBMIT_TOOL_ALLOWED PASS'
+    )
+
+    Invoke-Gate 'closureInstallSafety' {
+        Invoke-Script '.github/scripts/task164-closure-install-e2e.ps1'
+    } @(
+        'INSTALL_REVIEWER_HOST_RESOURCES PASS',
+        'INSTALL_EXISTING_OPENCODE_CONFLICT_FAIL_CLOSED PASS'
+    )
+
+    Invoke-Gate 'closureAgentContract' {
+        Invoke-Script '.github/scripts/task164-closure-agent-contract.ps1'
+    } @('HARNESS_164_AGENT_CONTRACT_CONSISTENT PASS')
 
     if (Test-Path '.code-harness/bin/ast-grep.exe') {
         $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '.code-harness/bin/ast-grep.exe').Path
@@ -357,6 +397,9 @@ try {
     Invoke-Gate 'task164PackagedFullReviewE2E' {
         Invoke-Script '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1'
     } @(
+        'OPENCODE_RUNTIME_PROGRESS_RENDERED PASS',
+        'OPENCODE_RUNTIME_PROGRESS_1_TO_8 PASS',
+        'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS',
         'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',
         'TASK164_TASK4_INDEPENDENT_REVIEWER_BOTH_PHASES PASS',
         'TASK164_TASK4_RUNTIME_PROGRESS_TERMINAL PASS',
@@ -367,6 +410,8 @@ try {
     Invoke-Gate 'task164ProgressInterruptionE2E' {
         Invoke-Script '.github/scripts/task164-task4-progress-interruption-e2e.ps1'
     } @(
+        'OPENCODE_INTERRUPTION_STAGE_VISIBLE PASS',
+        'OPENCODE_INTERRUPTION_LATER_STAGES_BLOCKED PASS',
         'TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS',
         'TASK164_TASK4_DOWNSTREAM_BLOCKED PASS',
         'TASK164_TASK4_GATE_D PASS'

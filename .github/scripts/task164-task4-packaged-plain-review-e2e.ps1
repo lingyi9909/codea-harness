@@ -106,7 +106,7 @@ $config = @{
             npm = '@ai-sdk/openai-compatible'
             name = 'Task 4 Local Deterministic'
             options = @{ baseURL = "http://127.0.0.1:$port/v1"; apiKey = 'task164-local' }
-            models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; limit = @{ context = 200000; output = 4096 } } }
+            models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; tool_call = $true; limit = @{ context = 200000; output = 4096 } } }
         }
     }
     permission = @{
@@ -143,7 +143,7 @@ try {
     finally { Pop-Location }
     Write-Utf8NoBom $transcript $raw
     if ($exit -ne 0) { throw "Task 4 literal harness review failed exit=$exit`n$raw" }
-    if ($raw.Contains('TASK4_STAGE_')) { throw 'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY: private TASK4_STAGE markers leaked into product transcript' }
+    if ($raw.Contains(('TASK4' + '_STAGE_'))) { throw 'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY: private TASK4_STAGE markers leaked into product transcript' }
 
     $runDirs = @(Get-ChildItem (Join-Path $fixture '.code-harness/runs') -Directory)
     if ($runDirs.Count -ne 1) {

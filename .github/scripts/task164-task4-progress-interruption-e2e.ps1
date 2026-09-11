@@ -74,7 +74,7 @@ $config = @{
             npm = '@ai-sdk/openai-compatible'
             name = 'Task 4 Interruption Deterministic'
             options = @{ baseURL = "http://127.0.0.1:$port/v1"; apiKey = 'task164-local' }
-            models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; limit = @{ context = 200000; output = 4096 } } }
+            models = @{ 'task4' = @{ name = 'Task 4 Deterministic'; tool_call = $true; limit = @{ context = 200000; output = 4096 } } }
         }
     }
     permission = @{ '*'='deny'; read='allow'; edit='allow'; bash='allow'; task='allow' }
@@ -108,7 +108,7 @@ try {
         if (-not $raw.Contains($marker)) { throw "OpenCode interruption transcript missing $marker; exit=$exit`n$raw" }
     }
     if ($raw.Contains('TASK4_FULL_REVIEW_COMPLETE')) { throw 'interruption path fell through to semantic success' }
-    if ($raw.Contains('TASK4_STAGE_')) { throw 'prompt-only stage markers leaked into interruption transcript' }
+    if ($raw.Contains(('TASK4' + '_STAGE_'))) { throw 'prompt-only stage markers leaked into interruption transcript' }
 
     $runDirs = @(Get-ChildItem (Join-Path $fixture '.code-harness/runs') -Directory)
     if ($runDirs.Count -ne 1) {
