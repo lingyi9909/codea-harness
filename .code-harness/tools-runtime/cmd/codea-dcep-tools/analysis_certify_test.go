@@ -23,10 +23,16 @@ func Test153AnalysisCertifyPublishesCertifiedBundle(t *testing.T) {
 	head := git153Cmd(t, root, "rev-parse", "HEAD")
 	mustWrite153Cmd(t, yml, "feature:\n  enabled: true\n")
 
-	copyTask153CommandContract(t, root, "change-analysis.schema.json")
-	copyTask153CommandContract(t, root, "entrypoint-inventory.schema.json")
-	copyTask153CommandContract(t, root, "change-analysis-cert.schema.json")
-	mustWrite153Cmd(t, filepath.Join(root, ".code-harness", "VERSION"), "1.5.2\n")
+	for _, name := range []string{
+		"change-set.schema.json",
+		"change-analysis-proposal.schema.json",
+		"change-analysis.schema.json",
+		"entrypoint-inventory.schema.json",
+		"change-analysis-cert.schema.json",
+	} {
+		copyTask153CommandContract(t, root, name)
+	}
+	mustWrite153Cmd(t, filepath.Join(root, ".code-harness", "VERSION"), "1.6.4\n")
 
 	draft := map[string]any{
 		"reviewScope": map[string]any{
@@ -46,13 +52,11 @@ func Test153AnalysisCertifyPublishesCertifiedBundle(t *testing.T) {
 	}
 	draftBytes, err := json.MarshalIndent(draft, "", "  ")
 	if err != nil { t.Fatal(err) }
-	draftPath := filepath.Join(root, ".code-harness", "runs", "r153", "requests", "change-analysis-draft.json")
-	mustWrite153Cmd(t, draftPath, string(append(draftBytes, '\n')))
+	existingAnalysisRel := ".code-harness/runs/r153/analysis/change-analysis-existing.json"
+	mustWrite153Cmd(t, filepath.Join(root, filepath.FromSlash(existingAnalysisRel)), string(append(draftBytes, '\n')))
 
-	req := analysisruntime.CertifyRequest{
-		RunID: "r153", DraftPath: ".code-harness/runs/r153/requests/change-analysis-draft.json",
-		BaseRef: "HEAD", IncludeWorkingTree: true, Intent: analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: "fixture-maintenance"},
-	}
+	intent := analysisruntime.Intent{Mode: "CHAIN_MAINTENANCE", Target: "fixture-maintenance"}
+	req := canonicalAnalysisCertifyRequestFromExistingTest(t, root, "r153", existingAnalysisRel, "HEAD", true, intent)
 	reqBytes, err := json.Marshal(req)
 	if err != nil { t.Fatal(err) }
 	requestPath := filepath.Join(root, ".code-harness", "runs", "r153", "requests", "analysis-certify.json")

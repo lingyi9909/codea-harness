@@ -58,6 +58,44 @@ review:
 
 均不存在 → `MANUAL_ACTION_REQUIRED`，当前 Harness 0 修改，并提示用户显式配置。**已有 `review` 时整个 block 字节级保持，不重新识别、不覆盖。**
 
+## 1.6.3 → 1.6.4 已登记 Migration
+
+### `config-1.6.3-to-1.6.4`
+
+1.6.4 Runtime 显式登记 `1.6.3 -> 1.6.4` release edge，并且必须在 1.6.4 target schema 校验之前执行。
+
+exact packaged 1.6.3 与当前 1.6.4 的 `harness-config.schema.json` 内容相同（仅正式 Windows package 行尾可能不同），因此本 release blocker **不是 1.6.4 schema diff**。
+
+真实 historical failure 来自更早的 Project State：commit `680c58d92e80dd6493327bbd447ba54bd3a25b37` 之前，正式模板/当时 schema 允许：
+
+```yaml
+initialization:
+  status: NEEDS_CONFIRMATION
+  unresolved: []
+```
+
+`680c58d` 收紧 initialization invariant 后，`NEEDS_CONFIRMATION` 必须至少有一个 unresolved，并把模板改为：
+
+```yaml
+initialization:
+  status: NEEDS_CONFIRMATION
+  unresolved:
+    - projectNotInitialized
+```
+
+`harness.yaml` 是跨 release 保留的 Project State，所以 exact 1.6.3 Framework 仍可能携带这个更早的合法历史状态。revoked 1.6.4 RC `6aa5d9dad0623cd60a845360c9b20ab153921e87` 没有修复该状态，最终在 target-schema validation 的 `/initialization/unresolved` `minItems` 门禁失败。
+
+当前 migration 只修复这个已由历史版本和真实 revoked-RC E2E 证明的状态：
+
+- `status: NEEDS_CONFIRMATION` + 空 `unresolved` → 确定性补入 `projectNotInitialized`；
+- 除该行最小变化外，用户配置顺序、注释和值保持不变；
+- 已满足 initialization invariant 的 `version: 2` config byte-for-byte 保持；
+- 1.6.3 仍支持的 config `version: 1` 先通过该 release edge，随后继续执行既有 `upgrade-config-v1-to-v2-resource-scopes`；
+- 其他 config version、重复/歧义顶层字段、不受支持的 direct release edge 或无法确定的历史表示一律 fail-closed，不由 Agent/LLM 猜测；
+- registered migrations 完成后才使用 1.6.4 target schema 校验；失败不得留下半升级安装。
+
+未来如果 `harness-config.schema.json` 出现 backward-incompatible change，必须新增明确 sourceVersion → targetVersion migration，或用长期回归证明所有受支持 source config 仍兼容。
+
 ## 禁止行为
 
 - 禁止 AI 猜 module/profile/path/baseRef。

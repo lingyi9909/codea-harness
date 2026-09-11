@@ -56,27 +56,53 @@ Release ZIP = 可安装/可升级产品
 
 ## 首次安装
 
-使用：
+1.6.4 首次安装必须使用正式 Release 产物：
 
 ```text
-codea-harness-1.5.0-windows-x64-install.zip
+codea-harness-1.6.4-windows-x64-install.zip
 ```
 
-解压后顶层直接得到：
+> ⚠ **不要使用 GitHub Source ZIP / `Code → Download ZIP` / `git clone` 目录替代 Release package。** Source 不含正式 Windows Runtime，也不是可安装产品。
+
+解压正式 install ZIP 后，package root 必须同时包含：
 
 ```text
+install.ps1
 .code-harness/
-├── VERSION
-├── RELEASE-MANIFEST.json
-├── bin/codea-dcep-tools.exe
-├── bin/ast-grep.exe
-├── contracts/chain.schema.json
-├── contracts/chain-validation-result.schema.json
-├── templates/chain.template.yaml
-└── ...
+.opencode/agents/reviewer.md
+.opencode/commands/harness-review-reviewer.md
+.opencode/tools/codea-reviewer-submit.ts
 ```
 
-把 `.code-harness/` 放到项目根目录，然后对工程 Agent 说：
+**不要只复制 `.code-harness/`。** 1.6.4 Review 的独立 Reviewer Host 还依赖 package root 中的 `.opencode/**` 三个受管资源。
+
+从解压后的 package root 执行：
+
+```powershell
+pwsh -NoProfile -File .\install.ps1 -ProjectRoot <项目根目录>
+```
+
+安装器先做完整 preflight，再一次性安装 `.code-harness/` 和缺失的 Reviewer Host 资源。1.6.4 的 OpenCode Host contract 固定按 `opencode-ai@1.18.25` 认证；首次安装与正式 Final Certification 都以该版本为兼容基线。
+
+如果项目根目录已经存在以下任一文件：
+
+```text
+.opencode/agents/reviewer.md
+.opencode/commands/harness-review-reviewer.md
+.opencode/tools/codea-reviewer-submit.ts
+```
+
+且内容不是 Codea package 中的 exact bytes，安装器必须 fail-closed：
+
+```text
+MANUAL_ACTION_REQUIRED
+INSTALL_EXISTING_OPENCODE_CONFLICT
+0 destructive overwrite
+```
+
+不会覆盖用户已有 Host 配置，也不会先写入 `.code-harness/` 或其他 Reviewer Host 文件。请先人工确认/迁移冲突文件，再重新执行安装。若目标已存在 `.code-harness/`，不要用首次安装包覆盖，应走正式 upgrade package。
+
+安装完成后，对工程 Agent 说：
 
 ```text
 读取 .code-harness/bootstrap.md，执行 harness init

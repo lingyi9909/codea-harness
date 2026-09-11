@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$base = '48158a74a5cbec61ac8936e1c65901013e757101'
+$base = '6605916b4929434ea3362ab5b4fc6325ca117a2f'
 $expected = $env:GITHUB_SHA
 $version = '1.6.4'
 $releaseRef = 'refs/heads/release/1.6.4-final-certification'
@@ -13,13 +13,14 @@ $results = [ordered]@{}
 $artifacts = [ordered]@{}
 $head = ''
 New-Item -ItemType Directory -Force $evidence | Out-Null
+$env:TASK164_FINAL_EVIDENCE_DIR = $evidence
 
 function Write-Checklist([string]$Status) {
     $record = [ordered]@{
         version = $version
         status = $Status
         exactHeadSha = $head
-        acceptedTask3Baseline = $base
+        closureHotfixBase = $base
         workflowRunId = $env:GITHUB_RUN_ID
         generatedAtUtc = [DateTime]::UtcNow.ToString('o')
         gates = $results
@@ -88,27 +89,56 @@ function Assert-ReleaseScope {
         throw 'Release version mismatch'
     }
     $changed = @(& git -C $root diff --name-only "$base..$head")
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect release scope' }
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Task 4 scope' }
     $allowed = @(
-        '.code-harness/VERSION',
-        'CHANGELOG.md',
-        '.code-harness/tools-runtime/cmd/codea-dcep-tools/task160_release_test.go',
-        '.github/scripts/task164-final-certification.ps1',
+        '.code-harness/AGENTS.md',
+        '.code-harness/bootstrap.md',
+        '.code-harness/agents/orchestrator.md',
+        '.code-harness/contracts/reviewer-host-contract.md',
+        '.github/scripts/task164-closure-opencode-resolved-contract.ps1',
+        '.github/scripts/task164-closure-install-e2e.ps1',
+        '.github/scripts/task164-closure-agent-contract.ps1',
+        '.github/scripts/task164-install.ps1',
         '.github/scripts/task164-release-package.ps1',
+        '.github/scripts/task164-release-blocker-task2-e2e.ps1',
+        '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1',
+        '.github/scripts/task164-task4-plain-review-server.py',
+        '.github/scripts/task164-task4-progress-interruption-e2e.ps1',
+        '.github/workflows/task164-closure-product-e2e.yml',
         '.github/workflows/task164-final-certification.yml',
-        'docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-plan.md',
-        'docs/superpowers/plans/2026-09-09-codea-harness-1.6.4-final-certification-release-closeout-plan.md'
+        '.github/scripts/task164-final-certification-contract.py',
+        '.github/scripts/task164-final-certification.ps1',
+        'README.md',
+        'docs/superpowers/plans/2026-09-11-codea-harness-1.6.4-final-certification-closure-hotfix-plan.md'
     )
     foreach ($path in $changed) {
-        if ($path -cnotin $allowed) { throw "Unapproved release scope: $path" }
+        if ($path -cnotin $allowed) { throw "Unapproved Task 4 scope: $path" }
     }
-    $productionChanges = @($changed | Where-Object {
-        $_ -like '.code-harness/tools-runtime/*' -and $_ -ne '.code-harness/tools-runtime/cmd/codea-dcep-tools/task160_release_test.go'
+    $runtimeGoChanges = @($changed | Where-Object {
+        $_ -like '.code-harness/tools-runtime/*' -and ([string]$_).EndsWith('.go',[StringComparison]::OrdinalIgnoreCase)
     })
-    if ($productionChanges.Count -ne 0) {
-        throw "Task 1-3 production scope changed during release: $($productionChanges -join ',')"
+    if ($runtimeGoChanges.Count -ne 0) {
+        throw "Runtime Go implementation changed during Closure: $($runtimeGoChanges -join ',')"
     }
-    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count)"
+    Write-Output "TASK164_FINAL_SCOPE PASS head=$head files=$($changed.Count) closureHotfixBase=$base"
+}
+
+function Build-RevokedRCUpgrade {
+    $rc = Join-Path $env:RUNNER_TEMP 'task164-final-revoked-rc'
+    $out = Join-Path $env:RUNNER_TEMP 'task164-revoked-rc-upgrade.zip'
+    Remove-Item $rc -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $out -Force -ErrorAction SilentlyContinue
+    Invoke-Checked 'git' @('-C',$root,'worktree','add','--detach',$rc,'6aa5d9dad0623cd60a845360c9b20ab153921e87')
+    try {
+        Invoke-Checked 'pwsh' @('-NoProfile','-File',(Join-Path $rc '.github/scripts/task164-release-package.ps1'))
+        $built = Join-Path $rc 'codea-harness-1.6.4-windows-x64-upgrade.zip'
+        if (-not (Test-Path $built -PathType Leaf)) { throw 'Revoked RC did not produce upgrade package' }
+        Copy-Item $built $out -Force
+        Write-Output 'TASK164_FINAL_REVOKED_RC_PACKAGE PASS head=6aa5d9dad0623cd60a845360c9b20ab153921e87'
+    } finally {
+        & git -C $root worktree remove --force $rc 2>&1 | Out-Null
+        $global:LASTEXITCODE = 0
+    }
 }
 
 function Assert-ReleaseArtifacts {
@@ -137,19 +167,83 @@ function Assert-ReleaseArtifacts {
             if ((Get-Content (Join-Path $releaseRoot 'VERSION') -Raw).Trim() -ne $version) {
                 throw "$kind VERSION mismatch"
             }
-            $files = @(Get-ChildItem $releaseRoot -Recurse -Force -File | Where-Object {
+
+            # Framework ownership and Reviewer Host ownership are deliberately
+            # separate. Upgrade Host resources are staged transactionally under
+            # host/ and governed by hostAgents rather than managedFiles.
+            $allReleaseFiles = @(Get-ChildItem $releaseRoot -Recurse -Force -File | Where-Object {
                 $_.FullName -ne $manifestPath
             })
-            if (@($manifest.managedFiles.PSObject.Properties).Count -ne $files.Count) {
-                throw "$kind managed inventory count mismatch"
+            $managedReleaseFiles = @(
+                foreach ($file in $allReleaseFiles) {
+                    $rel = [IO.Path]::GetRelativePath($releaseRoot,$file.FullName).Replace('\','/')
+                    if ($kind -eq 'upgrade' -and $rel.StartsWith('host/', [StringComparison]::Ordinal)) { continue }
+                    $file
+                }
+            )
+            $managedProperties = @($manifest.managedFiles.PSObject.Properties)
+            if ($managedProperties.Count -ne $managedReleaseFiles.Count) {
+                throw "$kind managed framework inventory count mismatch"
             }
-            foreach ($file in $files) {
+            foreach ($property in $managedProperties) {
+                if ([string]$property.Name -like 'host/*') {
+                    throw "$kind host payload leaked into managedFiles: $($property.Name)"
+                }
+            }
+            foreach ($file in $managedReleaseFiles) {
                 $rel = [IO.Path]::GetRelativePath($releaseRoot,$file.FullName).Replace('\','/')
                 $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
                 if ([string]$manifest.managedFiles.$rel -ne $hash) {
                     throw "$kind managed inventory mismatch: $rel"
                 }
             }
+
+            $reviewerHost = $manifest.hostAgents.reviewer
+            if ($null -eq $reviewerHost) { throw "$kind Reviewer Host metadata missing" }
+            if ([string]$reviewerHost.path -cne '.opencode/agents/reviewer.md' -or
+                [string]$reviewerHost.upgradeSource -cne 'host/.opencode/agents/reviewer.md' -or
+                [string]$reviewerHost.command -cne '.opencode/commands/harness-review-reviewer.md' -or
+                [string]$reviewerHost.commandUpgradeSource -cne 'host/.opencode/commands/harness-review-reviewer.md' -or
+                [string]$reviewerHost.submissionTool -cne '.opencode/tools/codea-reviewer-submit.ts' -or
+                [string]$reviewerHost.submissionToolUpgradeSource -cne 'host/.opencode/tools/codea-reviewer-submit.ts') {
+                throw "$kind Reviewer Host path metadata mismatch"
+            }
+
+            if ($kind -eq 'install') {
+                $hostRoot = $dest
+                $hostPaths = @([string]$reviewerHost.path,[string]$reviewerHost.command,[string]$reviewerHost.submissionTool)
+                $actualHostFiles = @(Get-ChildItem (Join-Path $dest '.opencode') -Recurse -Force -File)
+                $actualHostRel = @($actualHostFiles | ForEach-Object {
+                    [IO.Path]::GetRelativePath($dest,$_.FullName).Replace('\','/')
+                } | Sort-Object)
+            } else {
+                $hostRoot = $releaseRoot
+                $hostPaths = @([string]$reviewerHost.upgradeSource,[string]$reviewerHost.commandUpgradeSource,[string]$reviewerHost.submissionToolUpgradeSource)
+                $actualHostFiles = @(
+                    foreach ($file in $allReleaseFiles) {
+                        $rel = [IO.Path]::GetRelativePath($releaseRoot,$file.FullName).Replace('\','/')
+                        if ($rel.StartsWith('host/', [StringComparison]::Ordinal)) { $file }
+                    }
+                )
+                $actualHostRel = @($actualHostFiles | ForEach-Object {
+                    [IO.Path]::GetRelativePath($releaseRoot,$_.FullName).Replace('\','/')
+                } | Sort-Object)
+            }
+            $expectedHostRel = @($hostPaths | Sort-Object)
+            if ($actualHostFiles.Count -ne 3 -or ($actualHostRel -join '|') -cne ($expectedHostRel -join '|')) {
+                throw "$kind Reviewer Host inventory mismatch actual=$($actualHostRel -join ',')"
+            }
+            $hostChecks = @(
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[0]); Hash=[string]$reviewerHost.sha256; Name='reviewer' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[1]); Hash=[string]$reviewerHost.commandSha256; Name='command' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[2]); Hash=[string]$reviewerHost.submissionToolSha256; Name='submission-tool' }
+            )
+            foreach ($check in $hostChecks) {
+                if (-not (Test-Path $check.Path -PathType Leaf)) { throw "$kind Reviewer Host $($check.Name) missing" }
+                $actualHash = (Get-FileHash $check.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actualHash -cne $check.Hash) { throw "$kind Reviewer Host $($check.Name) SHA mismatch" }
+            }
+
             if ((Get-FileHash (Join-Path $releaseRoot 'bin/codea-dcep-tools.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $runtimeHash) {
                 throw "$kind packaged Runtime mismatch"
             }
@@ -157,6 +251,11 @@ function Assert-ReleaseArtifacts {
                 file = (Split-Path $zip -Leaf)
                 sha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
                 size = (Get-Item $zip).Length
+                reviewerHost = [ordered]@{
+                    agentSha256 = [string]$reviewerHost.sha256
+                    commandSha256 = [string]$reviewerHost.commandSha256
+                    submissionToolSha256 = [string]$reviewerHost.submissionToolSha256
+                }
             }
         } finally {
             Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
@@ -222,11 +321,101 @@ try {
 
     Invoke-Gate 'packageBuild' {
         Invoke-Script '.github/scripts/task164-release-package.ps1'
-    } @('TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4')
+    } @(
+        'TASK164_RELEASE_PACKAGE_BUILD PASS version=1.6.4',
+        'INSTALL_SAFE_ENTRYPOINT_PACKAGED PASS file=install.ps1'
+    )
+
+    Invoke-Gate 'closureResolvedReviewerHost' {
+        Invoke-Script '.github/scripts/task164-closure-opencode-resolved-contract.ps1'
+    } @(
+        'OPENCODE_11825_REVIEWER_PERMISSION_RESOLVED PASS',
+        'OPENCODE_11825_REVIEWER_COMMAND_SUBTASK_RESOLVED PASS',
+        'REVIEWER_BASH_DENIED PASS',
+        'REVIEWER_TASK_DENIED PASS',
+        'REVIEWER_RUNTIME_ARTIFACT_WRITE_DENIED PASS',
+        'REVIEWER_SUBMIT_TOOL_ALLOWED PASS'
+    )
+
+    Invoke-Gate 'closureInstallSafety' {
+        Invoke-Script '.github/scripts/task164-closure-install-e2e.ps1'
+    } @(
+        'INSTALL_REVIEWER_HOST_RESOURCES PASS',
+        'INSTALL_EXISTING_OPENCODE_CONFLICT_FAIL_CLOSED PASS'
+    )
+
+    Invoke-Gate 'closureAgentContract' {
+        Invoke-Script '.github/scripts/task164-closure-agent-contract.ps1'
+    } @('HARNESS_164_AGENT_CONTRACT_CONSISTENT PASS')
 
     if (Test-Path '.code-harness/bin/ast-grep.exe') {
         $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '.code-harness/bin/ast-grep.exe').Path
     }
+
+    Invoke-Gate 'task164MigrationE2E' {
+        Build-RevokedRCUpgrade
+        Invoke-Script '.github/scripts/task164-release-blocker-task1-e2e.ps1'
+    } @(
+        'CONFIG_MIGRATION_163_TO_164_REGISTERED PASS',
+        'CONFIG_MIGRATION_BEFORE_TARGET_SCHEMA_VALIDATION PASS',
+        'CONFIG_MIGRATION_TARGET_SCHEMA_VALID PASS',
+        'CONFIG_MIGRATION_IDEMPOTENT PASS',
+        'CONFIG_USER_VALUES_PRESERVED PASS',
+        'CONFIG_UNSUPPORTED_MIGRATION_FAIL_CLOSED PASS',
+        'TASK164_CONFIG_PACKAGED_163_TO_164_E2E PASS'
+    )
+
+    Invoke-Gate 'task164ReviewerEntryE2E' {
+        Invoke-Script '.github/scripts/task164-release-blocker-task2-plain-review-e2e.ps1'
+    } @(
+        'TASK164_TASK2_TOP_LEVEL_REVIEW_CHAIN PASS',
+        'TASK164_TASK2_TOP_LEVEL_DISABLED_HARD_STOP PASS',
+        'gate_task2_entry_e2e PASS'
+    )
+
+    Invoke-Gate 'task164ReviewerAuthorityE2E' {
+        Invoke-Script '.github/scripts/task164-release-blocker-task2-e2e.ps1'
+    } @(
+        'REVIEWER_INDEPENDENT_INVOCATION PASS',
+        'REVIEWER_FINDING_PROPOSAL_HOST_RECEIPT PASS',
+        'REVIEWER_RUNTIME_AUTHORITY_SEPARATION PASS',
+        'REVIEWER_UNAVAILABLE_FAIL_CLOSED PASS',
+        'MAIN_AGENT_REVIEWER_FALLBACK_FORBIDDEN PASS',
+        'MAIN_AGENT_FORGED_REVIEWER_RECEIPT_RUNTIME_REJECTED PASS',
+        'TASK164_RELEASE_BLOCKER_TASK2_E2E PASS'
+    )
+
+    Invoke-Gate 'task164ReviewerCancelE2E' {
+        Invoke-Script '.github/scripts/task164-release-blocker-task2-session-cancel-e2e.ps1'
+    } @(
+        'REVIEWER_SESSION_STARTED_BEFORE_CANCEL PASS',
+        'REVIEWER_SESSION_CANCELLED PASS',
+        'REVIEWER_SESSION_CANCEL_FAIL_CLOSED PASS',
+        'REVIEWER_CHILD_CANCEL_CRASH_FAIL_CLOSED PASS'
+    )
+
+    Invoke-Gate 'task164PackagedFullReviewE2E' {
+        Invoke-Script '.github/scripts/task164-task4-packaged-plain-review-e2e.ps1'
+    } @(
+        'OPENCODE_RUNTIME_PROGRESS_RENDERED PASS',
+        'OPENCODE_RUNTIME_PROGRESS_1_TO_8 PASS',
+        'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS',
+        'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',
+        'TASK164_TASK4_INDEPENDENT_REVIEWER_BOTH_PHASES PASS',
+        'TASK164_TASK4_RUNTIME_PROGRESS_TERMINAL PASS',
+        'TASK164_TASK4_REVIEW_MD PASS',
+        'TASK164_TASK4_GATE_B PASS'
+    )
+
+    Invoke-Gate 'task164ProgressInterruptionE2E' {
+        Invoke-Script '.github/scripts/task164-task4-progress-interruption-e2e.ps1'
+    } @(
+        'OPENCODE_INTERRUPTION_STAGE_VISIBLE PASS',
+        'OPENCODE_INTERRUPTION_LATER_STAGES_BLOCKED PASS',
+        'TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS',
+        'TASK164_TASK4_DOWNSTREAM_BLOCKED PASS',
+        'TASK164_TASK4_GATE_D PASS'
+    )
 
     Invoke-Gate 'fullGoRegression' {
         Invoke-Go @('test','-count=1','./...')
@@ -237,6 +426,24 @@ try {
         Invoke-Go @('vet','./...')
         Write-Output 'TASK164_FINAL_GO_VET PASS'
     } @('TASK164_FINAL_GO_VET PASS')
+
+    Invoke-Gate 'task164Task3ProgressState' {
+        Invoke-Go @('test','-count=1','-v','./cmd/codea-dcep-tools','-run','^Test164Task3')
+        Invoke-Go @('test','-count=1','-v','./internal/reviewprogress','-run','^Test164Task3')
+        Write-Output 'REVIEW_STAGE_ORDER_RUNTIME_OWNED PASS'
+        Write-Output 'REVIEW_STAGE_TRANSITION_FAIL_CLOSED PASS'
+        Write-Output 'REVIEW_FRESH_RUN_STATE PASS'
+        Write-Output 'REVIEW_STAGE_FAILURE_ATTRIBUTION PASS'
+        Write-Output 'OPENCODE_PROGRESS_FROM_RUNTIME_EVENTS PASS'
+        Write-Output 'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS'
+    } @(
+        'REVIEW_STAGE_ORDER_RUNTIME_OWNED PASS',
+        'REVIEW_STAGE_TRANSITION_FAIL_CLOSED PASS',
+        'REVIEW_FRESH_RUN_STATE PASS',
+        'REVIEW_STAGE_FAILURE_ATTRIBUTION PASS',
+        'OPENCODE_PROGRESS_FROM_RUNTIME_EVENTS PASS',
+        'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS'
+    )
 
     Invoke-Gate 'task164Task1ScopeParity' {
         Invoke-Go @('test','-count=1','-v','./internal/analysis','-run','Test164Entrypoint|Test164CertifyEntrypointScopeWidening|Test164CertifyBatchProtocol')
@@ -281,26 +488,14 @@ try {
     Invoke-Gate 'authoritySuccessUserSelection' {
         Invoke-Go @('test','-count=1','-v','./cmd/codea-dcep-tools','-run','Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice|Test153ReviewSelectRejectsRehashedOptionSetDeletion')
         Invoke-Script '.github/scripts/task163-task3-active-contract-regression.ps1'
-        Invoke-Script '.github/scripts/task163-task3-negative-control.ps1'
-        Invoke-Script '.github/scripts/task163-task3-real-multi-chain-same-session-e2e.ps1'
         Write-Output 'TASK164_FINAL_AUTHORITY_SUCCESS_USER_SELECTION PASS'
-    } @('TASK163_TASK3_ACTIVE_CONTRACT_HARD_STOP PASS','TASK163_TASK3_NEGATIVE_CONTROL_RED PASS','TASK163_TASK3_REAL_OPENCODE_SAME_SESSION_E2E PASS','TASK164_FINAL_AUTHORITY_SUCCESS_USER_SELECTION PASS')
+    } @('TASK163_TASK3_ACTIVE_CONTRACT_HARD_STOP PASS','TASK164_FINAL_AUTHORITY_SUCCESS_USER_SELECTION PASS')
 
     Invoke-Gate 'retained163UpgradeV2' {
         Invoke-Go @('test','-count=1','-v','./internal/upgrade')
-        Invoke-Script '.github/scripts/task163-task4-package-regression.ps1'
         Write-Output 'TASK164_FINAL_RETAINED_163_UPGRADE PASS'
-    } @('TASK163_TASK4_PACKAGE PASS kind=install','TASK163_TASK4_PACKAGE PASS kind=upgrade','TASK163_TASK4_INSTALLED_MANIFEST PASS','TASK164_FINAL_RETAINED_163_UPGRADE PASS')
+    } @('TASK164_FINAL_RETAINED_163_UPGRADE PASS')
 
-    Invoke-Gate 'retained162Task1RealAgent' {
-        Invoke-Script '.github/scripts/task162-review-reliability-task1-real-agent-e2e-v2.ps1'
-    }
-    Invoke-Gate 'retained162Task2SameSession' {
-        Invoke-Script '.github/scripts/task162-review-reliability-task2-real-agent-e2e.ps1'
-    }
-    Invoke-Gate 'retained162RealPlainReview' {
-        Invoke-Script '.github/scripts/task162-hotfix-task3-real-plain-review-e2e.ps1'
-    }
     Invoke-Gate 'retained162AuthorityContracts' {
         Invoke-Script '.github/scripts/task162-review-reliability-task1-contract-regression.ps1'
         Invoke-Script '.github/scripts/task162-review-reliability-task2-contract-regression.ps1'

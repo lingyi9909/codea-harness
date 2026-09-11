@@ -29,13 +29,13 @@
 
 ## Agent 职责
 
-- Reviewer：消费 Runtime Canonical ChangeSet Snapshot，负责 Code Navigation、semantic ChangeAnalysis Proposal、Review Coverage 与 Finding Proposal；不拥有 Git ChangeSet deterministic fact authority。
+- Reviewer：消费 Runtime Canonical ChangeSet Snapshot，只负责 Code Navigation、semantic ChangeAnalysis Proposal、Review Coverage 与 Finding Proposal；不拥有 Git ChangeSet deterministic fact authority，也不拥有整个 Review orchestration。
 - API Doc Agent：API target discovery、DTO/Enum/Validation/Direct Service 一层 evidence、结构化 ApiDoc，只读；不得自由写最终 Markdown。
 - Integration Test Agent：Existing Test Coverage、测试计划、生成/修复经审批的测试；不执行测试。
 - Runtime Debugger：独占测试/服务执行、日志与 Diagnosis。
 - Fix Agent：最小 Fix Plan + 经 fixPlanId 审批的生产修改；不执行测试。
 - Project Adapter：init 适配与配置生成。
-- Orchestrator：路由、触发 Runtime Snapshot/Certification、Review Coverage/审批门禁、API target selection、Chain Management、Agent 交接、测试修复轮次；不得独立重算 Git ChangeSet。
+- Orchestrator：拥有 Review 路由、Runtime 调用、Reviewer delegation、Runtime progress 展示与 fail-closed 处理，并继续负责 Review Coverage/审批门禁、API target selection、Chain Management、Agent 交接、测试修复轮次；不得独立重算 Git ChangeSet。
 
 ## 审批
 
@@ -64,6 +64,8 @@ codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --
 codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
 codea-dcep-tools.exe review begin
+codea-dcep-tools.exe review progress --run-id <runId>
+codea-dcep-tools.exe review reviewer-unavailable --run-id <runId>
 codea-dcep-tools.exe analysis snapshot --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
@@ -206,3 +208,27 @@ codea-dcep-tools.exe review begin
 当 plain `harness review` 的 Runtime `review options` 返回 `decision=USER_SELECTION`（2+ valid Chains）时，当前 Assistant Turn 必须只展示 Runtime 生成的选择并询问用户，然后立即结束；只有**下一条用户消息**提供明确选择后才允许继续 same-run Review。
 
 在下一条用户消息到达前，禁止调用 `review select`、`review units`、`review dispatch`、创建 `finding-proposals.json`、执行 Finding Certification 或 `report review`。不得把 Agent 自己选择的 FULL / TARGETED / LIST 冒充用户选择，也不得默认 ALL。AUTO_FULL 与 AUTO_SINGLE 的既有机器直通规则保持不变。
+
+## 1.6.4 Review Host Authority Flow
+
+The only supported product-level review ownership is:
+
+```text
+Main Agent / Orchestrator
+→ review begin
+→ Runtime snapshot
+→ independent Reviewer CHANGE_ANALYSIS
+→ Runtime certification
+→ Runtime planning
+→ independent Reviewer FINDINGS
+→ Runtime finding certification
+→ Runtime report
+```
+
+Reviewer owns only the two semantic proposal phases: `CHANGE_ANALYSIS` and `FINDINGS`. Reviewer does not own routing, Runtime execution, certification, planning, progress, final report rendering, or failure recovery.
+
+Main Agent / Orchestrator owns routing, Runtime invocation, Reviewer delegation, Runtime progress rendering, and fail-closed handling. It must use the official Runtime commands `review progress --run-id <runId>` to render `events[].display` and `review reviewer-unavailable --run-id <runId>` when the independent Reviewer Host cannot produce a valid same-run proposal.
+
+The Main Agent / Orchestrator may create only same-run `requests/**` request files. Reviewer proposals must enter the same run only through `codea-reviewer-submit`. `analysis/**`, `review.md`, and `.code-harness/chains/**` remain Runtime/Framework-owned. No semantic fallback to the Main Agent is permitted when Reviewer fails.
+
+OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.

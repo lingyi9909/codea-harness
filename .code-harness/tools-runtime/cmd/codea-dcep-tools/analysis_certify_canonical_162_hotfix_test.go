@@ -94,7 +94,9 @@ func new162CanonicalCertFixture(t *testing.T) (string, string, canonicalSnapshot
 	}
 	proposalBytes, err := json.MarshalIndent(proposal, "", "  ")
 	if err != nil { t.Fatal(err) }
+	proposalRel := ".code-harness/runs/" + runID + "/requests/change-analysis-proposal.json"
 	mustWrite153Cmd(t, filepath.Join(requestDir, "change-analysis-proposal.json"), string(proposalBytes))
+	writeReviewerAuthorityTestReceipt(t, root, runID, "change-analysis", proposalRel)
 	return root, runID, snapshot
 }
 
