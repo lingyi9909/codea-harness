@@ -1,0 +1,84 @@
+name: main-release-164-closeout-fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch 1.6.4 main closeout gate and self-delete
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = '.github/workflows/package-windows-x64.yml'
+          $self = '.github/workflows/main-release-164-closeout-fix.yml'
+          $text = (Get-Content $path -Raw) -replace "`r`n", "`n"
+          $startMarker = '      - name: Validate 1.6.4 accepted lineage and release-only main scope'
+          $endMarker = '      - name: Build 1.6.4 official main package'
+          $start = $text.IndexOf($startMarker, [System.StringComparison]::Ordinal)
+          $end = $text.IndexOf($endMarker, $start + 1, [System.StringComparison]::Ordinal)
+          if ($start -lt 0 -or $end -lt 0 -or $end -le $start) { throw 'cannot locate 1.6.4 main closeout gate block' }
+          if ($text.IndexOf($startMarker, $start + 1, [System.StringComparison]::Ordinal) -ge 0) { throw 'duplicate 1.6.4 closeout gate marker' }
+          $newBlock = @'
+      - name: Validate 1.6.4 accepted lineage and release-only main scope
+        if: steps.release.outputs.version == '1.6.4' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $accepted = '439d9618591657b80d4670f1d9f3b5909d378447'
+          $integration = '51d3dcdcfdf0e17ec686206e48268c54995d3f4a'
+          git merge-base --is-ancestor $accepted $integration
+          $acceptedExit = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($acceptedExit -ne 0) { throw "certified 1.6.4 head is not an ancestor of integration merge: accepted=$accepted integration=$integration" }
+          git merge-base --is-ancestor $integration $head
+          $integrationExit = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($integrationExit -ne 0) { throw "approved 1.6.4 integration merge is not an ancestor of main: integration=$integration head=$head" }
+          $integrationChanged = @(& git diff --name-only "$accepted..$integration")
+          if ($LASTEXITCODE -ne 0) { throw 'cannot inspect certified-to-integration scope' }
+          $allowedDocs = @(
+            'docs/superpowers/plans/2026-09-09-codea-harness-1.7-review-call-context-plan.md',
+            'docs/superpowers/specs/2026-09-03-codea-harness-1.7-project-harness-knowledge-context-design.md',
+            'docs/superpowers/specs/2026-09-09-codea-harness-1.7-review-call-context-design.md'
+          )
+          foreach ($path in $integrationChanged) {
+            if ($path.StartsWith('.github/workflows/', [System.StringComparison]::Ordinal)) { continue }
+            if ($path -cin $allowedDocs) { continue }
+            throw "unapproved certified-to-integration change: $path"
+          }
+          $postIntegrationChanged = @(& git diff --name-only "$integration..$head")
+          if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-integration closeout scope' }
+          $allowedPostIntegration = @('.github/workflows/package-windows-x64.yml')
+          foreach ($path in $postIntegrationChanged) {
+            if ($path -cnotin $allowedPostIntegration) { throw "unapproved post-integration closeout change: $path" }
+          }
+          if ((Get-Content '.code-harness/VERSION' -Raw).Trim() -ne '1.6.4') { throw 'repository VERSION mismatch' }
+          Write-Output "PACKAGE_WINDOWS_X64_164_MAIN_SCOPE PASS accepted=$accepted integration=$integration head=$head integrationFiles=$($integrationChanged.Count) closeoutFiles=$($postIntegrationChanged.Count)"
+
+'@
+          $updated = $text.Substring(0, $start) + $newBlock + $text.Substring($end)
+          [System.IO.File]::WriteAllText((Resolve-Path $path).Path, $updated, [System.Text.UTF8Encoding]::new($false))
+          $tokens = $null
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
+          if (@($errors).Count -ne 0) { throw "PowerShell parse failed after closeout patch: $errors" }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -- $self
+          git add -- $path
+          git commit -m 'fix(release): certify accepted 1.6.4 main integration'
+          git push origin HEAD:main
