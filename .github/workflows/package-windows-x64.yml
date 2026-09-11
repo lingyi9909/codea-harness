@@ -324,17 +324,76 @@ jobs:
               if ([string]$manifest.astGrepSha256 -ne $astHash) { throw "$kind ast-grep SHA mismatch" }
               if ([string]$manifest.astGrepVersion -ne '0.42.1') { throw "$kind ast-grep version mismatch" }
               if ((Get-Content (Join-Path $root 'VERSION') -Raw).Trim() -ne '1.6.4') { throw "$kind VERSION mismatch" }
-              $files = @(Get-ChildItem $root -Recurse -Force -File | Where-Object { $_.FullName -ne $manifestPath })
-              if (@($manifest.managedFiles.PSObject.Properties).Count -ne $files.Count) { throw "$kind managed inventory count mismatch" }
-              foreach ($file in $files) {
+
+              $allReleaseFiles = @(Get-ChildItem $root -Recurse -Force -File | Where-Object { $_.FullName -ne $manifestPath })
+              $managedReleaseFiles = @(
+                foreach ($file in $allReleaseFiles) {
+                  $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
+                  if ($kind -eq 'upgrade' -and $rel.StartsWith('host/', [StringComparison]::Ordinal)) { continue }
+                  $file
+                }
+              )
+              $managedProperties = @($manifest.managedFiles.PSObject.Properties)
+              if ($managedProperties.Count -ne $managedReleaseFiles.Count) { throw "$kind managed framework inventory count mismatch" }
+              foreach ($property in $managedProperties) {
+                if ([string]$property.Name -like 'host/*') { throw "$kind host payload leaked into managedFiles: $($property.Name)" }
+              }
+              foreach ($file in $managedReleaseFiles) {
                 $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
                 $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
                 if ([string]$manifest.managedFiles.$rel -ne $hash) { throw "$kind managed inventory mismatch: $rel" }
               }
+
+              $reviewerHost = $manifest.hostAgents.reviewer
+              if ($null -eq $reviewerHost) { throw "$kind Reviewer Host metadata missing" }
+              if ([string]$reviewerHost.path -cne '.opencode/agents/reviewer.md' -or
+                  [string]$reviewerHost.upgradeSource -cne 'host/.opencode/agents/reviewer.md' -or
+                  [string]$reviewerHost.command -cne '.opencode/commands/harness-review-reviewer.md' -or
+                  [string]$reviewerHost.commandUpgradeSource -cne 'host/.opencode/commands/harness-review-reviewer.md' -or
+                  [string]$reviewerHost.submissionTool -cne '.opencode/tools/codea-reviewer-submit.ts' -or
+                  [string]$reviewerHost.submissionToolUpgradeSource -cne 'host/.opencode/tools/codea-reviewer-submit.ts') {
+                throw "$kind Reviewer Host path metadata mismatch"
+              }
+              if ($kind -eq 'install') {
+                $hostRoot = $dest
+                $hostPaths = @([string]$reviewerHost.path,[string]$reviewerHost.command,[string]$reviewerHost.submissionTool)
+                $actualHostFiles = @(Get-ChildItem (Join-Path $dest '.opencode') -Recurse -Force -File)
+                $actualHostRel = @($actualHostFiles | ForEach-Object { [IO.Path]::GetRelativePath($dest,$_.FullName).Replace('\','/') } | Sort-Object)
+              } else {
+                $hostRoot = $root
+                $hostPaths = @([string]$reviewerHost.upgradeSource,[string]$reviewerHost.commandUpgradeSource,[string]$reviewerHost.submissionToolUpgradeSource)
+                $actualHostFiles = @(
+                  foreach ($file in $allReleaseFiles) {
+                    $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
+                    if ($rel.StartsWith('host/', [StringComparison]::Ordinal)) { $file }
+                  }
+                )
+                $actualHostRel = @($actualHostFiles | ForEach-Object { [IO.Path]::GetRelativePath($root,$_.FullName).Replace('\','/') } | Sort-Object)
+              }
+              $expectedHostRel = @($hostPaths | Sort-Object)
+              if ($actualHostFiles.Count -ne 3 -or ($actualHostRel -join '|') -cne ($expectedHostRel -join '|')) {
+                throw "$kind Reviewer Host inventory mismatch actual=$($actualHostRel -join ',')"
+              }
+              $hostChecks = @(
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[0]); Hash=[string]$reviewerHost.sha256; Name='reviewer' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[1]); Hash=[string]$reviewerHost.commandSha256; Name='command' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[2]); Hash=[string]$reviewerHost.submissionToolSha256; Name='submission-tool' }
+              )
+              foreach ($check in $hostChecks) {
+                if (-not (Test-Path $check.Path -PathType Leaf)) { throw "$kind Reviewer Host $($check.Name) missing" }
+                $actualHash = (Get-FileHash $check.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actualHash -cne $check.Hash) { throw "$kind Reviewer Host $($check.Name) SHA mismatch" }
+              }
+              if ((Get-FileHash (Join-Path $root 'bin/codea-dcep-tools.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $runtimeHash) { throw "$kind packaged Runtime mismatch" }
               $artifactRecord[$kind] = [ordered]@{
                 file = $zip
                 sha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
                 size = (Get-Item $zip).Length
+                reviewerHost = [ordered]@{
+                  agentSha256 = [string]$reviewerHost.sha256
+                  commandSha256 = [string]$reviewerHost.commandSha256
+                  submissionToolSha256 = [string]$reviewerHost.submissionToolSha256
+                }
               }
             } finally {
               Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
