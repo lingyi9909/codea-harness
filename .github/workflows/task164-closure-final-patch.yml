@@ -124,7 +124,8 @@ jobs:
             "        Invoke-Script '.github/scripts/task164-closure-agent-contract.ps1'",
             "    } @('HARNESS_164_AGENT_CONTRACT_CONSISTENT PASS')"
           ) -join "`n"
-          if (([regex]::Matches($final,[regex]::Escape($oldPackage))).Count -ne 1) { throw 'final package gate anchor must be unique' }
+          $packageFirst = $final.IndexOf($oldPackage,[StringComparison]::Ordinal)
+          if ($packageFirst -lt 0 -or $packageFirst -ne $final.LastIndexOf($oldPackage,[StringComparison]::Ordinal)) { throw 'final package gate anchor must be unique' }
           $final = $final.Replace($oldPackage, $newPackage)
 
           $positiveAnchor = "        'TASK164_TASK4_PACKAGED_PLAIN_REVIEW_8_OF_8 PASS',"
@@ -134,7 +135,8 @@ jobs:
             "        'PROMPT_ONLY_PROGRESS_NOT_AUTHORITY PASS',",
             $positiveAnchor
           ) -join "`n"
-          if (([regex]::Matches($final,[regex]::Escape($positiveAnchor))).Count -ne 1) { throw 'positive marker anchor must be unique' }
+          $positiveFirst = $final.IndexOf($positiveAnchor,[StringComparison]::Ordinal)
+          if ($positiveFirst -lt 0 -or $positiveFirst -ne $final.LastIndexOf($positiveAnchor,[StringComparison]::Ordinal)) { throw 'positive marker anchor must be unique' }
           $final = $final.Replace($positiveAnchor, $positivePrefix)
 
           $interruptAnchor = "        'TASK164_TASK4_INTERRUPTION_CHANGE_ANALYSIS PASS',"
@@ -143,7 +145,8 @@ jobs:
             "        'OPENCODE_INTERRUPTION_LATER_STAGES_BLOCKED PASS',",
             $interruptAnchor
           ) -join "`n"
-          if (([regex]::Matches($final,[regex]::Escape($interruptAnchor))).Count -ne 1) { throw 'interruption marker anchor must be unique' }
+          $interruptFirst = $final.IndexOf($interruptAnchor,[StringComparison]::Ordinal)
+          if ($interruptFirst -lt 0 -or $interruptFirst -ne $final.LastIndexOf($interruptAnchor,[StringComparison]::Ordinal)) { throw 'interruption marker anchor must be unique' }
           $final = $final.Replace($interruptAnchor, $interruptPrefix)
           [IO.File]::WriteAllText((Resolve-Path $finalPath), $final, $utf8)
 
