@@ -1,0 +1,75 @@
+name: task170-t1-contracts
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.7]
+    paths:
+      - '.code-harness/contracts/**'
+      - '.code-harness/tools-runtime/internal/nav/**'
+      - '.code-harness/tools-runtime/internal/reviewcontext/**'
+      - '.code-harness/tools-runtime/internal/knowledge/**'
+      - '.code-harness/tools-runtime/internal/finding/**'
+      - '.code-harness/tools-runtime/internal/schema/**'
+      - '.code-harness/tools-runtime/go.mod'
+      - '.code-harness/tools-runtime/go.sum'
+      - '.github/workflows/task170-t1-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  t1-contracts:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Verify accepted 1.6.4.final lineage
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 439d9618591657b80d4670f1d9f3b5909d378447 HEAD
+          if ($LASTEXITCODE -ne 0) { throw '1.7 branch is not based on accepted 1.6.4.final' }
+          Write-Output "TASK170_BASELINE PASS head=$((git rev-parse HEAD).Trim())"
+      - name: T1 core Test170 gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./internal/nav ./internal/reviewcontext ./internal/schema -run Test170 -count=1
+      - name: T1 knowledge contract Test170 gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./internal/schema ./internal/knowledge ./internal/nav -run Test170 -count=1
+      - name: No dependency drift
+        shell: pwsh
+        run: |
+          git diff --exit-code 439d9618591657b80d4670f1d9f3b5909d378447 -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'T1 changed go.mod/go.sum' }
+      - name: Full Go regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./... -count=1
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go vet ./...
