@@ -12,6 +12,8 @@ jobs:
   closure-product-e2e:
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      TASK164_FINAL_EVIDENCE_DIR: ${{ github.workspace }}/closure-evidence
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,3 +86,11 @@ jobs:
       - name: Reviewer interruption product E2E
         shell: pwsh
         run: pwsh -NoProfile -File ./.github/scripts/task164-task4-progress-interruption-e2e.ps1
+
+      - name: Upload Closure product diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task164-closure-product-evidence-${{ github.sha }}
+          path: closure-evidence/
+          if-no-files-found: warn
