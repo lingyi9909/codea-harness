@@ -1,0 +1,104 @@
+name: task170-t4-dubbo
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.7-integrated-t4]
+    paths:
+      - '.code-harness/tools-runtime/internal/reviewcontext/**'
+      - '.code-harness/tools-runtime/internal/workspace/**'
+      - '.code-harness/tools-runtime/internal/chain/**'
+      - '.code-harness/tools-runtime/go.mod'
+      - '.code-harness/tools-runtime/go.sum'
+      - '.github/workflows/task170-t4-dubbo.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  t4-dubbo:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap existing locked modules for hosted CI
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go mod download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git restore --source=HEAD -- go.mod go.sum
+          $moduleStatus = @(git status --short -- go.mod go.sum)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($moduleStatus.Count -ne 0) { throw "module bootstrap left locked files dirty: $($moduleStatus -join '; ')" }
+          Write-Output 'TASK170_T4_MODULE_BOOTSTRAP PASS existing-lock-only=true tracked-files-restored=true'
+      - name: Verify accepted T3 lineage and clean baseline
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor c982bf39a9fa60e8afa49316e51f1671311dde57 HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'T4 branch is not based on accepted T3 exact HEAD' }
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $status = @(git status --short)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($status.Count -ne 0) { throw "baseline working tree is not clean: $($status -join '; ')" }
+          Write-Output "TASK170_T4_BASELINE PASS head=$head status=clean"
+      - name: T4 Dubbo targeted gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./internal/reviewcontext -run Test170Dubbo -count=1
+      - name: T4 reviewcontext workspace regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./internal/reviewcontext ./internal/workspace -count=1
+      - name: Verify zero dependency drift
+        shell: pwsh
+        run: |
+          git diff --exit-code -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'offline T4 gates changed go.mod/go.sum' }
+          git diff --exit-code c982bf39a9fa60e8afa49316e51f1671311dde57 HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'T4 committed changes to go.mod/go.sum' }
+          Write-Output 'TASK170_T4_DEPENDENCY_DRIFT PASS working-tree=clean committed=unchanged'
+      - name: Full Go regression
+        id: full-regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: |
+          go test ./... -count=1 2>&1 | Tee-Object -FilePath task170-t4-full-go-regression.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload full regression evidence
+        if: always() && steps.full-regression.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: task170-t4-full-go-regression
+          path: .code-harness/tools-runtime/task170-t4-full-go-regression.log
+          if-no-files-found: error
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go vet ./...
