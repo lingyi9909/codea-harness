@@ -54,10 +54,11 @@ type myBatisIndex170 struct {
 }
 
 var (
-	myBatisParamImport170 = regexp.MustCompile(`(?m)(?:^|[;\n])\s*import\s+org\.apache\.ibatis\.annotations\.Param\s*;`)
-	myBatisParam170       = regexp.MustCompile(`@Param\s*\(\s*"([A-Za-z_$][A-Za-z0-9_$]*)"\s*\)`)
-	myBatisParamFQ170     = regexp.MustCompile(`@org\.apache\.ibatis\.annotations\.Param\s*\(\s*"([A-Za-z_$][A-Za-z0-9_$]*)"\s*\)`)
-	myBatisPlaceholder170 = regexp.MustCompile(`(?:#|\$)\{\s*([A-Za-z_$][A-Za-z0-9_$]*)`)
+	myBatisParamImport170    = regexp.MustCompile(`(?m)(?:^|[;\n])\s*import\s+org\.apache\.ibatis\.annotations\.Param\s*;`)
+	myBatisParam170          = regexp.MustCompile(`@Param\s*\(\s*"([A-Za-z_$][A-Za-z0-9_$]*)"\s*\)`)
+	myBatisParamFQ170        = regexp.MustCompile(`@org\.apache\.ibatis\.annotations\.Param\s*\(\s*"([A-Za-z_$][A-Za-z0-9_$]*)"\s*\)`)
+	myBatisPlaceholder170    = regexp.MustCompile(`(?:#|\$)\{\s*([A-Za-z_$][A-Za-z0-9_$]*)`)
+	myBatisGeneratedAlias170 = regexp.MustCompile(`^(?:param[1-9][0-9]*|arg(?:0|[1-9][0-9]*))$`)
 )
 
 // ResolveMapper170 resolves a supplied, already-scoped Java Mapper method to
@@ -500,7 +501,7 @@ func myBatisMissingParams170(known map[string]bool, data []byte) []string {
 			continue
 		}
 		name := string(match[1])
-		if known[name] || name == "_parameter" || name == "_databaseId" || strings.HasPrefix(name, "param") || strings.HasPrefix(name, "arg") {
+		if known[name] || name == "_parameter" || name == "_databaseId" || myBatisGeneratedAlias170.MatchString(name) {
 			continue
 		}
 		missing[name] = true
