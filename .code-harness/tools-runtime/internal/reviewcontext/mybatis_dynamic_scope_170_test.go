@@ -19,7 +19,7 @@ public interface OrderMapper {
     <bind name="pattern" value="'%' + title + '%'"/>
     SELECT id FROM orders WHERE title LIKE #{pattern} AND id IN
     <foreach collection="ids" item="id" index="idx" open="(" separator="," close=")">
-      #{id}
+      (#{id} + (#{idx} * 0))
     </foreach>
   </select>
 </mapper>
