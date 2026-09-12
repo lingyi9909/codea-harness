@@ -264,7 +264,8 @@ func parseMyBatisDocument170(path string, data []byte) (*myBatisDocument170, err
 		}
 		switch value := token.(type) {
 		case xml.Directive:
-			if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(string(value))), "DOCTYPE") {
+			directive := strings.TrimSpace(string(value))
+			if strings.HasPrefix(strings.ToUpper(directive), "DOCTYPE") && !myBatisKnownMapperDTD170(directive) {
 				return nil, fmt.Errorf("MYBATIS_XML_DTD_UNSUPPORTED: %s", path)
 			}
 		case xml.StartElement:
@@ -662,6 +663,13 @@ func myBatisNodeIdentity170(node *myBatisNode170) string {
 		return ""
 	}
 	return fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%d", node.Document.Path, node.Document.Namespace, node.Tag, node.ID, node.Start)
+}
+
+func myBatisKnownMapperDTD170(directive string) bool {
+	normalized := strings.Join(strings.Fields(directive), " ")
+	return strings.Contains(normalized, `-//mybatis.org//DTD Mapper 3.0//EN`) &&
+		(strings.Contains(normalized, `http://mybatis.org/dtd/mybatis-3-mapper.dtd`) ||
+			strings.Contains(normalized, `https://mybatis.org/dtd/mybatis-3-mapper.dtd`))
 }
 
 func myBatisNodeTag170(tag string) bool {
