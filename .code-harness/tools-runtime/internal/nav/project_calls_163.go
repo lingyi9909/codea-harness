@@ -29,11 +29,53 @@ type ImplementationType struct {
 	Annotations []string `json:"annotations"`
 }
 
-// FindDirectMethodCalls returns direct calls contained by exactly one requested
-// owner method. Text parsing is used only to read identifiers from AST match
-// text; target type authority comes from the AST-confirmed enclosing type and
-// its field declarations.
+// FindDirectMethodCalls keeps the 1.6.x projection but uses the 1.7 Java
+// resolver whenever a verified workspace is available. This is deliberately a
+// lossy compatibility view: only unique EXACT calls are marked Resolved. An
+// ambiguous overload or receiver never becomes a guessed legacy target.
 func (n Navigator) FindDirectMethodCalls(ctx context.Context, symbol, scope string) ([]DirectMethodCall, error) {
+	if isWorkspaceAvailable170(n) {
+		ref, idx, err := n.legacyMethodRef170(ctx, symbol, scope)
+		if err != nil {
+			return nil, err
+		}
+		method, err := idx.findMethod170(ref)
+		if err != nil {
+			return nil, err
+		}
+		calls, err := n.resolveMethodCalls170(ctx, idx, method, ref)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]DirectMethodCall, 0, len(calls))
+		for _, resolved := range calls {
+			fact := DirectMethodCall{
+				FromSymbol:   symbol,
+				Receiver:     resolved.Receiver,
+				ReceiverType: simpleType(resolved.ReceiverType),
+				Method:       resolved.Method,
+			}
+			if len(resolved.Relation.Evidence) > 0 {
+				fact.Path = resolved.Relation.Evidence[0].Ref.Path
+				fact.Line = resolved.Relation.Evidence[0].StartLine
+			}
+			if resolved.Relation.Resolution == "EXACT" && len(resolved.Relation.Targets) == 1 {
+				target := resolved.Relation.Targets[0]
+				fact.ReceiverType = simpleType(target.OwnerFQCN)
+				fact.TargetSymbol = simpleType(target.OwnerFQCN) + "." + target.Name
+				fact.Resolved = true
+			}
+			out = append(out, fact)
+		}
+		return out, nil
+	}
+	return n.findDirectMethodCallsLegacy163(ctx, symbol, scope)
+}
+
+// findDirectMethodCallsLegacy163 is retained only for historical Runner-backed
+// unit fixtures that do not provide a real workspace. Product project
+// discovery has a RepoRoot and therefore uses the shared 1.7 resolver above.
+func (n Navigator) findDirectMethodCallsLegacy163(ctx context.Context, symbol, scope string) ([]DirectMethodCall, error) {
 	if err := n.validate(symbol, scope); err != nil {
 		return nil, err
 	}
