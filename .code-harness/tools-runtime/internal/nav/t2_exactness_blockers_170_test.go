@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// These regressions lock the four false-EXACT failure modes found during the
+// T2 code-level acceptance review. They intentionally exercise the real AST
+// fixture so future compatibility changes cannot bypass conservative proof.
 func Test170JavaUnsupportedLambdaArgumentNeverExact(t *testing.T) {
 	n := newReviewFixture170(t, map[string]string{
 		"src/main/java/demo/Example.java": `package demo;
