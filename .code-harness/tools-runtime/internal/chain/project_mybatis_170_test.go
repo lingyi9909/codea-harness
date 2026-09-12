@@ -50,7 +50,19 @@ interface OrderMapper {
 	}
 
 	navigator := nav.Navigator{RepoRoot: root, AstGrepPath: exe}
-	paths, unresolved, err := projectWalkMethod163(context.Background(), root, navigator, "OrderService.run", map[string]bool{})
+	// T2 has already proven this call. T3 tests only the Mapper -> XML
+	// compatibility projection so upstream call discovery cannot mask the boundary.
+	call := nav.DirectMethodCall{
+		FromSymbol:   "OrderService.run",
+		TargetSymbol: "OrderMapper.updateStatus",
+		Receiver:     "mapper",
+		ReceiverType: "OrderMapper",
+		Method:       "updateStatus",
+		Path:         "src/main/java/demo/OrderService.java",
+		Line:         4,
+		Resolved:     true,
+	}
+	paths, unresolved, err := projectResolveCall163(context.Background(), root, navigator, call, map[string]bool{})
 	if err != nil {
 		t.Fatal(err)
 	}
