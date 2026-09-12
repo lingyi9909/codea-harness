@@ -155,6 +155,10 @@ func (n Navigator) buildJavaIndex170(ctx context.Context) (*javaIndex170, error)
 		idx.SimpleFQCN[name] = appendUniqueString170(idx.SimpleFQCN[name], fqcn)
 	}
 
+	// Rebuild identities only after every AST type is known so nested types
+	// retain their enclosing owner instead of collapsing by simple name.
+	idx.finalizeTypeIdentities170()
+
 	methodRaw, err := n.runWorkspaceRawTargets(ctx, files, allMethodPatterns()...)
 	if err != nil {
 		return nil, err
@@ -491,33 +495,7 @@ func normalizeJavaType170(value string) string {
 }
 
 func (idx *javaIndex170) resolveTypeName170(owner *javaType170, declared string) string {
-	declared = normalizeJavaType170(declared)
-	base := strings.TrimSuffix(declared, "[]")
-	if base == "" {
-		return ""
-	}
-	if strings.Contains(base, ".") {
-		return base
-	}
-	if owner != nil {
-		if fqcn := owner.Imports[base]; fqcn != "" {
-			return fqcn
-		}
-		if owner.Package != "" {
-			candidate := owner.Package + "." + base
-			if idx.ByFQCN[candidate] != nil {
-				return candidate
-			}
-		}
-	}
-	if matches := idx.SimpleFQCN[base]; len(matches) == 1 {
-		return matches[0]
-	}
-	switch base {
-	case "String", "Long", "Integer", "Boolean", "Double", "Float", "Short", "Byte", "Character", "Object":
-		return "java.lang." + base
-	}
-	return base
+	return idx.resolveTypeNameExact170(owner, declared)
 }
 
 func (idx *javaIndex170) findMethod170(ref ReviewRef170) (*javaMethod170, error) {
@@ -620,7 +598,7 @@ func (n Navigator) resolveMethodCalls170(ctx context.Context, idx *javaIndex170,
 		if !ok {
 			continue
 		}
-		ownerFQCN, receiverReason := idx.resolveReceiver170(method, receiver)
+		ownerFQCN, receiverReason := idx.resolveReceiverAt170(method, receiver, raw)
 		evidence, rangeErr := n.javaSourceRange170(fromRef, raw)
 		if rangeErr != nil {
 			return nil, rangeErr
@@ -651,22 +629,25 @@ func (n Navigator) resolveMethodCalls170(ctx context.Context, idx *javaIndex170,
 			out = append(out, resolved)
 			continue
 		}
-		selected, ambiguous := idx.selectOverload170(method, candidates, args)
-		if selected != nil && !ambiguous {
+		selection := idx.selectOverloadAt170(method, candidates, args, raw)
+		switch selection.Resolution {
+		case "EXACT":
 			resolved.Relation.Resolution = "EXACT"
-			resolved.Relation.Targets = []ReviewRef170{idx.methodRef170(selected, fromRef.Workspace, fromRef.Side)}
-		} else {
+			resolved.Relation.Targets = []ReviewRef170{idx.methodRef170(selection.Method, fromRef.Workspace, fromRef.Side)}
+		case "AMBIGUOUS":
 			resolved.Relation.Resolution = "AMBIGUOUS"
-			resolved.Relation.Reason = "JAVA_OVERLOAD_UNRESOLVED: multiple compatible overloads"
-			for _, candidate := range candidates {
-				if len(candidate.Params) == len(args) {
-					resolved.Relation.Targets = append(resolved.Relation.Targets, idx.methodRef170(candidate, fromRef.Workspace, fromRef.Side))
-				}
+			resolved.Relation.Reason = selection.Reason
+			for _, candidate := range selection.Candidates {
+				resolved.Relation.Targets = append(resolved.Relation.Targets, idx.methodRef170(candidate, fromRef.Workspace, fromRef.Side))
 			}
-			if len(resolved.Relation.Targets) == 0 {
-				for _, candidate := range candidates {
-					resolved.Relation.Targets = append(resolved.Relation.Targets, idx.methodRef170(candidate, fromRef.Workspace, fromRef.Side))
-				}
+		default:
+			resolved.Relation.Resolution = "UNRESOLVED"
+			resolved.Relation.Reason = selection.Reason
+			if resolved.Relation.Reason == "" {
+				resolved.Relation.Reason = "JAVA_OVERLOAD_UNRESOLVED: overload could not be proven"
+			}
+			for _, candidate := range selection.Candidates {
+				resolved.Relation.Targets = append(resolved.Relation.Targets, idx.methodRef170(candidate, fromRef.Workspace, fromRef.Side))
 			}
 		}
 		resolved.Relation.ID = relationID170(resolved.Relation, raw)

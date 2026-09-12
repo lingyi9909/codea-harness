@@ -190,6 +190,10 @@ func (n Navigator) springCandidates170(idx *javaIndex170, declared, workspace, s
 		if !springHasRecognizedAnnotation170(method.Owner.Imports, anns, "Bean") {
 			continue
 		}
+		ownerRegistered, ownerConditional := springBeanOwnerRegistered170(method.Owner)
+		if !ownerRegistered {
+			continue
+		}
 		returnType := idx.resolveTypeName170(method.Owner, method.ReturnType)
 		if returnType == "" || !idx.springTypeCompatible170(returnType, declared) {
 			continue
@@ -198,7 +202,7 @@ func (n Navigator) springCandidates170(idx *javaIndex170, declared, workspace, s
 			BeanName:    springBeanName170(anns, method.Name),
 			BeanType:    returnType,
 			Primary:     springHasRecognizedAnnotation170(method.Owner.Imports, anns, "Primary"),
-			Conditional: springHasCondition170(method.Owner.Imports, anns) || springHasCondition170(method.Owner.Imports, springTypeAnnotations170(idx, method.Owner.FQCN)),
+			Conditional: springHasCondition170(method.Owner.Imports, anns) || ownerConditional,
 			Target:      idx.methodRef170(method, workspace, side),
 		}
 		rangeRef, err := n.springTextEvidence170(candidate.Target, method.Raw.Path, method.Text, method.Raw.StartLine, method.Raw.StartColumn)
