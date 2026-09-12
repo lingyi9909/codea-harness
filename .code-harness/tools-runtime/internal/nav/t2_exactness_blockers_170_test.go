@@ -2,6 +2,7 @@ package nav
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -29,8 +30,8 @@ class Example {
 	if facts.Calls[0].Resolution == "EXACT" {
 		t.Fatalf("unsupported lambda argument must not be EXACT: %+v", facts.Calls[0])
 	}
-	if facts.Calls[0].Resolution != "UNRESOLVED" {
-		t.Fatalf("unsupported argument inference must be UNRESOLVED: %+v", facts.Calls[0])
+	if facts.Calls[0].Resolution != "UNRESOLVED" || !strings.Contains(facts.Calls[0].Reason, "JAVA_OVERLOAD_UNRESOLVED") {
+		t.Fatalf("unsupported argument inference must fail closed with overload reason: %+v", facts.Calls[0])
 	}
 }
 
@@ -116,8 +117,8 @@ func Test170SpringBeanMethodRequiresRegisteredOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rel.Resolution == "EXACT" {
-		t.Fatalf("@Bean on an unregistered owner must not become EXACT: %+v", rel)
+	if rel.Resolution != "UNRESOLVED" {
+		t.Fatalf("@Bean on an unregistered owner must remain UNRESOLVED: %+v", rel)
 	}
 	for _, target := range rel.Targets {
 		if target.OwnerFQCN == "demo.PlainConfig" {
