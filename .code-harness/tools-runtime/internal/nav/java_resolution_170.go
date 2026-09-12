@@ -699,37 +699,6 @@ func (n Navigator) targetMethods170(ctx context.Context, idx *javaIndex170, owne
 	return out, nil
 }
 
-func (idx *javaIndex170) resolveReceiver170(method *javaMethod170, receiver string) (string, string) {
-	owner := method.Owner
-	switch receiver {
-	case "":
-		return owner.FQCN, ""
-	case "this":
-		return owner.FQCN, ""
-	case "super":
-		if owner.Super == "" {
-			return "", "JAVA_RECEIVER_UNRESOLVED: superclass unavailable"
-		}
-		return idx.resolveTypeName170(owner, owner.Super), ""
-	}
-	for _, param := range method.Params {
-		if param.Name == receiver {
-			return idx.resolveTypeName170(owner, param.Type), ""
-		}
-	}
-	for _, match := range javaLocalRE170.FindAllStringSubmatch(method.Text, -1) {
-		if len(match) == 3 && match[2] == receiver {
-			return idx.resolveTypeName170(owner, match[1]), ""
-		}
-	}
-	for _, match := range javaFieldRE170.FindAllStringSubmatch(owner.Text, -1) {
-		if len(match) == 3 && match[2] == receiver {
-			return idx.resolveTypeName170(owner, match[1]), ""
-		}
-	}
-	return "", "JAVA_RECEIVER_UNRESOLVED: receiver declaration unavailable"
-}
-
 func (idx *javaIndex170) methodsForCall170(ownerFQCN, name string) []*javaMethod170 {
 	visited := map[string]bool{}
 	var walk func(string) []*javaMethod170
@@ -754,78 +723,6 @@ func (idx *javaIndex170) methodsForCall170(ownerFQCN, name string) []*javaMethod
 		return walk(idx.resolveTypeName170(typ, typ.Super))
 	}
 	return walk(ownerFQCN)
-}
-
-func (idx *javaIndex170) selectOverload170(caller *javaMethod170, candidates []*javaMethod170, args []string) (*javaMethod170, bool) {
-	var arity []*javaMethod170
-	for _, candidate := range candidates {
-		if len(candidate.Params) == len(args) {
-			arity = append(arity, candidate)
-		}
-	}
-	if len(arity) == 0 {
-		return nil, true
-	}
-	if len(arity) == 1 {
-		return arity[0], false
-	}
-	argTypes := make([]string, len(args))
-	complete := true
-	for i, arg := range args {
-		argTypes[i] = idx.inferArgType170(caller, arg)
-		if argTypes[i] == "" || argTypes[i] == "<null>" {
-			complete = false
-		}
-	}
-	if !complete {
-		return nil, true
-	}
-	var matches []*javaMethod170
-	for _, candidate := range arity {
-		match := true
-		for i, param := range candidate.Params {
-			want := idx.resolveTypeName170(candidate.Owner, param.Type)
-			if !javaTypeEqual170(want, argTypes[i]) {
-				match = false
-				break
-			}
-		}
-		if match {
-			matches = append(matches, candidate)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], false
-	}
-	return nil, true
-}
-
-func (idx *javaIndex170) inferArgType170(caller *javaMethod170, arg string) string {
-	arg = strings.TrimSpace(arg)
-	if arg == "null" {
-		return "<null>"
-	}
-	if javaStringRE170.MatchString(arg) {
-		return "java.lang.String"
-	}
-	if javaCharRE170.MatchString(arg) {
-		return "char"
-	}
-	if javaLongRE170.MatchString(arg) {
-		return "long"
-	}
-	if javaIntRE170.MatchString(arg) {
-		return "int"
-	}
-	if match := javaNewRE170.FindStringSubmatch(arg); len(match) == 2 {
-		return idx.resolveTypeName170(caller.Owner, match[1])
-	}
-	if identRE.MatchString(arg) {
-		if typ, _ := idx.resolveReceiver170(caller, arg); typ != "" {
-			return typ
-		}
-	}
-	return ""
 }
 
 func (idx *javaIndex170) methodRef170(method *javaMethod170, workspace, side string) ReviewRef170 {
