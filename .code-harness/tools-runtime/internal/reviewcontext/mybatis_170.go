@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -58,7 +59,8 @@ var (
 	myBatisParam170          = regexp.MustCompile(`@Param\s*\(\s*"([A-Za-z_$][A-Za-z0-9_$]*)"\s*\)`)
 	myBatisParamFQ170        = regexp.MustCompile(`@org\.apache\.ibatis\.annotations\.Param\s*\(\s*"([A-Za-z_$][A-Za-z0-9_$]*)"\s*\)`)
 	myBatisPlaceholder170    = regexp.MustCompile(`(?:#|\$)\{\s*([A-Za-z_$][A-Za-z0-9_$]*)`)
-	myBatisGeneratedAlias170 = regexp.MustCompile(`^(?:param[1-9][0-9]*|arg(?:0|[1-9][0-9]*))$`)
+	myBatisGeneratedAlias170 = regexp.MustCompile(`^param([1-9][0-9]*)$`)
+	myBatisIdentifier170     = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
 )
 
 // ResolveMapper170 resolves a supplied, already-scoped Java Mapper method to
@@ -131,6 +133,7 @@ func ResolveMapper170(ctx context.Context, repoRoot string, source nav.SourceRan
 	}
 
 	javaNames := myBatisExplicitParams170(javaData, source)
+	javaParamCount := myBatisMethodParameterCount170(javaData, source)
 	resolvedText := []byte{}
 	stack := map[string]bool{}
 	seenEdges := map[string]bool{}
@@ -146,7 +149,7 @@ func ResolveMapper170(ctx context.Context, repoRoot string, source nav.SourceRan
 		resolvedText = append(resolvedText, myBatisNodeBytes170(fragment)...)
 	}
 	if len(javaNames) > 0 {
-		missing := myBatisMissingParams170(javaNames, resolvedText)
+		missing := myBatisMissingParamsWithCount170(javaNames, javaParamCount, resolvedText)
 		if len(missing) > 0 {
 			at, rangeErr := myBatisNodeRange170(selected, myBatisNodeRef170(selected, source.Ref.Workspace, source.Ref.Side))
 			if rangeErr != nil {
@@ -469,17 +472,24 @@ func resolveMyBatisIncludes170(idx myBatisIndex170, node *myBatisNode170, worksp
 	return relations, issues, fragments, nil
 }
 
-func myBatisExplicitParams170(javaData []byte, source nav.SourceRange170) map[string]bool {
+func myBatisSourceSnippet170(javaData []byte, source nav.SourceRange170) string {
 	text := string(javaData)
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	start, end := source.StartLine-1, source.EndLine
 	if start < 0 || start >= len(lines) {
-		return nil
+		return ""
 	}
 	if end > len(lines) {
 		end = len(lines)
 	}
-	snippet := strings.Join(lines[start:end], "\n")
+	return strings.Join(lines[start:end], "\n")
+}
+
+func myBatisExplicitParams170(javaData []byte, source nav.SourceRange170) map[string]bool {
+	snippet := myBatisSourceSnippet170(javaData, source)
+	if snippet == "" {
+		return nil
+	}
 	if !myBatisParamImport170.Match(javaData) && !strings.Contains(snippet, "@org.apache.ibatis.annotations.Param") {
 		return nil
 	}
@@ -494,14 +504,258 @@ func myBatisExplicitParams170(javaData []byte, source nav.SourceRange170) map[st
 	return out
 }
 
+func myBatisMethodParameterCount170(javaData []byte, source nav.SourceRange170) int {
+	if len(source.Ref.ParameterTypes) > 0 {
+		count := 0
+		for _, parameterType := range source.Ref.ParameterTypes {
+			if !myBatisSpecialParameterType170(parameterType) {
+				count++
+			}
+		}
+		return count
+	}
+
+	snippet := myBatisSourceSnippet170(javaData, source)
+	if snippet == "" || source.Ref.Name == "" {
+		return 0
+	}
+	methodPattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(source.Ref.Name) + `\s*\(`)
+	loc := methodPattern.FindStringIndex(snippet)
+	if loc == nil {
+		return 0
+	}
+	openRelative := strings.LastIndexByte(snippet[loc[0]:loc[1]], '(')
+	if openRelative < 0 {
+		return 0
+	}
+	open := loc[0] + openRelative
+	close := myBatisMatchingParen170(snippet, open)
+	if close < 0 {
+		return 0
+	}
+
+	count := 0
+	for _, segment := range myBatisSplitJavaParameters170(snippet[open+1 : close]) {
+		segment = strings.TrimSpace(segment)
+		if segment == "" || myBatisSpecialParameterSegment170(segment) {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+func myBatisSpecialParameterType170(parameterType string) bool {
+	base := strings.TrimSpace(parameterType)
+	return base == "RowBounds" || strings.HasSuffix(base, ".RowBounds") || base == "ResultHandler" || strings.HasSuffix(base, ".ResultHandler")
+}
+
+func myBatisSpecialParameterSegment170(segment string) bool {
+	compact := strings.Join(strings.Fields(segment), " ")
+	for _, name := range []string{"RowBounds", "ResultHandler"} {
+		if strings.Contains(compact, "org.apache.ibatis.session."+name+" ") {
+			return true
+		}
+		pattern := regexp.MustCompile(`(?:^|\s)` + name + `\s+[A-Za-z_$][A-Za-z0-9_$]*$`)
+		if pattern.MatchString(compact) {
+			return true
+		}
+	}
+	return false
+}
+
+func myBatisMatchingParen170(text string, open int) int {
+	depth := 0
+	var quote byte
+	escaped := false
+	for i := open; i < len(text); i++ {
+		b := text[i]
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if b == '\\' {
+				escaped = true
+				continue
+			}
+			if b == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch b {
+		case '"', '\'':
+			quote = b
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func myBatisSplitJavaParameters170(text string) []string {
+	parts := []string{}
+	start := 0
+	parenDepth := 0
+	angleDepth := 0
+	bracketDepth := 0
+	braceDepth := 0
+	var quote byte
+	escaped := false
+	for i := 0; i < len(text); i++ {
+		b := text[i]
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if b == '\\' {
+				escaped = true
+				continue
+			}
+			if b == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch b {
+		case '"', '\'':
+			quote = b
+		case '(':
+			parenDepth++
+		case ')':
+			if parenDepth > 0 {
+				parenDepth--
+			}
+		case '<':
+			angleDepth++
+		case '>':
+			if angleDepth > 0 {
+				angleDepth--
+			}
+		case '[':
+			bracketDepth++
+		case ']':
+			if bracketDepth > 0 {
+				bracketDepth--
+			}
+		case '{':
+			braceDepth++
+		case '}':
+			if braceDepth > 0 {
+				braceDepth--
+			}
+		case ',':
+			if parenDepth == 0 && angleDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
+				parts = append(parts, text[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, text[start:])
+	return parts
+}
+
 func myBatisMissingParams170(known map[string]bool, data []byte) []string {
+	return myBatisMissingParamsWithCount170(known, len(known), data)
+}
+
+func myBatisMissingParamsWithCount170(known map[string]bool, parameterCount int, data []byte) []string {
+	if parameterCount < len(known) {
+		parameterCount = len(known)
+	}
+	missing := map[string]bool{}
+	scopes := []map[string]bool{{}}
+
+	isVisible := func(name string) bool {
+		if known[name] || name == "_parameter" || name == "_databaseId" || myBatisGeneratedAliasAllowed170(name, parameterCount) {
+			return true
+		}
+		for i := len(scopes) - 1; i >= 0; i-- {
+			if scopes[i][name] {
+				return true
+			}
+		}
+		return false
+	}
+	scan := func(raw []byte) {
+		for _, match := range myBatisPlaceholder170.FindAllSubmatch(raw, -1) {
+			if len(match) != 2 {
+				continue
+			}
+			name := string(match[1])
+			if !isVisible(name) {
+				missing[name] = true
+			}
+		}
+	}
+
+	wrapped := make([]byte, 0, len(data)+13)
+	wrapped = append(wrapped, []byte("<root>")...)
+	wrapped = append(wrapped, data...)
+	wrapped = append(wrapped, []byte("</root>")...)
+	decoder := xml.NewDecoder(bytes.NewReader(wrapped))
+	decoder.Strict = true
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return myBatisMissingParamsRaw170(known, parameterCount, data)
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			for _, attr := range value.Attr {
+				scan([]byte(attr.Value))
+			}
+			if value.Name.Local == "bind" {
+				name := strings.TrimSpace(myBatisAttr170(value, "name"))
+				if myBatisIdentifier170.MatchString(name) {
+					scopes[len(scopes)-1][name] = true
+				}
+			}
+			frame := map[string]bool{}
+			if value.Name.Local == "foreach" {
+				for _, attrName := range []string{"item", "index"} {
+					name := strings.TrimSpace(myBatisAttr170(value, attrName))
+					if myBatisIdentifier170.MatchString(name) {
+						frame[name] = true
+					}
+				}
+			}
+			scopes = append(scopes, frame)
+		case xml.CharData:
+			scan([]byte(value))
+		case xml.EndElement:
+			if len(scopes) > 1 {
+				scopes = scopes[:len(scopes)-1]
+			}
+		}
+	}
+
+	out := make([]string, 0, len(missing))
+	for name := range missing {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func myBatisMissingParamsRaw170(known map[string]bool, parameterCount int, data []byte) []string {
 	missing := map[string]bool{}
 	for _, match := range myBatisPlaceholder170.FindAllSubmatch(data, -1) {
 		if len(match) != 2 {
 			continue
 		}
 		name := string(match[1])
-		if known[name] || name == "_parameter" || name == "_databaseId" || myBatisGeneratedAlias170.MatchString(name) {
+		if known[name] || name == "_parameter" || name == "_databaseId" || myBatisGeneratedAliasAllowed170(name, parameterCount) {
 			continue
 		}
 		missing[name] = true
@@ -512,6 +766,15 @@ func myBatisMissingParams170(known map[string]bool, data []byte) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func myBatisGeneratedAliasAllowed170(name string, parameterCount int) bool {
+	match := myBatisGeneratedAlias170.FindStringSubmatch(name)
+	if len(match) != 2 {
+		return false
+	}
+	index, err := strconv.Atoi(match[1])
+	return err == nil && index >= 1 && index <= parameterCount
 }
 
 func myBatisNodeBytes170(node *myBatisNode170) []byte {
