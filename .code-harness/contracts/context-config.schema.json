@@ -43,6 +43,7 @@
         {"not": {"pattern": "^[A-Za-z]:"}},
         {"not": {"pattern": ":"}},
         {"not": {"pattern": "(^|/)\\.\\.(/|$)"}},
+        {"not": {"pattern": "[?*\\[\\]{}]"}},
         {"not": {"pattern": "^[A-Za-z][A-Za-z0-9+.-]*://"}}
       ]
     },
