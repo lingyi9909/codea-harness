@@ -133,7 +133,7 @@ func ResolveMapper170(ctx context.Context, repoRoot string, source nav.SourceRan
 	resolvedText := []byte{}
 	stack := map[string]bool{}
 	seenEdges := map[string]bool{}
-	includeRelations, includeIssues, fragments, err := resolveMyBatisIncludes170(idx, selected, stack, seenEdges)
+	includeRelations, includeIssues, fragments, err := resolveMyBatisIncludes170(idx, selected, source.Ref.Workspace, source.Ref.Side, stack, seenEdges)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -378,9 +378,7 @@ func myBatisStatementRelation170(source nav.SourceRange170, candidates []*myBati
 	return relation, selected, nil
 }
 
-func resolveMyBatisIncludes170(idx myBatisIndex170, node *myBatisNode170, stack, seenEdges map[string]bool) ([]nav.Relation170, []nav.Issue170, []*myBatisNode170, error) {
-	workspace := "current"
-	side := "CURRENT"
+func resolveMyBatisIncludes170(idx myBatisIndex170, node *myBatisNode170, workspace, side string, stack, seenEdges map[string]bool) ([]nav.Relation170, []nav.Issue170, []*myBatisNode170, error) {
 	from := myBatisNodeRef170(node, workspace, side)
 	nodeKey := myBatisNodeIdentity170(node)
 	stack[nodeKey] = true
@@ -457,7 +455,7 @@ func resolveMyBatisIncludes170(idx myBatisIndex170, node *myBatisNode170, stack,
 			relations = append(relations, relation)
 		}
 		fragments = appendUniqueMyBatisNode170(fragments, target)
-		nestedRelations, nestedIssues, nestedFragments, err := resolveMyBatisIncludes170(idx, target, stack, seenEdges)
+		nestedRelations, nestedIssues, nestedFragments, err := resolveMyBatisIncludes170(idx, target, workspace, side, stack, seenEdges)
 		if err != nil {
 			return nil, nil, nil, err
 		}
