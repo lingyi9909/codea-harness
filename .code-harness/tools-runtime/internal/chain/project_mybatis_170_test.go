@@ -49,6 +49,22 @@ interface OrderMapper {
 		}
 	}
 
+	// Legacy GetSymbolInfo still runs ast-grep relative to the process working
+	// directory. Put the test process in the fixture workspace so this test
+	// reaches the Mapper projection rather than treating the type as external.
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWD); err != nil {
+			t.Errorf("restore cwd: %v", err)
+		}
+	}()
+
 	navigator := nav.Navigator{RepoRoot: root, AstGrepPath: exe}
 	// T2 has already proven this call. T3 tests only the Mapper -> XML
 	// compatibility projection so upstream call discovery cannot mask the boundary.
