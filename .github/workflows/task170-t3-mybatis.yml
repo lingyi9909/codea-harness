@@ -1,0 +1,136 @@
+name: task170-t3-mybatis
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.7-integrated-t3]
+    paths:
+      - '.code-harness/tools-runtime/internal/reviewcontext/**'
+      - '.code-harness/tools-runtime/internal/chain/**'
+      - '.code-harness/review-rules/spring-v1.yaml'
+      - '.code-harness/tools-runtime/go.mod'
+      - '.code-harness/tools-runtime/go.sum'
+      - '.github/workflows/task170-t3-mybatis.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  t3-mybatis:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap existing locked modules for hosted CI
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go mod download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git restore --source=HEAD -- go.mod go.sum
+          $moduleStatus = @(git status --short -- go.mod go.sum)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($moduleStatus.Count -ne 0) { throw "module bootstrap left locked files dirty: $($moduleStatus -join '; ')" }
+          Write-Output 'TASK170_T3_MODULE_BOOTSTRAP PASS existing-lock-only=true tracked-files-restored=true'
+      - name: Verify accepted T2 lineage and clean baseline
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 94ef3484b451a221ff5dce2c167b09ed7f7f36d5 HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'T3 branch is not based on accepted T2 exact HEAD' }
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $status = @(git status --short)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($status.Count -ne 0) { throw "baseline working tree is not clean: $($status -join '; ')" }
+          Write-Output "TASK170_T3_BASELINE PASS head=$head status=clean"
+      - name: Download accepted 1.6.4.final release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision approved pinned ast-grep test fixture
+        shell: pwsh
+        run: |
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'task170-accepted-rc'
+          $installZip = Join-Path $artifactRoot 'codea-harness-1.6.4-windows-x64-install.zip'
+          if (-not (Test-Path $installZip -PathType Leaf)) { throw "accepted install ZIP missing: $installZip" }
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          Expand-Archive -Path $installZip -DestinationPath $stage -Force
+          $manifestPath = Join-Path $stage '.code-harness/RELEASE-MANIFEST.json'
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          if (-not (Test-Path $manifestPath -PathType Leaf)) { throw 'accepted release manifest missing' }
+          if (-not (Test-Path $source -PathType Leaf)) { throw 'accepted pinned ast-grep missing' }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ([string]$manifest.version -cne '1.6.4') { throw "accepted RC version mismatch: $($manifest.version)" }
+          if ([string]$manifest.buildCommit -cne '439d9618591657b80d4670f1d9f3b5909d378447') { throw "accepted RC build commit mismatch: $($manifest.buildCommit)" }
+          if ([string]$manifest.astGrepVersion -cne '0.42.1') { throw "accepted ast-grep version mismatch: $($manifest.astGrepVersion)" }
+          $actualHash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne [string]$manifest.astGrepSha256) { throw "accepted ast-grep hash mismatch: $actualHash" }
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "TASK170_T3_APPROVED_AST_GREP PASS sha256=$actualHash"
+      - name: T3 MyBatis targeted gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./internal/reviewcontext -run Test170MyBatis -count=1
+      - name: T3 reviewcontext chain reviewrules regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./internal/reviewcontext ./internal/chain ./internal/reviewrules -count=1
+      - name: Verify zero dependency drift
+        shell: pwsh
+        run: |
+          git diff --exit-code -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'offline T3 gates changed go.mod/go.sum' }
+          git diff --exit-code 94ef3484b451a221ff5dce2c167b09ed7f7f36d5 HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'T3 committed changes to go.mod/go.sum' }
+          Write-Output 'TASK170_T3_DEPENDENCY_DRIFT PASS working-tree=clean committed=unchanged'
+      - name: Full Go regression
+        id: full-regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: |
+          go test ./... -count=1 2>&1 | Tee-Object -FilePath task170-t3-full-go-regression.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload full regression evidence
+        if: always() && steps.full-regression.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: task170-t3-full-go-regression
+          path: .code-harness/tools-runtime/task170-t3-full-go-regression.log
+          if-no-files-found: error
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go vet ./...
