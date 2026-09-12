@@ -87,7 +87,7 @@ func javaAllTypePatterns170() []string {
 		"interface $C extends $$$IFACES { $$$BODY }",
 		"enum $C { $$$BODY }",
 	}
-	mods := []string{"", "public ", "protected ", "private ", "abstract ", "public abstract ", "final ", "public final "}
+	mods := []string{"", "public ", "protected ", "private ", "abstract ", "public abstract ", "final ", "public final ", "static ", "public static ", "protected static ", "private static ", "static abstract ", "abstract static ", "static final ", "final static ", "public static final ", "protected static final ", "private static final "}
 	out := make([]string, 0, len(base)*len(mods))
 	for _, mod := range mods {
 		for _, pattern := range base {
