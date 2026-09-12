@@ -1,0 +1,62 @@
+name: t2-scope-cleanup
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t2]
+    paths:
+      - '.github/workflows/t2-scope-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fold blocker helpers into planned T2 files
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          helper_path = Path('.code-harness/tools-runtime/internal/nav/exactness_170.go')
+          java_path = Path('.code-harness/tools-runtime/internal/nav/java_resolution_170.go')
+          spring_path = Path('.code-harness/tools-runtime/internal/nav/spring_resolution_170.go')
+
+          helper = helper_path.read_text(encoding='utf-8')
+          java = java_path.read_text(encoding='utf-8')
+          spring = spring_path.read_text(encoding='utf-8')
+
+          java_marker = 'type javaOverloadSelection170 struct {'
+          spring_marker = 'func springBeanOwnerRegistered170(owner *javaType170) (registered bool, conditional bool) {'
+          java_start = helper.index(java_marker)
+          spring_start = helper.index(spring_marker)
+          java_helpers = helper[java_start:spring_start].rstrip() + '\n'
+          spring_helper = helper[spring_start:].rstrip() + '\n'
+
+          if java_marker in java:
+              raise SystemExit('java helper already folded into java_resolution_170.go')
+          if spring_marker in spring:
+              raise SystemExit('spring helper already folded into spring_resolution_170.go')
+
+          java_path.write_text(java.rstrip() + '\n\n' + java_helpers, encoding='utf-8')
+          spring_path.write_text(spring.rstrip() + '\n\n' + spring_helper, encoding='utf-8')
+          helper_path.unlink()
+          '@ | Set-Content -LiteralPath "$env:RUNNER_TEMP\t2_scope_cleanup.py" -Encoding utf8
+          python "$env:RUNNER_TEMP\t2_scope_cleanup.py"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gofmt -w .code-harness/tools-runtime/internal/nav/java_resolution_170.go .code-harness/tools-runtime/internal/nav/spring_resolution_170.go
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git status --short
+      - name: Commit scoped production tree
+        shell: pwsh
+        run: |
+          git config user.name "codea-harness-ci"
+          git config user.email "codea-harness-ci@users.noreply.github.com"
+          git add .code-harness/tools-runtime/internal/nav/java_resolution_170.go .code-harness/tools-runtime/internal/nav/spring_resolution_170.go .code-harness/tools-runtime/internal/nav/exactness_170.go
+          git commit -m "refactor(nav): keep T2 exactness logic in planned files"
+          git push origin HEAD:feature/1.7-integrated-t2
