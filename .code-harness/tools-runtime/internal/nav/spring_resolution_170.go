@@ -465,3 +465,13 @@ func springRelationID170(rel Relation170) string {
 	}
 	return relationID170(rel, raw)
 }
+
+func springBeanOwnerRegistered170(owner *javaType170) (registered bool, conditional bool) {
+	if owner == nil {
+		return false, false
+	}
+	anns := annotations170(owner.Text)
+	registered = springHasRecognizedAnnotation170(owner.Imports, anns, "Configuration") || springIsStereotype170(owner.Imports, anns)
+	conditional = springHasCondition170(owner.Imports, anns)
+	return registered, conditional
+}
