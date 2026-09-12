@@ -5,16 +5,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"codea-harness-tools/internal/nav"
+	"codea-harness-tools/internal/reviewcontext"
 )
 
 const projectSourceAuthority163 = "PROJECT_SOURCE"
@@ -195,19 +195,53 @@ func projectResolveCall163(ctx context.Context, root string, navigator nav.Navig
 	}
 
 	if projectHasAnnotation163(typeInfo.Annotations, "Mapper") {
-		if _, err := navigator.GetSymbolInfo(ctx, call.TargetSymbol, "src/main/java"); err != nil {
+		methodInfo, err := navigator.GetSymbolInfo(ctx, call.TargetSymbol, "src/main/java")
+		if err != nil {
 			return nil, []string{"PROJECT_MAPPER_METHOD_NOT_RESOLVED: " + call.TargetSymbol}, nil
 		}
-		resource, found, err := projectFindMapperXML163(root, call.ReceiverType, typePath, call.Method)
+		namespace := projectJavaFQN163(call.ReceiverType, typePath)
+		if namespace == "" {
+			return nil, []string{"PROJECT_MAPPER_NAMESPACE_NOT_RESOLVED: " + call.ReceiverType}, nil
+		}
+		methodPath, err := projectRepoPath163(root, methodInfo.Path)
 		if err != nil {
 			return nil, nil, err
 		}
-		if !found {
+		source, err := projectMapperSourceRange170(root, methodPath, namespace, call.Method, methodInfo.LineStart, methodInfo.LineEnd)
+		if err != nil {
+			return nil, nil, err
+		}
+		relations, _, err := reviewcontext.ResolveMapper170(ctx, root, source)
+		if err != nil {
+			return nil, nil, fmt.Errorf("PROJECT_MAPPER_CONTEXT_FAILED: %s: %w", call.TargetSymbol, err)
+		}
+		var statement *nav.Relation170
+		for i := range relations {
+			if relations[i].Kind == "MYBATIS_STATEMENT" {
+				if statement != nil {
+					return nil, []string{"PROJECT_MAPPER_RELATION_AMBIGUOUS: " + call.TargetSymbol}, nil
+				}
+				statement = &relations[i]
+			}
+		}
+		if statement == nil {
 			return nil, []string{"PROJECT_MAPPER_RESOURCE_NOT_RESOLVED: " + call.TargetSymbol}, nil
 		}
+		if statement.Resolution != "EXACT" || len(statement.Targets) != 1 {
+			reason := strings.TrimSpace(statement.Reason)
+			if reason == "" {
+				reason = "PROJECT_MAPPER_RESOURCE_NOT_RESOLVED: " + call.TargetSymbol
+			}
+			return nil, []string{reason}, nil
+		}
+		target := statement.Targets[0]
 		return []projectPath163{{
-			Nodes:     []Node{{Workspace: CurrentWorkspace, Symbol: call.TargetSymbol, Path: typePath, Role: "MAPPER"}},
-			Resources: []Resource{resource},
+			Nodes: []Node{{Workspace: CurrentWorkspace, Symbol: call.TargetSymbol, Path: typePath, Role: "MAPPER"}},
+			Resources: []Resource{{
+				Path:   target.Path,
+				Symbol: call.TargetSymbol,
+				Role:   "MAPPER_XML",
+			}},
 		}}, nil, nil
 	}
 
@@ -301,84 +335,39 @@ func projectHasAnnotation163(annotations []string, wanted string) bool {
 	return projectRoleFromAnnotations163(annotations) == strings.ToUpper(wanted)
 }
 
-func projectFindMapperXML163(root, mapperType, mapperPath, method string) (Resource, bool, error) {
-	expectedNamespace := projectJavaFQN163(mapperType, mapperPath)
-	if expectedNamespace == "" {
-		return Resource{}, false, nil
+func projectMapperSourceRange170(root, methodPath, namespace, method string, lineStart, lineEnd int) (nav.SourceRange170, error) {
+	if lineStart < 1 || lineEnd < lineStart {
+		return nav.SourceRange170{}, fmt.Errorf("PROJECT_MAPPER_METHOD_RANGE_INVALID: %s.%s", namespace, method)
 	}
-	resourceRoot := filepath.Join(filepath.Clean(root), "src", "main", "resources")
-	var matches []string
-	err := filepath.WalkDir(resourceRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if os.IsNotExist(walkErr) {
-				return nil
-			}
-			return walkErr
-		}
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(entry.Name()), ".xml") {
-			return nil
-		}
-		ok, err := projectMapperStatement163(path, expectedNamespace, method)
-		if err != nil {
-			return err
-		}
-		if ok {
-			matches = append(matches, path)
-		}
-		return nil
-	})
+	abs := filepath.Join(filepath.Clean(root), filepath.FromSlash(methodPath))
+	data, err := os.ReadFile(abs)
 	if err != nil {
-		return Resource{}, false, fmt.Errorf("PROJECT_MAPPER_RESOURCE_SCAN_FAILED: %w", err)
+		return nav.SourceRange170{}, fmt.Errorf("PROJECT_MAPPER_METHOD_SOURCE_UNAVAILABLE: %s: %w", methodPath, err)
 	}
-	if len(matches) == 0 {
-		return Resource{}, false, nil
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	if lineEnd > len(lines) {
+		return nav.SourceRange170{}, fmt.Errorf("PROJECT_MAPPER_METHOD_RANGE_INVALID: %s.%s", namespace, method)
 	}
-	if len(matches) > 1 {
-		return Resource{}, false, fmt.Errorf("PROJECT_MAPPER_RESOURCE_AMBIGUOUS: %s.%s", mapperType, method)
+	endColumn := utf8.RuneCountInString(lines[lineEnd-1]) + 1
+	if endColumn < 2 {
+		endColumn = 2
 	}
-	rel, err := projectRepoPath163(root, matches[0])
-	if err != nil {
-		return Resource{}, false, err
+	ref := nav.ReviewRef170{
+		Workspace:      CurrentWorkspace,
+		Path:           methodPath,
+		Side:           "CURRENT",
+		Kind:           "METHOD",
+		OwnerFQCN:      namespace,
+		Name:           method,
+		ParameterTypes: []string{},
 	}
-	return Resource{Path: rel, Symbol: mapperType + "." + method, Role: "MAPPER_XML"}, true, nil
-}
-
-func projectMapperStatement163(path, namespace, method string) (bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer f.Close()
-	decoder := xml.NewDecoder(f)
-	mapperMatch := false
-	statementMatch := false
-	for {
-		token, err := decoder.Token()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return false, fmt.Errorf("PROJECT_MAPPER_XML_INVALID: %s: %w", path, err)
-		}
-		start, ok := token.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		if start.Name.Local == "mapper" {
-			for _, attr := range start.Attr {
-				if attr.Name.Local == "namespace" && strings.TrimSpace(attr.Value) == namespace {
-					mapperMatch = true
-				}
-			}
-			continue
-		}
-		for _, attr := range start.Attr {
-			if attr.Name.Local == "id" && strings.TrimSpace(attr.Value) == method {
-				statementMatch = true
-			}
-		}
-	}
-	return mapperMatch && statementMatch, nil
+	return nav.SourceRange170{
+		Ref:         ref,
+		StartLine:   lineStart,
+		EndLine:     lineEnd,
+		StartColumn: 1,
+		EndColumn:   endColumn,
+	}, nil
 }
 
 func projectJavaFQN163(typeName, path string) string {
