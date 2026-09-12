@@ -7,6 +7,7 @@ import (
 
 // BASE is supplied by the caller; ResolveMapper170 must preserve it on every
 // derived XML ref/evidence instead of silently converting the relation to CURRENT.
+// This test also keeps the formal T3 gate tied to the shared relation contract.
 func Test170MyBatisRelationsPreserveSuppliedSourceSide(t *testing.T) {
 	root, source := newMyBatisFixture170(t, map[string]string{
 		"src/main/java/demo/OrderMapper.java": `package demo;
