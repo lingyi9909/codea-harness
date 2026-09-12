@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// BASE is supplied by the caller; ResolveMapper170 must preserve it on every
+// derived XML ref/evidence instead of silently converting the relation to CURRENT.
 func Test170MyBatisRelationsPreserveSuppliedSourceSide(t *testing.T) {
 	root, source := newMyBatisFixture170(t, map[string]string{
 		"src/main/java/demo/OrderMapper.java": `package demo;
