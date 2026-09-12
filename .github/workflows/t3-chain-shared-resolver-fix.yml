@@ -1,0 +1,65 @@
+name: t3-chain-shared-resolver-fix
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t3]
+    paths:
+      - '.github/workflows/t3-chain-shared-resolver-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Route project Mapper discovery through ResolveMapper170
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          path = Path('.code-harness/tools-runtime/internal/chain/project_discover_163.go')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace('\t"encoding/xml"\n', '', 1)
+          text = text.replace('\t"io"\n', '', 1)
+          if '\t"unicode/utf8"\n' not in text:
+              text = text.replace('\t"strings"\n', '\t"strings"\n\t"unicode/utf8"\n', 1)
+          if '"codea-harness-tools/internal/reviewcontext"' not in text:
+              text = text.replace('\t"codea-harness-tools/internal/nav"\n', '\t"codea-harness-tools/internal/nav"\n\t"codea-harness-tools/internal/reviewcontext"\n', 1)
+
+          old = '''\tif projectHasAnnotation163(typeInfo.Annotations, "Mapper") {\n\t\tif _, err := navigator.GetSymbolInfo(ctx, call.TargetSymbol, "src/main/java"); err != nil {\n\t\t\treturn nil, []string{"PROJECT_MAPPER_METHOD_NOT_RESOLVED: " + call.TargetSymbol}, nil\n\t\t}\n\t\tresource, found, err := projectFindMapperXML163(root, call.ReceiverType, typePath, call.Method)\n\t\tif err != nil {\n\t\t\treturn nil, nil, err\n\t\t}\n\t\tif !found {\n\t\t\treturn nil, []string{"PROJECT_MAPPER_RESOURCE_NOT_RESOLVED: " + call.TargetSymbol}, nil\n\t\t}\n\t\treturn []projectPath163{{\n\t\t\tNodes:     []Node{{Workspace: CurrentWorkspace, Symbol: call.TargetSymbol, Path: typePath, Role: "MAPPER"}},\n\t\t\tResources: []Resource{resource},\n\t\t}}, nil, nil\n\t}\n'''
+          new = '''\tif projectHasAnnotation163(typeInfo.Annotations, "Mapper") {\n\t\tmethodInfo, err := navigator.GetSymbolInfo(ctx, call.TargetSymbol, "src/main/java")\n\t\tif err != nil {\n\t\t\treturn nil, []string{"PROJECT_MAPPER_METHOD_NOT_RESOLVED: " + call.TargetSymbol}, nil\n\t\t}\n\t\tnamespace := projectJavaFQN163(call.ReceiverType, typePath)\n\t\tif namespace == "" {\n\t\t\treturn nil, []string{"PROJECT_MAPPER_NAMESPACE_NOT_RESOLVED: " + call.ReceiverType}, nil\n\t\t}\n\t\tmethodPath, err := projectRepoPath163(root, methodInfo.Path)\n\t\tif err != nil {\n\t\t\treturn nil, nil, err\n\t\t}\n\t\tsource, err := projectMapperSourceRange170(root, methodPath, namespace, call.Method, methodInfo.LineStart, methodInfo.LineEnd)\n\t\tif err != nil {\n\t\t\treturn nil, nil, err\n\t\t}\n\t\trelations, _, err := reviewcontext.ResolveMapper170(ctx, root, source)\n\t\tif err != nil {\n\t\t\treturn nil, nil, fmt.Errorf("PROJECT_MAPPER_CONTEXT_FAILED: %s: %w", call.TargetSymbol, err)\n\t\t}\n\t\tvar statement *nav.Relation170\n\t\tfor i := range relations {\n\t\t\tif relations[i].Kind == "MYBATIS_STATEMENT" {\n\t\t\t\tif statement != nil {\n\t\t\t\t\treturn nil, []string{"PROJECT_MAPPER_RELATION_AMBIGUOUS: " + call.TargetSymbol}, nil\n\t\t\t\t}\n\t\t\t\tstatement = &relations[i]\n\t\t\t}\n\t\t}\n\t\tif statement == nil {\n\t\t\treturn nil, []string{"PROJECT_MAPPER_RESOURCE_NOT_RESOLVED: " + call.TargetSymbol}, nil\n\t\t}\n\t\tif statement.Resolution != "EXACT" || len(statement.Targets) != 1 {\n\t\t\treason := strings.TrimSpace(statement.Reason)\n\t\t\tif reason == "" {\n\t\t\t\treason = "PROJECT_MAPPER_RESOURCE_NOT_RESOLVED: " + call.TargetSymbol\n\t\t\t}\n\t\t\treturn nil, []string{reason}, nil\n\t\t}\n\t\ttarget := statement.Targets[0]\n\t\treturn []projectPath163{{\n\t\t\tNodes: []Node{{Workspace: CurrentWorkspace, Symbol: call.TargetSymbol, Path: typePath, Role: "MAPPER"}},\n\t\t\tResources: []Resource{{\n\t\t\t\tPath:   target.Path,\n\t\t\t\tSymbol: call.TargetSymbol,\n\t\t\t\tRole:   "MAPPER_XML",\n\t\t\t}},\n\t\t}}, nil, nil\n\t}\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'Mapper branch match count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          start = text.index('func projectFindMapperXML163(')
+          end = text.index('func projectJavaFQN163(', start)
+          text = text[:start] + text[end:]
+
+          marker = 'func projectJavaFQN163(typeName, path string) string {'
+          helper = '''func projectMapperSourceRange170(root, methodPath, namespace, method string, lineStart, lineEnd int) (nav.SourceRange170, error) {\n\tif lineStart < 1 || lineEnd < lineStart {\n\t\treturn nav.SourceRange170{}, fmt.Errorf("PROJECT_MAPPER_METHOD_RANGE_INVALID: %s.%s", namespace, method)\n\t}\n\tabs := filepath.Join(filepath.Clean(root), filepath.FromSlash(methodPath))\n\tdata, err := os.ReadFile(abs)\n\tif err != nil {\n\t\treturn nav.SourceRange170{}, fmt.Errorf("PROJECT_MAPPER_METHOD_SOURCE_UNAVAILABLE: %s: %w", methodPath, err)\n\t}\n\tlines := strings.Split(strings.ReplaceAll(string(data), "\\r\\n", "\\n"), "\\n")\n\tif lineEnd > len(lines) {\n\t\treturn nav.SourceRange170{}, fmt.Errorf("PROJECT_MAPPER_METHOD_RANGE_INVALID: %s.%s", namespace, method)\n\t}\n\tendColumn := utf8.RuneCountInString(lines[lineEnd-1]) + 1\n\tif endColumn < 2 {\n\t\tendColumn = 2\n\t}\n\tref := nav.ReviewRef170{\n\t\tWorkspace:      CurrentWorkspace,\n\t\tPath:           methodPath,\n\t\tSide:           "CURRENT",\n\t\tKind:           "METHOD",\n\t\tOwnerFQCN:      namespace,\n\t\tName:           method,\n\t\tParameterTypes: []string{},\n\t}\n\treturn nav.SourceRange170{\n\t\tRef:         ref,\n\t\tStartLine:   lineStart,\n\t\tEndLine:     lineEnd,\n\t\tStartColumn: 1,\n\t\tEndColumn:   endColumn,\n\t}, nil\n}\n\n'''
+          if marker not in text:
+              raise SystemExit('source range helper marker missing')
+          text = text.replace(marker, helper + marker, 1)
+          path.write_text(text, encoding='utf-8')
+          '@ | Set-Content -LiteralPath "$env:RUNNER_TEMP\t3_chain_shared.py" -Encoding utf8
+          python "$env:RUNNER_TEMP\t3_chain_shared.py"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gofmt -w .code-harness/tools-runtime/internal/chain/project_discover_163.go
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (Select-String -Path .code-harness/tools-runtime/internal/chain/project_discover_163.go -SimpleMatch 'func projectFindMapperXML163(') { throw 'legacy Mapper XML scanner remains' }
+          if (Select-String -Path .code-harness/tools-runtime/internal/chain/project_discover_163.go -SimpleMatch 'func projectMapperStatement163(') { throw 'legacy Mapper statement parser remains' }
+      - name: Commit Chain shared resolver fix
+        shell: pwsh
+        run: |
+          git config user.name "codea-harness-ci"
+          git config user.email "codea-harness-ci@users.noreply.github.com"
+          git add .code-harness/tools-runtime/internal/chain/project_discover_163.go
+          git commit -m "fix(chain): share T3 MyBatis resolver"
+          git push origin HEAD:feature/1.7-integrated-t3
