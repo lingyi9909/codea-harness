@@ -277,6 +277,9 @@ func javaTypeRangeSmaller170(left, right *javaType170) bool {
 func smallestJavaOwner170(types []*javaType170, raw workspaceRawMatch) *javaType170 {
 	var best *javaType170
 	for _, typ := range types {
+		if typ.Path != raw.Path {
+			continue
+		}
 		if !workspaceTypeContainsRaw(workspaceTypeMatch{Path: typ.Path, StartLine: typ.Raw.StartLine, StartColumn: typ.Raw.StartColumn, EndLine: typ.Raw.EndLine, EndColumn: typ.Raw.EndColumn}, raw) {
 			continue
 		}
