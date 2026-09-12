@@ -30,19 +30,14 @@ class RiskServiceImpl implements RiskService {
 `, nil, nil)
 
 	roots := ProviderRootsFromVerification170([]workspace.VerificationResult{{
-		DependencyID:  "risk-provider",
-		Status:        workspace.StatusVerified,
-		ConfirmedRoot: provider,
+		DependencyID: "risk-provider", Status: workspace.StatusVerified, ConfirmedRoot: provider,
 	}})
 	relations, issues, err := ResolveDubbo170(context.Background(), current, consumer, roots)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(issues) != 0 {
-		t.Fatalf("issues=%+v", issues)
-	}
-	if len(relations) != 1 {
-		t.Fatalf("relations=%+v", relations)
+	if len(issues) != 0 || len(relations) != 1 {
+		t.Fatalf("relations=%+v issues=%+v", relations, issues)
 	}
 	relation := relations[0]
 	if relation.Kind != "DUBBO_CONTRACT" || relation.Resolution != "EXACT" || len(relation.Targets) != 1 {
@@ -55,8 +50,10 @@ class RiskServiceImpl implements RiskService {
 	if len(target.ParameterTypes) != 1 || target.ParameterTypes[0] != "java.lang.String" {
 		t.Fatalf("target parameter types=%v", target.ParameterTypes)
 	}
-	if !containsString170(relation.Assumptions, "dubbo.interface=demo.RiskService") || !containsString170(relation.Assumptions, "dubbo.group=risk") || !containsString170(relation.Assumptions, "dubbo.version=1.0") {
-		t.Fatalf("assumptions=%v", relation.Assumptions)
+	for _, want := range []string{"dubbo.interface=demo.RiskService", "dubbo.group=risk", "dubbo.version=1.0"} {
+		if !containsString170(relation.Assumptions, want) {
+			t.Fatalf("missing assumption %q in %v", want, relation.Assumptions)
+		}
 	}
 	if err := nav.ValidateRelation170(relation); err != nil {
 		t.Fatalf("invalid relation: %v", err)
@@ -76,14 +73,11 @@ class OrderService {
 		`package demo;
 import org.apache.dubbo.config.annotation.DubboService;
 @DubboService(group="risk", version="1.0")
-class RiskServiceImpl implements RiskService {
-    public void check(String orderId) {}
-}
-`, map[string]string{
-		"src/main/resources/application.properties": "dubbo.group=risk\ndubbo.version=1.0\n",
-	}, nil)
-	roots := []ProviderRoot170{{Workspace: "risk-provider", Root: provider, verified: true}}
-	relations, issues, err := ResolveDubbo170(context.Background(), current, consumer, roots)
+class RiskServiceImpl implements RiskService { public void check(String orderId) {} }
+`,
+		map[string]string{"src/main/resources/application.properties": "dubbo.group=risk\ndubbo.version=1.0\n"}, nil)
+
+	relations, issues, err := ResolveDubbo170(context.Background(), current, consumer, []ProviderRoot170{{Workspace: "risk-provider", Root: provider, verified: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,34 +87,31 @@ class RiskServiceImpl implements RiskService {
 }
 
 func Test170DubboGroupAndVersionMismatchNeverExact(t *testing.T) {
-	cases := []struct {
-		name     string
-		provider string
+	for _, tc := range []struct {
+		name, group, version string
 	}{
-		{name: "group", provider: `package demo;
-import org.apache.dubbo.config.annotation.DubboService;
-@DubboService(group="other", version="1.0") class RiskServiceImpl implements RiskService { public void check(String orderId) {} }
-`},
-		{name: "version", provider: `package demo;
-import org.apache.dubbo.config.annotation.DubboService;
-@DubboService(group="risk", version="2.0") class RiskServiceImpl implements RiskService { public void check(String orderId) {} }
-`},
-	}
-	for _, tc := range cases {
+		{name: "group", group: "other", version: "1.0"},
+		{name: "version", group: "risk", version: "2.0"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			current, provider, consumer := newDubboFixture170(t,
 				`package demo;
 import org.apache.dubbo.config.annotation.DubboReference;
 class OrderService { @DubboReference(group="risk", version="1.0") RiskService risk; void submit(String orderId) { risk.check(orderId); } }
-`, tc.provider, nil, nil)
-		relations, _, err := ResolveDubbo170(context.Background(), current, consumer, []ProviderRoot170{{Workspace: "risk-provider", Root: provider, verified: true}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(relations) != 1 || relations[0].Resolution == "EXACT" {
-			t.Fatalf("relations=%+v", relations)
-		}
-	})
+`,
+				`package demo;
+import org.apache.dubbo.config.annotation.DubboService;
+@DubboService(group="`+tc.group+`", version="`+tc.version+`") class RiskServiceImpl implements RiskService { public void check(String orderId) {} }
+`, nil, nil)
+			relations, _, err := ResolveDubbo170(context.Background(), current, consumer, []ProviderRoot170{{Workspace: "risk-provider", Root: provider, verified: true}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(relations) != 1 || relations[0].Resolution == "EXACT" {
+				t.Fatalf("relations=%+v", relations)
+			}
+		})
+	}
 }
 
 func Test170DubboUnresolvedPlaceholderFailsClosed(t *testing.T) {
@@ -209,8 +200,7 @@ import org.apache.dubbo.config.annotation.DubboService;
 @DubboService(group="risk", version="1.0") class RiskServiceImpl implements RiskService { public void check(String orderId) {} }
 `,
 	})
-	consumer := dubboConsumerRef170()
-	relations, issues, err := ResolveDubbo170(context.Background(), current, consumer, nil)
+	relations, issues, err := ResolveDubbo170(context.Background(), current, dubboConsumerRef170(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,9 +222,9 @@ class OrderService { @DubboReference(group="risk", version="1.0") RiskService ri
 import org.apache.dubbo.config.annotation.DubboService;
 @DubboService(group="risk", version="1.0") class RiskServiceImpl implements RiskService { public void check(String orderId) {} }
 `, nil, nil)
-	roots := ProviderRootsFromVerification170([]workspace.VerificationResult{
-		{DependencyID: "risk-provider", Status: workspace.StatusVersionMismatch, ConfirmedRoot: provider},
-	})
+	roots := ProviderRootsFromVerification170([]workspace.VerificationResult{{
+		DependencyID: "risk-provider", Status: workspace.StatusVersionMismatch, ConfirmedRoot: provider,
+	}})
 	if len(roots) != 0 {
 		t.Fatalf("unverified workspace leaked into provider roots: %+v", roots)
 	}
@@ -243,6 +233,25 @@ import org.apache.dubbo.config.annotation.DubboService;
 		t.Fatal(err)
 	}
 	if len(relations) != 1 || relations[0].Resolution == "EXACT" || !hasIssue170(issues, "PROVIDER_SOURCE_UNAVAILABLE") {
+		t.Fatalf("relations=%+v issues=%+v", relations, issues)
+	}
+}
+
+func Test170DubboHistoricalAnnotationsRequireRecognizedImports(t *testing.T) {
+	current, provider, consumer := newDubboFixture170(t,
+		`package demo;
+import com.alibaba.dubbo.config.annotation.Reference;
+class OrderService { @Reference(group="risk", version="1.0") RiskService risk; void submit(String orderId) { risk.check(orderId); } }
+`,
+		`package demo;
+import com.alibaba.dubbo.config.annotation.Service;
+@Service(group="risk", version="1.0") class RiskServiceImpl implements RiskService { public void check(String orderId) {} }
+`, nil, nil)
+	relations, issues, err := ResolveDubbo170(context.Background(), current, consumer, []ProviderRoot170{{Workspace: "risk-provider", Root: provider, verified: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 0 || len(relations) != 1 || relations[0].Resolution != "EXACT" {
 		t.Fatalf("relations=%+v issues=%+v", relations, issues)
 	}
 }
@@ -266,13 +275,8 @@ func newDubboFixture170(t *testing.T, consumerJava, providerJava string, current
 
 func dubboConsumerRef170() nav.ReviewRef170 {
 	return nav.ReviewRef170{
-		Workspace:      "current",
-		Path:           "src/main/java/demo/OrderService.java",
-		Side:           "CURRENT",
-		Kind:           "METHOD",
-		OwnerFQCN:      "demo.OrderService",
-		Name:           "submit",
-		ParameterTypes: []string{"java.lang.String"},
+		Workspace: "current", Path: "src/main/java/demo/OrderService.java", Side: "CURRENT",
+		Kind: "METHOD", OwnerFQCN: "demo.OrderService", Name: "submit", ParameterTypes: []string{"java.lang.String"},
 	}
 }
 
