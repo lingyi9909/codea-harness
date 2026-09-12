@@ -83,6 +83,14 @@ jobs:
           Copy-Item -LiteralPath $source -Destination $target -Force
           "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Output "TASK170_T2_APPROVED_AST_GREP PASS sha256=$actualHash"
+      - name: Reject superseded false-EXACT resolver paths
+        shell: pwsh
+        run: |
+          $java = '.code-harness/tools-runtime/internal/nav/java_resolution_170.go'
+          if (Select-String -LiteralPath $java -SimpleMatch 'func (idx *javaIndex170) resolveReceiver170(') { throw 'superseded method-wide receiver resolver returned' }
+          if (Select-String -LiteralPath $java -SimpleMatch 'func (idx *javaIndex170) selectOverload170(') { throw 'superseded arity-only overload resolver returned' }
+          if (Test-Path '.code-harness/tools-runtime/internal/nav/exactness_170.go') { throw 'T2 exactness scope drift: helper must remain in planned files' }
+          Write-Output 'TASK170_T2_EXACTNESS_GUARD PASS legacy-resolvers=absent scope=planned-files'
       - name: T2 Java Spring targeted gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
