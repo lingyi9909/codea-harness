@@ -25,6 +25,10 @@ func Test170ContextConfigContract(t *testing.T) {
 		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: rule-a\n    root: PROJECT\n    path: ../private.md\n    kind: RULES\n    required: true\n"),
 		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: rule-a\n    root: PROJECT\n    path: docs/rule.md\n    kind: RULES\n    required: false\n"),
 		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: team-a\n    root: TEAM\n    path: docs/reference.md\n    kind: REFERENCE\n    required: false\n"),
+		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: glob-star\n    root: PROJECT\n    path: 'docs/*.md'\n    kind: REFERENCE\n    required: false\n"),
+		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: glob-question\n    root: PROJECT\n    path: 'docs/?.md'\n    kind: REFERENCE\n    required: false\n"),
+		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: glob-class\n    root: PROJECT\n    path: 'docs/[ab].md'\n    kind: REFERENCE\n    required: false\n"),
+		[]byte("version: 1\nprojectId: order-service\nsources:\n  - id: glob-brace\n    root: PROJECT\n    path: 'docs/{a,b}.md'\n    kind: REFERENCE\n    required: false\n"),
 	}
 	for _, raw := range cases { if err := schema.ValidateYAML(s, raw); err == nil { t.Fatalf("invalid context config accepted: %s", raw) } }
 }
