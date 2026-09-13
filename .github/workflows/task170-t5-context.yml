@@ -5,6 +5,7 @@ on:
   push:
     branches: [feature/1.7-integrated-t5]
     paths:
+      - '.code-harness/tools-runtime/internal/nav/**'
       - '.code-harness/tools-runtime/internal/reviewcontext/**'
       - '.code-harness/tools-runtime/internal/analysis/**'
       - '.code-harness/tools-runtime/internal/reviewunit/**'
