@@ -1,10 +1,14 @@
 name: task170-t5-green-patch
+
 on:
   push:
     branches: [feature/1.7-integrated-t5]
-    paths: ['.github/workflows/task170-t5-green-patch.yml']
+    paths:
+      - '.github/workflows/task170-t5-green-patch.yml'
+
 permissions:
   contents: write
+
 jobs:
   patch:
     runs-on: windows-latest
@@ -18,36 +22,25 @@ jobs:
         run: |
           $main = '.code-harness/tools-runtime/cmd/codea-dcep-tools/main.go'
           $text = Get-Content $main -Raw
-          $old = 'case "review":`r`n`t`treturn runReview160(args[1:])'
-          if (-not $text.Contains($old)) { $old = "case `"review`":`n`t`treturn runReview160(args[1:])" }
-          if (-not $text.Contains($old)) { throw 'main.go review route pattern missing' }
-          $new = $old.Replace('runReview160(args[1:])','runReview170(args[1:])')
-          $text = $text.Replace($old,$new)
-          [IO.File]::WriteAllText((Resolve-Path $main),$text,(New-Object Text.UTF8Encoding($false)))
+          $text2 = $text -replace 'return runReview160\(args\[1:\]\)', 'return runReview170(args[1:])'
+          if ($text2 -eq $text) { throw 'main.go review route pattern missing' }
+          [IO.File]::WriteAllText((Resolve-Path $main), $text2, (New-Object Text.UTF8Encoding($false)))
 
           $cmd = '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go'
           $text = Get-Content $cmd -Raw
-          $text = $text.Replace('"flag"'+"`r`n"+'`t"fmt"', '"flag"'+"`r`n"+'`t"fmt"'+"`r`n"+'`t"io"')
-          if (-not $text.Contains('"io"')) { $text = $text.Replace('"flag"'+"`n"+'`t"fmt"', '"flag"'+"`n"+'`t"fmt"'+"`n"+'`t"io"') }
-          $bad = 'if err := dec.Decode(&extra); !errors.Is(err, os.ErrClosed) && err == nil { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }'
-          $good = 'if err := dec.Decode(&extra); !errors.Is(err, io.EOF) { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }'
-          if (-not $text.Contains($bad)) { throw 'decode trailing pattern missing' }
-          $text = $text.Replace($bad,$good)
-          $marker = 'if _, err := os.Stat(reviewContextMarker170(runID)); err != nil { return fmt.Errorf("REVIEW_CONTEXT_RUN_NOT_170: %w", err) }'
-          if (-not $text.Contains($marker)) { throw 'marker pattern missing' }
-          $text = $text.Replace("`t$marker`r`n",'')
-          $text = $text.Replace("`t$marker`n",'')
-          $rulesNeedle = 'if req.Phase == "RULES" {'
-          $rulesReplacement = @'
-if req.Phase == "RULES" {
-		discoveryPath := filepath.Join(".code-harness", "runs", runID, "analysis", "review-context-discovery.json")
-		if _, err := os.Stat(discoveryPath); err != nil { return fmt.Errorf("REVIEW_CONTEXT_DISCOVERY_UNAVAILABLE: %w", err) }
-'@
-          $idx = $text.IndexOf($rulesNeedle)
-          if ($idx -lt 0) { throw 'RULES branch pattern missing' }
-          $text = $text.Substring(0,$idx) + $rulesReplacement + $text.Substring($idx + $rulesNeedle.Length)
-          $text = [regex]::Replace($text,'(?ms)\nfunc reviewContextMarker170\(runID string\) string \{.*?\}\s*$','`n')
-          [IO.File]::WriteAllText((Resolve-Path $cmd),$text,(New-Object Text.UTF8Encoding($false)))
+          if (-not $text.Contains('"io"')) {
+            $text = $text -replace '"fmt"\r?\n', '"fmt"' + [Environment]::NewLine + "`t`"io`"" + [Environment]::NewLine
+          }
+          $text = $text.Replace('if err := dec.Decode(&extra); !errors.Is(err, os.ErrClosed) && err == nil { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }', 'if err := dec.Decode(&extra); !errors.Is(err, io.EOF) { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }')
+          $text = $text.Replace("`tif _, err := os.Stat(reviewContextMarker170(runID)); err != nil { return fmt.Errorf(`"REVIEW_CONTEXT_RUN_NOT_170: %w`", err) }`r`n", '')
+          $text = $text.Replace("`tif _, err := os.Stat(reviewContextMarker170(runID)); err != nil { return fmt.Errorf(`"REVIEW_CONTEXT_RUN_NOT_170: %w`", err) }`n", '')
+          $needle = "`tif req.Phase == `"RULES`" {`r`n`t`tunitsPath"
+          if (-not $text.Contains($needle)) { $needle = "`tif req.Phase == `"RULES`" {`n`t`tunitsPath" }
+          if (-not $text.Contains($needle)) { throw 'RULES branch pattern missing' }
+          $insert = "`tif req.Phase == `"RULES`" {`r`n`t`tdiscoveryPath := filepath.Join(`".code-harness`", `"runs`", runID, `"analysis`", `"review-context-discovery.json`")`r`n`t`tif _, err := os.Stat(discoveryPath); err != nil { return fmt.Errorf(`"REVIEW_CONTEXT_DISCOVERY_UNAVAILABLE: %w`", err) }`r`n`t`tunitsPath"
+          $text = $text.Replace($needle, $insert)
+          $text = [regex]::Replace($text, '(?ms)\r?\nfunc reviewContextMarker170\(runID string\) string \{.*?\}\s*$', "`r`n")
+          [IO.File]::WriteAllText((Resolve-Path $cmd), $text, (New-Object Text.UTF8Encoding($false)))
 
           gofmt -w $main $cmd
           git diff --check
@@ -55,8 +48,8 @@ if req.Phase == "RULES" {
       - name: Commit patch
         shell: pwsh
         run: |
-          git config user.name 'lingyi9909'
-          git config user.email 'zhanhui9909@gmail.com'
+          git config user.name lingyi9909
+          git config user.email zhanhui9909@gmail.com
           git add .code-harness/tools-runtime/cmd/codea-dcep-tools/main.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) { throw 'T5 wiring patch produced no changes' }
