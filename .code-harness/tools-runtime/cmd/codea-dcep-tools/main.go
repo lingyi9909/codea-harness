@@ -51,7 +51,7 @@ func run(args []string) error {
 	case "analysis":
 		return runAnalysis(args[1:])
 	case "review":
-		return runReview160(args[1:])
+		return runReview170(args[1:])
 	case "report":
 		return runReport(args[1:])
 	case "seal-apply":
@@ -66,20 +66,32 @@ func run(args []string) error {
 func runSealApply(args []string) error {
 	fs := flag.NewFlagSet("seal-apply", flag.ContinueOnError)
 	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests/*.json")
-	if err := fs.Parse(args); err != nil { return err }
-	if fs.NArg() != 0 || *input == "" { return errors.New("seal-apply requires --input") }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || *input == "" {
+		return errors.New("seal-apply requires --input")
+	}
 	sealedPath, err := apply.SealRequestFile(".", *input)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return writeJSONAndStatus(map[string]any{"status": "SEALED", "sealedPlanPath": sealedPath}, true)
 }
 
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
 	input := fs.String("input", "", "apply request under .code-harness/runs/<runId>/requests/*.json")
-	if err := fs.Parse(args); err != nil { return err }
-	if fs.NArg() != 0 || *input == "" { return errors.New("apply requires --input") }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || *input == "" {
+		return errors.New("apply requires --input")
+	}
 	result, evidencePath, err := apply.ApplyRequestFile(".", *input)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return writeJSONAndStatus(map[string]any{"status": result.Status, "result": result, "evidencePath": evidencePath}, true)
 }
 
