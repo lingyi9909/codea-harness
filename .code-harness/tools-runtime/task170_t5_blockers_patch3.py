@@ -138,3 +138,4 @@ func exactBaseSourcePaths170(paths []string) ([]string, error) {
 ''')
 
 print('TASK170_T5_BLOCKER_PATCH3_APPLIED')
+# retrigger after fixing the permanent exact-path regression assertion
