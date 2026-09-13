@@ -13,14 +13,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply audited T5 fixes
-        run: python3 .code-harness/tools-runtime/task170_t5_patch.py
+      - name: Apply T5 queue and protocol cleanup
+        run: python3 .code-harness/tools-runtime/task170_t5_patch2.py
       - name: Format and commit
         run: |
-          gofmt -w .code-harness/tools-runtime/internal/reviewcontext/build_170.go .code-harness/tools-runtime/internal/nav/context_discovery_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_entry_170.go
+          gofmt -w .code-harness/tools-runtime/internal/reviewcontext/build_170.go
           git diff --check
           git config user.name codea-t5-ci
           git config user.email codea-t5-ci@example.invalid
-          git add .code-harness/tools-runtime/internal/reviewcontext/build_170.go .code-harness/tools-runtime/internal/nav/context_discovery_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_entry_170.go
-          git commit -m 'fix(t5): derive bounded context from runtime authority'
+          git add .code-harness/tools-runtime/internal/reviewcontext/build_170.go .code-harness/skills/analyze-change/SKILL.md .code-harness/agents/reviewer.md .code-harness/agents/orchestrator.md .code-harness/AGENTS.md .code-harness/tools/README.md
+          git commit -m 'fix(t5): stop expansion at context budgets'
           git push origin HEAD:feature/1.7-integrated-t5
