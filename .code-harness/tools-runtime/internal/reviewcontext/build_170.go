@@ -11,9 +11,9 @@ import (
 )
 
 type queue170 struct {
-	ref        nav.ReviewRef170
-	downDepth  int
-	upDepth    int
+	ref       nav.ReviewRef170
+	downDepth int
+	upDepth   int
 }
 
 type budgetState170 struct {
@@ -58,6 +58,7 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 		addIssue(nav.Issue170{Code: "CONTEXT_BUDGET_EXCEEDED", At: at, Detail: "bounded context exploration stopped before adding " + kind})
 	}
 	addRelation := func(rel nav.Relation170) error {
+		rel = cloneRelation170(rel)
 		if err := nav.ValidateRelation170(rel); err != nil {
 			return err
 		}
@@ -182,7 +183,9 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 	for _, relation := range relationByKey {
 		out.Relations = append(out.Relations, relation)
 	}
-	sort.Slice(out.Relations, func(i, j int) bool { return relationSortKey170(out.Relations[i]) < relationSortKey170(out.Relations[j]) })
+	sort.Slice(out.Relations, func(i, j int) bool {
+		return relationSortKey170(out.Relations[i]) < relationSortKey170(out.Relations[j])
+	})
 	out.Checks = buildChecks170(input.Needs, out.Relations, state.blocked)
 	sort.Slice(out.Issues, func(i, j int) bool {
 		left := out.Issues[i].Code + "\x00" + fileKey170(out.Issues[i].At.Ref) + fmt.Sprintf("\x00%09d\x00%09d", out.Issues[i].At.StartLine, out.Issues[i].At.StartColumn)
@@ -195,12 +198,24 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 
 func normalizedBudget170(b Budget170) Budget170 {
 	d := DefaultBudget170()
-	if b.MaxFiles <= 0 { b.MaxFiles = d.MaxFiles }
-	if b.MaxCandidates <= 0 { b.MaxCandidates = d.MaxCandidates }
-	if b.MaxSourceBytes <= 0 { b.MaxSourceBytes = d.MaxSourceBytes }
-	if b.MaxUpstreamDepth <= 0 { b.MaxUpstreamDepth = d.MaxUpstreamDepth }
-	if b.MaxDownstreamDepth <= 0 { b.MaxDownstreamDepth = d.MaxDownstreamDepth }
-	if b.MaxMillis <= 0 { b.MaxMillis = d.MaxMillis }
+	if b.MaxFiles <= 0 {
+		b.MaxFiles = d.MaxFiles
+	}
+	if b.MaxCandidates <= 0 {
+		b.MaxCandidates = d.MaxCandidates
+	}
+	if b.MaxSourceBytes <= 0 {
+		b.MaxSourceBytes = d.MaxSourceBytes
+	}
+	if b.MaxUpstreamDepth <= 0 {
+		b.MaxUpstreamDepth = d.MaxUpstreamDepth
+	}
+	if b.MaxDownstreamDepth <= 0 {
+		b.MaxDownstreamDepth = d.MaxDownstreamDepth
+	}
+	if b.MaxMillis <= 0 {
+		b.MaxMillis = d.MaxMillis
+	}
 	return b
 }
 
@@ -232,7 +247,9 @@ func buildChecks170(needs []Need170, relations []nav.Relation170, budgetBlocked 
 		checks = append(checks, check)
 	}
 	sort.Slice(checks, func(i, j int) bool {
-		if checks[i].ReviewUnitID != checks[j].ReviewUnitID { return checks[i].ReviewUnitID < checks[j].ReviewUnitID }
+		if checks[i].ReviewUnitID != checks[j].ReviewUnitID {
+			return checks[i].ReviewUnitID < checks[j].ReviewUnitID
+		}
 		return checks[i].RuleID < checks[j].RuleID
 	})
 	return checks
@@ -242,11 +259,17 @@ func relationTouchesAnySeed170(relation nav.Relation170, seeds []nav.ReviewRef17
 	fromKey, _ := nav.ReviewRefKey170(relation.From)
 	for _, seed := range seeds {
 		seedKey, err := nav.ReviewRefKey170(seed)
-		if err != nil { continue }
-		if seedKey == fromKey { return true }
+		if err != nil {
+			continue
+		}
+		if seedKey == fromKey {
+			return true
+		}
 		for _, target := range relation.Targets {
 			targetKey, err := nav.ReviewRefKey170(target)
-			if err == nil && targetKey == seedKey { return true }
+			if err == nil && targetKey == seedKey {
+				return true
+			}
 		}
 	}
 	return false
@@ -265,17 +288,23 @@ func relationSortKey170(relation nav.Relation170) string {
 	}
 	sort.Strings(targets)
 	line, col := 0, 0
-	if len(relation.Evidence) > 0 { line, col = relation.Evidence[0].StartLine, relation.Evidence[0].StartColumn }
+	if len(relation.Evidence) > 0 {
+		line, col = relation.Evidence[0].StartLine, relation.Evidence[0].StartColumn
+	}
 	return from + "\x00" + relation.Kind + "\x00" + strings.Join(targets, "\x01") + fmt.Sprintf("\x00%09d\x00%09d\x00", line, col) + relation.ID
 }
 
 func fileKey170(ref nav.ReviewRef170) string {
-	if strings.TrimSpace(ref.Workspace) == "" || strings.TrimSpace(ref.Path) == "" { return "" }
+	if strings.TrimSpace(ref.Workspace) == "" || strings.TrimSpace(ref.Path) == "" {
+		return ""
+	}
 	return strings.TrimSpace(ref.Workspace) + "\x00" + strings.ToLower(strings.ReplaceAll(strings.TrimSpace(ref.Path), "\\", "/"))
 }
 
 func firstEvidence170(relation nav.Relation170) nav.SourceRange170 {
-	if len(relation.Evidence) > 0 { return relation.Evidence[0] }
+	if len(relation.Evidence) > 0 {
+		return relation.Evidence[0]
+	}
 	return nav.SourceRange170{Ref: relation.From, StartLine: 1, EndLine: 1, StartColumn: 1, EndColumn: 2}
 }
 
@@ -284,7 +313,9 @@ func uniqueSorted170(values []string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		value = strings.TrimSpace(value)
-		if value == "" || seen[value] { continue }
+		if value == "" || seen[value] {
+			continue
+		}
 		seen[value] = true
 		out = append(out, value)
 	}
