@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	analysisruntime "codea-harness-tools/internal/analysis"
+	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/nav"
 	"codea-harness-tools/internal/reviewcontext"
 	"codea-harness-tools/internal/reviewprogress"
@@ -69,6 +70,108 @@ func validateReviewContextProgress170(state reviewprogress.State, phase string) 
 	return nil
 }
 
+func reviewContextAuthority170(runID, phase string) (string, bool, error) {
+	phase = strings.ToUpper(strings.TrimSpace(phase))
+	switch phase {
+	case "DISCOVERY":
+		return filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-set.json")), false, nil
+	case "RULES":
+		return filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")), true, nil
+	default:
+		return "", false, fmt.Errorf("REVIEW_CONTEXT_PHASE_INVALID: %q", phase)
+	}
+}
+
+func reviewContextArtifactPath170(runID, phase string) string {
+	name := "review-call-context.json"
+	if strings.EqualFold(strings.TrimSpace(phase), "RULES") {
+		name = "review-rule-context.json"
+	}
+	return filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", name))
+}
+
+func loadFreshChangeSet170(runID string) (changeset.Snapshot, error) {
+	path, _, err := reviewContextAuthority170(runID, "DISCOVERY")
+	if err != nil {
+		return changeset.Snapshot{}, err
+	}
+	raw, err := os.ReadFile(filepath.FromSlash(path))
+	if err != nil {
+		return changeset.Snapshot{}, fmt.Errorf("REVIEW_CONTEXT_CHANGESET_UNAVAILABLE: %w", err)
+	}
+	var snap changeset.Snapshot
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&snap); err != nil {
+		return snap, fmt.Errorf("REVIEW_CONTEXT_CHANGESET_INVALID: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return snap, fmt.Errorf("REVIEW_CONTEXT_CHANGESET_INVALID: trailing JSON")
+	}
+	fresh, err := changeset.Compute(".", snap.RequestedBaseRef, snap.IncludeWorkingTree)
+	if err != nil {
+		return snap, fmt.Errorf("REVIEW_CONTEXT_CHANGESET_STALE: %w", err)
+	}
+	if fresh.SnapshotSHA256 != snap.SnapshotSHA256 || fresh.HeadCommit != snap.HeadCommit || fresh.MergeBase != snap.MergeBase || fresh.ResolvedBaseCommit != snap.ResolvedBaseCommit {
+		return snap, fmt.Errorf("REVIEW_CONTEXT_CHANGESET_STALE: current ChangeSet identity changed")
+	}
+	return snap, nil
+}
+
+func currentJavaChangePaths170(snap changeset.Snapshot) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, file := range snap.Files {
+		p := filepath.ToSlash(filepath.Clean(file.Path))
+		if !strings.HasSuffix(strings.ToLower(p), ".java") {
+			continue
+		}
+		if _, err := os.Stat(filepath.FromSlash(p)); err != nil {
+			continue
+		}
+		key := strings.ToLower(p)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func resourcesForSeeds170(ctx context.Context, n nav.Navigator, seeds []nav.ReviewRef170) ([]nav.SourceRange170, error) {
+	paths := []string{}
+	seen := map[string]bool{}
+	wanted := map[string]bool{}
+	for _, seed := range seeds {
+		key, err := nav.ReviewRefKey170(seed)
+		if err != nil {
+			return nil, err
+		}
+		wanted[key] = true
+		p := filepath.ToSlash(seed.Path)
+		pk := strings.ToLower(p)
+		if !seen[pk] {
+			seen[pk] = true
+			paths = append(paths, p)
+		}
+	}
+	refs, ranges, err := n.DiscoverMethods170(ctx, paths)
+	if err != nil {
+		return nil, err
+	}
+	out := []nav.SourceRange170{}
+	for i, ref := range refs {
+		key, _ := nav.ReviewRefKey170(ref)
+		if wanted[key] && i < len(ranges) {
+			out = append(out, ranges[i])
+		}
+	}
+	return out, nil
+}
+
 func runReviewContext170(args []string) error {
 	fs := flag.NewFlagSet("review context", flag.ContinueOnError)
 	inputPath := fs.String("input", "", "same-run review context request under .code-harness/runs/<runId>/requests")
@@ -100,24 +203,36 @@ func runReviewContext170(args []string) error {
 	if err := validateReviewContextProgress170(state, req.Phase); err != nil {
 		return err
 	}
-
-	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json"))
-	analysisValue, _, err := analysisruntime.LoadCertified(".", analysisPath)
-	if err != nil {
-		return fmt.Errorf("REVIEW_CONTEXT_ANALYSIS_UNAVAILABLE: %w", err)
-	}
 	resolver, err := newRuntimeResolver170(".")
 	if err != nil {
 		return err
 	}
 	buildInput := reviewcontext.BuildInput170{RunID: runID, Phase: req.Phase, Budget: reviewcontext.DefaultBudget170()}
-	buildInput.Seeds = seedsFromAnalysis170(analysisValue)
-
 	var unitsPath, dispatchPath string
-	if req.Phase == "RULES" {
-		discoveryPath := filepath.Join(".code-harness", "runs", runID, "analysis", "review-context-discovery.json")
-		if _, err := os.Stat(discoveryPath); err != nil {
+	if req.Phase == "DISCOVERY" {
+		snap, err := loadFreshChangeSet170(runID)
+		if err != nil {
+			return err
+		}
+		methods, ranges, err := resolver.navigators["current"].DiscoverMethods170(context.Background(), currentJavaChangePaths170(snap))
+		if err != nil {
+			return fmt.Errorf("REVIEW_CONTEXT_DISCOVERY_METHODS_FAILED: %w", err)
+		}
+		buildInput.Seeds = methods
+		buildInput.Resources = ranges
+	} else {
+		if _, err := os.Stat(filepath.FromSlash(reviewContextArtifactPath170(runID, "DISCOVERY"))); err != nil {
 			return fmt.Errorf("REVIEW_CONTEXT_DISCOVERY_UNAVAILABLE: %w", err)
+		}
+		analysisPath, _, _ := reviewContextAuthority170(runID, "RULES")
+		analysisValue, _, err := analysisruntime.LoadCertified(".", analysisPath)
+		if err != nil {
+			return fmt.Errorf("REVIEW_CONTEXT_ANALYSIS_UNAVAILABLE: %w", err)
+		}
+		buildInput.Seeds = seedsFromAnalysis170(analysisValue)
+		buildInput.Resources, err = resourcesForSeeds170(context.Background(), resolver.navigators["current"], buildInput.Seeds)
+		if err != nil {
+			return fmt.Errorf("REVIEW_CONTEXT_RULE_RESOURCES_FAILED: %w", err)
 		}
 		unitsPath = filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "review-units.json"))
 		dispatchPath = filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "rule-dispatch.json"))
@@ -146,16 +261,16 @@ func runReviewContext170(args []string) error {
 		return fmt.Errorf("REVIEW_CONTEXT_ENCODE_FAILED: %w", err)
 	}
 	encoded = append(encoded, '\n')
-	artifactPath := filepath.Join(".code-harness", "runs", runID, "analysis", "review-context-"+strings.ToLower(req.Phase)+".json")
-	if err := atomicReviewWrite153(artifactPath, encoded); err != nil {
+	artifactPath := reviewContextArtifactPath170(runID, req.Phase)
+	if err := atomicReviewWrite153(filepath.FromSlash(artifactPath), encoded); err != nil {
 		return fmt.Errorf("REVIEW_CONTEXT_WRITE_FAILED: %w", err)
 	}
 	if req.Phase == "RULES" {
-		if err := advanceReviewProgressStage164(runID, reviewprogress.StageReviewPlanning, unitsPath, dispatchPath, filepath.ToSlash(artifactPath)); err != nil {
+		if err := advanceReviewProgressStage164(runID, reviewprogress.StageReviewPlanning, unitsPath, dispatchPath, artifactPath); err != nil {
 			return err
 		}
 	}
-	return writeJSONAndStatus(map[string]any{"status": "READY", "runId": runID, "phase": req.Phase, "artifactPath": filepath.ToSlash(artifactPath), "context": built}, true)
+	return writeJSONAndStatus(map[string]any{"status": "READY", "runId": runID, "phase": req.Phase, "artifactPath": artifactPath, "context": built}, true)
 }
 
 type runtimeResolver170 struct {
@@ -204,11 +319,38 @@ func (r *runtimeResolver170) Method(ctx context.Context, ref nav.ReviewRef170) (
 	}
 	return n.InspectMethod170(ctx, ref)
 }
-func (r *runtimeResolver170) Callers(context.Context, nav.ReviewRef170) ([]nav.Relation170, error) {
-	// T2 exposes exact forward call resolution. Upstream expansion remains
-	// fail-closed until a caller candidate can be re-proven as an exact forward
-	// edge; never manufacture a caller relation from name-only legacy search.
-	return []nav.Relation170{}, nil
+func (r *runtimeResolver170) Callers(ctx context.Context, ref nav.ReviewRef170) ([]nav.Relation170, error) {
+	n, err := r.navigator(ref)
+	if err != nil {
+		return nil, err
+	}
+	return n.ExactCallers170(ctx, ref)
+}
+func (r *runtimeResolver170) SourceBytes(_ context.Context, ref nav.ReviewRef170) (int, error) {
+	n, err := r.navigator(ref)
+	if err != nil {
+		return 0, err
+	}
+	root, err := filepath.Abs(n.RepoRoot)
+	if err != nil {
+		return 0, err
+	}
+	candidate, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(ref.Path)))
+	if err != nil {
+		return 0, err
+	}
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return 0, fmt.Errorf("REVIEW_CONTEXT_SOURCE_PATH_INVALID: %s", ref.Path)
+	}
+	info, err := os.Lstat(candidate)
+	if err != nil {
+		return 0, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return 0, fmt.Errorf("REVIEW_CONTEXT_SOURCE_PATH_INVALID: %s", ref.Path)
+	}
+	return int(info.Size()), nil
 }
 func (r *runtimeResolver170) Mapper(ctx context.Context, source nav.SourceRange170) ([]nav.Relation170, []nav.Issue170, error) {
 	n, err := r.navigator(source.Ref)

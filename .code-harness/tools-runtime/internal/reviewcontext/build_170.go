@@ -17,10 +17,15 @@ type queue170 struct {
 }
 
 type budgetState170 struct {
-	inputFiles map[string]bool
-	files      map[string]bool
-	candidates int
-	blocked    map[string]bool
+	inputFiles  map[string]bool
+	files       map[string]bool
+	candidates  int
+	sourceBytes int
+	blocked     map[string]bool
+}
+
+type sourceSizer170 interface {
+	SourceBytes(context.Context, nav.ReviewRef170) (int, error)
 }
 
 func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (Context170, error) {
@@ -67,26 +72,43 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 			addBudgetIssue(rel.Kind, firstEvidence170(rel))
 			return nil
 		}
-		newFiles := map[string]bool{}
+		newFiles := map[string]nav.ReviewRef170{}
 		for _, target := range rel.Targets {
 			key := fileKey170(target)
 			if key != "" && !state.inputFiles[key] && !state.files[key] {
-				newFiles[key] = true
+				newFiles[key] = target
 			}
 		}
 		for _, evidence := range rel.Evidence {
 			key := fileKey170(evidence.Ref)
 			if key != "" && !state.inputFiles[key] && !state.files[key] {
-				newFiles[key] = true
+				newFiles[key] = evidence.Ref
 			}
 		}
 		if budget.MaxFiles > 0 && len(state.files)+len(newFiles) > budget.MaxFiles {
 			addBudgetIssue(rel.Kind, firstEvidence170(rel))
 			return nil
 		}
+		additionalBytes := 0
+		if sizer, ok := resolver.(sourceSizer170); ok {
+			for _, ref := range newFiles {
+				size, err := sizer.SourceBytes(ctx, ref)
+				if err != nil {
+					return fmt.Errorf("REVIEW_CONTEXT_SOURCE_SIZE_FAILED: %w", err)
+				}
+				if size > 0 {
+					additionalBytes += size
+				}
+			}
+		}
+		if budget.MaxSourceBytes > 0 && state.sourceBytes+additionalBytes > budget.MaxSourceBytes {
+			addBudgetIssue(rel.Kind, firstEvidence170(rel))
+			return nil
+		}
 		for key := range newFiles {
 			state.files[key] = true
 		}
+		state.sourceBytes += additionalBytes
 		key := relationKey170(rel)
 		if _, exists := relationByKey[key]; !exists {
 			relationByKey[key] = rel
@@ -151,6 +173,8 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 						queue = append(queue, queue170{ref: target, downDepth: item.downDepth + 1, upDepth: item.upDepth})
 					}
 				}
+			} else if relation.Resolution == "EXACT" && relation.Kind == "JAVA_CALL" && item.downDepth >= budget.MaxDownstreamDepth {
+				addIssue(nav.Issue170{Code: "RECURSION_BOUNDARY", At: firstEvidence170(relation), Detail: "downstream review context depth limit reached"})
 			}
 		}
 
@@ -175,6 +199,8 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 			}
 			if relation.Resolution == "EXACT" && item.upDepth < budget.MaxUpstreamDepth && relation.From.Side == "CURRENT" && relation.From.Kind == "METHOD" {
 				queue = append(queue, queue170{ref: relation.From, downDepth: item.downDepth, upDepth: item.upDepth + 1})
+			} else if relation.Resolution == "EXACT" && item.upDepth >= budget.MaxUpstreamDepth {
+				addIssue(nav.Issue170{Code: "RECURSION_BOUNDARY", At: firstEvidence170(relation), Detail: "upstream review context depth limit reached"})
 			}
 		}
 	}
@@ -192,7 +218,7 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 		right := out.Issues[j].Code + "\x00" + fileKey170(out.Issues[j].At.Ref) + fmt.Sprintf("\x00%09d\x00%09d", out.Issues[j].At.StartLine, out.Issues[j].At.StartColumn)
 		return left < right
 	})
-	out.Usage = Usage170{Files: len(state.files), Candidates: state.candidates, SourceBytes: 0, ElapsedMillis: time.Since(started).Milliseconds()}
+	out.Usage = Usage170{Files: len(state.files), Candidates: state.candidates, SourceBytes: state.sourceBytes, ElapsedMillis: time.Since(started).Milliseconds()}
 	return out, nil
 }
 
