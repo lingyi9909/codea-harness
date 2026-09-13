@@ -17,33 +17,18 @@ jobs:
         with:
           fetch-depth: 0
           ref: feature/1.7-integrated-t5
-      - name: Apply exact T5 wiring fixes
+      - name: Apply relation isolation fix
         shell: pwsh
         run: |
-          $main = '.code-harness/tools-runtime/cmd/codea-dcep-tools/main.go'
-          $text = Get-Content $main -Raw
-          $text2 = $text -replace 'return runReview160\(args\[1:\]\)', 'return runReview170(args[1:])'
-          if ($text2 -eq $text) { throw 'main.go review route pattern missing' }
-          [IO.File]::WriteAllText((Resolve-Path $main), $text2, (New-Object Text.UTF8Encoding($false)))
-
-          $cmd = '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go'
-          $text = Get-Content $cmd -Raw
-          if (-not $text.Contains('"io"')) {
-            $replacement = '"fmt"' + [Environment]::NewLine + "`t`"io`"" + [Environment]::NewLine
-            $text = $text -replace '"fmt"\r?\n', $replacement
-          }
-          $text = $text.Replace('if err := dec.Decode(&extra); !errors.Is(err, os.ErrClosed) && err == nil { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }', 'if err := dec.Decode(&extra); !errors.Is(err, io.EOF) { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }')
-          $text = $text.Replace("`tif _, err := os.Stat(reviewContextMarker170(runID)); err != nil { return fmt.Errorf(`"REVIEW_CONTEXT_RUN_NOT_170: %w`", err) }`r`n", '')
-          $text = $text.Replace("`tif _, err := os.Stat(reviewContextMarker170(runID)); err != nil { return fmt.Errorf(`"REVIEW_CONTEXT_RUN_NOT_170: %w`", err) }`n", '')
-          $needle = "`tif req.Phase == `"RULES`" {`r`n`t`tunitsPath"
-          if (-not $text.Contains($needle)) { $needle = "`tif req.Phase == `"RULES`" {`n`t`tunitsPath" }
-          if (-not $text.Contains($needle)) { throw 'RULES branch pattern missing' }
-          $insert = "`tif req.Phase == `"RULES`" {`r`n`t`tdiscoveryPath := filepath.Join(`".code-harness`", `"runs`", runID, `"analysis`", `"review-context-discovery.json`")`r`n`t`tif _, err := os.Stat(discoveryPath); err != nil { return fmt.Errorf(`"REVIEW_CONTEXT_DISCOVERY_UNAVAILABLE: %w`", err) }`r`n`t`tunitsPath"
-          $text = $text.Replace($needle, $insert)
-          $text = [regex]::Replace($text, '(?ms)\r?\nfunc reviewContextMarker170\(runID string\) string \{.*?\}\s*$', "`r`n")
-          [IO.File]::WriteAllText((Resolve-Path $cmd), $text, (New-Object Text.UTF8Encoding($false)))
-
-          gofmt -w $main $cmd
+          $path = '.code-harness/tools-runtime/internal/reviewcontext/build_170.go'
+          $text = Get-Content $path -Raw
+          $needle = "`taddRelation := func(rel nav.Relation170) error {`r`n"
+          if (-not $text.Contains($needle)) { $needle = "`taddRelation := func(rel nav.Relation170) error {`n" }
+          if (-not $text.Contains($needle)) { throw 'addRelation pattern missing' }
+          $replacement = $needle + "`t`trel = cloneRelation170(rel)`r`n"
+          $text = $text.Replace($needle, $replacement)
+          [IO.File]::WriteAllText((Resolve-Path $path), $text, (New-Object Text.UTF8Encoding($false)))
+          gofmt -w $path
           git diff --check
           git diff --exit-code -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
       - name: Commit patch
@@ -51,8 +36,8 @@ jobs:
         run: |
           git config user.name lingyi9909
           git config user.email zhanhui9909@gmail.com
-          git add .code-harness/tools-runtime/cmd/codea-dcep-tools/main.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go
+          git add .code-harness/tools-runtime/internal/reviewcontext/build_170.go
           git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) { throw 'T5 wiring patch produced no changes' }
-          git commit -m 'feat(review): wire bounded context into review runtime'
+          if ($LASTEXITCODE -eq 0) { throw 'relation isolation patch produced no changes' }
+          git commit -m 'fix(review): clone resolved relations before publication'
           git push origin HEAD:feature/1.7-integrated-t5
