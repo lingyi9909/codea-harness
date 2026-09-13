@@ -1,0 +1,266 @@
+name: task170-t4-blocker-patch
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t4]
+    paths:
+      - '.github/workflows/task170-t4-blocker-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Apply exactly three T4 blocker fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.code-harness/tools-runtime/internal/reviewcontext/dubbo_parse_170.go')
+          text = path.read_text(encoding='utf-8')
+
+          old_loop = '''\t\tfor _, candidate := range candidates {
+          \t\t\tif !candidate.ConfigResolved {
+          \t\t\t\tproviderConfigUnknown = true
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\tif candidate.Group != reference.Group || candidate.Version != reference.Version {
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\tif !dubboSignatureCompatible170(argTypes, candidate.ParameterTypes) {
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\tmatching = append(matching, candidate)
+          \t\t}
+          '''
+          new_loop = '''\t\tfor _, candidate := range candidates {
+          \t\t\tif !dubboSignatureCompatible170(argTypes, candidate.ParameterTypes) {
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\tif !candidate.ConfigResolved {
+          \t\t\t\tproviderConfigUnknown = true
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\tif candidate.Group != reference.Group || candidate.Version != reference.Version {
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\tmatching = append(matching, candidate)
+          \t\t}
+          '''
+          if old_loop not in text:
+              raise SystemExit('candidate loop anchor not found')
+          text = text.replace(old_loop, new_loop, 1)
+
+          old_exact = '\tif len(matching) == 1 {\n'
+          new_exact = '\tif len(matching) == 1 && !providerConfigUnknown {\n'
+          if old_exact not in text:
+              raise SystemExit('EXACT anchor not found')
+          text = text.replace(old_exact, new_exact, 1)
+
+          old_type = '''func dubboTypeEqual170(left, right string) bool {
+          \tleft, right = strings.TrimSpace(left), strings.TrimSpace(right)
+          \treturn left == right || dubboSimpleName170(left) == dubboSimpleName170(right)
+          }
+          '''
+          new_type = '''func dubboTypeEqual170(left, right string) bool {
+          \tleft, right = strings.TrimSpace(left), strings.TrimSpace(right)
+          \treturn left != "" && right != "" && left == right
+          }
+          '''
+          if old_type not in text:
+              raise SystemExit('type equality anchor not found')
+          text = text.replace(old_type, new_type, 1)
+
+          start = text.index('func dubboRemoteCall170(')
+          end = text.index('func dubboProviderMethods170(', start)
+          remote = r'''func dubboRemoteCall170(data []byte, caller dubboMethod170, refs []dubboReference170) ([2]int, dubboReference170, string, []string, bool) {
+          	var none [2]int
+          	if caller.BodyStart < 0 || caller.BodyEnd <= caller.BodyStart || caller.BodyEnd > len(data) {
+          		return none, dubboReference170{}, "", nil, false
+          	}
+          	body := string(data[caller.BodyStart:caller.BodyEnd])
+          	paramTypes := map[string]string{}
+          	for i, name := range caller.ParameterNames {
+          		if i < len(caller.ParameterTypes) {
+          			paramTypes[name] = caller.ParameterTypes[i]
+          		}
+          	}
+          	for _, ref := range refs {
+          		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(ref.Field) + `\s*\.\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)`)
+          		for _, loc := range re.FindAllStringSubmatchIndex(body, -1) {
+          			if len(loc) < 6 || !dubboReceiverBindsField170(body, loc[0], ref.Field, caller.ParameterNames) {
+          				continue
+          			}
+          			method := body[loc[2]:loc[3]]
+          			argsText := body[loc[4]:loc[5]]
+          			argTypes := []string{}
+          			for _, arg := range dubboSplitComma170(argsText) {
+          				argTypes = append(argTypes, dubboInferArgumentType170(strings.TrimSpace(arg), paramTypes))
+          			}
+          			return [2]int{caller.BodyStart + loc[0], caller.BodyStart + loc[1]}, ref, method, argTypes, true
+          		}
+          	}
+          	return none, dubboReference170{}, "", nil, false
+          }
+
+          func dubboReceiverBindsField170(body string, callStart int, field string, params []string) bool {
+          	if callStart < 0 || callStart > len(body) {
+          		return false
+          	}
+          	prefix := dubboLexicalMask170(body[:callStart])
+          	explicitThis := regexp.MustCompile(`\bthis\s*\.\s*$`)
+          	if explicitThis.MatchString(prefix) {
+          		return true
+          	}
+          	for _, name := range params {
+          		if name == field {
+          			return false
+          		}
+          	}
+          	return !dubboActiveLocalShadow170(prefix, field)
+          }
+
+          func dubboActiveLocalShadow170(prefix, field string) bool {
+          	if strings.TrimSpace(field) == "" {
+          		return false
+          	}
+          	decl := regexp.MustCompile(`(?m)(?:^|[;{}])\s*(?:final\s+)?[A-Za-z_$][A-Za-z0-9_$.]*(?:\s*<[^;{}=()]*>)?(?:\s*\[\s*\])*\s+` + regexp.QuoteMeta(field) + `\b\s*(?:=|;|,)`)
+          	for _, loc := range decl.FindAllStringIndex(prefix, -1) {
+          		depth := dubboBraceDepth170(prefix[:loc[0]])
+          		if dubboDeclarationScopeActive170(prefix[loc[1]:], depth) {
+          			return true
+          		}
+          	}
+          	return false
+          }
+
+          func dubboDeclarationScopeActive170(rest string, declarationDepth int) bool {
+          	depth := declarationDepth
+          	for i := 0; i < len(rest); i++ {
+          		switch rest[i] {
+          		case '{':
+          			depth++
+          		case '}':
+          			depth--
+          			if depth < declarationDepth {
+          				return false
+          			}
+          		}
+          	}
+          	return true
+          }
+
+          func dubboBraceDepth170(value string) int {
+          	depth := 0
+          	for i := 0; i < len(value); i++ {
+          		switch value[i] {
+          		case '{':
+          			depth++
+          		case '}':
+          			if depth > 0 {
+          				depth--
+          			}
+          		}
+          	}
+          	return depth
+          }
+
+          func dubboLexicalMask170(value string) string {
+          	out := []byte(value)
+          	for i := 0; i < len(out); {
+          		if i+1 < len(out) && out[i] == '/' && out[i+1] == '/' {
+          			out[i], out[i+1] = ' ', ' '
+          			i += 2
+          			for i < len(out) && out[i] != '\n' {
+          				out[i] = ' '
+          				i++
+          			}
+          			continue
+          		}
+          		if i+1 < len(out) && out[i] == '/' && out[i+1] == '*' {
+          			out[i], out[i+1] = ' ', ' '
+          			i += 2
+          			for i+1 < len(out) && !(out[i] == '*' && out[i+1] == '/') {
+          				if out[i] != '\n' {
+          					out[i] = ' '
+          				}
+          				i++
+          			}
+          			if i+1 < len(out) {
+          				out[i], out[i+1] = ' ', ' '
+          				i += 2
+          			}
+          			continue
+          		}
+          		if out[i] == '"' || out[i] == '\'' {
+          			quote := out[i]
+          			out[i] = ' '
+          			i++
+          			for i < len(out) {
+          				if out[i] == '\\' {
+          					out[i] = ' '
+          					i++
+          					if i < len(out) {
+          						out[i] = ' '
+          						i++
+          					}
+          					continue
+          				}
+          				current := out[i]
+          				if current != '\n' {
+          					out[i] = ' '
+          				}
+          				i++
+          				if current == quote {
+          					break
+          				}
+          			}
+          			continue
+          		}
+          		i++
+          	}
+          	return string(out)
+          }
+
+          '''
+          text = text[:start] + remote + text[end:]
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('.code-harness/tools-runtime/internal/reviewcontext/dubbo_170_blockers_test.go')
+          tests = test_path.read_text(encoding='utf-8')
+          tests = tests.replace('\t"path/filepath"\n', '')
+          marker = '\nfunc Test170DubboBlockerRegressionsStayInsideDeclaredProviderRoots'
+          if marker in tests:
+              tests = tests[:tests.index(marker)].rstrip() + '\n'
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+          gofmt -w .code-harness/tools-runtime/internal/reviewcontext/dubbo_parse_170.go .code-harness/tools-runtime/internal/reviewcontext/dubbo_170_blockers_test.go
+      - name: Targeted GREEN verification
+        working-directory: .code-harness/tools-runtime
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go mod download
+          go test ./internal/reviewcontext -run Test170Dubbo -count=1
+      - name: Commit scoped fix and remove patch workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/task170-t4-blocker-patch.yml
+          git config user.name 'lingyi9909'
+          git config user.email 'zhanhui9909@gmail.com'
+          git add .code-harness/tools-runtime/internal/reviewcontext/dubbo_parse_170.go .code-harness/tools-runtime/internal/reviewcontext/dubbo_170_blockers_test.go
+          git diff --cached --check
+          git commit -m 'fix(t4): fail closed on Dubbo identity ambiguity'
+          git push origin HEAD:feature/1.7-integrated-t4
