@@ -38,7 +38,7 @@ jobs:
           $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
           $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
           New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
-          Copy-Item -LiteralPath $source -DestinationPath $target -Force
+          Copy-Item -LiteralPath $source -Destination $target -Force
           "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Apply blocker repair
         shell: pwsh
