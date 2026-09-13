@@ -448,3 +448,7 @@ Chain context 只能补充业务理解；不得反向修改 ChangeAnalysis 的 s
 - 不得 sampled review。
 - 不得执行任意 Shell、`git fetch` 或 `git pull`。
 - 不得修改生产代码或测试代码。
+
+## 1.7 按需 Review Context（T5）
+
+Review 的关系上下文只由 Controlled Runtime 构造。Agent 只能为同一 run 请求 `review context`，请求体固定为 `runId + phase`；不得提供 `roots/files/baseRef/snapshot/seeds/budget`。DISCOVERY 使用 Runtime 已有 Canonical ChangeSet，RULES 使用同 run Certified ChangeAnalysis + ReviewUnit + RuleDispatch。返回的 `review-call-context.json` / `review-rule-context.json` 仅是本次 review 的有界上下文，不是新的 Snapshot、索引或跨 run 权威；Agent 不得写入或修补 `analysis/**`。

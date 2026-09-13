@@ -167,13 +167,14 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 			if err := addRelation(relation); err != nil {
 				return Context170{}, err
 			}
-			if relation.Resolution == "EXACT" && relation.Kind == "JAVA_CALL" && item.downDepth < budget.MaxDownstreamDepth {
+			_, accepted := relationByKey[relationKey170(relation)]
+			if accepted && relation.Resolution == "EXACT" && relation.Kind == "JAVA_CALL" && item.downDepth < budget.MaxDownstreamDepth {
 				for _, target := range relation.Targets {
 					if target.Side == "CURRENT" && target.Kind == "METHOD" {
 						queue = append(queue, queue170{ref: target, downDepth: item.downDepth + 1, upDepth: item.upDepth})
 					}
 				}
-			} else if relation.Resolution == "EXACT" && relation.Kind == "JAVA_CALL" && item.downDepth >= budget.MaxDownstreamDepth {
+			} else if accepted && relation.Resolution == "EXACT" && relation.Kind == "JAVA_CALL" && item.downDepth >= budget.MaxDownstreamDepth {
 				addIssue(nav.Issue170{Code: "RECURSION_BOUNDARY", At: firstEvidence170(relation), Detail: "downstream review context depth limit reached"})
 			}
 		}
@@ -197,9 +198,10 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 			if err := addRelation(relation); err != nil {
 				return Context170{}, err
 			}
-			if relation.Resolution == "EXACT" && item.upDepth < budget.MaxUpstreamDepth && relation.From.Side == "CURRENT" && relation.From.Kind == "METHOD" {
+			_, accepted := relationByKey[relationKey170(relation)]
+			if accepted && relation.Resolution == "EXACT" && item.upDepth < budget.MaxUpstreamDepth && relation.From.Side == "CURRENT" && relation.From.Kind == "METHOD" {
 				queue = append(queue, queue170{ref: relation.From, downDepth: item.downDepth, upDepth: item.upDepth + 1})
-			} else if relation.Resolution == "EXACT" && item.upDepth >= budget.MaxUpstreamDepth {
+			} else if accepted && relation.Resolution == "EXACT" && item.upDepth >= budget.MaxUpstreamDepth {
 				addIssue(nav.Issue170{Code: "RECURSION_BOUNDARY", At: firstEvidence170(relation), Detail: "upstream review context depth limit reached"})
 			}
 		}

@@ -1017,3 +1017,7 @@ Main Agent / Orchestrator owns routing, Runtime invocation, Reviewer delegation,
 The Main Agent / Orchestrator may create only same-run `requests/**` request files. Reviewer proposals must enter the same run only through `codea-reviewer-submit`. `analysis/**`, `review.md`, and `.code-harness/chains/**` remain Runtime/Framework-owned. No semantic fallback to the Main Agent is permitted when Reviewer fails.
 
 OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.
+
+## 1.7 T5 两阶段按需上下文
+
+1.7 Review 的顺序固定为：Runtime Canonical ChangeSet → DISCOVERY `review context` → 独立 Reviewer semantic proposal / Runtime certification → ReviewUnit →（T7 接入前 knowledge 关闭）一次 RuleDispatch → RULES `review context` → Runtime 内部把 `REVIEW_PLANNING` 推进到 `REVIEW_EXECUTION`。1.7 dispatch 本身不得立即推进阶段；RULES 未成功时 FINDINGS 不得开始。历史 run 若没有 1.7 DISCOVERY artifact，继续走既有 1.6 流程。Orchestrator 不得创建第二套 snapshot/context authority，也不得向 Runtime 注入 roots/files/seeds/budget。

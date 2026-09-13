@@ -232,3 +232,7 @@ Main Agent / Orchestrator owns routing, Runtime invocation, Reviewer delegation,
 The Main Agent / Orchestrator may create only same-run `requests/**` request files. Reviewer proposals must enter the same run only through `codea-reviewer-submit`. `analysis/**`, `review.md`, and `.code-harness/chains/**` remain Runtime/Framework-owned. No semantic fallback to the Main Agent is permitted when Reviewer fails.
 
 OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.
+
+## 1.7 T5 Review Context 内部命令
+
+允许的内部入口为 `codea-dcep-tools.exe review context --input .code-harness/runs/<runId>/requests/<name>.json`。request 只允许 `runId`、`phase`，phase 仅 `DISCOVERY|RULES`。DISCOVERY 输出 `analysis/review-call-context.json`；RULES 输出 `analysis/review-rule-context.json`。两者均为 same-run Runtime Managed artifact，不可跨 run 复用，不扩展 ReviewUnit.Files / ChangedHunks / ReviewScope，也不授权 Agent 写 `analysis/**`。

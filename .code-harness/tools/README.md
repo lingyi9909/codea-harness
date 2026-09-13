@@ -550,3 +550,11 @@ TARGETED：
 每一次新的顶层 `harness review` 都必须先执行 `codea-dcep-tools.exe review begin` 获取 Runtime-owned fresh runId，再用该 runId 创建 Snapshot request 并执行 `analysis snapshot`。旧 run 的 runId、Snapshot、ChangeAnalysis、0 Change 结论和 `review.md` 不能作为新 invocation 的输入事实。
 
 `review begin` 只创建 `.code-harness/runs/<runId>/` 并返回 runId；不读取 Git、不计算 ChangeSet、不创建任何 Authority artifact。Git ChangeSet 仍只能由随后执行的 `analysis snapshot` 计算。
+
+## Review Context（1.7 T5，内部）
+
+```text
+codea-dcep-tools.exe review context --input .code-harness/runs/<runId>/requests/<name>.json
+```
+
+唯一请求字段是 `runId` 和 `phase`（`DISCOVERY` 或 `RULES`）。DISCOVERY 从同 run 的 `analysis/change-set.json` 派生，产出 `analysis/review-call-context.json`；RULES 只在 Certified ChangeAnalysis、ReviewUnit、RuleDispatch 已就绪时执行，产出 `analysis/review-rule-context.json`，成功后由 Runtime 内部完成 REVIEW_PLANNING → REVIEW_EXECUTION。固定每阶段预算为 40 files / 200 candidates / 1 MiB source / 15s，向上 3 层、向下 6 层；超限保留 issue/BLOCKED，不扩大原 review selection。该命令只用于 Review，不是通用索引、Snapshot 或跨 run cache。

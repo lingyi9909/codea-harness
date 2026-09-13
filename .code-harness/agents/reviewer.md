@@ -439,3 +439,7 @@ report-review.json           → .code-harness/contracts/report-review-request.s
 当 same-run Runtime `review options` 返回 `USER_SELECTION` 时，Reviewer 必须把控制权交回 Orchestrator 进行用户选择，并立即停止当前 Assistant Turn 的 Review 执行。在收到**下一条用户消息**并由 Runtime `review select` 形成 verified FULL/TARGETED/LIST scope 之前，不得调用 `review-code`，**不得进入 Finding Proposal**，不得创建 `finding-proposals.json`，也不得触发 Finding Certification 或 Review Report。
 
 AUTO_FULL / AUTO_SINGLE 保持既有自动继续语义；本 Gate 只约束 USER_SELECTION 和显式下游 target 的多上游选择场景。
+
+## 1.7 T5 Runtime Context 边界
+
+Reviewer 继续保持独立角色，只消费 Runtime 提供的 same-run context，不自行扫描额外 roots，也不提供 seeds/budget/roots。DISCOVERY/RULES 请求仅包含 `runId` 与 `phase`；未知、歧义、预算耗尽关系必须保留为边界或 BLOCKED，不能猜测为 EXACT。Reviewer 的 semantic proposal 仍走既有 `codea-reviewer-submit`，不得写 `analysis/**`，也不能因有新上下文而接管 Runtime/Host 阶段推进。
