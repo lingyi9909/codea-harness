@@ -1,0 +1,63 @@
+name: task170-t5-blockers-patch
+on:
+  push:
+    branches: [feature/1.7-integrated-t5]
+    paths:
+      - '.code-harness/tools-runtime/task170_t5_blockers_patch.py'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  patch:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Download accepted 1.6.4.final release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision pinned ast-grep
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'task170-accepted-rc/codea-harness-1.6.4-windows-x64-install.zip'
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Expand-Archive -Path $zip -DestinationPath $stage -Force
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Apply blocker repair
+        shell: pwsh
+        run: python .code-harness/tools-runtime/task170_t5_blockers_patch.py
+      - name: Format
+        shell: pwsh
+        run: |
+          Get-ChildItem .code-harness/tools-runtime -Recurse -Filter *.go | ForEach-Object { gofmt -w $_.FullName }
+          git diff --check
+      - name: Focused T5 blocker tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: |
+          go test ./internal/nav ./internal/reviewcontext ./internal/reviewprogress ./cmd/codea-dcep-tools -run Test170 -count=1
+      - name: Commit repair
+        shell: pwsh
+        run: |
+          git config user.name codea-t5-ci
+          git config user.email codea-t5-ci@example.invalid
+          git add .code-harness/tools-runtime/internal .code-harness/tools-runtime/cmd/codea-dcep-tools
+          git diff --cached --check
+          git commit -m 'fix(t5): close context authority and evidence blockers'
+          git push origin HEAD:feature/1.7-integrated-t5
