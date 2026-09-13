@@ -1,0 +1,125 @@
+name: task170-t5-context
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.7-integrated-t5]
+    paths:
+      - '.code-harness/tools-runtime/internal/reviewcontext/**'
+      - '.code-harness/tools-runtime/internal/analysis/**'
+      - '.code-harness/tools-runtime/internal/reviewunit/**'
+      - '.code-harness/tools-runtime/internal/reviewrules/**'
+      - '.code-harness/tools-runtime/internal/reviewprogress/**'
+      - '.code-harness/tools-runtime/cmd/codea-dcep-tools/**'
+      - '.code-harness/contracts/**'
+      - '.code-harness/skills/analyze-change/SKILL.md'
+      - '.code-harness/agents/reviewer.md'
+      - '.code-harness/agents/orchestrator.md'
+      - '.code-harness/AGENTS.md'
+      - '.code-harness/tools/README.md'
+      - '.code-harness/tools-runtime/go.mod'
+      - '.code-harness/tools-runtime/go.sum'
+      - '.github/workflows/task170-t5-context.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  t5-context:
+    runs-on: windows-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap existing locked modules for hosted CI
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go mod download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git restore --source=HEAD -- go.mod go.sum
+          $moduleStatus = @(git status --short -- go.mod go.sum)
+          if ($moduleStatus.Count -ne 0) { throw "module bootstrap left locked files dirty: $($moduleStatus -join '; ')" }
+          Write-Output 'TASK170_T5_MODULE_BOOTSTRAP PASS'
+      - name: Verify accepted T4 lineage and clean baseline
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor e48da7aa37a3350dfb58d96fa074af380ad5c297 HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'T5 branch is not based on accepted T4 exact HEAD' }
+          $status = @(git status --short)
+          if ($status.Count -ne 0) { throw "baseline working tree is not clean: $($status -join '; ')" }
+          Write-Output "TASK170_T5_BASELINE PASS head=$((git rev-parse HEAD).Trim()) status=clean"
+      - name: Download accepted 1.6.4.final release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision approved pinned ast-grep test fixture
+        shell: pwsh
+        run: |
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'task170-accepted-rc'
+          $installZip = Join-Path $artifactRoot 'codea-harness-1.6.4-windows-x64-install.zip'
+          if (-not (Test-Path $installZip -PathType Leaf)) { throw "accepted install ZIP missing: $installZip" }
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          Expand-Archive -Path $installZip -DestinationPath $stage -Force
+          $manifestPath = Join-Path $stage '.code-harness/RELEASE-MANIFEST.json'
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ([string]$manifest.buildCommit -cne '439d9618591657b80d4670f1d9f3b5909d378447') { throw 'accepted RC build commit mismatch' }
+          $actualHash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne [string]$manifest.astGrepSha256) { throw 'accepted ast-grep hash mismatch' }
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "TASK170_T5_APPROVED_AST_GREP PASS sha256=$actualHash"
+      - name: T5 targeted gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/reviewcontext ./internal/analysis ./cmd/codea-dcep-tools -run Test170 -count=1
+      - name: T5 subsystem regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/nav ./internal/reviewcontext ./internal/analysis ./internal/reviewunit ./internal/reviewrules ./internal/reviewprogress ./internal/reviewauthority ./cmd/codea-dcep-tools -count=1
+      - name: Verify zero dependency drift
+        shell: pwsh
+        run: |
+          git diff --exit-code -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'offline T5 gates changed go.mod/go.sum' }
+          git diff --exit-code e48da7aa37a3350dfb58d96fa074af380ad5c297 HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'T5 committed changes to go.mod/go.sum' }
+          Write-Output 'TASK170_T5_DEPENDENCY_DRIFT PASS working-tree=clean committed=unchanged'
+      - name: Full Go regression
+        id: full-regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: |
+          go test ./... -count=1 2>&1 | Tee-Object -FilePath task170-t5-full-go-regression.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload full regression evidence
+        if: always() && steps.full-regression.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: task170-t5-full-go-regression
+          path: .code-harness/tools-runtime/task170-t5-full-go-regression.log
+          if-no-files-found: error
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go vet ./...
