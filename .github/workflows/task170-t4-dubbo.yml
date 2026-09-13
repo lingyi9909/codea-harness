@@ -52,6 +52,38 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($status.Count -ne 0) { throw "baseline working tree is not clean: $($status -join '; ')" }
           Write-Output "TASK170_T4_BASELINE PASS head=$head status=clean"
+      - name: Download accepted 1.6.4.final release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision approved pinned ast-grep test fixture
+        shell: pwsh
+        run: |
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'task170-accepted-rc'
+          $installZip = Join-Path $artifactRoot 'codea-harness-1.6.4-windows-x64-install.zip'
+          if (-not (Test-Path $installZip -PathType Leaf)) { throw "accepted install ZIP missing: $installZip" }
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          Expand-Archive -Path $installZip -DestinationPath $stage -Force
+          $manifestPath = Join-Path $stage '.code-harness/RELEASE-MANIFEST.json'
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          if (-not (Test-Path $manifestPath -PathType Leaf)) { throw 'accepted release manifest missing' }
+          if (-not (Test-Path $source -PathType Leaf)) { throw 'accepted pinned ast-grep missing' }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ([string]$manifest.version -cne '1.6.4') { throw "accepted RC version mismatch: $($manifest.version)" }
+          if ([string]$manifest.buildCommit -cne '439d9618591657b80d4670f1d9f3b5909d378447') { throw "accepted RC build commit mismatch: $($manifest.buildCommit)" }
+          if ([string]$manifest.astGrepVersion -cne '0.42.1') { throw "accepted ast-grep version mismatch: $($manifest.astGrepVersion)" }
+          $actualHash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne [string]$manifest.astGrepSha256) { throw "accepted ast-grep hash mismatch: $actualHash" }
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "TASK170_T4_APPROVED_AST_GREP PASS sha256=$actualHash"
       - name: T4 Dubbo targeted gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
