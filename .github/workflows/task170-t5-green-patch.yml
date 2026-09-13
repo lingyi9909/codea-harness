@@ -14,7 +14,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Apply T5 queue and protocol cleanup
-        run: python3 .code-harness/tools-runtime/task170_t5_patch2.py
+        run: python3 .code-harness/tools-runtime/task170_t5_patch3.py
       - name: Format and commit
         run: |
           gofmt -w .code-harness/tools-runtime/internal/reviewcontext/build_170.go
