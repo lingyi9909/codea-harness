@@ -36,6 +36,26 @@ func Test170SourceByteBudgetBlocksAdditionalContext(t *testing.T) {
 	}
 }
 
+func Test170BudgetRejectedEdgeDoesNotExpandQueue(t *testing.T) {
+	seed := ref170("src/main/java/demo/A.java", "demo.A", "submit")
+	target := ref170("src/main/java/demo/Large.java", "demo.Large", "save")
+	seedKey, _ := nav.ReviewRefKey170(seed)
+	targetKey, _ := nav.ReviewRefKey170(target)
+	base := &fakeResolver170{
+		methods: map[string]nav.MethodFacts170{
+			seedKey: {Method:seed, Calls:[]nav.Relation170{exact170("r-large", "JAVA_CALL", seed, target)}, Issues:[]nav.Issue170{}},
+			targetKey: {Method:target, Calls:[]nav.Relation170{}, Issues:[]nav.Issue170{}},
+		},
+		callers: map[string][]nav.Relation170{}, dubbo: map[string][]nav.Relation170{},
+	}
+	resolver := &sizedResolver170{fakeResolver170: base, sizes: map[string]int{targetKey: 1024}}
+	budget := DefaultBudget170(); budget.MaxSourceBytes = 32
+	if _, err := Build170(context.Background(), BuildInput170{RunID:"review-case", Phase:"DISCOVERY", Seeds:[]nav.ReviewRef170{seed}, Budget:budget}, resolver); err != nil { t.Fatal(err) }
+	for _, call := range resolver.methodCalls {
+		if call == targetKey { t.Fatalf("budget-rejected target was still expanded: calls=%v", resolver.methodCalls) }
+	}
+}
+
 func Test170RecursionBoundaryIsExplicit(t *testing.T) {
 	seed := ref170("src/main/java/demo/A.java", "demo.A", "a")
 	b := ref170("src/main/java/demo/B.java", "demo.B", "b")
