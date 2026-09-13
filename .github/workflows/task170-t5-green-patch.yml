@@ -29,7 +29,8 @@ jobs:
           $cmd = '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go'
           $text = Get-Content $cmd -Raw
           if (-not $text.Contains('"io"')) {
-            $text = $text -replace '"fmt"\r?\n', '"fmt"' + [Environment]::NewLine + "`t`"io`"" + [Environment]::NewLine
+            $replacement = '"fmt"' + [Environment]::NewLine + "`t`"io`"" + [Environment]::NewLine
+            $text = $text -replace '"fmt"\r?\n', $replacement
           }
           $text = $text.Replace('if err := dec.Decode(&extra); !errors.Is(err, os.ErrClosed) && err == nil { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }', 'if err := dec.Decode(&extra); !errors.Is(err, io.EOF) { return req, fmt.Errorf("REVIEW_CONTEXT_REQUEST_INVALID: trailing JSON") }')
           $text = $text.Replace("`tif _, err := os.Stat(reviewContextMarker170(runID)); err != nil { return fmt.Errorf(`"REVIEW_CONTEXT_RUN_NOT_170: %w`", err) }`r`n", '')
