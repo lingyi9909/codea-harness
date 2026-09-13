@@ -21,6 +21,6 @@ jobs:
           git diff --check
           git config user.name codea-t5-ci
           git config user.email codea-t5-ci@example.invalid
-          git add .code-harness/tools-runtime/internal/reviewcontext/build_170.go .code-harness/tools-runtime/internal/nav/context_discovery_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_entry_170.go .github/workflows/task170-t5-context.yml
+          git add .code-harness/tools-runtime/internal/reviewcontext/build_170.go .code-harness/tools-runtime/internal/nav/context_discovery_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_command_170.go .code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_entry_170.go
           git commit -m 'fix(t5): derive bounded context from runtime authority'
           git push origin HEAD:feature/1.7-integrated-t5
