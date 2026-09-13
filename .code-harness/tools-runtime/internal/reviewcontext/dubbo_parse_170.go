@@ -64,10 +64,10 @@ type dubboRoot170 struct {
 }
 
 var (
-	dubboPackageRE170 = regexp.MustCompile(`(?m)^\s*package\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*;`)
-	dubboImportRE170  = regexp.MustCompile(`(?m)^\s*import\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*;`)
-	dubboFieldRE170   = regexp.MustCompile(`(?s)^\s*(?:(?:public|protected|private|static|final|volatile|transient)\s+)*([A-Za-z_$][A-Za-z0-9_$.<>?\[\]]*)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*;`)
-	dubboClassRE170   = regexp.MustCompile(`(?s)^\s*(?:(?:public|protected|private|abstract|final|static)\s+)*class\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+[A-Za-z0-9_$.<>?]+)?(?:\s+implements\s+([^\{]+))?\s*\{`)
+	dubboPackageRE170    = regexp.MustCompile(`(?m)^\s*package\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*;`)
+	dubboImportRE170     = regexp.MustCompile(`(?m)^\s*import\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*;`)
+	dubboFieldRE170      = regexp.MustCompile(`(?s)^\s*(?:(?:public|protected|private|static|final|volatile|transient)\s+)*([A-Za-z_$][A-Za-z0-9_$.<>?\[\]]*)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*;`)
+	dubboClassRE170      = regexp.MustCompile(`(?s)^\s*(?:(?:public|protected|private|abstract|final|static)\s+)*class\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+[A-Za-z0-9_$.<>?]+)?(?:\s+implements\s+([^\{]+))?\s*\{`)
 	dubboAttrStringRE170 = regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*"([^"]*)"`)
 	dubboAttrClassRE170  = regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([A-Za-z_$][A-Za-z0-9_$.]*)\s*\.class`)
 	dubboIntRE170        = regexp.MustCompile(`^-?[0-9]+$`)
@@ -174,14 +174,14 @@ func resolveDubboContract170(ctx context.Context, currentRoot string, consumer n
 		}
 		allCandidates = append(allCandidates, candidates...)
 		for _, candidate := range candidates {
+			if !dubboSignatureCompatible170(argTypes, candidate.ParameterTypes) {
+				continue
+			}
 			if !candidate.ConfigResolved {
 				providerConfigUnknown = true
 				continue
 			}
 			if candidate.Group != reference.Group || candidate.Version != reference.Version {
-				continue
-			}
-			if !dubboSignatureCompatible170(argTypes, candidate.ParameterTypes) {
 				continue
 			}
 			matching = append(matching, candidate)
@@ -203,7 +203,7 @@ func resolveDubboContract170(ctx context.Context, currentRoot string, consumer n
 	}
 	assumptions = uniqueSortedMyBatis170(assumptions)
 
-	if len(matching) == 1 {
+	if len(matching) == 1 && !providerConfigUnknown {
 		candidate := matching[0]
 		target := dubboProviderRef170(candidate, consumer.Side)
 		targetEvidence := dubboRange170(candidate.Data, target, candidate.Start, candidate.End)
@@ -293,19 +293,139 @@ func dubboRemoteCall170(data []byte, caller dubboMethod170, refs []dubboReferenc
 	}
 	for _, ref := range refs {
 		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(ref.Field) + `\s*\.\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)`)
-		loc := re.FindStringSubmatchIndex(body)
-		if len(loc) < 6 {
-			continue
+		for _, loc := range re.FindAllStringSubmatchIndex(body, -1) {
+			if len(loc) < 6 || !dubboReceiverBindsField170(body, loc[0], ref.Field, caller.ParameterNames) {
+				continue
+			}
+			method := body[loc[2]:loc[3]]
+			argsText := body[loc[4]:loc[5]]
+			argTypes := []string{}
+			for _, arg := range dubboSplitComma170(argsText) {
+				argTypes = append(argTypes, dubboInferArgumentType170(strings.TrimSpace(arg), paramTypes))
+			}
+			return [2]int{caller.BodyStart + loc[0], caller.BodyStart + loc[1]}, ref, method, argTypes, true
 		}
-		method := body[loc[2]:loc[3]]
-		argsText := body[loc[4]:loc[5]]
-		argTypes := []string{}
-		for _, arg := range dubboSplitComma170(argsText) {
-			argTypes = append(argTypes, dubboInferArgumentType170(strings.TrimSpace(arg), paramTypes))
-		}
-		return [2]int{caller.BodyStart + loc[0], caller.BodyStart + loc[1]}, ref, method, argTypes, true
 	}
 	return none, dubboReference170{}, "", nil, false
+}
+
+func dubboReceiverBindsField170(body string, callStart int, field string, params []string) bool {
+	if callStart < 0 || callStart > len(body) {
+		return false
+	}
+	prefix := dubboLexicalMask170(body[:callStart])
+	explicitThis := regexp.MustCompile(`\bthis\s*\.\s*$`)
+	if explicitThis.MatchString(prefix) {
+		return true
+	}
+	for _, name := range params {
+		if name == field {
+			return false
+		}
+	}
+	return !dubboActiveLocalShadow170(prefix, field)
+}
+
+func dubboActiveLocalShadow170(prefix, field string) bool {
+	if strings.TrimSpace(field) == "" {
+		return false
+	}
+	decl := regexp.MustCompile(`(?m)(?:^|[;{}])\s*(?:final\s+)?[A-Za-z_$][A-Za-z0-9_$.]*(?:\s*<[^;{}=()]*>)?(?:\s*\[\s*\])*\s+` + regexp.QuoteMeta(field) + `\b\s*(?:=|;|,)`)
+	for _, loc := range decl.FindAllStringIndex(prefix, -1) {
+		depth := dubboBraceDepth170(prefix[:loc[0]])
+		if dubboDeclarationScopeActive170(prefix[loc[1]:], depth) {
+			return true
+		}
+	}
+	return false
+}
+
+func dubboDeclarationScopeActive170(rest string, declarationDepth int) bool {
+	depth := declarationDepth
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth < declarationDepth {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func dubboBraceDepth170(value string) int {
+	depth := 0
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return depth
+}
+
+func dubboLexicalMask170(value string) string {
+	out := []byte(value)
+	for i := 0; i < len(out); {
+		if i+1 < len(out) && out[i] == '/' && out[i+1] == '/' {
+			out[i], out[i+1] = ' ', ' '
+			i += 2
+			for i < len(out) && out[i] != '\n' {
+				out[i] = ' '
+				i++
+			}
+			continue
+		}
+		if i+1 < len(out) && out[i] == '/' && out[i+1] == '*' {
+			out[i], out[i+1] = ' ', ' '
+			i += 2
+			for i+1 < len(out) && !(out[i] == '*' && out[i+1] == '/') {
+				if out[i] != '\n' {
+					out[i] = ' '
+				}
+				i++
+			}
+			if i+1 < len(out) {
+				out[i], out[i+1] = ' ', ' '
+				i += 2
+			}
+			continue
+		}
+		if out[i] == '"' || out[i] == '\'' {
+			quote := out[i]
+			out[i] = ' '
+			i++
+			for i < len(out) {
+				if out[i] == '\\' {
+					out[i] = ' '
+					i++
+					if i < len(out) {
+						out[i] = ' '
+						i++
+					}
+					continue
+				}
+				current := out[i]
+				if current != '\n' {
+					out[i] = ' '
+				}
+				i++
+				if current == quote {
+					break
+				}
+			}
+			continue
+		}
+		i++
+	}
+	return string(out)
 }
 
 func dubboProviderMethods170(ctx context.Context, root dubboRoot170, interfaceFQCN, methodName string) ([]dubboProviderMethod170, error) {
@@ -738,7 +858,7 @@ func dubboResolveType170(raw, pkg string, imports map[string]string) string {
 
 func dubboTypeEqual170(left, right string) bool {
 	left, right = strings.TrimSpace(left), strings.TrimSpace(right)
-	return left == right || dubboSimpleName170(left) == dubboSimpleName170(right)
+	return left != "" && right != "" && left == right
 }
 
 func dubboOwnerRange170(data []byte, owner string) (int, int, bool) {

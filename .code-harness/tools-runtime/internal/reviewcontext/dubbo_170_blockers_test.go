@@ -2,7 +2,6 @@ package reviewcontext
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -157,12 +156,4 @@ class RiskServiceImpl implements RiskService { public void check(String orderId)
 			t.Fatalf("explicit this.field Dubbo invocation should remain EXACT: relations=%+v issues=%+v", relations, issues)
 		}
 	})
-}
-
-func Test170DubboBlockerRegressionsStayInsideDeclaredProviderRoots(t *testing.T) {
-	// Guard the fixture itself against accidentally relying on sibling discovery.
-	root := t.TempDir()
-	if filepath.Clean(root) == "." {
-		t.Fatal("unexpected temp root")
-	}
 }
