@@ -15,8 +15,8 @@ func validBinding170() []byte {
 
 func activeRule170(ruleID, projectID, selector string) []byte {
 	return []byte(fmt.Sprintf(`---
-ruleId: %s
-projectId: %s
+ruleId: '%s'
+projectId: '%s'
 status: ACTIVE
 version: "1"
 owner: order-team
