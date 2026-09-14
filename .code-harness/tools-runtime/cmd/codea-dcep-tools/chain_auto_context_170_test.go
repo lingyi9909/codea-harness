@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -85,18 +84,35 @@ func Test170AutoChainCommandUsesRuntimeOwnedTemporaryPolicy(t *testing.T) {
 	}
 }
 
-func Test170AutoChainRequestCannotOverrideRuntimeStrategy(t *testing.T) {
-	withTempProject(t)
+func Test170AutoChainLegacyFlagCannotOverrideRuntimeStrategy(t *testing.T) {
 	const runID = "run-t6-command-policy"
+	chainPath := setupTask170AutoChainCommand(t, runID)
+	before, err := os.ReadFile(chainPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	request := `{
   "runId":"` + runID + `",
   "changeAnalysisPath":".code-harness/runs/` + runID + `/analysis/change-analysis.json",
-  "reviewScope":{"mode":"FULL","selectedCallChains":[],"scopedFiles":[]},
+  "reviewScope":` + task170CurrentScopeRequest() + `,
   "allowTemporaryForStale":false
 }`
 	requestPath := writeQueryRequest(t, runID, "chain-review-context.json", request)
-	err := run([]string{"chain", "review-context", "--input", requestPath})
-	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "unknown field") {
-		t.Fatalf("Agent must not be able to override AUTO_TEMPORARY policy, err=%v", err)
+	if err := run([]string{"chain", "review-context", "--input", requestPath}); err != nil {
+		t.Fatalf("legacy stale flag must remain parse-compatible but cannot disable AUTO_TEMPORARY: %v", err)
+	}
+	after, err := os.ReadFile(chainPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("legacy stale flag must not authorize persisted Project State mutation")
+	}
+	entries, err := os.ReadDir(filepath.Join(".code-harness", "runs", runID, "analysis", "discovered-chains"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("legacy stale flag must be ignored and current temporary chain must be published: %v", entries)
 	}
 }
