@@ -85,3 +85,14 @@ func Test153UserSelectionFullReviewRejectsChainIDs(t *testing.T) {
 		t.Fatalf("FULL review with Chain IDs must fail closed, got %v", err)
 	}
 }
+
+func Test153UserSelectionTargetedRequiresExplicitHumanChoice(t *testing.T) {
+	options := task153SelectionOptions(t)
+	if options.Decision != DecisionUser {
+		t.Fatalf("2+ valid Chains must require USER_SELECTION, got %s", options.Decision)
+	}
+	_, err := validateSelectionAgainstOptions153(options, SelectionRequest{RunID: "r153", Mode: "TARGETED", OptionsHash: options.OptionsHash})
+	if err == nil || !strings.Contains(err.Error(), "USER_SELECTION TARGETED requires selectionIds") {
+		t.Fatalf("multi-chain TARGETED review must stop until the user selects one or more Chains, got %v", err)
+	}
+}
