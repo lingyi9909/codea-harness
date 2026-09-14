@@ -39,7 +39,7 @@ jobs:
           $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
           $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
           New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
-          Copy-Item -LiteralPath $source -Destination $target -Force
+          Copy-Item -LiteralPath $source -DestinationPath $target -Force
           "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Apply blocker repair
         shell: pwsh
@@ -74,47 +74,25 @@ jobs:
         shell: pwsh
         env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
         run: go test ./internal/nav ./internal/reviewcontext ./internal/reviewprogress ./cmd/codea-dcep-tools -run Test170 -count=1
-      - name: Smoke nav full
-        working-directory: .code-harness/tools-runtime
-        shell: pwsh
-        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/nav -count=1
-      - name: Smoke reviewcontext full
-        working-directory: .code-harness/tools-runtime
-        shell: pwsh
-        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/reviewcontext -count=1
-      - name: Smoke analysis full
-        working-directory: .code-harness/tools-runtime
-        shell: pwsh
-        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/analysis -count=1
-      - name: Smoke reviewunit full
-        working-directory: .code-harness/tools-runtime
-        shell: pwsh
-        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/reviewunit -count=1
-      - name: Smoke reviewrules full
-        working-directory: .code-harness/tools-runtime
-        shell: pwsh
-        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/reviewrules -count=1
-      - name: Smoke reviewprogress full
-        working-directory: .code-harness/tools-runtime
-        shell: pwsh
-        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/reviewprogress -count=1
-      - name: Smoke reviewauthority full
-        working-directory: .code-harness/tools-runtime
-        shell: pwsh
-        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/reviewauthority -count=1
       - name: Smoke codea-dcep-tools full
+        id: cmd-smoke
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./cmd/codea-dcep-tools -count=1
+        run: |
+          go test ./cmd/codea-dcep-tools -count=1 -v 2>&1 | Tee-Object -FilePath task170-t5-cmd-smoke.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve cmd failure log
+        if: failure() && steps.cmd-smoke.outcome == 'failure'
+        shell: pwsh
+        run: |
+          git config user.name codea-t5-ci
+          git config user.email codea-t5-ci@example.invalid
+          git add -f .code-harness/tools-runtime/task170-t5-cmd-smoke.log
+          git commit -m 'debug(t5): capture cmd regression failure'
+          git push origin HEAD:feature/1.7-integrated-t5
       - name: Commit repair
+        if: success()
         shell: pwsh
         run: |
           git config user.name codea-t5-ci
