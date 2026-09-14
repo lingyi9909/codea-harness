@@ -26,6 +26,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Verify no temporary T6 repair residue and aligned policy docs
+        shell: pwsh
+        run: |
+          $forbidden = @(
+            '.github/workflows/task170-t6-doc-format.yml',
+            '.github/workflows/task170-t6-patch.yml',
+            '.code-harness/tools-runtime/task170-t6-patch.py',
+            '.code-harness/tools-runtime/task170-t6-debug.log'
+          )
+          $present = @($forbidden | Where-Object { Test-Path $_ })
+          $dynamic = @(Get-ChildItem '.code-harness/tools-runtime' -File -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -like 'task170*t6*patch*' -or $_.Name -like 'task170*t6*debug*'
+          } | ForEach-Object { $_.FullName })
+          $present += $dynamic
+          if ($present.Count -ne 0) { throw "temporary T6 residue remains: $($present -join '; ')" }
+          $orchestrator = Get-Content '.code-harness/agents/orchestrator.md' -Raw
+          $skill = Get-Content '.code-harness/skills/review-code/SKILL.md' -Raw
+          $agents = Get-Content '.code-harness/AGENTS.md' -Raw
+          $readme = Get-Content 'README.md' -Raw
+          if (-not $orchestrator.Contains('FULL / TARGETED 固定流程（1.7 T6 覆盖旧 STALE 交互）')) { throw 'T6 orchestrator policy missing' }
+          if ($orchestrator.Contains('### STALE 决策门禁')) { throw 'obsolete Review stale-maintenance prompt remains authoritative' }
+          if (-not $skill.Contains('### 1.7 T6 AUTO_TEMPORARY Chain 约束')) { throw 'T6 review-code policy missing' }
+          if (-not $agents.Contains('## 1.7 T6 Review 自动临时 Chain')) { throw 'T6 AGENTS policy missing' }
+          if (-not $readme.Contains('## 1.7.0（Task 6：Review 自动临时 Chain）')) { throw 'T6 README policy missing' }
+          Write-Output 'TASK170_T6_TEMP_RESIDUE_AND_DOCS PASS'
       - uses: actions/setup-go@v7
         with:
           go-version: '1.23.10'
