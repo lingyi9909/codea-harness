@@ -1,0 +1,143 @@
+name: task170-t7-knowledge
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.7-integrated-t7]
+    paths:
+      - '.code-harness/tools-runtime/internal/knowledge/**'
+      - '.code-harness/tools-runtime/internal/reviewrules/**'
+      - '.code-harness/tools-runtime/cmd/codea-dcep-tools/**'
+      - '.code-harness/contracts/**'
+      - '.code-harness/tools/README.md'
+      - '.github/workflows/task170-t7-knowledge.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  t7-knowledge:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Normalize checkout line endings
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git reset --hard HEAD
+          $status = @(git status --short)
+          if ($status.Count -ne 0) { throw "canonical checkout normalization left dirty state: $($status -join '; ')" }
+          Write-Output 'TASK170_T7_CANONICAL_LF PASS'
+      - name: Verify no temporary T7 residue
+        shell: pwsh
+        run: |
+          $dynamic = @(Get-ChildItem '.code-harness/tools-runtime' -File -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -like 'task170*t7*patch*' -or $_.Name -like 'task170*t7*debug*'
+          } | ForEach-Object { $_.FullName })
+          if ($dynamic.Count -ne 0) { throw "temporary T7 residue remains: $($dynamic -join '; ')" }
+          Write-Output 'TASK170_T7_TEMP_RESIDUE PASS'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap existing locked modules
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go mod download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git restore --source=HEAD -- go.mod go.sum
+          $moduleStatus = @(git status --short -- go.mod go.sum)
+          if ($moduleStatus.Count -ne 0) { throw "module bootstrap left locked files dirty: $($moduleStatus -join '; ')" }
+          Write-Output 'TASK170_T7_MODULE_BOOTSTRAP PASS'
+      - name: Verify accepted T6 lineage and clean baseline
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor c41d19c08f998ae23081ba8aaa9fca05fa20f37d HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'T7 branch is not based on accepted T6 exact HEAD' }
+          $status = @(git status --short)
+          if ($status.Count -ne 0) { throw "baseline working tree is not clean: $($status -join '; ')" }
+          Write-Output "TASK170_T7_BASELINE PASS head=$((git rev-parse HEAD).Trim()) status=clean"
+      - name: Download accepted 1.6.4.final release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision approved pinned ast-grep
+        shell: pwsh
+        run: |
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'task170-accepted-rc'
+          $installZip = Join-Path $artifactRoot 'codea-harness-1.6.4-windows-x64-install.zip'
+          if (-not (Test-Path $installZip -PathType Leaf)) { throw "accepted install ZIP missing: $installZip" }
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          Expand-Archive -Path $installZip -DestinationPath $stage -Force
+          $manifestPath = Join-Path $stage '.code-harness/RELEASE-MANIFEST.json'
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ([string]$manifest.buildCommit -cne '439d9618591657b80d4670f1d9f3b5909d378447') { throw 'accepted RC build commit mismatch' }
+          $actualHash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne [string]$manifest.astGrepSha256) { throw 'accepted ast-grep hash mismatch' }
+          if ($actualHash -cne '61bb00d4dbac70f9c61748bf48431f6d42d557e321fc02839c7192eb237d11e4') { throw 'pinned ast-grep hash changed' }
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "TASK170_T7_APPROVED_AST_GREP PASS sha256=$actualHash"
+      - name: T7 targeted knowledge gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/knowledge ./internal/reviewrules ./cmd/codea-dcep-tools -run Test170Knowledge -count=1
+      - name: T7 subsystem regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/knowledge ./internal/reviewrules ./internal/schema ./internal/reviewunit ./internal/reviewprogress ./cmd/codea-dcep-tools -count=1
+      - name: Verify zero dependency drift
+        shell: pwsh
+        run: |
+          git diff --exit-code -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'offline T7 gates changed go.mod/go.sum' }
+          git diff --exit-code c41d19c08f998ae23081ba8aaa9fca05fa20f37d HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'T7 committed changes to go.mod/go.sum' }
+          Write-Output 'TASK170_T7_DEPENDENCY_DRIFT PASS working-tree=clean committed=unchanged'
+      - name: Go format guard
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $files = @(git diff --name-only c41d19c08f998ae23081ba8aaa9fca05fa20f37d HEAD -- '*.go' | ForEach-Object { $_ -replace '^.code-harness/tools-runtime/', '' })
+          if ($files.Count -gt 0) {
+            $bad = @(gofmt -l $files)
+            if ($bad.Count -gt 0) { throw "gofmt required: $($bad -join '; ')" }
+          }
+          Write-Output 'TASK170_T7_GOFMT PASS'
+      - name: Full Go regression
+        id: full-regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: |
+          go test ./... -count=1 2>&1 | Tee-Object -FilePath task170-t7-full-go-regression.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload full regression evidence
+        if: always() && steps.full-regression.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: task170-t7-full-go-regression
+          path: .code-harness/tools-runtime/task170-t7-full-go-regression.log
+          if-no-files-found: error
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go vet ./...
