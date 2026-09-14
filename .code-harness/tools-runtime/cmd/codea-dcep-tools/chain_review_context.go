@@ -14,10 +14,9 @@ import (
 )
 
 type chainReviewContextRequest struct {
-	RunID                  string          `json:"runId"`
-	ChangeAnalysisPath     string          `json:"changeAnalysisPath"`
-	ReviewScope            json.RawMessage `json:"reviewScope"`
-	AllowTemporaryForStale bool            `json:"allowTemporaryForStale,omitempty"`
+	RunID              string          `json:"runId"`
+	ChangeAnalysisPath string          `json:"changeAnalysisPath"`
+	ReviewScope        json.RawMessage `json:"reviewScope"`
 }
 
 func runChainReviewContext(args []string) error {
@@ -84,8 +83,8 @@ func runChainReviewContext(args []string) error {
 	}
 
 	result, err := reviewscope.ResolveChainContexts(".", selection, analysisBytes, reviewscope.ChainResolveOptions{
-		RunID:                  req.RunID,
-		AllowTemporaryForStale: req.AllowTemporaryForStale,
+		RunID:    req.RunID,
+		Strategy: reviewscope.ChainResolutionStrategyAutoTemporary,
 		CertifyDiscovered: func(candidate chain.Chain) error {
 			candidatePath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "analysis", "discovered-chains", candidate.ID+".yaml"))
 			_, err := chain.CertifyCandidate(".", candidate, candidatePath, "DISCOVERED", cert)
