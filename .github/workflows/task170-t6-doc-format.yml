@@ -1,0 +1,40 @@
+name: task170-t6-doc-format
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t6]
+    paths:
+      - '.github/workflows/task170-t6-doc-format.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache: false
+      - name: Gofmt exact T6 files and self-clean
+        shell: pwsh
+        run: |
+          $files = @(
+            '.code-harness/tools-runtime/cmd/codea-dcep-tools/chain_auto_context_170_test.go',
+            '.code-harness/tools-runtime/cmd/codea-dcep-tools/chain_review_context.go',
+            '.code-harness/tools-runtime/internal/reviewscope/chain_auto_context_170_test.go',
+            '.code-harness/tools-runtime/internal/reviewscope/chain_context.go'
+          )
+          foreach ($file in $files) { gofmt -w $file }
+          git rm '.github/workflows/task170-t6-doc-format.yml'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add $files
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git commit -m 'style(t6): gofmt auto-chain implementation'
+          git push origin HEAD:feature/1.7-integrated-t6
