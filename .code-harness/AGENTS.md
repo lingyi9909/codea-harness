@@ -236,3 +236,13 @@ OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`
 ## 1.7 T5 Review Context 内部命令
 
 允许的内部入口为 `codea-dcep-tools.exe review context --input .code-harness/runs/<runId>/requests/<name>.json`。request 只允许 `runId`、`phase`，phase 仅 `DISCOVERY|RULES`。DISCOVERY 输出 `analysis/review-call-context.json`；RULES 输出 `analysis/review-rule-context.json`。两者均为 same-run Runtime Managed artifact，不可跨 run 复用，不扩展 ReviewUnit.Files / ChangedHunks / ReviewScope，也不授权 Agent 写 `analysis/**`。
+
+
+## 1.7 T6 Review 自动临时 Chain
+
+- 正常 Review 的 Chain resolution policy 固定为 Runtime-owned `AUTO_TEMPORARY`；Agent request 不得携带 `allowTemporaryForStale` 或等价开关。
+- saved `.code-harness/chains/*.yaml` 在 Review 中是展示/历史辅助，不是当前代码关系 Authority；当前事实只来自 same-run Certified ChangeAnalysis。
+- saved Chain STALE、缺失或损坏时，Runtime 自动生成本次 `DISCOVERED + TEMPORARY` context；不得要求用户先 refresh，也不得把旧节点继续当 CURRENT。
+- 自动 Review 不得调用 `chain seal-persist` / `chain persist`，不得覆盖 manual name/notes；Project State 写入仍只允许显式 Chain Management 的 exact planId 授权流程。
+- saved entry 已删除时只记录删除说明并排除当前 context；关系不完整/歧义时 fail closed 为 PARTIAL/unresolved，不得让用户猜目标。
+- `AUTO_TEMPORARY` 不改变 `AUTO_FULL / AUTO_SINGLE / USER_SELECTION`，不取消真实多业务链选择；显式 Controller/Controller.method 仍 direct TARGETED 并保留机器防漏链。

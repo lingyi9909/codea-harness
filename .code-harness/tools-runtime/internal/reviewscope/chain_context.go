@@ -34,9 +34,9 @@ type StaleChain struct {
 }
 
 type ChainResolveOptions struct {
-	RunID                  string `json:"runId"`
-	Strategy               string `json:"-"`
-	AllowTemporaryForStale bool   `json:"allowTemporaryForStale,omitempty"`
+	RunID                  string                  `json:"runId"`
+	Strategy               string                  `json:"-"`
+	AllowTemporaryForStale bool                    `json:"allowTemporaryForStale,omitempty"`
 	CertifyDiscovered      func(chain.Chain) error `json:"-"`
 }
 
@@ -238,7 +238,9 @@ func ResolveChainContexts(root string, selection Selection, changeAnalysisJSON [
 func requiredReviewCallChains(selection Selection, all []chain.CallChainEvidence) []chain.CallChainEvidence {
 	if selection.Mode == "FULL" {
 		out := append([]chain.CallChainEvidence(nil), all...)
-		sort.Slice(out, func(i, j int) bool { return callChainKey(out[i].EntryPoint, out[i].Chain) < callChainKey(out[j].EntryPoint, out[j].Chain) })
+		sort.Slice(out, func(i, j int) bool {
+			return callChainKey(out[i].EntryPoint, out[i].Chain) < callChainKey(out[j].EntryPoint, out[j].Chain)
+		})
 		return out
 	}
 	out := make([]chain.CallChainEvidence, 0, len(selection.SelectedCallChains))

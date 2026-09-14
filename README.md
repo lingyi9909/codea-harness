@@ -2,6 +2,12 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
+## 1.7.0（Task 6：Review 自动临时 Chain）
+
+正常 `harness review` 现在由 Runtime 固定使用 `AUTO_TEMPORARY` Chain 策略：项目中已保存 Chain 仍可提供名称、备注和历史展示，但当前调用事实必须重新以本次 Certified ChangeAnalysis 为准。saved Chain 缺失、过期或 YAML 损坏时，Review 自动在当前 run 生成 `DISCOVERED + TEMPORARY` Chain，不再弹出“先刷新还是临时继续”的维护确认；入口已删除只给删除说明，歧义/证据不足则 fail closed。
+
+该自动策略**不会写 `.code-harness/chains/**`**，不会自动 `seal-persist/persist`，也不会覆盖手工 name/notes。显式 `harness chain refresh/edit/...` 的 Project State 授权流程保持不变；plain Review 的 `AUTO_FULL/AUTO_SINGLE/USER_SELECTION`、显式 Controller/Controller.method direct TARGETED 以及多上游选择规则也保持不变。
+
 ## 1.5.0
 
 1. **Chain Management**：新增一链一 YAML 的业务 Chain Project State，以及 `harness chain list/show/discover/refresh/validate`、lazy discovery、exact canonicalization、STALE 检测和用户确认后的安全持久化。

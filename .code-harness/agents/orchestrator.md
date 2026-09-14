@@ -190,32 +190,18 @@ Change Set = 变化事实边界
 Chain = 业务上下文边界
 ```
 
-### FULL / TARGETED 固定流程
+### FULL / TARGETED 固定流程（1.7 T6 覆盖旧 STALE 交互）
 
 1. 先执行 `analysis snapshot → Reviewer.analyze-change semantic proposal → analysis certify`，获得同一 Canonical ChangeSet 与 Certified ChangeAnalysis。
 2. FULL 必须先满足原 FULL machine coverage；TARGETED 必须先得到 Runtime verified `ReviewScopeSelection` 与 COMPLETE scoped coverage。Chain 不能替代这些 Gate。
-3. Orchestrator 生成同 run 的 `.code-harness/runs/<runId>/requests/chain-review-context.json`，只携带 `runId / changeAnalysisPath / reviewScope / allowTemporaryForStale`。
-4. 调用 Controlled Runtime：
+3. Orchestrator 生成同 run 的 `.code-harness/runs/<runId>/requests/chain-review-context.json`，只携带 `runId / changeAnalysisPath / reviewScope`。**不得携带 `allowTemporaryForStale` 或任何策略覆盖字段。**
+4. 调用 Controlled Runtime `chain review-context`。Runtime 对正常 Review 固定采用 `AUTO_TEMPORARY`：saved Chain 匹配时重新按当前事实验证；缺失、STALE 或 saved YAML 损坏时，以同一份 Certified ChangeAnalysis 自动重发现本次 `DISCOVERED + TEMPORARY` Chain。
+5. stale maintenance 不再产生 `STALE_REQUIRES_DECISION`，不要求用户先 refresh；但旧 saved Chain 绝不能静默当作 CURRENT 事实。入口已删除时只记录删除说明并从当前 Chain context 排除。
+6. 自动重发现只允许写同 run `analysis/discovered-chains/**`，绝不写 `.code-harness/chains/**`，也绝不自动调用 `chain seal-persist` / `chain persist`。manual `name/notes` 原 bytes 必须保持。
+7. 当前关系不完整或歧义时保留已确认边界并返回 `PARTIAL/unresolved`；不得让用户猜实现，也不得默认选择某个候选。
+8. 本策略**不取消**真正的多业务链 `USER_SELECTION`。plain `harness review` 继续使用 Runtime ReviewOptions；显式 Controller/Controller.method 继续 direct TARGETED + machine-required branch 防漏校验；显式下游 Service 多上游继续既有选择语义。
 
-```text
-codea-dcep-tools.exe chain review-context --input .code-harness/runs/<runId>/requests/chain-review-context.json
-```
-
-5. Runtime 只接受同 run 路径，并重新验证 ChangeAnalysis Schema、ReviewScope Schema、selectedCallChains/scopedFiles 与对应 coverage，然后解析 Chain context。
-6. 命中项目 `ACCEPTED` Chain 时必须重新 validate；只有 `ACCEPTED + VALID` 才可直接复用。
-7. 当前 Review 所需入口没有可用 Accepted Chain 时，Runtime 才基于同一份 verified ChangeAnalysis lazy discover，并只写 `runs/<runId>/analysis/discovered-chains/**`；返回 `DISCOVERED + TEMPORARY`，不得写 Project State。
-
-### STALE 决策门禁
-
-Runtime 返回 `STALE_REQUIRES_DECISION` 时，Orchestrator 必须展示且只允许用户明确选择：
-
-- **使用本次临时发现的 Chain 继续评审**：同一请求显式设置 `allowTemporaryForStale=true` 后重新调用 `chain review-context`；只使用 Run State，不刷新 Project State。
-- **刷新项目 Chain**：进入 Task 3 的 `chain refresh` diff-first 流程；若用户决定保存，必须继续走 `seal-persist → exact planId confirmation → persist`，刷新本身不自动代表继续 Review或写 Project State。
-- **停止本次评审**：STOP。
-
-不得默认第一项，不得把 STALE Chain 静默当 VALID 使用，也不得因为 Review 需要上下文而自动 refresh/overwrite `.code-harness/chains/**`。
-
-`PARTIAL` / unresolved Chain context 进入需要人工处理，不得调用 `review-code`。
+显式 `harness chain discover/refresh/edit/validate` 仍属于 Chain Management；若用户主动要保存/更新，继续走 `seal-persist → exact planId confirmation → persist` 的原授权链。Review 自身不获得 Project State 写权限。
 
 ### Coverage 与报告保持原语义
 

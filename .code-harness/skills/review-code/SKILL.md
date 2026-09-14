@@ -149,7 +149,8 @@ category = TEST_VALIDITY
 
 - `ACCEPTED + VALID` 可以作为当前 Review 的已验证长期业务上下文。
 - `DISCOVERED + TEMPORARY` 只能作为本次 run 临时上下文；**临时 DISCOVERED Chain 不授权 Project State 写入**。
-- STALE/INVALID/PARTIAL Chain context 不允许进入 Finding Review。
+- 正常 1.7 Review 的 stale/corrupt saved Chain 不再作为代码事实进入 Finding Review：Runtime 必须基于本次 Certified ChangeAnalysis 自动重发现 `DISCOVERED + TEMPORARY`；只有该临时结果通过当前事实验证后才可消费。
+- `PARTIAL` / unresolved 临时 Chain 仍不得进入 Finding Review；Agent 不得自行猜实现或选择候选。
 - **Finding.file 仍由原 FULL/TARGETED Scope Gate 决定**；不能因为某文件存在于 Chain 就绕过 verified scopedFiles/完整 Change Set 规则。
 - Chain 的 `notes` 不得覆盖实际代码证据；Finding 的 problem/evidence/impact/recommendation 仍必须来自本次变更与已读取源码。
 - 使用临时 Chain 不等于接受/保存该 Chain；沉淀必须回到 Orchestrator 的用户明确确认 + Task 3 Runtime persist 流程。
@@ -227,3 +228,8 @@ workspace dependency finding
 `TASK163_USER_SELECTION_TURN_HARD_STOP`
 
 如果当前 same-run `review-options.json` 的 decision 仍为 `USER_SELECTION`，且尚未在**下一条用户消息**之后通过 Runtime `review select` 生成 verified FULL/TARGETED scope，则**不得执行本 Skill**，不得读取 ReviewUnit 做 Finding Review，也不得生成 `finding-proposals.json`。Agent 自行推断 FULL/TARGETED/LIST 或默认 ALL 不能解除本门禁。
+
+
+### 1.7 T6 AUTO_TEMPORARY Chain 约束
+
+正常 `harness review` 的 Chain 维护策略由 Runtime 固定为 `AUTO_TEMPORARY`，不是 Agent 参数。Review request 不得携带 `allowTemporaryForStale`，不得先要求用户执行 refresh，也不得自动调用 `chain seal-persist` / `chain persist`。saved Chain 只可提供名称、备注和历史/删除解释；当前调用关系必须来自本次 same-run Certified ChangeAnalysis。saved YAML 损坏但当前分析可恢复时，Runtime 继续使用本次临时 Chain并给出一次提示；入口已删除时只保留删除说明，不得把旧节点当 CURRENT。真正的多业务链 `USER_SELECTION`、显式 Controller/Controller.method 的 direct TARGETED 与机器防漏链门禁保持原语义。
