@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"codea-harness-tools/internal/knowledge"
 	"codea-harness-tools/internal/reviewunit"
 )
 
@@ -96,6 +97,78 @@ func BuildDispatch(units reviewunit.Manifest, rules []Rule, catalogSHA string) (
 	return sealManifest160(manifest)
 }
 
+// BuildDispatch170 extends the immutable technical dispatch with READY business
+// checks produced by Runtime-owned knowledge loading. The knowledge document
+// version remains metadata; dispatch version is the stable Runtime contract v1.
+func BuildDispatch170(units reviewunit.Manifest, rules []Rule, catalogSHA string, km knowledge.Manifest170) (Manifest, error) {
+	base, err := BuildDispatch(units, rules, catalogSHA)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if strings.TrimSpace(km.RunID) != strings.TrimSpace(units.RunID) {
+		return Manifest{}, fmt.Errorf("RULE_DISPATCH_KNOWLEDGE_STALE: runId mismatch")
+	}
+	knowledgeSHA, err := knowledge.Digest170(km)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("RULE_DISPATCH_KNOWLEDGE_INVALID: %w", err)
+	}
+	unitIDs := map[string]bool{}
+	for _, unit := range units.Units {
+		unitIDs[strings.TrimSpace(unit.ID)] = true
+	}
+	sources := map[string]knowledge.SourceRecord170{}
+	for _, source := range km.Sources {
+		id := strings.TrimSpace(source.SourceID)
+		if id == "" {
+			return Manifest{}, fmt.Errorf("RULE_DISPATCH_KNOWLEDGE_INVALID: empty sourceId")
+		}
+		if _, exists := sources[id]; exists {
+			return Manifest{}, fmt.Errorf("RULE_DISPATCH_KNOWLEDGE_INVALID: duplicate sourceId %s", id)
+		}
+		sources[id] = source
+	}
+	seenBusiness := map[string]bool{}
+	for _, check := range km.Checks {
+		if check.Status != "READY" {
+			continue
+		}
+		unitID := strings.TrimSpace(check.ReviewUnitID)
+		sourceID := strings.TrimSpace(check.SourceID)
+		ruleID := strings.TrimSpace(check.RuleID)
+		ruleKey := "BUSINESS:" + sourceID + ":" + ruleID
+		if !unitIDs[unitID] || strings.TrimSpace(check.RuleKey) != ruleKey || sourceID == "" || ruleID == "" {
+			return Manifest{}, fmt.Errorf("RULE_DISPATCH_KNOWLEDGE_STALE: invalid READY business check %s", check.RuleKey)
+		}
+		source, ok := sources[sourceID]
+		if !ok || source.Kind != "RULES" || source.Status != "READY" || source.Rule == nil || source.Rule.RuleID != ruleID || source.Rule.Status != "ACTIVE" {
+			return Manifest{}, fmt.Errorf("RULE_DISPATCH_KNOWLEDGE_STALE: READY business check has no matching active rule %s", ruleKey)
+		}
+		key := unitID + "\x00" + ruleKey
+		if seenBusiness[key] {
+			return Manifest{}, fmt.Errorf("RULE_DISPATCH_KNOWLEDGE_INVALID: duplicate business dispatch %s", ruleKey)
+		}
+		seenBusiness[key] = true
+		base.Dispatches = append(base.Dispatches, Dispatch{
+			ReviewUnitID:     unitID,
+			RuleID:           ruleKey,
+			RuleVersion:      1,
+			Kind:             KindAgent,
+			SeverityDefault:  "medium",
+			RequiredEvidence: []string{"BUSINESS_RULE", "CHANGED_RANGE"},
+			DispatchReason:   []string{"BUSINESS_RULE:" + sourceID + ":" + ruleID},
+		})
+	}
+	base.KnowledgeSHA256 = knowledgeSHA
+	base.RuleCatalogSHA256 = effectiveCatalogDigest170(catalogSHA, knowledgeSHA)
+	base.SHA256 = ""
+	return sealManifest160(base)
+}
+
+func effectiveCatalogDigest170(catalogSHA, knowledgeSHA string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(catalogSHA) + "\x00" + strings.TrimSpace(knowledgeSHA)))
+	return fmt.Sprintf("%x", sum[:])
+}
+
 func verifyReviewUnits160(units reviewunit.Manifest) error {
 	want := strings.TrimSpace(units.SHA256)
 	if want == "" || strings.TrimSpace(units.RunID) == "" {
@@ -177,6 +250,7 @@ func normalizeManifest160(m Manifest) Manifest {
 	m.RunID = strings.TrimSpace(m.RunID)
 	m.ReviewUnitsSHA256 = strings.TrimSpace(m.ReviewUnitsSHA256)
 	m.RuleCatalogSHA256 = strings.TrimSpace(m.RuleCatalogSHA256)
+	m.KnowledgeSHA256 = strings.TrimSpace(m.KnowledgeSHA256)
 	m.Dispatches = append([]Dispatch(nil), m.Dispatches...)
 	for i := range m.Dispatches {
 		m.Dispatches[i].ReviewUnitID = strings.TrimSpace(m.Dispatches[i].ReviewUnitID)
