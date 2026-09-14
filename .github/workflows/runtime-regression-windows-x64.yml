@@ -31,6 +31,11 @@ jobs:
           go-version: '1.23.x'
           cache-dependency-path: .code-harness/tools-runtime/go.sum
 
+      - name: Review regression tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -count=1 ./internal/reviewauthority ./internal/reviewselection
+
       - name: Go test
         working-directory: .code-harness/tools-runtime
         shell: pwsh
