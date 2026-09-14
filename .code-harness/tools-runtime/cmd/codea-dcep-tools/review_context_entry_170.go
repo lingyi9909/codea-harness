@@ -22,6 +22,8 @@ func runReview170(args []string) error {
 			return runReviewBegin170(args[1:])
 		case "context":
 			return runReviewContext170(args[1:])
+		case "knowledge":
+			return runReviewKnowledge170(args[1:])
 		case "dispatch":
 			state, err := reviewDispatchState170(args[1:])
 			if err != nil {
@@ -145,11 +147,18 @@ func runReviewDispatch170(args []string) error {
 	if err != nil {
 		return failPlanning(fmt.Errorf("RULE_DISPATCH_STALE: %w", err))
 	}
+	knowledgeManifest, err := readReviewKnowledgeManifest170(".", canonicalRunID)
+	if err != nil {
+		return failPlanning(err)
+	}
+	if err := verifyReviewKnowledgeUse170(".", canonicalRunID, knowledgeUnits170(units), knowledgeManifest); err != nil {
+		return failPlanning(err)
+	}
 	rules, catalogSHA, err := reviewrules.LoadCatalog(filepath.Join(".code-harness", "review-rules", "spring-v1.yaml"))
 	if err != nil {
 		return failPlanning(err)
 	}
-	manifest, err := reviewrules.BuildDispatch(units, rules, catalogSHA)
+	manifest, err := reviewrules.BuildDispatch170(units, rules, catalogSHA, knowledgeManifest)
 	if err != nil {
 		return failPlanning(err)
 	}
