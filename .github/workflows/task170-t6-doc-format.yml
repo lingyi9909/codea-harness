@@ -1,0 +1,102 @@
+name: task170-t6-doc-format
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t6]
+    paths:
+      - '.github/workflows/task170-t6-doc-format.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+      - name: Format T6 Go changes
+        shell: pwsh
+        run: |
+          gofmt -w `
+            .code-harness/tools-runtime/internal/reviewscope/chain_context.go `
+            .code-harness/tools-runtime/internal/reviewscope/chain_auto_context_170_test.go `
+            .code-harness/tools-runtime/cmd/codea-dcep-tools/chain_review_context.go `
+            .code-harness/tools-runtime/cmd/codea-dcep-tools/chain_auto_context_170_test.go
+      - name: Align T6 documentation
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import re
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              with open(path, 'w', encoding='utf-8', newline='\n') as f:
+                  f.write(text)
+
+          skill = '.code-harness/skills/review-code/SKILL.md'
+          text = read(skill)
+          old = '- STALE/INVALID/PARTIAL Chain context 不允许进入 Finding Review。'
+          new = '''- 正常 1.7 Review 的 stale/corrupt saved Chain 不再作为代码事实进入 Finding Review：Runtime 必须基于本次 Certified ChangeAnalysis 自动重发现 `DISCOVERED + TEMPORARY`；只有该临时结果通过当前事实验证后才可消费。\n- `PARTIAL` / unresolved 临时 Chain 仍不得进入 Finding Review；Agent 不得自行猜实现或选择候选。'''
+          if old not in text and '正常 1.7 Review 的 stale/corrupt saved Chain' not in text:
+              raise SystemExit('review-code stale policy anchor missing')
+          if old in text:
+              text = text.replace(old, new, 1)
+          marker = '### 1.7 T6 AUTO_TEMPORARY Chain 约束'
+          if marker not in text:
+              text += '''\n\n### 1.7 T6 AUTO_TEMPORARY Chain 约束\n\n正常 `harness review` 的 Chain 维护策略由 Runtime 固定为 `AUTO_TEMPORARY`，不是 Agent 参数。Review request 不得携带 `allowTemporaryForStale`，不得先要求用户执行 refresh，也不得自动调用 `chain seal-persist` / `chain persist`。saved Chain 只可提供名称、备注和历史/删除解释；当前调用关系必须来自本次 same-run Certified ChangeAnalysis。saved YAML 损坏但当前分析可恢复时，Runtime 继续使用本次临时 Chain并给出一次提示；入口已删除时只保留删除说明，不得把旧节点当 CURRENT。真正的多业务链 `USER_SELECTION`、显式 Controller/Controller.method 的 direct TARGETED 与机器防漏链门禁保持原语义。\n'''
+          write(skill, text)
+
+          orch = '.code-harness/agents/orchestrator.md'
+          text = read(orch)
+          pattern = re.compile(r'### FULL / TARGETED 固定流程\n.*?### Coverage 与报告保持原语义', re.S)
+          replacement = '''### FULL / TARGETED 固定流程（1.7 T6 覆盖旧 STALE 交互）\n\n1. 先执行 `analysis snapshot → Reviewer.analyze-change semantic proposal → analysis certify`，获得同一 Canonical ChangeSet 与 Certified ChangeAnalysis。\n2. FULL 必须先满足原 FULL machine coverage；TARGETED 必须先得到 Runtime verified `ReviewScopeSelection` 与 COMPLETE scoped coverage。Chain 不能替代这些 Gate。\n3. Orchestrator 生成同 run 的 `.code-harness/runs/<runId>/requests/chain-review-context.json`，只携带 `runId / changeAnalysisPath / reviewScope`。**不得携带 `allowTemporaryForStale` 或任何策略覆盖字段。**\n4. 调用 Controlled Runtime `chain review-context`。Runtime 对正常 Review 固定采用 `AUTO_TEMPORARY`：saved Chain 匹配时重新按当前事实验证；缺失、STALE 或 saved YAML 损坏时，以同一份 Certified ChangeAnalysis 自动重发现本次 `DISCOVERED + TEMPORARY` Chain。\n5. stale maintenance 不再产生 `STALE_REQUIRES_DECISION`，不要求用户先 refresh；但旧 saved Chain 绝不能静默当作 CURRENT 事实。入口已删除时只记录删除说明并从当前 Chain context 排除。\n6. 自动重发现只允许写同 run `analysis/discovered-chains/**`，绝不写 `.code-harness/chains/**`，也绝不自动调用 `chain seal-persist` / `chain persist`。manual `name/notes` 原 bytes 必须保持。\n7. 当前关系不完整或歧义时保留已确认边界并返回 `PARTIAL/unresolved`；不得让用户猜实现，也不得默认选择某个候选。\n8. 本策略**不取消**真正的多业务链 `USER_SELECTION`。plain `harness review` 继续使用 Runtime ReviewOptions；显式 Controller/Controller.method 继续 direct TARGETED + machine-required branch 防漏校验；显式下游 Service 多上游继续既有选择语义。\n\n显式 `harness chain discover/refresh/edit/validate` 仍属于 Chain Management；若用户主动要保存/更新，继续走 `seal-persist → exact planId confirmation → persist` 的原授权链。Review 自身不获得 Project State 写权限。\n\n### Coverage 与报告保持原语义'''
+          updated, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              if 'FULL / TARGETED 固定流程（1.7 T6 覆盖旧 STALE 交互）' not in text:
+                  raise SystemExit('orchestrator review-chain section anchor missing')
+          else:
+              text = updated
+          write(orch, text)
+
+          agents = '.code-harness/AGENTS.md'
+          text = read(agents)
+          marker = '## 1.7 T6 Review 自动临时 Chain'
+          if marker not in text:
+              text += '''\n\n## 1.7 T6 Review 自动临时 Chain\n\n- 正常 Review 的 Chain resolution policy 固定为 Runtime-owned `AUTO_TEMPORARY`；Agent request 不得携带 `allowTemporaryForStale` 或等价开关。\n- saved `.code-harness/chains/*.yaml` 在 Review 中是展示/历史辅助，不是当前代码关系 Authority；当前事实只来自 same-run Certified ChangeAnalysis。\n- saved Chain STALE、缺失或损坏时，Runtime 自动生成本次 `DISCOVERED + TEMPORARY` context；不得要求用户先 refresh，也不得把旧节点继续当 CURRENT。\n- 自动 Review 不得调用 `chain seal-persist` / `chain persist`，不得覆盖 manual name/notes；Project State 写入仍只允许显式 Chain Management 的 exact planId 授权流程。\n- saved entry 已删除时只记录删除说明并排除当前 context；关系不完整/歧义时 fail closed 为 PARTIAL/unresolved，不得让用户猜目标。\n- `AUTO_TEMPORARY` 不改变 `AUTO_FULL / AUTO_SINGLE / USER_SELECTION`，不取消真实多业务链选择；显式 Controller/Controller.method 仍 direct TARGETED 并保留机器防漏链。\n'''
+          write(agents, text)
+
+          readme = 'README.md'
+          text = read(readme)
+          marker = '## 1.7.0（Task 6：Review 自动临时 Chain）'
+          if marker not in text:
+              section = '''## 1.7.0（Task 6：Review 自动临时 Chain）\n\n正常 `harness review` 现在由 Runtime 固定使用 `AUTO_TEMPORARY` Chain 策略：项目中已保存 Chain 仍可提供名称、备注和历史展示，但当前调用事实必须重新以本次 Certified ChangeAnalysis 为准。saved Chain 缺失、过期或 YAML 损坏时，Review 自动在当前 run 生成 `DISCOVERED + TEMPORARY` Chain，不再弹出“先刷新还是临时继续”的维护确认；入口已删除只给删除说明，歧义/证据不足则 fail closed。\n\n该自动策略**不会写 `.code-harness/chains/**`**，不会自动 `seal-persist/persist`，也不会覆盖手工 name/notes。显式 `harness chain refresh/edit/...` 的 Project State 授权流程保持不变；plain Review 的 `AUTO_FULL/AUTO_SINGLE/USER_SELECTION`、显式 Controller/Controller.method direct TARGETED 以及多上游选择规则也保持不变。\n\n'''
+              anchor = '## 1.5.0\n'
+              if anchor not in text:
+                  raise SystemExit('README version anchor missing')
+              text = text.replace(anchor, section + anchor, 1)
+          write(readme, text)
+          '@ | python -
+      - name: Commit formatted implementation and docs
+        shell: pwsh
+        run: |
+          git config user.name 'codea-t6-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .code-harness/tools-runtime/internal/reviewscope/chain_context.go `
+                  .code-harness/tools-runtime/internal/reviewscope/chain_auto_context_170_test.go `
+                  .code-harness/tools-runtime/cmd/codea-dcep-tools/chain_review_context.go `
+                  .code-harness/tools-runtime/cmd/codea-dcep-tools/chain_auto_context_170_test.go `
+                  .code-harness/skills/review-code/SKILL.md `
+                  .code-harness/agents/orchestrator.md `
+                  .code-harness/AGENTS.md README.md
+          $changes = @(git status --short)
+          if ($changes.Count -eq 0) { Write-Output 'TASK170_T6_DOC_FORMAT NOOP'; exit 0 }
+          git commit -m 'docs(t6): align automatic temporary chain policy'
+          git push origin HEAD:feature/1.7-integrated-t6
