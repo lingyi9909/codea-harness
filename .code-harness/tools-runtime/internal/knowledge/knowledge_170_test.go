@@ -23,7 +23,7 @@ owner: order-team
 source: requirements/order.md
 approvalRef: approvals/ORDER-APPROVED
 appliesTo:
-  paths: [%s]
+  paths: ['%s']
   entryPoints: []
 supersedes: []
 exceptions: []
