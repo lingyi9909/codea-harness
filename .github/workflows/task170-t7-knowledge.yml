@@ -7,6 +7,7 @@ on:
     paths:
       - '.code-harness/tools-runtime/internal/knowledge/**'
       - '.code-harness/tools-runtime/internal/reviewrules/**'
+      - '.code-harness/tools-runtime/internal/finding/**'
       - '.code-harness/tools-runtime/cmd/codea-dcep-tools/**'
       - '.code-harness/contracts/**'
       - '.code-harness/tools/README.md'
@@ -97,12 +98,12 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/knowledge ./internal/reviewrules ./cmd/codea-dcep-tools -run Test170Knowledge -count=1
+        run: go test ./internal/knowledge ./internal/reviewrules ./internal/finding ./cmd/codea-dcep-tools -run Test170Knowledge -count=1
       - name: T7 subsystem regression
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: go test ./internal/knowledge ./internal/reviewrules ./internal/schema ./internal/reviewunit ./internal/reviewprogress ./cmd/codea-dcep-tools -count=1
+        run: go test ./internal/knowledge ./internal/reviewrules ./internal/finding ./internal/schema ./internal/reviewunit ./internal/reviewprogress ./cmd/codea-dcep-tools -count=1
       - name: Verify zero dependency drift
         shell: pwsh
         run: |
