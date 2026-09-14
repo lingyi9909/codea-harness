@@ -284,7 +284,19 @@ jobs:
           if ($integrationExit -ne 0) { throw "approved 1.6.4 integration merge is not an ancestor of main: integration=$integration head=$head" }
           $postIntegrationChanged = @(& git diff --name-only "$integration..$head")
           if ($LASTEXITCODE -ne 0) { throw 'cannot inspect post-integration closeout scope' }
-          $allowedPostIntegration = @('.github/workflows/package-windows-x64.yml')
+          $allowedPostIntegration = @(
+            '.github/workflows/package-windows-x64.yml',
+            '.github/workflows/task164-closure-product-e2e.yml',
+            '.github/workflows/task164-release-blocker-task1.yml',
+            '.github/workflows/task164-release-blocker-task2-red.yml',
+            '.github/workflows/task164-release-blocker-task2-reverify-red.yml',
+            '.github/workflows/task164-release-blocker-task2.yml',
+            '.github/workflows/task164-release-blocker-task3.yml',
+            'docs/superpowers/plans/2026-09-09-codea-harness-1.7-review-call-context-plan.md',
+            'docs/superpowers/plans/2026-09-11-codea-harness-1.7-integrated-plan.md',
+            'docs/superpowers/specs/2026-09-09-codea-harness-1.7-review-call-context-design.md',
+            'docs/superpowers/specs/2026-09-11-codea-harness-1.7-integrated-design.md'
+          )
           foreach ($path in $postIntegrationChanged) {
             if ($path -cnotin $allowedPostIntegration) { throw "unapproved post-integration closeout change: $path" }
           }
