@@ -148,7 +148,7 @@ committed = mergeBase → HEAD
 
 确定性定位 Java 类/接口/枚举/方法声明。底层当前为 ast-grep，但 Contract 不暴露 ast-grep pattern。
 
-### `find_references(symbol, scope?) -> SymbolSearchResult`
+### `find_references(symbol, scope?) -> ReferenceSearchResult`
 
 确定性定位项目内部直接引用/调用。用于 changed Service 反向寻找 Controller/Service 上游，以及调用链继续展开。
 
