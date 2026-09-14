@@ -120,10 +120,12 @@ func TestTask6WindowsDependencySentinelRequiresExactMachineCodeAndEvidence(t *te
 }
 
 func TestTask6WorkflowGoVersionMatchesGoMod(t *testing.T) {
-	goMod := string(task6Read160(t, filepath.Join("..", "..", "go.mod"))); match := regexp.MustCompile(`(?m)^go\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)\s*$`).FindStringSubmatch(goMod)
-	if len(match) != 2 { t.Fatal("cannot read go version") }
-	workflow := string(task6Read160(t, filepath.Join("..", "..", "..", "..", ".github", "workflows", "task160-review-precision.yml")))
-	if !strings.Contains(workflow, "go-version: '"+match[1]+"'") { t.Fatalf("workflow must use %s", match[1]) }
+	goMod := string(task6Read160(t, filepath.Join("..", "..", "go.mod")))
+	match := regexp.MustCompile(`(?m)^go\s+([0-9]+)\.([0-9]+)(?:\.[0-9]+)?\s*$`).FindStringSubmatch(goMod)
+	if len(match) != 3 { t.Fatal("cannot read go version") }
+	workflow := string(task6Read160(t, filepath.Join("..", "..", "..", "..", ".github", "workflows", "package-windows-x64.yml")))
+	expected := "go-version: '" + match[1] + "." + match[2] + ".x'"
+	if !strings.Contains(workflow, expected) { t.Fatalf("release workflow must use Go %s.%s.x", match[1], match[2]) }
 }
 
 func task6Read160(t *testing.T, path string) []byte { t.Helper(); data, err := os.ReadFile(path); if err != nil { t.Fatalf("read %s: %v", path, err) }; return data }
