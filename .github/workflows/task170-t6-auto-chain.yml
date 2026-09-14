@@ -32,6 +32,8 @@ jobs:
           $forbidden = @(
             '.github/workflows/task170-t6-doc-format.yml',
             '.github/workflows/task170-t6-patch.yml',
+            '.github/workflows/task170-t6-diagnose.yml',
+            '.github/task170-t6-subsystem-diagnosis.txt',
             '.code-harness/tools-runtime/task170-t6-patch.py',
             '.code-harness/tools-runtime/task170-t6-debug.log'
           )
