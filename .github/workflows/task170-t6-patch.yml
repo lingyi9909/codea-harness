@@ -27,6 +27,8 @@ jobs:
           git reset --hard HEAD
           $path = '.code-harness/agents/orchestrator.md'
           $text = Get-Content $path -Raw -Encoding utf8
+          $text = $text -replace "`r`n", "`n"
+          $text = $text -replace "`r", ""
           $marker = '显式 `harness chain discover/refresh/edit/validate` 仍属于 Chain Management；若用户主动要保存/更新，继续走 `seal-persist → exact planId confirmation → persist` 的原授权链。Review 自身不获得 Project State 写权限。'
           if (-not $text.Contains($marker)) { throw 'T6 insertion marker missing' }
           $compatLines = @(
