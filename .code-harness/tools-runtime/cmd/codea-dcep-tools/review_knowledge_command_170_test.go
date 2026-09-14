@@ -29,7 +29,7 @@ func Test170KnowledgeRequiresReviewPlanning(t *testing.T) {
 	for _, state := range []reviewprogress.State{
 		{ProtocolVersion: "", Status: reviewprogress.StatusRunning, CurrentStage: reviewprogress.StageReviewPlanning},
 		{ProtocolVersion: reviewprogress.Protocol170, Status: reviewprogress.StatusRunning, CurrentStage: reviewprogress.StageCertification},
-		{ProtocolVersion: reviewprogress.Protocol170, Status: reviewprogress.StatusCompleted, CurrentStage: reviewprogress.StageReviewPlanning},
+		{ProtocolVersion: reviewprogress.Protocol170, Status: reviewprogress.StatusSucceeded, CurrentStage: reviewprogress.StageReviewPlanning},
 	} {
 		if err := validateReviewKnowledgeProgress170(state); err == nil { t.Fatalf("illegal state accepted: %+v", state) }
 	}
