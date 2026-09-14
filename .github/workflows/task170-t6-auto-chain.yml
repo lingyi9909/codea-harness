@@ -1,5 +1,5 @@
 name: task170-t6-auto-chain
-# Final exact-head certification uses canonical LF before deterministic gofmt checks.
+# Final exact-head certification after legacy contract compatibility repair.
 
 on:
   workflow_dispatch:
