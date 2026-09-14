@@ -53,8 +53,8 @@ jobs:
           go mod download
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git restore --source=HEAD -- go.mod go.sum
-          $moduleStatus = @(git status --short -- go.mod go.sum)
-          if ($moduleStatus.Count -ne 0) { throw "module bootstrap left locked files dirty: $($moduleStatus -join '; ')" }
+          git diff --exit-code -- go.mod go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'module bootstrap changed locked go.mod/go.sum content' }
           Write-Output 'TASK170_T7_MODULE_BOOTSTRAP PASS'
       - name: Verify accepted T6 lineage and clean baseline
         shell: pwsh
