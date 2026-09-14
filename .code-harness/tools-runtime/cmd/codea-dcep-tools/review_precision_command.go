@@ -262,6 +262,9 @@ func runReviewCertifyFindings160(args []string) error {
 	if err := verifyReviewContextArtifactUse170(runID, analysisValue, units, dispatch); err != nil {
 		return failCertification(err)
 	}
+	if err := verifyReviewKnowledgeArtifactUse170(".", runID, units, dispatch); err != nil {
+		return failCertification(err)
+	}
 	ctx := finding.CertifyContext{
 		Verify:                 verifyCtx,
 		RunID:                  runID,
