@@ -203,6 +203,17 @@ Chain = 业务上下文边界
 
 显式 `harness chain discover/refresh/edit/validate` 仍属于 Chain Management；若用户主动要保存/更新，继续走 `seal-persist → exact planId confirmation → persist` 的原授权链。Review 自身不获得 Project State 写权限。
 
+### 1.5 Task 4 历史兼容词汇（非运行时策略）
+
+以下词汇仅用于旧版 contract regression、迁移识别与历史文档兼容，**不再构成 1.7 T6 的交互或策略 authority**。正常 Review 仍严格执行上面的 Runtime-owned `AUTO_TEMPORARY` 流程，不得恢复旧 STALE 人工决策门禁：
+
+- Controlled Runtime 命令入口仍为 `chain review-context --input`；请求体策略由 Runtime 决定，Agent 不得覆盖。
+- 历史返回词 `STALE_REQUIRES_DECISION` 仅作为兼容识别词保留；1.7 T6 正常 Review 不再产生该状态。
+- 历史选项文案“使用本次临时发现的 Chain 继续评审”“刷新项目 Chain”“停止本次评审”仅用于识别旧流程，不得在 1.7 T6 正常 Review 中重新展示为 stale maintenance 选择。
+- `Chain = 业务上下文边界` 的原原则保持；不得自动保存 DISCOVERED Chain。
+- Review 后若用户主动要求沉淀，仍可提示“是否沉淀到项目 `.code-harness/chains/`？”，但必须进入独立 Chain Management 授权链。
+
+
 ### Coverage 与报告保持原语义
 
 - FULL 即使复用多个 Accepted Chain，required coverage 仍是完整 Canonical ChangeSet；不得因为 Chain 已覆盖部分调用链而把缺失 changed file 判为 COMPLETE。
