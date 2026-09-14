@@ -1,0 +1,401 @@
+head=4245bc194626ac303e0413aec7250979b0282487
+exit=1
+command=go test ./internal/reviewscope ./internal/chain ./cmd/codea-dcep-tools -count=1 -v
+--- evidence ---
+  "changeSetSha256": "830d4d53a3e90855e535994f72e06ae64782357347d2fadd5826ffd5df047a5a",
+  "entrypointInventorySha256": "f2de52d5ca760c5dc5655516bc847b1ed14592f2d181903ea3c0cce9b0c9c953",
+  "runId": "r153",
+  "status": "CERTIFIED"
+}
+--- PASS: Test153AnalysisCertifyPublishesCertifiedBundle (1.52s)
+=== RUN   Test153AnalysisCertifyRejectsRunIDPathMismatch
+--- PASS: Test153AnalysisCertifyRejectsRunIDPathMismatch (0.00s)
+=== RUN   Test153AnalysisInventoryWritesRuntimeOwnedArtifact
+{
+  "artifactPath": ".code-harness/runs/r153/analysis/entrypoint-inventory.json",
+  "changeSetSha256": "f0a63f0abb6c837c4ae09309dd5c93e09d35d98f1ccd930e8820c09892a9caa1",
+  "expectedEntryPoints": 0,
+  "runId": "r153",
+  "status": "COMPLETE"
+}
+--- PASS: Test153AnalysisInventoryWritesRuntimeOwnedArtifact (0.53s)
+=== RUN   Test153AnalysisInventoryRejectsRunIDPathMismatch
+--- PASS: Test153AnalysisInventoryRejectsRunIDPathMismatch (0.00s)
+=== RUN   Test162HotfixAnalysisSnapshotPublishesRuntimeOwnedCanonicalArtifact
+{
+  "artifactPath": ".code-harness/runs/r162hotfix/analysis/change-set.json",
+  "headCommit": "af49853b5f2abdcf9c68ea8becd970b089c10665",
+  "mergeBase": "af49853b5f2abdcf9c68ea8becd970b089c10665",
+  "resolvedBaseCommit": "af49853b5f2abdcf9c68ea8becd970b089c10665",
+  "runId": "r162hotfix",
+  "snapshotSha256": "dc42a4280ec4554ba1356b27c1a2fed010ebd209258298cfddad2b33e578ce4b",
+  "status": "SNAPSHOT_READY"
+}
+--- PASS: Test162HotfixAnalysisSnapshotPublishesRuntimeOwnedCanonicalArtifact (0.53s)
+=== RUN   TestSealApplySubcommandIsWired
+--- PASS: TestSealApplySubcommandIsWired (0.00s)
+=== RUN   TestApplySubcommandIsWired
+--- PASS: TestApplySubcommandIsWired (0.00s)
+=== RUN   TestApplyDoesNotAcceptPatchCLIArguments
+flag provided but not defined: -patch
+Usage of apply:
+  -input string
+    	apply request under .code-harness/runs/<runId>/requests/*.json
+--- PASS: TestApplyDoesNotAcceptPatchCLIArguments (0.00s)
+=== RUN   TestUsageListsSealAndApply
+--- PASS: TestUsageListsSealAndApply (0.00s)
+=== RUN   Test162HotfixCanonicalCertificateCannotDowngradeToLegacyAuthority
+---
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-6038e6536944f4affed1e4d26ad47b61a223e245b38851ad82299b03c5b3cb08",
+    "runId": "run-153-seal-existing",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-seal-existing/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "05ecee1f5d45e7ca3edc0ecc0cac1fa2ceabbd1db06ad8bfe04f8f8effa6b42c",
+    "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-6038e6536944f4affed1e4d26ad47b61a223e245b38851ad82299b03c5b3cb08",
+  "planPath": ".code-harness/runs/run-153-seal-existing/analysis/chain-write-plans/chain-write-6038e6536944f4affed1e4d26ad47b61a223e245b38851ad82299b03c5b3cb08.json",
+  "status": "SEALED"
+}
+--- PASS: Test153WritePlanRejectsExistingProjectStateMutationAfterSealWithZeroWrites (1.52s)
+=== RUN   Test153PersistRejectsArbitraryCandidatePathRequest
+--- PASS: Test153PersistRejectsArbitraryCandidatePathRequest (0.00s)
+=== RUN   Test170AutoChainCommandUsesRuntimeOwnedTemporaryPolicy
+{
+  "status": "READY",
+  "contexts": [
+    {
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "source": "DISCOVERED",
+      "status": "TEMPORARY"
+    }
+  ],
+  "stale": [
+    {
+      "id": "order-approve",
+      "name": "手工维护的订单审批链"
+    }
+  ],
+  "unresolved": []
+}
+--- PASS: Test170AutoChainCommandUsesRuntimeOwnedTemporaryPolicy (0.90s)
+=== RUN   Test170AutoChainRequestCannotOverrideRuntimeStrategy
+---
+  "changed": [
+    "name:\"OrderController.approve\"-\u003e\"订单审批持久化名称\""
+  ]
+}
+{
+  "plan": {
+    "planId": "chain-write-d7db50784be2d08248f8b38dcbe82a347d86de432a2d8ce04e5d150a07a7745c",
+    "runId": "run-153-edit-persist",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-persist/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "37814aeefff35435dbc733f81139698a54f46625940ababa7d08ce1b8d4dcc57",
+    "analysisHash": "fdc88a380afd142c051990cbb3142351825fe47024085bed6df1007ee0f56c34",
+    "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
+    "previewSha256": "37814aeefff35435dbc733f81139698a54f46625940ababa7d08ce1b8d4dcc57"
+  },
+  "planId": "chain-write-d7db50784be2d08248f8b38dcbe82a347d86de432a2d8ce04e5d150a07a7745c",
+  "planPath": ".code-harness/runs/run-153-edit-persist/analysis/chain-write-plans/chain-write-d7db50784be2d08248f8b38dcbe82a347d86de432a2d8ce04e5d150a07a7745c.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-d7db50784be2d08248f8b38dcbe82a347d86de432a2d8ce04e5d150a07a7745c",
+  "status": "PERSISTED"
+}
+--- PASS: Test153EditCandidatePersistsOnlyThroughWritePlan (3.73s)
+=== RUN   Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+---
+  "changed": [
+    "name:\"OrderController.approve\"-\u003e\"订单审批待保存名称\""
+  ]
+}
+{
+  "plan": {
+    "planId": "chain-write-685f05181371ede49d085831dcaf2bbd31d69a0af1552000b4b53a9dea82ef3a",
+    "runId": "run-153-edit-seal-tamper",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "3c02d89a7953d89be934d1401b6926e1711bc8c9889ad975c18689408c6054ba",
+    "analysisHash": "efb138c54b78226dca925959001c16e092eec1da15a178799944224388057430",
+    "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
+    "previewSha256": "3c02d89a7953d89be934d1401b6926e1711bc8c9889ad975c18689408c6054ba"
+  },
+  "planId": "chain-write-685f05181371ede49d085831dcaf2bbd31d69a0af1552000b4b53a9dea82ef3a",
+  "planPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-write-plans/chain-write-685f05181371ede49d085831dcaf2bbd31d69a0af1552000b4b53a9dea82ef3a.json",
+  "status": "SEALED"
+}
+--- PASS: Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites (4.31s)
+=== RUN   Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+---
+   ↓
+📄 src/main/resources/mapper/OrderMapper.xml#OrderMapper.updateStatus
+
+说明：
+核心审批链路
+{
+  "chainId": "order-approve",
+  "status": "VALID",
+  "errors": [],
+  "warnings": []
+}
+--- PASS: TestChainListShowAndValidateCommands (0.75s)
+=== RUN   TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash
+{
+  "candidatePath": ".code-harness/runs/run-task3/analysis/refresh-candidates/order-approve.yaml",
+  "refresh": {
+    "candidate": {
+      "version": 1,
+      "id": "order-approve",
+      "name": "订单审批",
+      "status": "ACCEPTED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+---
+    "errors": []
+  },
+  "status": "DIFF_READY"
+}
+{
+  "plan": {
+    "planId": "chain-write-e35d8fd1c9fef3f0166c8464409eb08576aeb8ead71f66044b7742e35da6548b",
+    "runId": "run-task3",
+    "chainId": "order-approve",
+    "candidatePath": ".code-harness/runs/run-task3/analysis/refresh-candidates/order-approve.yaml",
+    "candidateHash": "a3441f544edb1b5c4b8ae4d9e26d0db90491ff3922d0d92ce315db50d23e3e3d",
+    "analysisHash": "8d7758fd5d9f61e3e06c053597e9a4f36d02cf99751f76e339406d0c9828fb9e",
+    "expectedExistingHash": "da08c1678fcdfe7591f54d93d8b94dcdb0da4ba3a8bce63ffda53ceb4c236951",
+    "previewSha256": "a3441f544edb1b5c4b8ae4d9e26d0db90491ff3922d0d92ce315db50d23e3e3d"
+  },
+  "planId": "chain-write-e35d8fd1c9fef3f0166c8464409eb08576aeb8ead71f66044b7742e35da6548b",
+  "planPath": ".code-harness/runs/run-task3/analysis/chain-write-plans/chain-write-e35d8fd1c9fef3f0166c8464409eb08576aeb8ead71f66044b7742e35da6548b.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-e35d8fd1c9fef3f0166c8464409eb08576aeb8ead71f66044b7742e35da6548b",
+  "status": "PERSISTED"
+}
+--- PASS: TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash (2.17s)
+=== RUN   TestChainPersistValidationFailureMakesZeroProjectStateWrites
+--- PASS: TestChainPersistValidationFailureMakesZeroProjectStateWrites (2.04s)
+=== RUN   TestChainPersistNewDiscoveredCandidateAfterValidation
+{
+  "plan": {
+    "planId": "chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08",
+    "runId": "run-new-chain",
+    "chainId": "order-approve",
+    "candidatePath": ".code-harness/runs/run-new-chain/analysis/discovered-chains/order-approve.yaml",
+    "candidateHash": "71d22f8c9a2652df400433129eb5a355d052467d44fc13429a122a40b94a574c",
+    "analysisHash": "b6ab360c30c002155ae5e0420bfd54d999f15f57374aef4d88327c96b2b712f1",
+    "previewSha256": "98277afdd5d01703e2151ed976dbe92dcf80f9506ee038dbf5178ebe94aa3088"
+  },
+  "planId": "chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08",
+  "planPath": ".code-harness/runs/run-new-chain/analysis/chain-write-plans/chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08",
+---
+    "analysisHash": "8d7758fd5d9f61e3e06c053597e9a4f36d02cf99751f76e339406d0c9828fb9e",
+    "expectedExistingHash": "da08c1678fcdfe7591f54d93d8b94dcdb0da4ba3a8bce63ffda53ceb4c236951",
+    "previewSha256": "a3441f544edb1b5c4b8ae4d9e26d0db90491ff3922d0d92ce315db50d23e3e3d"
+  },
+  "planId": "chain-write-e35d8fd1c9fef3f0166c8464409eb08576aeb8ead71f66044b7742e35da6548b",
+  "planPath": ".code-harness/runs/run-task3/analysis/chain-write-plans/chain-write-e35d8fd1c9fef3f0166c8464409eb08576aeb8ead71f66044b7742e35da6548b.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-e35d8fd1c9fef3f0166c8464409eb08576aeb8ead71f66044b7742e35da6548b",
+  "status": "PERSISTED"
+}
+--- PASS: TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash (2.17s)
+=== RUN   TestChainPersistValidationFailureMakesZeroProjectStateWrites
+--- PASS: TestChainPersistValidationFailureMakesZeroProjectStateWrites (2.04s)
+=== RUN   TestChainPersistNewDiscoveredCandidateAfterValidation
+{
+  "plan": {
+    "planId": "chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08",
+    "runId": "run-new-chain",
+    "chainId": "order-approve",
+    "candidatePath": ".code-harness/runs/run-new-chain/analysis/discovered-chains/order-approve.yaml",
+    "candidateHash": "71d22f8c9a2652df400433129eb5a355d052467d44fc13429a122a40b94a574c",
+    "analysisHash": "b6ab360c30c002155ae5e0420bfd54d999f15f57374aef4d88327c96b2b712f1",
+    "previewSha256": "98277afdd5d01703e2151ed976dbe92dcf80f9506ee038dbf5178ebe94aa3088"
+  },
+  "planId": "chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08",
+  "planPath": ".code-harness/runs/run-new-chain/analysis/chain-write-plans/chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-f67caae2566c5c4dd142f890579bb17ea79367f2aae1d5e96b514f21c3501a08",
+  "status": "PERSISTED"
+}
+--- PASS: TestChainPersistNewDiscoveredCandidateAfterValidation (1.96s)
+=== RUN   TestChainPersistValidatesDiscoveredBeforePromotingAccepted
+--- PASS: TestChainPersistValidatesDiscoveredBeforePromotingAccepted (1.20s)
+=== RUN   Test163Task2AffectedPersistRegression
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+---
+    "candidatePath": ".code-harness/runs/run-task4-review/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "61627d464f58334bbbcf185edffa3448653ba3994db75fa15717f7e8a4b54ea5",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-218a23d2c75e46eede3106d6caced638a571c088c141c498ba26018328d78530",
+  "planPath": ".code-harness/runs/run-task4-review/analysis/chain-write-plans/chain-write-218a23d2c75e46eede3106d6caced638a571c088c141c498ba26018328d78530.json",
+  "status": "SEALED"
+}
+--- PASS: Test153ChainReviewContextLazyDiscoveryPublishesProvenanceAndCanSeal (1.65s)
+=== RUN   Test153ChainReviewContextStaleTemporaryDiscoveryPublishesProvenance
+    chain_review_context_authority_153_test.go:139: stale temporary review-context discovery failed: decode chain review-context request: json: unknown field "allowTemporaryForStale"
+--- FAIL: Test153ChainReviewContextStaleTemporaryDiscoveryPublishesProvenance (1.25s)
+=== RUN   TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted
+{
+  "status": "READY",
+  "contexts": [
+    {
+      "id": "order-approve",
+      "name": "订单审批",
+      "source": "ACCEPTED",
+      "status": "VALID"
+    }
+  ],
+  "stale": [],
+  "unresolved": []
+}
+--- PASS: TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted (1.09s)
+=== RUN   TestChainReviewContextRejectsOutsideRequestAndCrossRunAnalysis
+--- PASS: TestChainReviewContextRejectsOutsideRequestAndCrossRunAnalysis (0.00s)
+=== RUN   TestChainReviewContextRejectsUnverifiedScopeBeforeResolution
+--- PASS: TestChainReviewContextRejectsUnverifiedScopeBeforeResolution (0.96s)
+=== RUN   Test162HotfixTask2ZeroArgUsageUsesRuntimeName
+--- PASS: Test162HotfixTask2ZeroArgUsageUsesRuntimeName (0.00s)
+=== RUN   Test162HotfixTask2InvocationRequestSchemas
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/snapshot
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/inventory
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/canonical_certify
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/review_options
+--- PASS: Test162HotfixTask2InvocationRequestSchemas (0.01s)
+    --- PASS: Test162HotfixTask2InvocationRequestSchemas/snapshot (0.00s)
+    --- PASS: Test162HotfixTask2InvocationRequestSchemas/inventory (0.00s)
+    --- PASS: Test162HotfixTask2InvocationRequestSchemas/canonical_certify (0.00s)
+---
+    --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/dependency_file (0.00s)
+=== RUN   Test152ValidateHarnessConfigRunsWorkspaceSemanticGate
+--- PASS: Test152ValidateHarnessConfigRunsWorkspaceSemanticGate (0.00s)
+=== RUN   Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema
+    workspace_runtime_152_test.go:34: symlink permission is environment-dependent on Windows; covered by workspace semantic unit gate
+--- SKIP: Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema (0.00s)
+=== RUN   Test152WorkspaceVerifyIsFormalRuntimeEntry
+--- PASS: Test152WorkspaceVerifyIsFormalRuntimeEntry (0.00s)
+=== RUN   Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep
+--- PASS: Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep (0.00s)
+=== RUN   Test152Task5RequiresRealDualProjectWindowsE2E
+--- PASS: Test152Task5RequiresRealDualProjectWindowsE2E (0.00s)
+FAIL
+FAIL	codea-harness-tools/cmd/codea-dcep-tools	224.736s
+FAIL
+---
+=== RUN   Test152ValidateHarnessConfigRunsWorkspaceSemanticGate
+--- PASS: Test152ValidateHarnessConfigRunsWorkspaceSemanticGate (0.00s)
+=== RUN   Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema
+    workspace_runtime_152_test.go:34: symlink permission is environment-dependent on Windows; covered by workspace semantic unit gate
+--- SKIP: Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema (0.00s)
+=== RUN   Test152WorkspaceVerifyIsFormalRuntimeEntry
+--- PASS: Test152WorkspaceVerifyIsFormalRuntimeEntry (0.00s)
+=== RUN   Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep
+--- PASS: Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep (0.00s)
+=== RUN   Test152Task5RequiresRealDualProjectWindowsE2E
+--- PASS: Test152Task5RequiresRealDualProjectWindowsE2E (0.00s)
+FAIL
+FAIL	codea-harness-tools/cmd/codea-dcep-tools	224.736s
+FAIL
+---
+--- PASS: Test152ValidateHarnessConfigRunsWorkspaceSemanticGate (0.00s)
+=== RUN   Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema
+    workspace_runtime_152_test.go:34: symlink permission is environment-dependent on Windows; covered by workspace semantic unit gate
+--- SKIP: Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema (0.00s)
+=== RUN   Test152WorkspaceVerifyIsFormalRuntimeEntry
+--- PASS: Test152WorkspaceVerifyIsFormalRuntimeEntry (0.00s)
+=== RUN   Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep
+--- PASS: Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep (0.00s)
+=== RUN   Test152Task5RequiresRealDualProjectWindowsE2E
+--- PASS: Test152Task5RequiresRealDualProjectWindowsE2E (0.00s)
+FAIL
+FAIL	codea-harness-tools/cmd/codea-dcep-tools	224.736s
+FAIL
+---
