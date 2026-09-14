@@ -16,6 +16,7 @@ import (
 
 	"codea-harness-tools/internal/knowledge"
 	"codea-harness-tools/internal/reviewprogress"
+	"codea-harness-tools/internal/reviewrules"
 	"codea-harness-tools/internal/reviewunit"
 )
 
@@ -75,7 +76,11 @@ func knowledgeUnits170(manifest reviewunit.Manifest) []knowledge.Unit170 {
 		if exactKnowledgeEntryPoint170.MatchString(entry) {
 			entryPoints = append(entryPoints, entry)
 		}
-		out = append(out, knowledge.Unit170{ID: strings.TrimSpace(unit.ID), Paths: paths, EntryPoints: entryPoints})
+		out = append(out, knowledge.Unit170{
+			ID:          strings.TrimSpace(unit.ID),
+			Paths:       paths,
+			EntryPoints: entryPoints,
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
@@ -88,17 +93,33 @@ func reviewKnowledgeArtifactPath170(runID string) string {
 func invalidKnowledgeManifest170(runID string, raw []byte, err error) knowledge.LoadResult170 {
 	sum := sha256.Sum256(raw)
 	issues := []string{err.Error()}
-	return knowledge.LoadResult170{Manifest: knowledge.Manifest170{
-		RunID: runID, ProjectID: "INVALID", Status: "INVALID", BindingSHA256: fmt.Sprintf("%x", sum[:]),
-		Sources: []knowledge.SourceRecord170{}, Checks: []knowledge.BusinessCheck170{}, Issues: issues,
-	}, Documents: []knowledge.Document170{}}
+	return knowledge.LoadResult170{
+		Manifest: knowledge.Manifest170{
+			RunID:         runID,
+			ProjectID:     "INVALID",
+			Status:        "INVALID",
+			BindingSHA256: fmt.Sprintf("%x", sum[:]),
+			Sources:       []knowledge.SourceRecord170{},
+			Checks:        []knowledge.BusinessCheck170{},
+			Issues:        issues,
+		},
+		Documents: []knowledge.Document170{},
+	}
 }
 
 func notConfiguredKnowledge170(runID string) knowledge.LoadResult170 {
-	return knowledge.LoadResult170{Manifest: knowledge.Manifest170{
-		RunID: runID, ProjectID: "UNCONFIGURED", Status: "NOT_CONFIGURED", BindingSHA256: "ABSENT",
-		Sources: []knowledge.SourceRecord170{}, Checks: []knowledge.BusinessCheck170{}, Issues: []string{},
-	}, Documents: []knowledge.Document170{}}
+	return knowledge.LoadResult170{
+		Manifest: knowledge.Manifest170{
+			RunID:         runID,
+			ProjectID:     "UNCONFIGURED",
+			Status:        "NOT_CONFIGURED",
+			BindingSHA256: "ABSENT",
+			Sources:       []knowledge.SourceRecord170{},
+			Checks:        []knowledge.BusinessCheck170{},
+			Issues:        []string{},
+		},
+		Documents: []knowledge.Document170{},
+	}
 }
 
 func loadReviewKnowledge170(repoRoot, runID string, units []knowledge.Unit170) (knowledge.LoadResult170, error) {
@@ -114,7 +135,13 @@ func loadReviewKnowledge170(repoRoot, runID string, units []knowledge.Unit170) (
 	if err != nil {
 		return invalidKnowledgeManifest170(runID, raw, err), nil
 	}
-	return knowledge.Load170(knowledge.LoadInput170{RunID: runID, RepoRoot: repoRoot, Binding: binding, BindingSHA256: digest, Units: units})
+	return knowledge.Load170(knowledge.LoadInput170{
+		RunID:         runID,
+		RepoRoot:      repoRoot,
+		Binding:       binding,
+		BindingSHA256: digest,
+		Units:         units,
+	})
 }
 
 func readReviewKnowledgeManifest170(repoRoot, runID string) (knowledge.Manifest170, error) {
@@ -179,8 +206,42 @@ func verifyReviewKnowledgeUse170(repoRoot, runID string, units []knowledge.Unit1
 	if parseErr != nil {
 		return fmt.Errorf("KNOWLEDGE_BINDING_CHANGED: %w", parseErr)
 	}
-	input := knowledge.LoadInput170{RunID: runID, RepoRoot: repoRoot, Binding: binding, BindingSHA256: digest, Units: units}
+	input := knowledge.LoadInput170{
+		RunID:         runID,
+		RepoRoot:      repoRoot,
+		Binding:       binding,
+		BindingSHA256: digest,
+		Units:         units,
+	}
 	return knowledge.Verify170(input, expected)
+}
+
+func verifyReviewKnowledgeArtifactUse170(repoRoot, runID string, units reviewunit.Manifest, dispatch reviewrules.Manifest) error {
+	state, err := reviewprogress.Read(repoRoot, runID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if state.ProtocolVersion != reviewprogress.Protocol170 {
+		return nil
+	}
+	manifest, err := readReviewKnowledgeManifest170(repoRoot, runID)
+	if err != nil {
+		return err
+	}
+	if err := verifyReviewKnowledgeUse170(repoRoot, runID, knowledgeUnits170(units), manifest); err != nil {
+		return err
+	}
+	digest, err := knowledge.Digest170(manifest)
+	if err != nil {
+		return fmt.Errorf("REVIEW_KNOWLEDGE_DIGEST_FAILED: %w", err)
+	}
+	if strings.TrimSpace(dispatch.KnowledgeSHA256) != digest {
+		return fmt.Errorf("KNOWLEDGE_BINDING_CHANGED: final RuleDispatch knowledgeSha256 no longer matches review knowledge")
+	}
+	return nil
 }
 
 func runReviewKnowledge170(args []string) error {
@@ -239,7 +300,10 @@ func runReviewKnowledge170(args []string) error {
 		return fmt.Errorf("REVIEW_KNOWLEDGE_DIGEST_FAILED: %w", err)
 	}
 	return writeJSONAndStatus(map[string]any{
-		"status": loaded.Manifest.Status, "runId": req.RunID, "artifactPath": artifactPath,
-		"knowledgeSha256": knowledgeSHA, "manifest": loaded.Manifest,
+		"status":          loaded.Manifest.Status,
+		"runId":           req.RunID,
+		"artifactPath":    artifactPath,
+		"knowledgeSha256": knowledgeSHA,
+		"manifest":        loaded.Manifest,
 	}, true)
 }
