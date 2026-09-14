@@ -26,6 +26,10 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
+    "knowledgeSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
     "dispatches": {
       "type": "array",
       "items": {
@@ -57,7 +61,7 @@
         },
         "ruleId": {
           "type": "string",
-          "pattern": "^[A-Z0-9-]+$"
+          "pattern": "^(?:[A-Z0-9-]+|BUSINESS:[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$"
         },
         "ruleVersion": {
           "type": "integer",
