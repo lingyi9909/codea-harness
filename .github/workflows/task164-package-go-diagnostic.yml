@@ -1,0 +1,113 @@
+name: 1.6.4 Package Go Regression Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/task164-package-go-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Capture environment
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force 'task164-diagnostics' | Out-Null
+          $head = (git rev-parse HEAD).Trim()
+          $goVersion = (& go version | Out-String).Trim()
+          $goEnv = (& go env GOOS GOARCH GOVERSION GOMOD GOWORK CGO_ENABLED | Out-String).Trim()
+          @(
+            "head=$head"
+            "go_version=$goVersion"
+            'go_env:'
+            $goEnv
+            'git_status_before_package:'
+            (& git status --short | Out-String).TrimEnd()
+          ) | Set-Content 'task164-diagnostics/environment-before-package.txt' -Encoding utf8
+
+      - name: Reproduce 1.6.4 package build
+        shell: pwsh
+        run: ./.github/scripts/task164-release-package.ps1
+
+      - name: Capture post-package workspace
+        shell: pwsh
+        run: |
+          @(
+            "head=$((git rev-parse HEAD).Trim())"
+            'git_status_after_package:'
+            (& git status --short | Out-String).TrimEnd()
+          ) | Set-Content 'task164-diagnostics/environment-after-package.txt' -Encoding utf8
+
+      - name: Run Go test and capture exact output
+        id: gotest
+        shell: pwsh
+        run: |
+          $repoRoot = (Get-Location).Path
+          $stdout = Join-Path $repoRoot 'task164-diagnostics/go-test.stdout.log'
+          $stderr = Join-Path $repoRoot 'task164-diagnostics/go-test.stderr.log'
+          Push-Location '.code-harness/tools-runtime'
+          try {
+            $go = (Get-Command go).Source
+            $proc = Start-Process -FilePath $go -ArgumentList @('test','-count=1','./...') -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            $exitCode = $proc.ExitCode
+          } finally {
+            Pop-Location
+          }
+          Get-Content $stdout -ErrorAction SilentlyContinue
+          Get-Content $stderr -ErrorAction SilentlyContinue
+          "exit_code=$exitCode" >> $env:GITHUB_OUTPUT
+          Write-Output "TASK164_DIAGNOSTIC_GO_TEST exit=$exitCode"
+
+      - name: Run Go vet and capture exact output
+        id: govet
+        shell: pwsh
+        run: |
+          $repoRoot = (Get-Location).Path
+          $stdout = Join-Path $repoRoot 'task164-diagnostics/go-vet.stdout.log'
+          $stderr = Join-Path $repoRoot 'task164-diagnostics/go-vet.stderr.log'
+          Push-Location '.code-harness/tools-runtime'
+          try {
+            $go = (Get-Command go).Source
+            $proc = Start-Process -FilePath $go -ArgumentList @('vet','./...') -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            $exitCode = $proc.ExitCode
+          } finally {
+            Pop-Location
+          }
+          Get-Content $stdout -ErrorAction SilentlyContinue
+          Get-Content $stderr -ErrorAction SilentlyContinue
+          "exit_code=$exitCode" >> $env:GITHUB_OUTPUT
+          Write-Output "TASK164_DIAGNOSTIC_GO_VET exit=$exitCode"
+
+      - name: Capture package diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task164-package-go-diagnostic-${{ github.sha }}
+          path: task164-diagnostics
+          if-no-files-found: error
+
+      - name: Enforce diagnostic regression result
+        if: always()
+        shell: pwsh
+        run: |
+          $testExit = '${{ steps.gotest.outputs.exit_code }}'
+          $vetExit = '${{ steps.govet.outputs.exit_code }}'
+          if ($testExit -ne '0') { throw "go test failed with exit code $testExit" }
+          if ($vetExit -ne '0') { throw "go vet failed with exit code $vetExit" }
+          Write-Output 'TASK164_PACKAGE_GO_DIAGNOSTIC PASS'
