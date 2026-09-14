@@ -15,12 +15,18 @@ func Test170KnowledgeBusinessDispatchBindsManifestDigest(t *testing.T) {
 		ID: "RU-ORDER",
 		Files: []reviewunit.FileRef{{Path: "src/main/java/OrderService.java", Role: "Service", Changed: true, Workspace: "current"}},
 	}})
+	active := knowledge.Rule170{
+		RuleID: "ORDER-STATE-001", ProjectID: "order-service", Status: "ACTIVE", Version: "1",
+		Owner: "order-team", Source: "requirements/order.md", ApprovalRef: "approvals/ORDER-APPROVED",
+		AppliesTo: knowledge.AppliesTo170{Paths: []string{"src/main/java/"}, EntryPoints: []string{}},
+		Supersedes: []string{}, Exceptions: []string{},
+	}
 	km := knowledge.Manifest170{
 		RunID: "run-rule-dispatch",
 		ProjectID: "order-service",
 		Status: "READY",
 		BindingSHA256: strings.Repeat("c", 64),
-		Sources: []knowledge.SourceRecord170{{SourceID: "order-rules", Root: "PROJECT", Path: "docs/order.md", Kind: "RULES", Required: true, SHA256: strings.Repeat("d", 64), Status: "READY"}},
+		Sources: []knowledge.SourceRecord170{{SourceID: "order-rules", Root: "PROJECT", Path: "docs/order.md", Kind: "RULES", Required: true, SHA256: strings.Repeat("d", 64), Rule: &active, Status: "READY", Reasons: []string{}}},
 		Checks: []knowledge.BusinessCheck170{{ReviewUnitID: "RU-ORDER", RuleKey: "BUSINESS:order-rules:ORDER-STATE-001", SourceID: "order-rules", RuleID: "ORDER-STATE-001", Status: "READY", Reasons: []string{}}},
 		Issues: []string{},
 	}
