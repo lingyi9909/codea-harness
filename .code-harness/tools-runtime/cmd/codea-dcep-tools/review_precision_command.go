@@ -239,7 +239,7 @@ func runReviewCertifyFindings160(args []string) error {
 		return failCertification(err)
 	}
 	analysisPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json"))
-	_, analysisCert, err := analysisruntime.LoadCertified(".", analysisPath)
+	analysisValue, analysisCert, err := analysisruntime.LoadCertified(".", analysisPath)
 	if err != nil {
 		return failCertification(err)
 	}
@@ -254,6 +254,13 @@ func runReviewCertifyFindings160(args []string) error {
 	dispatchBytes, err := os.ReadFile(filepath.Join(".code-harness", "runs", runID, "analysis", "rule-dispatch.json"))
 	if err != nil {
 		return failCertification(fmt.Errorf("FINDING_RULE_DISPATCH_READ_FAILED: %w", err))
+	}
+	var dispatch reviewrules.Manifest
+	if err := json.Unmarshal(dispatchBytes, &dispatch); err != nil {
+		return failCertification(fmt.Errorf("FINDING_RULE_DISPATCH_INVALID: %w", err))
+	}
+	if err := verifyReviewContextArtifactUse170(runID, analysisValue, units, dispatch); err != nil {
+		return failCertification(err)
 	}
 	ctx := finding.CertifyContext{
 		Verify:                 verifyCtx,

@@ -2,6 +2,7 @@ package reviewcontext
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -123,6 +124,10 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 		}
 		relations, issues, err := resolver.Mapper(ctx, resource)
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				addBudgetIssue("TIME", resource)
+				break
+			}
 			return Context170{}, fmt.Errorf("REVIEW_CONTEXT_MAPPER_FAILED: %w", err)
 		}
 		out.Issues = append(out.Issues, issues...)
@@ -160,6 +165,11 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 
 		facts, err := resolver.Method(ctx, item.ref)
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				at := nav.SourceRange170{Ref: item.ref, StartLine: 1, EndLine: 1, StartColumn: 1, EndColumn: 2}
+				addBudgetIssue("TIME", at)
+				break
+			}
 			return Context170{}, fmt.Errorf("REVIEW_CONTEXT_METHOD_FAILED: %w", err)
 		}
 		out.Issues = append(out.Issues, facts.Issues...)
@@ -179,8 +189,38 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 			}
 		}
 
+		springRelations, springIssues, err := resolver.Spring(ctx, item.ref)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				at := nav.SourceRange170{Ref: item.ref, StartLine: 1, EndLine: 1, StartColumn: 1, EndColumn: 2}
+				addBudgetIssue("TIME", at)
+				break
+			}
+			return Context170{}, fmt.Errorf("REVIEW_CONTEXT_SPRING_FAILED: %w", err)
+		}
+		out.Issues = append(out.Issues, springIssues...)
+		for _, relation := range springRelations {
+			if strings.TrimSpace(relation.ID) == "" && strings.TrimSpace(relation.Kind) == "" {
+				continue
+			}
+			if err := addRelation(relation); err != nil {
+				return Context170{}, err
+			}
+		}
+
+		// BASE evidence is comparison-only. Never traverse it as CURRENT caller,
+		// Dubbo provider, or dependency target.
+		if item.ref.Side == "BASE" {
+			continue
+		}
+
 		dubboRelations, dubboIssues, err := resolver.Dubbo(ctx, item.ref)
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				at := nav.SourceRange170{Ref: item.ref, StartLine: 1, EndLine: 1, StartColumn: 1, EndColumn: 2}
+				addBudgetIssue("TIME", at)
+				break
+			}
 			return Context170{}, fmt.Errorf("REVIEW_CONTEXT_DUBBO_FAILED: %w", err)
 		}
 		out.Issues = append(out.Issues, dubboIssues...)
@@ -190,13 +230,51 @@ func Build170(ctx context.Context, input BuildInput170, resolver Resolver170) (C
 			}
 		}
 
-		callerRelations, err := resolver.Callers(ctx, item.ref)
+		callerRelations := []nav.Relation170{}
+		if bounded, ok := resolver.(BoundedCallerResolver170); ok {
+			remaining := 0
+			if budget.MaxCandidates > 0 {
+				remaining = budget.MaxCandidates - state.candidates
+				if remaining <= 0 {
+					at := nav.SourceRange170{Ref: item.ref, StartLine: 1, EndLine: 1, StartColumn: 1, EndColumn: 2}
+					addBudgetIssue("JAVA_CALL", at)
+					continue
+				}
+			}
+			var examined int
+			var exhausted bool
+			callerRelations, examined, exhausted, err = bounded.CallersBounded170(ctx, item.ref, remaining)
+			credited := examined
+			if remaining > 0 && credited > remaining {
+				credited = remaining
+			}
+			if credited > 0 {
+				state.candidates += credited
+			}
+			if exhausted || examined > credited {
+				at := nav.SourceRange170{Ref: item.ref, StartLine: 1, EndLine: 1, StartColumn: 1, EndColumn: 2}
+				addBudgetIssue("JAVA_CALL", at)
+			}
+		} else {
+			callerRelations, err = resolver.Callers(ctx, item.ref)
+		}
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				at := nav.SourceRange170{Ref: item.ref, StartLine: 1, EndLine: 1, StartColumn: 1, EndColumn: 2}
+				addBudgetIssue("TIME", at)
+				break
+			}
 			return Context170{}, fmt.Errorf("REVIEW_CONTEXT_CALLERS_FAILED: %w", err)
 		}
 		for _, relation := range callerRelations {
-			if err := addRelation(relation); err != nil {
-				return Context170{}, err
+			beforeCandidates := state.candidates
+			if beforeCandidates > 0 {
+				state.candidates--
+			}
+			addErr := addRelation(relation)
+			state.candidates = beforeCandidates
+			if addErr != nil {
+				return Context170{}, addErr
 			}
 			_, accepted := relationByKey[relationKey170(relation)]
 			if accepted && relation.Resolution == "EXACT" && item.upDepth < budget.MaxUpstreamDepth && relation.From.Side == "CURRENT" && relation.From.Kind == "METHOD" {
@@ -261,7 +339,7 @@ func buildChecks170(needs []Need170, relations []nav.Relation170, budgetBlocked 
 			}
 			if len(matched) == 0 {
 				check.Status = "BLOCKED"
-				if budgetBlocked[kind] {
+				if budgetBlocked[kind] || budgetBlocked["TIME"] {
 					check.Reasons = append(check.Reasons, "CONTEXT_BUDGET_EXCEEDED:"+kind)
 				} else {
 					check.Reasons = append(check.Reasons, "RELATION_REQUIRED:"+kind)
@@ -296,6 +374,12 @@ func relationTouchesAnySeed170(relation nav.Relation170, seeds []nav.ReviewRef17
 		for _, target := range relation.Targets {
 			targetKey, err := nav.ReviewRefKey170(target)
 			if err == nil && targetKey == seedKey {
+				return true
+			}
+			if relation.Kind == "SPRING_BINDING" && target.Kind == "TYPE" && seed.Kind == "METHOD" &&
+				strings.TrimSpace(target.Workspace) == strings.TrimSpace(seed.Workspace) &&
+				strings.EqualFold(strings.ReplaceAll(strings.TrimSpace(target.Path), "\\", "/"), strings.ReplaceAll(strings.TrimSpace(seed.Path), "\\", "/")) &&
+				target.Side == seed.Side && strings.TrimSpace(target.OwnerFQCN) == strings.TrimSpace(seed.OwnerFQCN) {
 				return true
 			}
 		}

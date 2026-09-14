@@ -16,6 +16,10 @@ import (
 )
 
 const (
+	Protocol170 = "1.7"
+)
+
+const (
 	StatusPending   = "PENDING"
 	StatusRunning   = "RUNNING"
 	StatusSucceeded = "SUCCEEDED"
@@ -76,17 +80,18 @@ type Event struct {
 }
 
 type State struct {
-	Version       int          `json:"version"`
-	RunID         string       `json:"runId"`
-	Status        string       `json:"status"`
-	CurrentStage  string       `json:"currentStage"`
-	TerminalStage string       `json:"terminalStage,omitempty"`
-	FailureStage  string       `json:"failureStage,omitempty"`
-	FailureCode   string       `json:"failureCode,omitempty"`
-	StartedAt     string       `json:"startedAt"`
-	UpdatedAt     string       `json:"updatedAt"`
-	Stages        []StageState `json:"stages"`
-	Events        []Event      `json:"events"`
+	Version         int          `json:"version"`
+	ProtocolVersion string       `json:"protocolVersion,omitempty"`
+	RunID           string       `json:"runId"`
+	Status          string       `json:"status"`
+	CurrentStage    string       `json:"currentStage"`
+	TerminalStage   string       `json:"terminalStage,omitempty"`
+	FailureStage    string       `json:"failureStage,omitempty"`
+	FailureCode     string       `json:"failureCode,omitempty"`
+	StartedAt       string       `json:"startedAt"`
+	UpdatedAt       string       `json:"updatedAt"`
+	Stages          []StageState `json:"stages"`
+	Events          []Event      `json:"events"`
 }
 
 func CanonicalStages() []string {
@@ -101,6 +106,14 @@ func Path(runID string) (string, error) {
 }
 
 func Begin(repoRoot, runID string) (State, error) {
+	return beginWithProtocol(repoRoot, runID, "")
+}
+
+func Begin170(repoRoot, runID string) (State, error) {
+	return beginWithProtocol(repoRoot, runID, Protocol170)
+}
+
+func beginWithProtocol(repoRoot, runID, protocolVersion string) (State, error) {
 	rel, err := Path(runID)
 	if err != nil {
 		return State{}, err
@@ -127,13 +140,14 @@ func Begin(repoRoot, runID string) (State, error) {
 	stages[1].StartedAt = ts
 
 	state := State{
-		Version:      1,
-		RunID:        runID,
-		Status:       StatusRunning,
-		CurrentStage: StageSnapshot,
-		StartedAt:    ts,
-		UpdatedAt:    ts,
-		Stages:       stages,
+		Version:         1,
+		ProtocolVersion: protocolVersion,
+		RunID:           runID,
+		Status:          StatusRunning,
+		CurrentStage:    StageSnapshot,
+		StartedAt:       ts,
+		UpdatedAt:       ts,
+		Stages:          stages,
 		Events: []Event{
 			{Sequence: 1, Index: 1, Total: len(canonicalStages), Stage: StageReviewBegin, Status: StatusRunning, Timestamp: ts, Display: "[1/8] REVIEW_BEGIN RUNNING"},
 			{Sequence: 2, Index: 1, Total: len(canonicalStages), Stage: StageReviewBegin, Status: StatusSucceeded, Timestamp: ts, Display: "[1/8] REVIEW_BEGIN PASS"},
@@ -204,13 +218,13 @@ func Advance(repoRoot, runID, stage string, artifactPaths ...string) (State, err
 	current.DurationMS = durationMS(current.StartedAt, now)
 	current.Artifacts = artifacts
 	state.Events = append(state.Events, Event{
-		Sequence: len(state.Events) + 1,
-		Index:    idx + 1,
-		Total:    len(canonicalStages),
-		Stage:    stage,
-		Status:   StatusSucceeded,
+		Sequence:  len(state.Events) + 1,
+		Index:     idx + 1,
+		Total:     len(canonicalStages),
+		Stage:     stage,
+		Status:    StatusSucceeded,
 		Timestamp: ts,
-		Display:  fmt.Sprintf("[%d/%d] %s PASS", idx+1, len(canonicalStages), stage),
+		Display:   fmt.Sprintf("[%d/%d] %s PASS", idx+1, len(canonicalStages), stage),
 	})
 
 	if idx == len(canonicalStages)-1 {
@@ -348,7 +362,7 @@ func durationMS(startedAt string, now time.Time) int64 {
 }
 
 func validate(state State) error {
-	if state.Version != 1 || !runIDPattern.MatchString(state.RunID) {
+	if state.Version != 1 || !runIDPattern.MatchString(state.RunID) || (state.ProtocolVersion != "" && state.ProtocolVersion != Protocol170) {
 		return errors.New("REVIEW_PROGRESS_INVALID: identity")
 	}
 	if state.StartedAt == "" || state.UpdatedAt == "" {

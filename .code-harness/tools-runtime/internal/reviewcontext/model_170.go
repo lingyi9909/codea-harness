@@ -60,6 +60,11 @@ type Resolver170 interface {
 	Callers(context.Context, nav.ReviewRef170) ([]nav.Relation170, error)
 	Mapper(context.Context, nav.SourceRange170) ([]nav.Relation170, []nav.Issue170, error)
 	Dubbo(context.Context, nav.ReviewRef170) ([]nav.Relation170, []nav.Issue170, error)
+	Spring(context.Context, nav.ReviewRef170) ([]nav.Relation170, []nav.Issue170, error)
+}
+
+type BoundedCallerResolver170 interface {
+	CallersBounded170(context.Context, nav.ReviewRef170, int) ([]nav.Relation170, int, bool, error)
 }
 
 // DefaultBudget170 freezes the per-phase exploration limits. T5 owns the

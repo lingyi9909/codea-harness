@@ -33,6 +33,7 @@ var springAnnotationFQCN170 = map[string][]string{
 	"Bean":          {"org.springframework.context.annotation.Bean"},
 	"Configuration": {"org.springframework.context.annotation.Configuration"},
 	"Autowired":     {"org.springframework.beans.factory.annotation.Autowired"},
+	"Transactional": {"org.springframework.transaction.annotation.Transactional"},
 	"Qualifier":     {"org.springframework.beans.factory.annotation.Qualifier"},
 }
 
@@ -474,4 +475,48 @@ func springBeanOwnerRegistered170(owner *javaType170) (registered bool, conditio
 	registered = springHasRecognizedAnnotation170(owner.Imports, anns, "Configuration") || springIsStereotype170(owner.Imports, anns)
 	conditional = springHasCondition170(owner.Imports, anns)
 	return registered, conditional
+}
+
+// ResolveSpringMethodContext170 proves the source-verifiable part of Spring
+// transaction proxy context for a concrete method. It does not claim that a
+// runtime invocation traversed a proxy; it proves that the owner is a managed
+// Spring bean and that @Transactional is present on the method or owner.
+func (n Navigator) ResolveSpringMethodContext170(ctx context.Context, ref ReviewRef170) ([]Relation170, []Issue170, error) {
+	if ref.Kind != "METHOD" {
+		return []Relation170{}, []Issue170{}, nil
+	}
+	idx, err := n.buildJavaIndex170(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	method, err := idx.findMethod170(ref)
+	if err != nil {
+		return nil, nil, err
+	}
+	ownerAnns := annotations170(method.Owner.Text)
+	methodAnns := annotations170(method.Text)
+	managed := springIsStereotype170(method.Owner.Imports, ownerAnns) || springHasRecognizedAnnotation170(method.Owner.Imports, ownerAnns, "Configuration")
+	transactional := springHasRecognizedAnnotation170(method.Owner.Imports, methodAnns, "Transactional") || springHasRecognizedAnnotation170(method.Owner.Imports, ownerAnns, "Transactional")
+	target := ReviewRef170{Workspace: ref.Workspace, Path: method.Owner.Path, Side: ref.Side, Kind: "TYPE", OwnerFQCN: method.Owner.FQCN, Name: method.Owner.Name, ParameterTypes: []string{}}
+	evidence, evidenceErr := n.springTextEvidence170(ref, method.Raw.Path, method.Text, method.Raw.StartLine, method.Raw.StartColumn, "@Transactional", method.Name)
+	if evidenceErr != nil {
+		return nil, nil, evidenceErr
+	}
+	rel := Relation170{Kind: "SPRING_BINDING", From: ref, Targets: []ReviewRef170{}, Evidence: []SourceRange170{evidence}, Assumptions: []string{}}
+	if !managed {
+		rel.Resolution = "UNRESOLVED"
+		rel.Reason = "SPRING_PROXY_CONTEXT_UNRESOLVED: owner is not a source-verifiable managed Spring bean"
+	} else if !transactional {
+		rel.Resolution = "UNRESOLVED"
+		rel.Reason = "SPRING_PROXY_CONTEXT_UNRESOLVED: @Transactional is not source-verifiable on method or owner"
+	} else if springHasCondition170(method.Owner.Imports, ownerAnns) {
+		rel.Targets = []ReviewRef170{target}
+		rel.Resolution = "CONDITIONAL"
+		rel.Reason = "SPRING_CONDITION_UNRESOLVED: bean registration has unresolved profile/condition"
+	} else {
+		rel.Targets = []ReviewRef170{target}
+		rel.Resolution = "EXACT"
+	}
+	rel.ID = springRelationID170(rel)
+	return []Relation170{rel}, []Issue170{}, nil
 }
