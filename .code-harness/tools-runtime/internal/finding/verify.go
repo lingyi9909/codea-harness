@@ -81,11 +81,11 @@ func LoadVerifyContext(repoRoot, runID, astGrepPath string) (VerifyContext, erro
 		}
 	}
 	return VerifyContext{
-		trusted: true,
-		repoRoot: root,
-		analysis: analysisValue,
-		units: units,
-		dispatch: dispatch,
+		trusted:      true,
+		repoRoot:     root,
+		analysis:     analysisValue,
+		units:        units,
+		dispatch:     dispatch,
 		symbolRanges: ranges,
 	}, nil
 }
@@ -171,7 +171,7 @@ func loadDispatchAuthority160(root, runID string, units reviewunit.Manifest) (re
 	if err != nil {
 		return reviewrules.Manifest{}, findingError160("FINDING_PROPOSAL_INVALID", "load current rule catalog: %v", err)
 	}
-	expected, err := reviewrules.BuildDispatch(units, rules, catalogSHA)
+	expected, err := rebuildDispatchAuthority170(root, runID, units, rules, catalogSHA, manifest)
 	if err != nil {
 		return reviewrules.Manifest{}, findingError160("FINDING_PROPOSAL_INVALID", "rebuild RuleDispatch: %v", err)
 	}
