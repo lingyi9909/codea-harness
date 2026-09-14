@@ -28,9 +28,10 @@ type Dispatch struct {
 }
 
 type Manifest struct {
-	RunID              string     `json:"runId"`
-	ReviewUnitsSHA256  string     `json:"reviewUnitsSha256"`
-	RuleCatalogSHA256  string     `json:"ruleCatalogSha256"`
-	Dispatches         []Dispatch `json:"dispatches"`
-	SHA256             string     `json:"sha256"`
+	RunID             string     `json:"runId"`
+	ReviewUnitsSHA256 string     `json:"reviewUnitsSha256"`
+	RuleCatalogSHA256 string     `json:"ruleCatalogSha256"`
+	KnowledgeSHA256   string     `json:"knowledgeSha256,omitempty"`
+	Dispatches        []Dispatch `json:"dispatches"`
+	SHA256            string     `json:"sha256"`
 }
