@@ -1,9 +1,8 @@
 package finding
 
 import (
-	"crypto/sha256"
+	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,8 +56,8 @@ func loadKnowledgeAuthority170(root, runID, expectedSHA string) (knowledge.Manif
 		return manifest, findingError160("FINDING_PROPOSAL_INVALID", "canonicalize ReviewKnowledge: %v", err)
 	}
 	canonical = append(canonical, '\n')
-	if fmt.Sprintf("%x", sha256.Sum256(canonical)) == "" {
-		return manifest, findingError160("FINDING_PROPOSAL_INVALID", "ReviewKnowledge canonical digest unavailable")
+	if !bytes.Equal(raw, canonical) {
+		return manifest, findingError160("FINDING_PROPOSAL_INVALID", "ReviewKnowledge bytes are not canonical")
 	}
 	return manifest, nil
 }
