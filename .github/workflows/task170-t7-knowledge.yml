@@ -62,9 +62,11 @@ jobs:
         run: |
           git merge-base --is-ancestor c41d19c08f998ae23081ba8aaa9fca05fa20f37d HEAD
           if ($LASTEXITCODE -ne 0) { throw 'T7 branch is not based on accepted T6 exact HEAD' }
-          $status = @(git status --short)
-          if ($status.Count -ne 0) { throw "baseline working tree is not clean: $($status -join '; ')" }
-          Write-Output "TASK170_T7_BASELINE PASS head=$((git rev-parse HEAD).Trim()) status=clean"
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'baseline working tree has real content differences' }
+          git diff --cached --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'baseline index has staged content differences' }
+          Write-Output "TASK170_T7_BASELINE PASS head=$((git rev-parse HEAD).Trim()) content=clean"
       - name: Download accepted 1.6.4.final release candidate
         uses: actions/download-artifact@v4
         with:
