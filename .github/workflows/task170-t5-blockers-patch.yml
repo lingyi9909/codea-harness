@@ -73,14 +73,47 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: |
-          go test ./internal/nav ./internal/reviewcontext ./internal/reviewprogress ./cmd/codea-dcep-tools -run Test170 -count=1
-      - name: T5 subsystem smoke
+        run: go test ./internal/nav ./internal/reviewcontext ./internal/reviewprogress ./cmd/codea-dcep-tools -run Test170 -count=1
+      - name: Smoke nav full
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
-        run: |
-          go test ./internal/nav ./internal/reviewcontext ./internal/analysis ./internal/reviewunit ./internal/reviewrules ./internal/reviewprogress ./internal/reviewauthority ./cmd/codea-dcep-tools -count=1
+        run: go test ./internal/nav -count=1
+      - name: Smoke reviewcontext full
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/reviewcontext -count=1
+      - name: Smoke analysis full
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/analysis -count=1
+      - name: Smoke reviewunit full
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/reviewunit -count=1
+      - name: Smoke reviewrules full
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/reviewrules -count=1
+      - name: Smoke reviewprogress full
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/reviewprogress -count=1
+      - name: Smoke reviewauthority full
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/reviewauthority -count=1
+      - name: Smoke codea-dcep-tools full
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./cmd/codea-dcep-tools -count=1
       - name: Commit repair
         shell: pwsh
         run: |
