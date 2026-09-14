@@ -1,4 +1,5 @@
 name: task170-t6-auto-chain
+# Final exact-head certification trigger after deterministic gofmt cleanup.
 
 on:
   workflow_dispatch:
