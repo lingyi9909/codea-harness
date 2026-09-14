@@ -128,16 +128,22 @@ function Add-OpenCodeReviewerRegistration([string]$ZipPath, [string]$Kind) {
         [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
 
         $installerPath = $null
+        $installerCmdPath = $null
         if ($Kind -eq 'install') {
             $installerSource = Join-Path $repoRoot '.github/scripts/task164-install.ps1'
-            if (-not (Test-Path $installerSource -PathType Leaf)) { throw 'safe first-install entrypoint missing' }
+            if (-not (Test-Path $installerSource -PathType Leaf)) { throw 'safe first-install PowerShell entrypoint missing' }
             $installerPath = Join-Path $stage 'install.ps1'
             Copy-Item -LiteralPath $installerSource -Destination $installerPath -Force
+
+            $installerCmdSource = Join-Path $repoRoot '.github/scripts/task164-install.cmd'
+            if (-not (Test-Path $installerCmdSource -PathType Leaf)) { throw 'one-click first-install entrypoint missing' }
+            $installerCmdPath = Join-Path $stage 'install.cmd'
+            Copy-Item -LiteralPath $installerCmdSource -Destination $installerCmdPath -Force
         }
 
         Remove-Item -Force $ZipPath
         if ($Kind -eq 'install') {
-            Compress-Archive -Path @($harnessRoot, (Join-Path $stage '.opencode'), $installerPath) -DestinationPath $ZipPath -Force
+            Compress-Archive -Path @($harnessRoot, (Join-Path $stage '.opencode'), $installerPath, $installerCmdPath) -DestinationPath $ZipPath -Force
         } else {
             Compress-Archive -Path $harnessRoot -DestinationPath $ZipPath -Force
         }
@@ -156,4 +162,5 @@ Write-Output 'REVIEWER_HOST_PACKAGE_REGISTRATION PASS path=.opencode/agents/revi
 Write-Output 'REVIEWER_HOST_COMMAND_REGISTRATION PASS command=.opencode/commands/harness-review-reviewer.md subtask=true'
 Write-Output 'REVIEWER_HOST_TOOL_REGISTRATION PASS tool=.opencode/tools/codea-reviewer-submit.ts'
 Write-Output 'INSTALL_SAFE_ENTRYPOINT_PACKAGED PASS file=install.ps1'
+Write-Output 'INSTALL_ONE_CLICK_ENTRYPOINT_PACKAGED PASS file=install.cmd'
 Write-Output 'REVIEWER_HOST_UPGRADE_STAGED_TRANSACTION PASS source=.code-harness-upgrade/host/.opencode'
