@@ -195,6 +195,14 @@ func ResolveChainContexts(root string, selection Selection, changeAnalysisJSON [
 		if err != nil {
 			return result, fmt.Errorf("discover temporary review chain for %q: %w", branch.EntryPoint, err)
 		}
+		if autoTemporary && discovered.Status != chain.DiscoveryComplete {
+			result.Status = ChainResolutionPartial
+			result.Unresolved = append(result.Unresolved, discovered.Unresolved...)
+			if len(discovered.Unresolved) == 0 {
+				result.Unresolved = append(result.Unresolved, "CHAIN_DISCOVERY_PARTIAL: "+branch.EntryPoint)
+			}
+			continue
+		}
 
 		matched := false
 		for _, candidate := range discovered.Chains {
