@@ -14,9 +14,10 @@ import (
 )
 
 type chainReviewContextRequest struct {
-	RunID              string          `json:"runId"`
-	ChangeAnalysisPath string          `json:"changeAnalysisPath"`
-	ReviewScope        json.RawMessage `json:"reviewScope"`
+	RunID                  string          `json:"runId"`
+	ChangeAnalysisPath     string          `json:"changeAnalysisPath"`
+	ReviewScope            json.RawMessage `json:"reviewScope"`
+	AllowTemporaryForStale bool            `json:"allowTemporaryForStale,omitempty"`
 }
 
 func runChainReviewContext(args []string) error {
@@ -82,6 +83,10 @@ func runChainReviewContext(args []string) error {
 		return fmt.Errorf("review-context scope coverage incomplete: missingFiles=%v unresolvedSymbols=%v", machine.MissingFiles, machine.UnresolvedSymbols)
 	}
 
+	// 1.7 keeps the legacy request field parse-compatible, but Runtime owns the
+	// normal Review policy and always resolves stale/missing chains through the
+	// current certified AUTO_TEMPORARY path. The request value is intentionally
+	// ignored so callers cannot downgrade the Runtime-owned strategy.
 	result, err := reviewscope.ResolveChainContexts(".", selection, analysisBytes, reviewscope.ChainResolveOptions{
 		RunID:    req.RunID,
 		Strategy: reviewscope.ChainResolutionStrategyAutoTemporary,
