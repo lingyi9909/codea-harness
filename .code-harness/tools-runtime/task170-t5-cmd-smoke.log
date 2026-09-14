@@ -1,0 +1,4465 @@
+=== RUN   Test162HotfixAnalysisCertifyConsumesRuntimeSnapshotAndSemanticProposal
+{
+  "artifactPath": ".code-harness/runs/r162canonical/analysis/change-set.json",
+  "headCommit": "483290f403538d979a3f9b3093d1d9a20a187b54",
+  "mergeBase": "483290f403538d979a3f9b3093d1d9a20a187b54",
+  "resolvedBaseCommit": "483290f403538d979a3f9b3093d1d9a20a187b54",
+  "runId": "r162canonical",
+  "snapshotSha256": "66717bd33dd4292734a0dd9bdb3449e353c74c221e0a5f31f3f4e8c1da39de0b",
+  "status": "SNAPSHOT_READY"
+}
+{
+  "analysisSha256": "294d7cb50c3827bc962e8f17f08917d4ad4fd9ae2b47ceb9000d4831b859e9a5",
+  "artifactPath": ".code-harness/runs/r162canonical/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/r162canonical/analysis/change-analysis.cert.json",
+  "changeSetSha256": "66717bd33dd4292734a0dd9bdb3449e353c74c221e0a5f31f3f4e8c1da39de0b",
+  "entrypointInventorySha256": "3023bcfb65de016f1f6f9e936713f99fb381cc5453ee9e8813ab03654a1304c5",
+  "runId": "r162canonical",
+  "status": "CERTIFIED"
+}
+--- PASS: Test162HotfixAnalysisCertifyConsumesRuntimeSnapshotAndSemanticProposal (1.07s)
+=== RUN   Test162HotfixAnalysisCertifyRejectsStaleSnapshotAfterGitBytesChange
+{
+  "artifactPath": ".code-harness/runs/r162canonical/analysis/change-set.json",
+  "headCommit": "9931760f8748a26cd8bcfffe5876e5090125dff0",
+  "mergeBase": "9931760f8748a26cd8bcfffe5876e5090125dff0",
+  "resolvedBaseCommit": "9931760f8748a26cd8bcfffe5876e5090125dff0",
+  "runId": "r162canonical",
+  "snapshotSha256": "495d65fc965463783c7a2266565147de2985c6934127467f7bcd7eb2a47fe84e",
+  "status": "SNAPSHOT_READY"
+}
+--- PASS: Test162HotfixAnalysisCertifyRejectsStaleSnapshotAfterGitBytesChange (0.94s)
+=== RUN   Test153AnalysisCertifyPublishesCertifiedBundle
+{
+  "analysisSha256": "fa88405d33a9e5b43b7f88d0d8553d93f9e0f41e65bd46e88de6cb5611f94d36",
+  "artifactPath": ".code-harness/runs/r153/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/r153/analysis/change-analysis.cert.json",
+  "changeSetSha256": "efdc4eb2c05b27af493b825f54e2efa9026bb4c15f60c98626d09c1bc3a26ed1",
+  "entrypointInventorySha256": "07219998aa9d6357ab6949979d5f4ce74ef5b074485e3369f866fd920b6f1dd2",
+  "runId": "r153",
+  "status": "CERTIFIED"
+}
+--- PASS: Test153AnalysisCertifyPublishesCertifiedBundle (1.80s)
+=== RUN   Test153AnalysisCertifyRejectsRunIDPathMismatch
+--- PASS: Test153AnalysisCertifyRejectsRunIDPathMismatch (0.01s)
+=== RUN   Test153AnalysisInventoryWritesRuntimeOwnedArtifact
+{
+  "artifactPath": ".code-harness/runs/r153/analysis/entrypoint-inventory.json",
+  "changeSetSha256": "7d19d070192a3176695a923236bb4b5b3577417e5d068a89cb904b2b7add02ff",
+  "expectedEntryPoints": 0,
+  "runId": "r153",
+  "status": "COMPLETE"
+}
+--- PASS: Test153AnalysisInventoryWritesRuntimeOwnedArtifact (0.62s)
+=== RUN   Test153AnalysisInventoryRejectsRunIDPathMismatch
+--- PASS: Test153AnalysisInventoryRejectsRunIDPathMismatch (0.01s)
+=== RUN   Test162HotfixAnalysisSnapshotPublishesRuntimeOwnedCanonicalArtifact
+{
+  "artifactPath": ".code-harness/runs/r162hotfix/analysis/change-set.json",
+  "headCommit": "9e6710bbf288c32f24dd31ce24c65cf76638d130",
+  "mergeBase": "9e6710bbf288c32f24dd31ce24c65cf76638d130",
+  "resolvedBaseCommit": "9e6710bbf288c32f24dd31ce24c65cf76638d130",
+  "runId": "r162hotfix",
+  "snapshotSha256": "ac4399e0cf16fbe853c16b5e5b6738ecae8942f8dc1ab27c2102ba14fb66a00c",
+  "status": "SNAPSHOT_READY"
+}
+--- PASS: Test162HotfixAnalysisSnapshotPublishesRuntimeOwnedCanonicalArtifact (0.65s)
+=== RUN   TestSealApplySubcommandIsWired
+--- PASS: TestSealApplySubcommandIsWired (0.00s)
+=== RUN   TestApplySubcommandIsWired
+--- PASS: TestApplySubcommandIsWired (0.00s)
+=== RUN   TestApplyDoesNotAcceptPatchCLIArguments
+flag provided but not defined: -patch
+Usage of apply:
+  -input string
+    	apply request under .code-harness/runs/<runId>/requests/*.json
+--- PASS: TestApplyDoesNotAcceptPatchCLIArguments (0.00s)
+=== RUN   TestUsageListsSealAndApply
+--- PASS: TestUsageListsSealAndApply (0.00s)
+=== RUN   Test162HotfixCanonicalCertificateCannotDowngradeToLegacyAuthority
+{
+  "artifactPath": ".code-harness/runs/r162canonical/analysis/change-set.json",
+  "headCommit": "6d81f2e7bd6e02bb318264a627395f60e0403e0b",
+  "mergeBase": "6d81f2e7bd6e02bb318264a627395f60e0403e0b",
+  "resolvedBaseCommit": "6d81f2e7bd6e02bb318264a627395f60e0403e0b",
+  "runId": "r162canonical",
+  "snapshotSha256": "c8ec6c75e1417a694876a70ab60ec4229bf94e1a038f787627be1f0f93c516f6",
+  "status": "SNAPSHOT_READY"
+}
+{
+  "analysisSha256": "5217be49d7e97efb9137bc8a4f67c51bf7a985d5ef1b78af8da75903414a2b0c",
+  "artifactPath": ".code-harness/runs/r162canonical/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/r162canonical/analysis/change-analysis.cert.json",
+  "changeSetSha256": "c8ec6c75e1417a694876a70ab60ec4229bf94e1a038f787627be1f0f93c516f6",
+  "entrypointInventorySha256": "bca8a4db4822c86fd93be6244f9a7a0bf62c32bb6c65d302c8f8f655871ce8bd",
+  "runId": "r162canonical",
+  "status": "CERTIFIED"
+}
+--- PASS: Test162HotfixCanonicalCertificateCannotDowngradeToLegacyAuthority (1.09s)
+=== RUN   Test153ChainLoaderRejectsUncertifiedAnalysis
+--- PASS: Test153ChainLoaderRejectsUncertifiedAnalysis (0.01s)
+=== RUN   Test153ChainDiscoverRejectsUncertifiedAnalysis
+--- PASS: Test153ChainDiscoverRejectsUncertifiedAnalysis (0.01s)
+=== RUN   Test153ChainRefreshRejectsUncertifiedAnalysis
+--- PASS: Test153ChainRefreshRejectsUncertifiedAnalysis (0.02s)
+=== RUN   Test153ChainReviewContextRejectsUncertifiedAnalysis
+--- PASS: Test153ChainReviewContextRejectsUncertifiedAnalysis (0.01s)
+=== RUN   Test153WritePlanRejectsCandidateMutationAfterSealWithZeroProjectStateWrites
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-100b047787b312ef91d62e5490a673937c9d2491db3c930fd328d96d675457f6",
+    "runId": "run-153-seal-candidate",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-seal-candidate/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "7ca81313a1f23b9a922a018021727ef028a014947a624b04a5db36da786f73cf",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-100b047787b312ef91d62e5490a673937c9d2491db3c930fd328d96d675457f6",
+  "planPath": ".code-harness/runs/run-153-seal-candidate/analysis/chain-write-plans/chain-write-100b047787b312ef91d62e5490a673937c9d2491db3c930fd328d96d675457f6.json",
+  "status": "SEALED"
+}
+--- PASS: Test153WritePlanRejectsCandidateMutationAfterSealWithZeroProjectStateWrites (1.76s)
+=== RUN   Test153WritePlanRejectsCertifiedAnalysisMutationAfterSealWithZeroProjectStateWrites
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-aec33647c82ea2caabe27e96de2d76d0f812bb287ed030166cadcd1877a4fd46",
+    "runId": "run-153-seal-analysis",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-seal-analysis/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "50f1a3768481c1c28328c7731ebd0b9d391349128284b4d62a0f73f7ab2de0d2",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-aec33647c82ea2caabe27e96de2d76d0f812bb287ed030166cadcd1877a4fd46",
+  "planPath": ".code-harness/runs/run-153-seal-analysis/analysis/chain-write-plans/chain-write-aec33647c82ea2caabe27e96de2d76d0f812bb287ed030166cadcd1877a4fd46.json",
+  "status": "SEALED"
+}
+--- PASS: Test153WritePlanRejectsCertifiedAnalysisMutationAfterSealWithZeroProjectStateWrites (1.37s)
+=== RUN   Test153WritePlanRejectsExistingProjectStateMutationAfterSealWithZeroWrites
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-61706be0e7e452cef94d6007999c245a876ca7f0492b98f48ead99ea55c8705b",
+    "runId": "run-153-seal-existing",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-seal-existing/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "8a8b0b5ba03f14a46dccdee8a5cea9c48f4d6ecc63d1b656a16f90d18d27f780",
+    "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-61706be0e7e452cef94d6007999c245a876ca7f0492b98f48ead99ea55c8705b",
+  "planPath": ".code-harness/runs/run-153-seal-existing/analysis/chain-write-plans/chain-write-61706be0e7e452cef94d6007999c245a876ca7f0492b98f48ead99ea55c8705b.json",
+  "status": "SEALED"
+}
+--- PASS: Test153WritePlanRejectsExistingProjectStateMutationAfterSealWithZeroWrites (1.77s)
+=== RUN   Test153PersistRejectsArbitraryCandidatePathRequest
+--- PASS: Test153PersistRejectsArbitraryCandidatePathRequest (0.01s)
+=== RUN   TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+--- PASS: TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState (0.95s)
+=== RUN   TestChainDiscoverRejectsOutsideInputAndRunIDMismatch
+--- PASS: TestChainDiscoverRejectsOutsideInputAndRunIDMismatch (0.01s)
+=== RUN   TestChainDiscoverRejectsRawTargetOrOutputCLIArguments
+flag provided but not defined: -output
+Usage of chain discover:
+  -input string
+    	chain discovery request under .code-harness/runs/<runId>/requests/*.json
+--- PASS: TestChainDiscoverRejectsRawTargetOrOutputCLIArguments (0.00s)
+=== RUN   Test151ChainDiscoverBootstrapContractIsSelfContained
+--- PASS: Test151ChainDiscoverBootstrapContractIsSelfContained (0.00s)
+=== RUN   Test151DirectDiscoverSupportsFreshAddedControllerServiceMapperStack
+{
+  "format": "json",
+  "reviewCoverage": {
+    "status": "COMPLETE"
+  },
+  "status": "VALID"
+}
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "f4f0ddfd31f673049631f586209de951a1ced7717a0925b7d0c373e892f4b525",
+      "name": "NewController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "NewController.approve",
+          "path": "src/main/java/com/example/approval/NewController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "ApprovalService.approve",
+          "path": "src/main/java/com/example/approval/ApprovalService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "ApprovalServiceImpl.approve",
+          "path": "src/main/java/com/example/approval/ApprovalServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "ApprovalMapper.updateStatus",
+          "path": "src/main/java/com/example/approval/ApprovalMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/ApprovalMapper.xml",
+          "symbol": "ApprovalMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+--- PASS: Test151DirectDiscoverSupportsFreshAddedControllerServiceMapperStack (0.68s)
+=== RUN   Test153EditCommandRequiresChainMaintenanceCertifiedIntent
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce",
+    "runId": "run-153-edit-intent",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-intent/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "9eeb1390dabd36316b7e13223c38ceb04f175a9c9ae48b3d21bb69daec4e9767",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce",
+  "planPath": ".code-harness/runs/run-153-edit-intent/analysis/chain-write-plans/chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce",
+  "status": "PERSISTED"
+}
+--- PASS: Test153EditCommandRequiresChainMaintenanceCertifiedIntent (2.11s)
+=== RUN   Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "analysisSha256": "87225d334c55c1ac77529436867957f1a39480b20510a5c73184ab3e05bb1692",
+  "artifactPath": ".code-harness/runs/run-153-edit-command/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/run-153-edit-command/analysis/change-analysis.cert.json",
+  "changeSetSha256": "cc36316d325b2bdd1b9cdecc7d97c080b752a38c5d1bfb3e06e73437251bf509",
+  "entrypointInventorySha256": "27a68397552c8fc8afded667babe7730a63d335a2c60d8dc0d8ffe26009a3778",
+  "runId": "run-153-edit-command",
+  "status": "CERTIFIED"
+}
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356",
+    "runId": "run-153-edit-command",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-command/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "87225d334c55c1ac77529436867957f1a39480b20510a5c73184ab3e05bb1692",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356",
+  "planPath": ".code-harness/runs/run-153-edit-command/analysis/chain-write-plans/chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356",
+  "status": "PERSISTED"
+}
+{
+  "status": "EDIT_READY",
+  "candidatePath": ".code-harness/runs/run-153-edit-command/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+  "added": null,
+  "removed": null,
+  "changed": [
+    "name:\"OrderController.approve\"-\u003e\"订单审批新名称\""
+  ]
+}
+--- PASS: Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite (3.38s)
+=== RUN   Test153EditCandidatePersistsOnlyThroughWritePlan
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "analysisSha256": "c2e61130bcad21903aff868c91ed83c4430be42730e08c9d77339d89198f85ea",
+  "artifactPath": ".code-harness/runs/run-153-edit-persist/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/run-153-edit-persist/analysis/change-analysis.cert.json",
+  "changeSetSha256": "22e7b1e38955082e99045a275272e00896ac5ff08f74156256a218a9a4494009",
+  "entrypointInventorySha256": "def5b86f4dca7c7d8479dd205bb140bc402b09c8566142cffab0e7949e78e65f",
+  "runId": "run-153-edit-persist",
+  "status": "CERTIFIED"
+}
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9",
+    "runId": "run-153-edit-persist",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-persist/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "c2e61130bcad21903aff868c91ed83c4430be42730e08c9d77339d89198f85ea",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9",
+  "planPath": ".code-harness/runs/run-153-edit-persist/analysis/chain-write-plans/chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9",
+  "status": "PERSISTED"
+}
+{
+  "status": "EDIT_READY",
+  "candidatePath": ".code-harness/runs/run-153-edit-persist/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+  "added": null,
+  "removed": null,
+  "changed": [
+    "name:\"OrderController.approve\"-\u003e\"订单审批持久化名称\""
+  ]
+}
+{
+  "plan": {
+    "planId": "chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922",
+    "runId": "run-153-edit-persist",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-persist/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "37814aeefff35435dbc733f81139698a54f46625940ababa7d08ce1b8d4dcc57",
+    "analysisHash": "c2e61130bcad21903aff868c91ed83c4430be42730e08c9d77339d89198f85ea",
+    "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
+    "previewSha256": "37814aeefff35435dbc733f81139698a54f46625940ababa7d08ce1b8d4dcc57"
+  },
+  "planId": "chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922",
+  "planPath": ".code-harness/runs/run-153-edit-persist/analysis/chain-write-plans/chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922",
+  "status": "PERSISTED"
+}
+--- PASS: Test153EditCandidatePersistsOnlyThroughWritePlan (4.12s)
+=== RUN   Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "analysisSha256": "efb3888d56fef8e7d6d9d17c0a516615c82a7446f8339bd2daf8cf5722501c3a",
+  "artifactPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/change-analysis.cert.json",
+  "changeSetSha256": "4549f278aa4979bb18153a1c54e2ad7633890eeafb841fa04a62ede3f5174912",
+  "entrypointInventorySha256": "cf974a250384c0d2c308721b03633ebe2f290f0c2d5dc613c00b89efa73fbfbd",
+  "runId": "run-153-edit-seal-tamper",
+  "status": "CERTIFIED"
+}
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819",
+    "runId": "run-153-edit-seal-tamper",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "efb3888d56fef8e7d6d9d17c0a516615c82a7446f8339bd2daf8cf5722501c3a",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819",
+  "planPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-write-plans/chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819",
+  "status": "PERSISTED"
+}
+{
+  "status": "EDIT_READY",
+  "candidatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+  "added": null,
+  "removed": null,
+  "changed": [
+    "name:\"OrderController.approve\"-\u003e\"订单审批待保存名称\""
+  ]
+}
+{
+  "plan": {
+    "planId": "chain-write-500d9a905cdd8cfe46ae1254f8a6e0ba3c8dda862675306d15c42bca93d1987d",
+    "runId": "run-153-edit-seal-tamper",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "3c02d89a7953d89be934d1401b6926e1711bc8c9889ad975c18689408c6054ba",
+    "analysisHash": "efb3888d56fef8e7d6d9d17c0a516615c82a7446f8339bd2daf8cf5722501c3a",
+    "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
+    "previewSha256": "3c02d89a7953d89be934d1401b6926e1711bc8c9889ad975c18689408c6054ba"
+  },
+  "planId": "chain-write-500d9a905cdd8cfe46ae1254f8a6e0ba3c8dda862675306d15c42bca93d1987d",
+  "planPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-write-plans/chain-write-500d9a905cdd8cfe46ae1254f8a6e0ba3c8dda862675306d15c42bca93d1987d.json",
+  "status": "SEALED"
+}
+--- PASS: Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites (4.19s)
+=== RUN   Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "analysisSha256": "ad10f9f584716516c3ea1bc31f39a4ee6fc6be8f2d4b1d51c1b3f05abd4a8863",
+  "artifactPath": ".code-harness/runs/run-153-edit-unverified/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/run-153-edit-unverified/analysis/change-analysis.cert.json",
+  "changeSetSha256": "f1fcddb501e8e8942f1f830da79b3f897dfad8f432d585c00227eca591177007",
+  "entrypointInventorySha256": "a873e75ce358c50c7ef6f154ff65014663eb4523b427a5d8f085b4e5890b84ae",
+  "runId": "run-153-edit-unverified",
+  "status": "CERTIFIED"
+}
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e",
+    "runId": "run-153-edit-unverified",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-unverified/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "ad10f9f584716516c3ea1bc31f39a4ee6fc6be8f2d4b1d51c1b3f05abd4a8863",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e",
+  "planPath": ".code-harness/runs/run-153-edit-unverified/analysis/chain-write-plans/chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e",
+  "status": "PERSISTED"
+}
+--- PASS: Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite (3.37s)
+=== RUN   Test153EditRequestSchemaRejectsEntryPointMutation
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "analysisSha256": "511eecb800a78b868f1b3da962ab1dfc4109e0c298eb3c458323e3a8527fbbdc",
+  "artifactPath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/change-analysis.cert.json",
+  "changeSetSha256": "158742e9559bd1ae6f48c4f6236238a7447e74ac5a50eecf25240f80ac17f4ec",
+  "entrypointInventorySha256": "54c236f7dc278f6c8d8a77a473067513c7de2befffdad4bfa41b7187aa89dd21",
+  "runId": "run-153-edit-entrypoint-forbidden",
+  "status": "CERTIFIED"
+}
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f",
+    "runId": "run-153-edit-entrypoint-forbidden",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "511eecb800a78b868f1b3da962ab1dfc4109e0c298eb3c458323e3a8527fbbdc",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f",
+  "planPath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/chain-write-plans/chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f",
+  "status": "PERSISTED"
+}
+--- PASS: Test153EditRequestSchemaRejectsEntryPointMutation (2.98s)
+=== RUN   Test153EditCommandRejectsNonRequestPath
+--- PASS: Test153EditCommandRejectsNonRequestPath (0.00s)
+=== RUN   Test153EditRejectsJointWorkspaceAuthorityEscalation
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "analysisSha256": "b193021a848462bd600d43003cb8bf5dd45f7f96dcdb3e17881925a4023d5b3e",
+  "artifactPath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/change-analysis.cert.json",
+  "changeSetSha256": "dbf451aeb7b8d0eef384b683c7493b8836e31d460156d7397d1e10ce6f5cb412",
+  "entrypointInventorySha256": "9691d6bc81a0f319e83fa18ed422c43b45dd9f937367406e2314fedd3e390819",
+  "runId": "run-153-edit-intent-escalation",
+  "status": "CERTIFIED"
+}
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257",
+    "runId": "run-153-edit-intent-escalation",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "b193021a848462bd600d43003cb8bf5dd45f7f96dcdb3e17881925a4023d5b3e",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257",
+  "planPath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/chain-write-plans/chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257",
+  "status": "PERSISTED"
+}
+--- PASS: Test153EditRejectsJointWorkspaceAuthorityEscalation (2.98s)
+=== RUN   TestChainListShowAndValidateCommands
+{
+  "chains": [
+    {
+      "id": "order-approve",
+      "name": "订单审批",
+      "status": "ACCEPTED",
+      "statusLabel": "✅ 已确认"
+    }
+  ],
+  "status": "OK"
+}
+订单审批
+
+状态：✅ 已确认
+
+入口：
+1. OrderController.approve
+
+核心链路：
+🌐 OrderController.approve
+   ↓
+⚙️ OrderService.approve
+   ↓
+⚙️ OrderServiceImpl.approve
+   ↓
+🗄 OrderMapper.updateStatus
+   ↓
+📄 src/main/resources/mapper/OrderMapper.xml#OrderMapper.updateStatus
+
+说明：
+核心审批链路
+{
+  "chainId": "order-approve",
+  "status": "VALID",
+  "errors": [],
+  "warnings": []
+}
+--- PASS: TestChainListShowAndValidateCommands (0.94s)
+=== RUN   TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash
+{
+  "candidatePath": ".code-harness/runs/run-task3/analysis/refresh-candidates/order-approve.yaml",
+  "refresh": {
+    "candidate": {
+      "version": 1,
+      "id": "order-approve",
+      "name": "订单审批",
+      "status": "ACCEPTED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "RiskService.check",
+          "path": "src/main/java/com/example/order/RiskService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ],
+      "notes": "核心审批链路"
+    },
+    "existingHash": "da08c1678fcdfe7591f54d93d8b94dcdb0da4ba3a8bce63ffda53ceb4c236951",
+    "changed": true,
+    "added": [
+      "node:SERVICE:RiskService.check@src/main/java/com/example/order/RiskService.java"
+    ],
+    "removed": [],
+    "errors": []
+  },
+  "status": "DIFF_READY"
+}
+{
+  "plan": {
+    "planId": "chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615",
+    "runId": "run-task3",
+    "chainId": "order-approve",
+    "candidatePath": ".code-harness/runs/run-task3/analysis/refresh-candidates/order-approve.yaml",
+    "candidateHash": "a3441f544edb1b5c4b8ae4d9e26d0db90491ff3922d0d92ce315db50d23e3e3d",
+    "analysisHash": "2f211941404a2bbc03fc7e33822f67bf6207225b7ab1a51375289abdc3fa810d",
+    "expectedExistingHash": "da08c1678fcdfe7591f54d93d8b94dcdb0da4ba3a8bce63ffda53ceb4c236951",
+    "previewSha256": "a3441f544edb1b5c4b8ae4d9e26d0db90491ff3922d0d92ce315db50d23e3e3d"
+  },
+  "planId": "chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615",
+  "planPath": ".code-harness/runs/run-task3/analysis/chain-write-plans/chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615",
+  "status": "PERSISTED"
+}
+--- PASS: TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash (2.11s)
+=== RUN   TestChainPersistValidationFailureMakesZeroProjectStateWrites
+--- PASS: TestChainPersistValidationFailureMakesZeroProjectStateWrites (1.31s)
+=== RUN   TestChainPersistNewDiscoveredCandidateAfterValidation
+{
+  "plan": {
+    "planId": "chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043",
+    "runId": "run-new-chain",
+    "chainId": "order-approve",
+    "candidatePath": ".code-harness/runs/run-new-chain/analysis/discovered-chains/order-approve.yaml",
+    "candidateHash": "71d22f8c9a2652df400433129eb5a355d052467d44fc13429a122a40b94a574c",
+    "analysisHash": "046024f7b6adfea311a1edbdc209fef198f8ee5c738e9cf439e715e78e8cf1f2",
+    "previewSha256": "98277afdd5d01703e2151ed976dbe92dcf80f9506ee038dbf5178ebe94aa3088"
+  },
+  "planId": "chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043",
+  "planPath": ".code-harness/runs/run-new-chain/analysis/chain-write-plans/chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043",
+  "status": "PERSISTED"
+}
+--- PASS: TestChainPersistNewDiscoveredCandidateAfterValidation (1.70s)
+=== RUN   TestChainPersistValidatesDiscoveredBeforePromotingAccepted
+--- PASS: TestChainPersistValidatesDiscoveredBeforePromotingAccepted (1.33s)
+=== RUN   Test163Task2AffectedPersistRegression
+{
+  "status": "COMPLETE",
+  "chains": [
+    {
+      "version": 1,
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "status": "DISCOVERED",
+      "entryPoints": [
+        {
+          "workspace": "current",
+          "symbol": "OrderController.approve",
+          "path": "src/main/java/com/example/order/OrderController.java"
+        }
+      ],
+      "nodes": [
+        {
+          "workspace": "current",
+          "symbol": "OrderService.approve",
+          "path": "src/main/java/com/example/order/OrderService.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderServiceImpl.approve",
+          "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+          "role": "SERVICE"
+        },
+        {
+          "workspace": "current",
+          "symbol": "OrderMapper.updateStatus",
+          "path": "src/main/java/com/example/order/OrderMapper.java",
+          "role": "MAPPER"
+        }
+      ],
+      "resources": [
+        {
+          "path": "src/main/resources/mapper/OrderMapper.xml",
+          "symbol": "OrderMapper.updateStatus",
+          "role": "MAPPER_XML"
+        }
+      ]
+    }
+  ],
+  "unresolved": null
+}
+{
+  "plan": {
+    "planId": "chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7",
+    "runId": "run-163-affected-persist",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-163-affected-persist/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "3e749a4e40aca2b310a2e8fb7711066eaf1c66e1d4012839b269ee904aca66ca",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7",
+  "planPath": ".code-harness/runs/run-163-affected-persist/analysis/chain-write-plans/chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7.json",
+  "status": "SEALED"
+}
+{
+  "planId": "chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7",
+  "status": "PERSISTED"
+}
+    chain_persistence_regression_163_task2_test.go:27: AFFECTED_PERSIST_REGRESSION PASS
+--- PASS: Test163Task2AffectedPersistRegression (2.63s)
+=== RUN   Test163Task2ActiveContractsSplitProjectFromAffectedDiscovery
+--- PASS: Test163Task2ActiveContractsSplitProjectFromAffectedDiscovery (0.00s)
+=== RUN   Test163Task2CleanProjectDiscoveryFindsExistingChain
+    chain_project_discovery_163_task2_test.go:20: CODEA_AST_GREP_TEST_PATH is required for Task 2 real project discovery
+--- SKIP: Test163Task2CleanProjectDiscoveryFindsExistingChain (0.00s)
+=== RUN   Test153ChainReviewContextLazyDiscoveryPublishesProvenanceAndCanSeal
+{
+  "status": "READY",
+  "contexts": [
+    {
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "source": "DISCOVERED",
+      "status": "TEMPORARY"
+    }
+  ],
+  "stale": [],
+  "unresolved": []
+}
+{
+  "plan": {
+    "planId": "chain-write-dea31099819efcef5d2c5adab039dea9badb55065019c31db67ec64dc0b40421",
+    "runId": "run-task4-review",
+    "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+    "candidatePath": ".code-harness/runs/run-task4-review/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
+    "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
+    "analysisHash": "587810c1a7cd6aea3201faab59ae124abb251b5adcf9906ad762b45cae1d7204",
+    "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
+  },
+  "planId": "chain-write-dea31099819efcef5d2c5adab039dea9badb55065019c31db67ec64dc0b40421",
+  "planPath": ".code-harness/runs/run-task4-review/analysis/chain-write-plans/chain-write-dea31099819efcef5d2c5adab039dea9badb55065019c31db67ec64dc0b40421.json",
+  "status": "SEALED"
+}
+--- PASS: Test153ChainReviewContextLazyDiscoveryPublishesProvenanceAndCanSeal (1.90s)
+=== RUN   Test153ChainReviewContextStaleTemporaryDiscoveryPublishesProvenance
+{
+  "status": "READY",
+  "contexts": [
+    {
+      "id": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
+      "name": "OrderController.approve",
+      "source": "DISCOVERED",
+      "status": "TEMPORARY"
+    }
+  ],
+  "stale": [
+    {
+      "id": "order-approve",
+      "name": "订单审批"
+    }
+  ],
+  "unresolved": []
+}
+--- PASS: Test153ChainReviewContextStaleTemporaryDiscoveryPublishesProvenance (0.98s)
+=== RUN   TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted
+{
+  "status": "READY",
+  "contexts": [
+    {
+      "id": "order-approve",
+      "name": "订单审批",
+      "source": "ACCEPTED",
+      "status": "VALID"
+    }
+  ],
+  "stale": [],
+  "unresolved": []
+}
+--- PASS: TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted (0.97s)
+=== RUN   TestChainReviewContextRejectsOutsideRequestAndCrossRunAnalysis
+--- PASS: TestChainReviewContextRejectsOutsideRequestAndCrossRunAnalysis (0.00s)
+=== RUN   TestChainReviewContextRejectsUnverifiedScopeBeforeResolution
+--- PASS: TestChainReviewContextRejectsUnverifiedScopeBeforeResolution (0.98s)
+=== RUN   Test162HotfixTask2ZeroArgUsageUsesRuntimeName
+--- PASS: Test162HotfixTask2ZeroArgUsageUsesRuntimeName (0.00s)
+=== RUN   Test162HotfixTask2InvocationRequestSchemas
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/snapshot
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/inventory
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/canonical_certify
+=== RUN   Test162HotfixTask2InvocationRequestSchemas/review_options
+--- PASS: Test162HotfixTask2InvocationRequestSchemas (0.01s)
+    --- PASS: Test162HotfixTask2InvocationRequestSchemas/snapshot (0.00s)
+    --- PASS: Test162HotfixTask2InvocationRequestSchemas/inventory (0.00s)
+    --- PASS: Test162HotfixTask2InvocationRequestSchemas/canonical_certify (0.00s)
+    --- PASS: Test162HotfixTask2InvocationRequestSchemas/review_options (0.00s)
+=== RUN   Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields
+=== RUN   Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/snapshot_requestedBaseRef
+=== RUN   Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/inventory_unknown_field
+=== RUN   Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/certify_unknown_field
+=== RUN   Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/review_options_baseRef
+--- PASS: Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields (0.01s)
+    --- PASS: Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/snapshot_requestedBaseRef (0.00s)
+    --- PASS: Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/inventory_unknown_field (0.00s)
+    --- PASS: Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/certify_unknown_field (0.00s)
+    --- PASS: Test162HotfixTask2CommandEntryRejectsSchemaInvalidFields/review_options_baseRef (0.00s)
+=== RUN   TestDBUnknownActionReturnsNonzero
+--- PASS: TestDBUnknownActionReturnsNonzero (0.00s)
+=== RUN   TestDBQueryRejectsInputOutsideRuns
+--- PASS: TestDBQueryRejectsInputOutsideRuns (0.00s)
+=== RUN   TestDBQueryRejectsMissingRequiredRequestFields
+--- PASS: TestDBQueryRejectsMissingRequiredRequestFields (0.00s)
+=== RUN   TestDBMissingConfigReturnsControlledUnavailable
+--- PASS: TestDBMissingConfigReturnsControlledUnavailable (0.00s)
+=== RUN   TestDBProductionConfigRejectedBeforeDatabaseUse
+--- PASS: TestDBProductionConfigRejectedBeforeDatabaseUse (0.00s)
+=== RUN   TestDBWriteSQLRejectedBeforeConnect
+--- PASS: TestDBWriteSQLRejectedBeforeConnect (0.01s)
+=== RUN   TestDBQueryBudgetExceededBeforeConnect
+--- PASS: TestDBQueryBudgetExceededBeforeConnect (0.01s)
+=== RUN   TestDBDuplicateQueryIDRejectedBeforeConnect
+--- PASS: TestDBDuplicateQueryIDRejectedBeforeConnect (0.01s)
+=== RUN   TestDBQueryDoesNotAcceptRawSQLArgument
+flag provided but not defined: -sql
+Usage of db query:
+  -input string
+    	structured query request under .code-harness/runs/<runId>/requests
+--- PASS: TestDBQueryDoesNotAcceptRawSQLArgument (0.00s)
+=== RUN   TestExtendedNavigationActionsAreRegistered
+--- PASS: TestExtendedNavigationActionsAreRegistered (0.00s)
+=== RUN   TestFindByAnnotationRejectsRawPattern
+flag provided but not defined: -pattern
+Usage of nav:
+  -annotation string
+    	Java annotation name
+  -scope string
+    	repository-relative scope (default "src/main/java")
+  -symbol string
+    	Java symbol
+--- PASS: TestFindByAnnotationRejectsRawPattern (0.00s)
+=== RUN   Test153ReportReviewRejectsUncertifiedAnalysis
+--- PASS: Test153ReportReviewRejectsUncertifiedAnalysis (0.01s)
+=== RUN   Test164ReportReviewRejectsCertifiedAnalysisWithoutReviewerCertifiedFindings
+--- PASS: Test164ReportReviewRejectsCertifiedAnalysisWithoutReviewerCertifiedFindings (1.24s)
+=== RUN   TestReportDispatchRecognizesReport
+--- PASS: TestReportDispatchRecognizesReport (0.00s)
+=== RUN   TestReportReviewWritesArtifactAndDeletesTransport
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "a61a24d3279c3bc75b8d8ce3c6cabb285902595f9af3919d26f64f256e783b72",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "fe01573eaf1329290d14f68014d8cb761c3229ced5c77785b00d9e16189c775f"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "a61a24d3279c3bc75b8d8ce3c6cabb285902595f9af3919d26f64f256e783b72",
+    "changeAnalysisSha256": "f05351d2c542a92e09d02886d9b5cbaf03ac5d77155e992baca50815c65e3d7a",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "84e7019de78c58572cd9c8bfb5cc8a8254038a30c0b7073acaeff7526797e35d"
+  },
+  "status": "READY"
+}
+    report_test.go:22: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: TestReportReviewWritesArtifactAndDeletesTransport (3.74s)
+=== RUN   TestReportReviewRejectsInputOutsideRunRequests
+--- PASS: TestReportReviewRejectsInputOutsideRunRequests (0.00s)
+=== RUN   TestReportApiDocWritesArtifactAndDeletesTransport
+{
+  "reportPath": ".code-harness/runs/api-doc-001/api-doc.md",
+  "status": "OK"
+}
+--- PASS: TestReportApiDocWritesArtifactAndDeletesTransport (0.01s)
+=== RUN   TestReportApiDocRejectsUnknownAction
+--- PASS: TestReportApiDocRejectsUnknownAction (0.00s)
+=== RUN   Test170NewRunIdentityDoesNotDependOnDiscoveryArtifact
+--- PASS: Test170NewRunIdentityDoesNotDependOnDiscoveryArtifact (0.00s)
+=== RUN   Test170DispatchRequiresDiscoveryForNewRun
+--- PASS: Test170DispatchRequiresDiscoveryForNewRun (0.09s)
+=== RUN   Test170LegacyDispatchRoutingRemainsLegacy
+--- PASS: Test170LegacyDispatchRoutingRemainsLegacy (0.00s)
+=== RUN   Test170NeedsMapFormalEvidenceByRole
+--- PASS: Test170NeedsMapFormalEvidenceByRole (0.00s)
+=== RUN   Test170NeedsDoNotPairChainAndFilesByIndex
+--- PASS: Test170NeedsDoNotPairChainAndFilesByIndex (0.00s)
+=== RUN   Test170BaseAdapterReturnsDeletedMethodAndMapperEvidence
+--- PASS: Test170BaseAdapterReturnsDeletedMethodAndMapperEvidence (9.50s)
+=== RUN   Test170UseTimeVerificationRejectsTamperedRuleContext
+--- PASS: Test170UseTimeVerificationRejectsTamperedRuleContext (0.00s)
+=== RUN   Test170SortHelperSanity
+--- PASS: Test170SortHelperSanity (0.00s)
+=== RUN   Test170ReviewContextRequestAcceptsMinimalRuntimeOwnedInput
+--- PASS: Test170ReviewContextRequestAcceptsMinimalRuntimeOwnedInput (0.00s)
+=== RUN   Test170ReviewContextRequestRejectsAgentSuppliedAuthority
+--- PASS: Test170ReviewContextRequestRejectsAgentSuppliedAuthority (0.00s)
+=== RUN   Test170ReviewContextRequestRejectsRunMismatch
+--- PASS: Test170ReviewContextRequestRejectsRunMismatch (0.00s)
+=== RUN   Test170ReviewContextRequestRejectsUnknownPhase
+--- PASS: Test170ReviewContextRequestRejectsUnknownPhase (0.00s)
+=== RUN   Test170ContextPhaseAuthority
+=== RUN   Test170ContextPhaseAuthority/discovery-during-analysis
+=== RUN   Test170ContextPhaseAuthority/rules-during-planning
+=== RUN   Test170ContextPhaseAuthority/rules-too-early
+=== RUN   Test170ContextPhaseAuthority/discovery-too-late
+=== RUN   Test170ContextPhaseAuthority/terminal-rejected
+--- PASS: Test170ContextPhaseAuthority (0.00s)
+    --- PASS: Test170ContextPhaseAuthority/discovery-during-analysis (0.00s)
+    --- PASS: Test170ContextPhaseAuthority/rules-during-planning (0.00s)
+    --- PASS: Test170ContextPhaseAuthority/rules-too-early (0.00s)
+    --- PASS: Test170ContextPhaseAuthority/discovery-too-late (0.00s)
+    --- PASS: Test170ContextPhaseAuthority/terminal-rejected (0.00s)
+=== RUN   Test170DiscoveryAuthorityIsChangeSetNotCertifiedAnalysis
+--- PASS: Test170DiscoveryAuthorityIsChangeSetNotCertifiedAnalysis (0.00s)
+=== RUN   Test170ContextArtifactNamesFollowTwoPhaseContract
+--- PASS: Test170ContextArtifactNamesFollowTwoPhaseContract (0.00s)
+=== RUN   Test153ReviewSelectRejectsJointOriginAndOptionsRewriteWithValidHash
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "a0502c85f2ab76d5a2887e046582d34e1396afb75f0ca0673ad62ae2aa1a0ab6",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "USER_SELECTION",
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      },
+      {
+        "selectionId": "C2",
+        "chainId": "refund-approve",
+        "entryPoints": [
+          "RefundController.refund"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "fe812aba22dc672ea461cc9edf80e37a6dfc28c98bc448ecb2294fc7492d5a1d"
+  },
+  "status": "READY"
+}
+--- PASS: Test153ReviewSelectRejectsJointOriginAndOptionsRewriteWithValidHash (2.59s)
+=== RUN   Test160ReviewUnitsCommandWritesRuntimeOwnedManifest
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "349000211bf3e33cfbddd77d7890717152d449db9dfeba7872936105b8beeb5c",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "dfcdc13883ae95f6bbc5e9636b280ecec08c1582afcaab25436bb98dd9dd1636"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "349000211bf3e33cfbddd77d7890717152d449db9dfeba7872936105b8beeb5c",
+    "changeAnalysisSha256": "306ed1c6fa406ddfc169f8d2f705cef01654afc03500211be994bbe778f856b9",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 1
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "5747bb968e96210ab3c7c8d959f440a4490f24199ddb34475b81a6c7a00eb9d9"
+  },
+  "status": "READY"
+}
+--- PASS: Test160ReviewUnitsCommandWritesRuntimeOwnedManifest (3.28s)
+=== RUN   Test160ReviewUnitsCommandRequiresRunID
+--- PASS: Test160ReviewUnitsCommandRequiresRunID (0.00s)
+=== RUN   Test160ReviewUnitsCommandRejectsNonCanonicalRunID
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "ed4e5e33b0197aa5ac9f714ed1bf8cd038f7cb04a07494c2d76075d8b6e53272",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "230ee1d7948975bde15a3dca263bf4d4a03e18bce75521e03c287c98d5920fe7"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+--- PASS: Test160ReviewUnitsCommandRejectsNonCanonicalRunID (2.49s)
+=== RUN   Test160ReviewDispatchCommandWritesRuntimeOwnedManifest
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "9c63964a50f1aea90a06ea0167bf5be4f23d03dadde412ebfe1d87685434f0a5",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "0ade62f17dc5910768eaccdf35268f37da31aa99f6ee40bd4c31e8ec5795b0e4"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "9c63964a50f1aea90a06ea0167bf5be4f23d03dadde412ebfe1d87685434f0a5",
+    "changeAnalysisSha256": "86e7733d100d92340e1f3356475d3b99a0636293fd79de74b320ea0a2673b9bc",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 1
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "31fe363ed6bc71970aa49a75d0bb1837fe37270dee512df93311a0b95b78da86"
+  },
+  "status": "READY"
+}
+    review_precision_command_test.go:90: review dispatch: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test160ReviewDispatchCommandWritesRuntimeOwnedManifest (3.24s)
+=== RUN   Test160ReviewDispatchCommandRequiresRunID
+--- PASS: Test160ReviewDispatchCommandRequiresRunID (0.00s)
+=== RUN   Test160ReviewDispatchCommandRejectsNonCanonicalRunID
+    review_precision_command_test.go:113: review dispatch must reject non-canonical run id, got REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test160ReviewDispatchCommandRejectsNonCanonicalRunID (0.00s)
+=== RUN   Test160ReviewCertifyFindingsRequiresInput
+--- PASS: Test160ReviewCertifyFindingsRequiresInput (0.00s)
+=== RUN   Test160ReviewCertifyFindingsRejectsOutsideRunRequests
+--- PASS: Test160ReviewCertifyFindingsRejectsOutsideRunRequests (0.00s)
+=== RUN   Test164Task3AnalysisCertifyAdvancesChangeAnalysisAndCertification
+{
+  "analysisSha256": "cfc5d31d603b11d0de5f903484cade1999b658ab7196683258cf038cabaf01b7",
+  "artifactPath": ".code-harness/runs/review-task3-cert-success/analysis/change-analysis.json",
+  "certificatePath": ".code-harness/runs/review-task3-cert-success/analysis/change-analysis.cert.json",
+  "changeSetSha256": "2d78e30dbec7ef6468a69daf61fd1027bda60f2d74c88c0fcbb8fe06e5412d61",
+  "entrypointInventorySha256": "edfa6c01842619f6049f45cfd4fdf24dab64e490cb60b621039081ef39bf4837",
+  "runId": "review-task3-cert-success",
+  "status": "CERTIFIED"
+}
+--- PASS: Test164Task3AnalysisCertifyAdvancesChangeAnalysisAndCertification (1.12s)
+=== RUN   Test164Task3ChangeAnalysisAuthorityFailureTerminatesAtChangeAnalysis
+--- PASS: Test164Task3ChangeAnalysisAuthorityFailureTerminatesAtChangeAnalysis (0.71s)
+=== RUN   Test164Task3CertificationStaleSnapshotFailureTerminatesAtCertification
+--- PASS: Test164Task3CertificationStaleSnapshotFailureTerminatesAtCertification (1.00s)
+=== RUN   Test164Task3ReviewPlanningCommandsAdvanceRuntimeProgress
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "9abc511d0831c060ffee9bf03a5030b65c4d7bb3e0b61677acf3019ca9d91d03",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "8a0531e6025d370c5e62dd542bb911a2c20b849291565da44632262a1267be92"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "9abc511d0831c060ffee9bf03a5030b65c4d7bb3e0b61677acf3019ca9d91d03",
+    "changeAnalysisSha256": "a5f52da268d2dccbc5def9cf37f5b090318d468565baee897facd479f201e51b",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "0d6981ca2b1ddf546a9a585d4bb428b313534185f7c7775e99db41b815fdc1f4"
+  },
+  "status": "READY"
+}
+    review_progress_lifecycle_task3_test.go:45: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164Task3ReviewPlanningCommandsAdvanceRuntimeProgress (3.29s)
+=== RUN   Test164Task3ReviewPlanningFailureBlocksLaterStages
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "c337c67b1486712d1ddb8ff5b0531f6dbc85d1b090f84800875bae95dc2e4aa5",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "1ac1e02a69e6e4ed82840be49c96673836c36943a24fd5be02ffc431181b89e2"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "c337c67b1486712d1ddb8ff5b0531f6dbc85d1b090f84800875bae95dc2e4aa5",
+    "changeAnalysisSha256": "c666eb43584e6cb7d6a9dcd0d85f7b0bb43dd762a0c76f6d25c4fd4101234168",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "12c53ef3e08274dd836bbd596018a7aa002d496dc1e06b74b56bad80c1411df5"
+  },
+  "status": "READY"
+}
+    review_progress_lifecycle_task3_test.go:70: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164Task3ReviewPlanningFailureBlocksLaterStages (3.28s)
+=== RUN   Test164Task3ReviewerAuthorityFailureTerminatesReviewExecution
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "bc95026beea7d36f06d95ea2ee78a6e1064dd3e26df4a054adaf47c7763b2479",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "d217fbd422ca90a6831dc5a76929bfa609baa456576fdef30a73bbfada6b4a06"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "bc95026beea7d36f06d95ea2ee78a6e1064dd3e26df4a054adaf47c7763b2479",
+    "changeAnalysisSha256": "08ad307cc1071b42820d4b4002efa896388172b0fc7df89098cd3454996d3e5f",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "bda6450bb7a07c9869b490b110cbe887c373674795e45ba0f0b022faade76068"
+  },
+  "status": "READY"
+}
+    review_progress_lifecycle_task3_test.go:93: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164Task3ReviewerAuthorityFailureTerminatesReviewExecution (3.26s)
+=== RUN   Test164Task3FindingCertificationFailureIsAttributedAfterReviewerAuthority
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "9345c109800579e46e1cf4d509ecc01cfbcbaec913744f0e603a35b13ec557a6",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "cf771a362403f2da707808ef87bacf6096fe09c877d8ccdcaaca3dac76e5bafa"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "9345c109800579e46e1cf4d509ecc01cfbcbaec913744f0e603a35b13ec557a6",
+    "changeAnalysisSha256": "2c7c93131be4b77915166d086cb508b843f32f730e6cd26b9eeb39e74137fce3",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "03a49791fdce02d842c1acddf28492f3c78562e556ef5732a1d04adbfdd835f3"
+  },
+  "status": "READY"
+}
+    review_progress_lifecycle_task3_test.go:107: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164Task3FindingCertificationFailureIsAttributedAfterReviewerAuthority (3.25s)
+=== RUN   Test164Task3FindingCertificationAndReportCompleteRuntimeProgress
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "2e68b25489a60a2420e55723d1c0b101428fbab83413633fab92d5df5c62d87f",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "1619abbce605594f866ae7ad9478f7a606c8680158394dc0a635e6eb481542e0"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "2e68b25489a60a2420e55723d1c0b101428fbab83413633fab92d5df5c62d87f",
+    "changeAnalysisSha256": "a4eaab2b5eccae07211e2cd9adc4c9ec54ecb791eef9ea6e83e7e4e75190084b",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "6b71467d5d5f54a2608217be07faa33c1aea6bfebd0064ce2024aeb7ffa773d0"
+  },
+  "status": "READY"
+}
+    review_progress_lifecycle_task3_test.go:124: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164Task3FindingCertificationAndReportCompleteRuntimeProgress (3.29s)
+=== RUN   Test164Task3ReportFailureTerminatesAtReport
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "7e6b93aeb246b9014b73ef2646230131c9f57e298bb7a3e26bbca03345770c3a",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "ea7a68ebd259294ce3485b65897f711935605d52a8d50611e3d74dffb58778a3"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "7e6b93aeb246b9014b73ef2646230131c9f57e298bb7a3e26bbca03345770c3a",
+    "changeAnalysisSha256": "2edee5206a69e0cfb54c9a071bfc172b3582de74a62a7104deac9943e63d4b41",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "9fc34f4f3e3126c093713e1d004f2564781ce0054d2837c0e366659dacaff6a8"
+  },
+  "status": "READY"
+}
+    review_progress_lifecycle_task3_test.go:146: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164Task3ReportFailureTerminatesAtReport (3.27s)
+=== RUN   Test164Task3OpenCodeRendersOnlyRuntimeProgressEvents
+--- PASS: Test164Task3OpenCodeRendersOnlyRuntimeProgressEvents (0.00s)
+=== RUN   Test164Task3ReviewerUnavailableFailsChangeAnalysisAtHostBoundary
+--- PASS: Test164Task3ReviewerUnavailableFailsChangeAnalysisAtHostBoundary (0.02s)
+=== RUN   Test164Task3ReviewerUnavailableFailsReviewExecutionAtHostBoundary
+--- PASS: Test164Task3ReviewerUnavailableFailsReviewExecutionAtHostBoundary (0.04s)
+=== RUN   Test164Task3ReviewerUnavailableCannotFailNonReviewerStage
+--- PASS: Test164Task3ReviewerUnavailableCannotFailNonReviewerStage (0.01s)
+=== RUN   Test164Task3OpenCodeHostFailureReportsRuntimeProgressBeforeHardStop
+--- PASS: Test164Task3OpenCodeHostFailureReportsRuntimeProgressBeforeHardStop (0.00s)
+=== RUN   Test164Task3SnapshotSuccessAdvancesRuntimeProgress
+{
+  "artifactPath": ".code-harness/runs/review-task3-snapshot-success/analysis/change-set.json",
+  "headCommit": "3b16c97dc39b1dc873e704f20792f6ae24fb0d7e",
+  "mergeBase": "3b16c97dc39b1dc873e704f20792f6ae24fb0d7e",
+  "resolvedBaseCommit": "3b16c97dc39b1dc873e704f20792f6ae24fb0d7e",
+  "runId": "review-task3-snapshot-success",
+  "snapshotSha256": "5c5841e1dbce3a307fc78fe30de4f39a2d1feb57bb0a0f30ba6576c3a64ea012",
+  "status": "SNAPSHOT_READY"
+}
+--- PASS: Test164Task3SnapshotSuccessAdvancesRuntimeProgress (0.67s)
+=== RUN   Test164Task3SnapshotFailureTerminatesAtSnapshot
+--- PASS: Test164Task3SnapshotFailureTerminatesAtSnapshot (0.32s)
+=== RUN   Test164Task3ReviewBeginCreatesRuntimeOwnedProgress
+{
+  "progressPath": ".code-harness/runs/review-72e165e44217c339ebbca275b8395565/runtime/review-progress.json",
+  "protocolVersion": "1.7",
+  "runId": "review-72e165e44217c339ebbca275b8395565",
+  "runPath": ".code-harness/runs/review-72e165e44217c339ebbca275b8395565",
+  "status": "READY"
+}
+{
+  "version": 1,
+  "protocolVersion": "1.7",
+  "runId": "review-72e165e44217c339ebbca275b8395565",
+  "status": "RUNNING",
+  "currentStage": "SNAPSHOT",
+  "startedAt": "2026-09-14T01:58:21.6883524Z",
+  "updatedAt": "2026-09-14T01:58:21.6883524Z",
+  "stages": [
+    {
+      "index": 1,
+      "total": 8,
+      "name": "REVIEW_BEGIN",
+      "status": "SUCCEEDED",
+      "startedAt": "2026-09-14T01:58:21.6883524Z",
+      "completedAt": "2026-09-14T01:58:21.6883524Z"
+    },
+    {
+      "index": 2,
+      "total": 8,
+      "name": "SNAPSHOT",
+      "status": "RUNNING",
+      "startedAt": "2026-09-14T01:58:21.6883524Z"
+    },
+    {
+      "index": 3,
+      "total": 8,
+      "name": "CHANGE_ANALYSIS",
+      "status": "PENDING"
+    },
+    {
+      "index": 4,
+      "total": 8,
+      "name": "CERTIFICATION",
+      "status": "PENDING"
+    },
+    {
+      "index": 5,
+      "total": 8,
+      "name": "REVIEW_PLANNING",
+      "status": "PENDING"
+    },
+    {
+      "index": 6,
+      "total": 8,
+      "name": "REVIEW_EXECUTION",
+      "status": "PENDING"
+    },
+    {
+      "index": 7,
+      "total": 8,
+      "name": "FINDING_CERTIFICATION",
+      "status": "PENDING"
+    },
+    {
+      "index": 8,
+      "total": 8,
+      "name": "REPORT",
+      "status": "PENDING"
+    }
+  ],
+  "events": [
+    {
+      "sequence": 1,
+      "index": 1,
+      "total": 8,
+      "stage": "REVIEW_BEGIN",
+      "status": "RUNNING",
+      "timestamp": "2026-09-14T01:58:21.6883524Z",
+      "display": "[1/8] REVIEW_BEGIN RUNNING"
+    },
+    {
+      "sequence": 2,
+      "index": 1,
+      "total": 8,
+      "stage": "REVIEW_BEGIN",
+      "status": "SUCCEEDED",
+      "timestamp": "2026-09-14T01:58:21.6883524Z",
+      "display": "[1/8] REVIEW_BEGIN PASS"
+    },
+    {
+      "sequence": 3,
+      "index": 2,
+      "total": 8,
+      "stage": "SNAPSHOT",
+      "status": "RUNNING",
+      "timestamp": "2026-09-14T01:58:21.6883524Z",
+      "display": "[2/8] SNAPSHOT RUNNING"
+    }
+  ]
+}
+--- PASS: Test164Task3ReviewBeginCreatesRuntimeOwnedProgress (0.01s)
+=== RUN   Test162ReviewReliabilityTask1RequestSchemas
+=== RUN   Test162ReviewReliabilityTask1RequestSchemas/finding_certify
+=== RUN   Test162ReviewReliabilityTask1RequestSchemas/report_review_full
+=== RUN   Test162ReviewReliabilityTask1RequestSchemas/report_review_targeted
+--- PASS: Test162ReviewReliabilityTask1RequestSchemas (0.01s)
+    --- PASS: Test162ReviewReliabilityTask1RequestSchemas/finding_certify (0.00s)
+    --- PASS: Test162ReviewReliabilityTask1RequestSchemas/report_review_full (0.01s)
+    --- PASS: Test162ReviewReliabilityTask1RequestSchemas/report_review_targeted (0.00s)
+=== RUN   Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode
+=== RUN   Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/finding_certify_unknown_field
+=== RUN   Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/report_review_unknown_field
+--- PASS: Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode (0.01s)
+    --- PASS: Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/finding_certify_unknown_field (0.00s)
+    --- PASS: Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/report_review_unknown_field (0.01s)
+=== RUN   Test162ReviewReliabilityTask2BeginCreatesFreshRunWithoutSnapshot
+{
+  "progressPath": ".code-harness/runs/review-32f4e1737d03fbbe2d3ba2262a7d3c27/runtime/review-progress.json",
+  "protocolVersion": "1.7",
+  "runId": "review-32f4e1737d03fbbe2d3ba2262a7d3c27",
+  "runPath": ".code-harness/runs/review-32f4e1737d03fbbe2d3ba2262a7d3c27",
+  "status": "READY"
+}
+{
+  "progressPath": ".code-harness/runs/review-78b3093bc6c22af9fe7adbef3b0fc302/runtime/review-progress.json",
+  "protocolVersion": "1.7",
+  "runId": "review-78b3093bc6c22af9fe7adbef3b0fc302",
+  "runPath": ".code-harness/runs/review-78b3093bc6c22af9fe7adbef3b0fc302",
+  "status": "READY"
+}
+--- PASS: Test162ReviewReliabilityTask2BeginCreatesFreshRunWithoutSnapshot (0.02s)
+=== RUN   Test162ReviewReliabilityTask2BeginRejectsArguments
+--- PASS: Test162ReviewReliabilityTask2BeginRejectsArguments (0.00s)
+=== RUN   Test153ReviewScopeRejectsUncertifiedAnalysis
+--- PASS: Test153ReviewScopeRejectsUncertifiedAnalysis (0.01s)
+=== RUN   Test153ReviewScopeRejectsTamperedCertifiedAnalysis
+--- PASS: Test153ReviewScopeRejectsTamperedCertifiedAnalysis (0.87s)
+=== RUN   Test153ReviewScopeRejectsStaleCertifiedChangeSet
+--- PASS: Test153ReviewScopeRejectsStaleCertifiedChangeSet (1.23s)
+=== RUN   Test153ReviewScopeAcceptsCertifiedAnalysis
+{
+  "format": "json",
+  "reviewCoverage": {
+    "status": "COMPLETE"
+  },
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderController.approve",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/OrderController.java",
+      "src/main/java/OrderService.java"
+    ]
+  },
+  "status": "VALID"
+}
+--- PASS: Test153ReviewScopeAcceptsCertifiedAnalysis (1.23s)
+=== RUN   TestValidateReviewScopeUsesScopedCoverageNotFullChangedSet
+{
+  "format": "json",
+  "reviewCoverage": {
+    "status": "COMPLETE"
+  },
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderController.approve",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/OrderController.java",
+      "src/main/java/OrderService.java"
+    ]
+  },
+  "status": "VALID"
+}
+--- PASS: TestValidateReviewScopeUsesScopedCoverageNotFullChangedSet (1.45s)
+=== RUN   TestValidateReviewScopeRejectsMissingScopedReviewedFile
+--- PASS: TestValidateReviewScopeRejectsMissingScopedReviewedFile (1.42s)
+=== RUN   Test153ReviewOptionsAutoSingleExecutesWithoutUserChoice
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "09278e265592f5ef9ccebec11b7d8316a3fafc79946430af3bf2fdf05b689538",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "fce80dd87b66f9e653de924e280948a3089ae23530f72cfee563dccd2a182dc0"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+--- PASS: Test153ReviewOptionsAutoSingleExecutesWithoutUserChoice (2.75s)
+=== RUN   Test153ReviewSelectRejectsStaleAndUnknownRuntimeOptions
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "81aa1b2db6980d01920b811bacd8dffd179826ae8d7db9b43216c145468249d5",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "6d5a370c80f824451057827bb84744ae9feed94c25ede7fa396584264f6aad66"
+  },
+  "status": "READY"
+}
+--- PASS: Test153ReviewSelectRejectsStaleAndUnknownRuntimeOptions (3.25s)
+=== RUN   Test153ReviewSelectRejectsRehashedOptionSetDeletion
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "2234a8a5997cf80d25f84dbf96ce1608001534b57832a95ae3ec6078b947030b",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "USER_SELECTION",
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      },
+      {
+        "selectionId": "C2",
+        "chainId": "refund-approve",
+        "entryPoints": [
+          "RefundController.refund"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "c3ca582aba425d833d0e804ae96a41e0927578b70c36da9b6e4e7c183808f7f7"
+  },
+  "status": "READY"
+}
+--- PASS: Test153ReviewSelectRejectsRehashedOptionSetDeletion (2.49s)
+=== RUN   Test153ReviewSelectRejectsJointOriginAndOptionsIntentRewrite
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "78bb4d717e6270840da9b6b514a7ea73665496b4ba18968c8d37cc07092cf124",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "USER_SELECTION",
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      },
+      {
+        "selectionId": "C2",
+        "chainId": "refund-approve",
+        "entryPoints": [
+          "RefundController.refund"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "134c02900611f53d81931cb97c34474105994377a00aa5b7ff09f7ed917a3992"
+  },
+  "status": "READY"
+}
+--- PASS: Test153ReviewSelectRejectsJointOriginAndOptionsIntentRewrite (2.50s)
+=== RUN   Test153ExplicitTargetIsImmutableAndHashBound
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "d5121bc2c40ade9c543e4982b4130d40925412556bc630b9592354aca9ec81bb",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "TARGETED",
+      "target": "OrderServiceImpl.approve"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "73418400bbb0e908c48e598ac76d6d169d9e834d8d9e345e66c6892ec787123a"
+  },
+  "status": "READY"
+}
+--- PASS: Test153ExplicitTargetIsImmutableAndHashBound (2.50s)
+=== RUN   Test153ExplicitTargetAutoSinglePreservesReviewScopeTarget
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "b2e4f636fbaf2f6e12969ea2fc060ce387994d59a3e3dee1e4cba69a603308a0",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "TARGETED",
+      "target": "OrderServiceImpl.approve"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "ca6b3dcde6c47bf413190f49ff0ebdf311c18fd91197b3c660da73e99b96a3b4"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderServiceImpl.approve",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+--- PASS: Test153ExplicitTargetAutoSinglePreservesReviewScopeTarget (2.47s)
+=== RUN   Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "d4b615e6109f0212693acb556488228952fa2b5145ea2ef3e2bdd8ca4eb3d596",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "TARGETED",
+      "target": "OrderServiceImpl.approve"
+    },
+    "decision": "USER_SELECTION",
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      },
+      {
+        "selectionId": "C2",
+        "chainId": "refund-approve",
+        "entryPoints": [
+          "RefundController.refund"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "3467426f7695c424611532a1df0d510bab03f0257bdadfbab78c9bd3809ae9cd"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderServiceImpl.approve",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderServiceImpl.approve",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "RefundController.refund",
+        "chain": [
+          "RefundController.refund",
+          "RefundService.refund",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/java/com/example/order/RefundController.java",
+      "src/main/java/com/example/order/RefundService.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+--- PASS: Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice (3.27s)
+=== RUN   Test153ExplicitTargetWithoutMatchingChainStopsInsteadOfAutoFull
+--- PASS: Test153ExplicitTargetWithoutMatchingChainStopsInsteadOfAutoFull (1.32s)
+=== RUN   Test164FindingCertificationRequiresReviewerHostAuthority
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "061058aaa0ac18af6c7cb303fc584ceeb82f77b6ba8163e6af9a9d27a8f18fc6",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "9d4c2cc58ba7fd18d3dd9073808c74b2e300be415114d1c3ef6f856ebdd7957f"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "061058aaa0ac18af6c7cb303fc584ceeb82f77b6ba8163e6af9a9d27a8f18fc6",
+    "changeAnalysisSha256": "e64d2cb076de0f7a79b3b650348354132795c2e6d12e3d05fcb3f55b02398427",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "a7703a6b5a5cc9118da07900016f219765562943bb796706f179e022f350a784"
+  },
+  "status": "READY"
+}
+    reviewer_findings_report_164_test.go:153: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164FindingCertificationRequiresReviewerHostAuthority (3.28s)
+=== RUN   Test164ReviewerCertifiedEmptyFindingsDrivePassedReport
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "fe797fac4d3ea8af841d0b160f9def11350d3c47e67d0e95cda4e2f1ec7654a0",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "daf9d70094d3b07d8779254ca9e8fbfac4966813678ec9dc3e8854e089527357"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "fe797fac4d3ea8af841d0b160f9def11350d3c47e67d0e95cda4e2f1ec7654a0",
+    "changeAnalysisSha256": "b26f18094b7d0d6bfcb0317fbe83dfead524f1afbe002dd5897ce91531cdd0d1",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "6a132ef476f611556c696476ba64342e087348d33b61b620ecf9353fb51ce6fe"
+  },
+  "status": "READY"
+}
+    reviewer_findings_report_164_test.go:172: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164ReviewerCertifiedEmptyFindingsDrivePassedReport (3.27s)
+=== RUN   Test153Task6ArtifactAuthorityReleaseContract
+--- PASS: Test153Task6ArtifactAuthorityReleaseContract (0.00s)
+=== RUN   Test153Task6ChainEditAndReleaseContract
+--- PASS: Test153Task6ChainEditAndReleaseContract (0.00s)
+=== RUN   Test153Task6ControllerCompletenessReleaseContract
+--- PASS: Test153Task6ControllerCompletenessReleaseContract (0.00s)
+=== RUN   Test153Task6ReviewSelectionReleaseContract
+--- PASS: Test153Task6ReviewSelectionReleaseContract (0.00s)
+=== RUN   TestTask160ReleaseMetadataAndPackageWorkflow
+--- PASS: TestTask160ReleaseMetadataAndPackageWorkflow (0.00s)
+=== RUN   TestTask4LoadCertifiedAndReportRejectSourceMutationAfterCertification
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "ac5cfe4c8ebe329d8092292a3c095e7323e9230685920164bda500c49fa1f9f8",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "d80abe08a0d5db722637e47e75ebf9b68f100189f4fea45514ac47b49d6b100b"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "ac5cfe4c8ebe329d8092292a3c095e7323e9230685920164bda500c49fa1f9f8",
+    "changeAnalysisSha256": "2a20eb4a5295b0fd037ba5f087585f325b7a942f1e0884039416fc5cc44c9e8b",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 1
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "0eec0c5148e40a1f3e960dae4286263a21a1a99d4e80fe0d1bacab39045417c1"
+  },
+  "status": "READY"
+}
+    task4_blocker_regression_test.go:19: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: TestTask4LoadCertifiedAndReportRejectSourceMutationAfterCertification (3.27s)
+=== RUN   TestTask4ProposalBytesMutationReturnsCertifiedFindingsStale
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "18f3a0212c38048812c416d862c24b772a1b04a301c371ac42add4752e723517",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "d98148281e1d854262c50e6b70e9b1c480984af733a498915b384c40e9ad653d"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "18f3a0212c38048812c416d862c24b772a1b04a301c371ac42add4752e723517",
+    "changeAnalysisSha256": "7d45aaca24fd160d3b6dbf79bc57759f16361b3f4f7ffc470e339918d7f74a39",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 1
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "236d9cd6767aad5b1d39870f85238baea6c549a277922346544310c8dbaa0c03"
+  },
+  "status": "READY"
+}
+    task4_blocker_regression_test.go:43: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: TestTask4ProposalBytesMutationReturnsCertifiedFindingsStale (3.21s)
+=== RUN   TestTask4CertifiedFindingsHashTamperKeepsHashMismatchCode
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "ee00898e1b778a50005546afb89c8479a146f86f10dec1a6c1a47fef871b60d5",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "8c6949b85ba0d7f2177646d2ca1c60b8d72983757afa0fe432086ad6cd6d7070"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "ee00898e1b778a50005546afb89c8479a146f86f10dec1a6c1a47fef871b60d5",
+    "changeAnalysisSha256": "79012edf0a4f7d5323fb30e8b46f88418caf5c9c525720af0b049004ce36de15",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 1
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "bc1335620f84500a13e8229195831d19837767185034e114cc5477e3d34dc5a2"
+  },
+  "status": "READY"
+}
+    task4_blocker_regression_test.go:54: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: TestTask4CertifiedFindingsHashTamperKeepsHashMismatchCode (3.23s)
+=== RUN   TestTask4TargetedCertificateRejectsFullReport
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "d977b66889d970ffc26b15a245f650d049059e87fa627c43ed66f52a740959ea",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "a2ce0b6a204dc8956b95fc6b984bce4328be5b387f192f94266284272a892191"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "d977b66889d970ffc26b15a245f650d049059e87fa627c43ed66f52a740959ea",
+    "changeAnalysisSha256": "1fef286ab51db562979f29bedcfc52039f5bcc4a08d09c6752c3823aa4d26c65",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 1
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "59d32424db12f6723f4be01d8f17e6480dd621f7b9765c36850de1942e14d33f"
+  },
+  "status": "READY"
+}
+    task4_blocker_regression_test.go:75: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: TestTask4TargetedCertificateRejectsFullReport (3.27s)
+=== RUN   TestTask4TargetedCertificateRejectsWrongTargetOrScopedFiles
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
+  "options": {
+    "runId": "run-task4-review",
+    "changeSetSha256": "3ef6e3fef75387f56cc17b2376cf8f0ddfa317a66dd2321d204c12ecb0000fab",
+    "entrypointCompleteness": "COMPLETE",
+    "intent": {
+      "mode": "FULL"
+    },
+    "decision": "AUTO_SINGLE",
+    "autoSelectionIds": [
+      "C1"
+    ],
+    "chains": [
+      {
+        "selectionId": "C1",
+        "chainId": "order-approve",
+        "entryPoints": [
+          "OrderController.approve"
+        ],
+        "source": "ACCEPTED",
+        "status": "VALID"
+      }
+    ],
+    "optionsHash": "a728bc6cf47ef96dd9889e8ea9e3330f0edfb1cf3e74c20a8b5cc10f8b74f115"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-scope.json",
+  "reviewScope": {
+    "mode": "TARGETED",
+    "target": {
+      "symbol": "OrderMapper.updateStatus",
+      "kind": "METHOD"
+    },
+    "selectedCallChains": [
+      {
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ]
+      }
+    ],
+    "scopedFiles": [
+      "src/main/java/com/example/order/OrderController.java",
+      "src/main/java/com/example/order/OrderMapper.java",
+      "src/main/java/com/example/order/OrderService.java",
+      "src/main/java/com/example/order/OrderServiceImpl.java",
+      "src/main/resources/mapper/OrderMapper.xml"
+    ]
+  },
+  "status": "SELECTED"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "3ef6e3fef75387f56cc17b2376cf8f0ddfa317a66dd2321d204c12ecb0000fab",
+    "changeAnalysisSha256": "a100704c340c0144cbee2094be5bdc06c7ed756225e8eea07bcde8b526474991",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 1
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "9a42f7c960cac7bdda12ce2ddafc712f8beeb18e47316e2814be05762f59699e"
+  },
+  "status": "READY"
+}
+    task4_blocker_regression_test.go:85: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: TestTask4TargetedCertificateRejectsWrongTargetOrScopedFiles (3.22s)
+=== RUN   Test152AnalyzeChangeDeclaresVerifiedWorkspaceFallback
+--- PASS: Test152AnalyzeChangeDeclaresVerifiedWorkspaceFallback (0.00s)
+=== RUN   Test152WorkspaceToolsAreGloballyAllowlisted
+--- PASS: Test152WorkspaceToolsAreGloballyAllowlisted (0.00s)
+=== RUN   Test152WindowsSmokeContainsRealAnalyzeChangeDiscoverBootstrap
+--- PASS: Test152WindowsSmokeContainsRealAnalyzeChangeDiscoverBootstrap (0.00s)
+=== RUN   Test152RealDualProjectWorkspaceBusinessRegression
+--- PASS: Test152RealDualProjectWorkspaceBusinessRegression (0.67s)
+=== RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions
+=== RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/version_mismatch
+=== RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/not_configured
+=== RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/ambiguous_override
+=== RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/source_missing
+--- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions (2.25s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/version_mismatch (0.52s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/not_configured (0.54s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/ambiguous_override (0.67s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/source_missing (0.52s)
+=== RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets
+=== RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/source_directory
+=== RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/single_current_file
+=== RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/multiple_candidates
+=== RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/dependency_file
+--- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets (0.42s)
+    --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/source_directory (0.00s)
+    --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/single_current_file (0.00s)
+    --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/multiple_candidates (0.00s)
+    --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/dependency_file (0.00s)
+=== RUN   Test152ValidateHarnessConfigRunsWorkspaceSemanticGate
+--- PASS: Test152ValidateHarnessConfigRunsWorkspaceSemanticGate (0.01s)
+=== RUN   Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema
+    workspace_runtime_152_test.go:34: symlink permission is environment-dependent on Windows; covered by workspace semantic unit gate
+--- SKIP: Test152ValidateHarnessConfigRejectsSymlinkEscapeAfterSchema (0.00s)
+=== RUN   Test152WorkspaceVerifyIsFormalRuntimeEntry
+--- PASS: Test152WorkspaceVerifyIsFormalRuntimeEntry (0.01s)
+=== RUN   Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep
+--- PASS: Test152WorkspaceNavRejectsMismatchedSourceBeforeAstGrep (0.01s)
+=== RUN   Test152Task5RequiresRealDualProjectWindowsE2E
+--- PASS: Test152Task5RequiresRealDualProjectWindowsE2E (0.00s)
+FAIL
+FAIL	codea-harness-tools/cmd/codea-dcep-tools	153.505s
+FAIL
