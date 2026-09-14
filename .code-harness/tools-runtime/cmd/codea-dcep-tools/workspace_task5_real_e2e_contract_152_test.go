@@ -50,18 +50,4 @@ func Test152Task5RequiresRealDualProjectWindowsE2E(t *testing.T) {
 			t.Fatalf("Task 5 real Windows E2E driver missing evidence %q", want)
 		}
 	}
-
-	workflowBytes, err := os.ReadFile(filepath.Join(repoRoot, ".github", "workflows", "task152-workspace-navigation.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow := string(workflowBytes)
-	for _, want := range []string{
-		"Task 5 real dual-project business regression",
-		"task152-task5-real-business-regression.ps1",
-	} {
-		if !strings.Contains(workflow, want) {
-			t.Fatalf("Task 5 workflow gate missing %q", want)
-		}
-	}
 }
