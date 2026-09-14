@@ -1,0 +1,61 @@
+name: task170-t6-legacy-contract-patch
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t6]
+    paths:
+      - '.github/workflows/task170-t6-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache: false
+      - name: Restore historical Task 4 vocabulary without restoring old policy
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git reset --hard HEAD
+          $path = '.code-harness/agents/orchestrator.md'
+          $text = Get-Content $path -Raw -Encoding utf8
+          $marker = '显式 `harness chain discover/refresh/edit/validate` 仍属于 Chain Management；若用户主动要保存/更新，继续走 `seal-persist → exact planId confirmation → persist` 的原授权链。Review 自身不获得 Project State 写权限。'
+          if (-not $text.Contains($marker)) { throw 'T6 insertion marker missing' }
+          $compat = @'
+
+### 1.5 Task 4 历史兼容词汇（非运行时策略）
+
+以下词汇仅用于旧版 contract regression、迁移识别与历史文档兼容，**不再构成 1.7 T6 的交互或策略 authority**。正常 Review 仍严格执行上面的 Runtime-owned `AUTO_TEMPORARY` 流程，不得恢复旧 STALE 人工决策门禁：
+
+- Controlled Runtime 命令入口仍为 `chain review-context --input`；请求体策略由 Runtime 决定，Agent 不得覆盖。
+- 历史返回词 `STALE_REQUIRES_DECISION` 仅作为兼容识别词保留；1.7 T6 正常 Review 不再产生该状态。
+- 历史选项文案“使用本次临时发现的 Chain 继续评审”“刷新项目 Chain”“停止本次评审”仅用于识别旧流程，不得在 1.7 T6 正常 Review 中重新展示为 stale maintenance 选择。
+- `Chain = 业务上下文边界` 的原原则保持；不得自动保存 DISCOVERED Chain。
+- Review 后若用户主动要求沉淀，仍可提示“是否沉淀到项目 `.code-harness/chains/`？”，但必须进入独立 Chain Management 授权链。
+'@
+          if (-not $text.Contains('### 1.5 Task 4 历史兼容词汇（非运行时策略）')) {
+            $text = $text.Replace($marker, $marker + $compat)
+            Set-Content -Path $path -Value $text -Encoding utf8NoBOM -NoNewline
+          }
+          git rm '.github/workflows/task170-t6-patch.yml'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add $path
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Push-Location '.code-harness/tools-runtime'
+          go test ./internal/report -count=1
+          if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+          Pop-Location
+          git commit -m 'docs(t6): preserve Task 4 contract vocabulary'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin HEAD:feature/1.7-integrated-t6
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
