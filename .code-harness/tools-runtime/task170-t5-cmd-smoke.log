@@ -1,51 +1,51 @@
 === RUN   Test162HotfixAnalysisCertifyConsumesRuntimeSnapshotAndSemanticProposal
 {
   "artifactPath": ".code-harness/runs/r162canonical/analysis/change-set.json",
-  "headCommit": "483290f403538d979a3f9b3093d1d9a20a187b54",
-  "mergeBase": "483290f403538d979a3f9b3093d1d9a20a187b54",
-  "resolvedBaseCommit": "483290f403538d979a3f9b3093d1d9a20a187b54",
+  "headCommit": "af0e526be9dd4b1ef43ed5ae557a4f3cfd3aafef",
+  "mergeBase": "af0e526be9dd4b1ef43ed5ae557a4f3cfd3aafef",
+  "resolvedBaseCommit": "af0e526be9dd4b1ef43ed5ae557a4f3cfd3aafef",
   "runId": "r162canonical",
-  "snapshotSha256": "66717bd33dd4292734a0dd9bdb3449e353c74c221e0a5f31f3f4e8c1da39de0b",
+  "snapshotSha256": "3e03fce044fb587a08c5c8ef5b7dc512e0ca4edd77528082abd9692da3396742",
   "status": "SNAPSHOT_READY"
 }
 {
-  "analysisSha256": "294d7cb50c3827bc962e8f17f08917d4ad4fd9ae2b47ceb9000d4831b859e9a5",
+  "analysisSha256": "8f48dc3ac27ed066e72c2b0da1feddbb1bf260203018ba57b6f046c3ee36a6fa",
   "artifactPath": ".code-harness/runs/r162canonical/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/r162canonical/analysis/change-analysis.cert.json",
-  "changeSetSha256": "66717bd33dd4292734a0dd9bdb3449e353c74c221e0a5f31f3f4e8c1da39de0b",
-  "entrypointInventorySha256": "3023bcfb65de016f1f6f9e936713f99fb381cc5453ee9e8813ab03654a1304c5",
+  "changeSetSha256": "3e03fce044fb587a08c5c8ef5b7dc512e0ca4edd77528082abd9692da3396742",
+  "entrypointInventorySha256": "7a183d34236f1fe87aae7367ac7a8ec36bdf7a05511e1ee0dac4fa8e306a469a",
   "runId": "r162canonical",
   "status": "CERTIFIED"
 }
---- PASS: Test162HotfixAnalysisCertifyConsumesRuntimeSnapshotAndSemanticProposal (1.07s)
+--- PASS: Test162HotfixAnalysisCertifyConsumesRuntimeSnapshotAndSemanticProposal (1.10s)
 === RUN   Test162HotfixAnalysisCertifyRejectsStaleSnapshotAfterGitBytesChange
 {
   "artifactPath": ".code-harness/runs/r162canonical/analysis/change-set.json",
-  "headCommit": "9931760f8748a26cd8bcfffe5876e5090125dff0",
-  "mergeBase": "9931760f8748a26cd8bcfffe5876e5090125dff0",
-  "resolvedBaseCommit": "9931760f8748a26cd8bcfffe5876e5090125dff0",
+  "headCommit": "a1aeb83fdc5c7f21533dfd98da748392b3cb9456",
+  "mergeBase": "a1aeb83fdc5c7f21533dfd98da748392b3cb9456",
+  "resolvedBaseCommit": "a1aeb83fdc5c7f21533dfd98da748392b3cb9456",
   "runId": "r162canonical",
-  "snapshotSha256": "495d65fc965463783c7a2266565147de2985c6934127467f7bcd7eb2a47fe84e",
+  "snapshotSha256": "3521adae6b298b0edf1b35d963dba19c971b8c0a43a5c997bc3d4d4bb6d21a8d",
   "status": "SNAPSHOT_READY"
 }
---- PASS: Test162HotfixAnalysisCertifyRejectsStaleSnapshotAfterGitBytesChange (0.94s)
+--- PASS: Test162HotfixAnalysisCertifyRejectsStaleSnapshotAfterGitBytesChange (0.96s)
 === RUN   Test153AnalysisCertifyPublishesCertifiedBundle
 {
-  "analysisSha256": "fa88405d33a9e5b43b7f88d0d8553d93f9e0f41e65bd46e88de6cb5611f94d36",
+  "analysisSha256": "8df888b14e6f0d4e48e7fe437bd32724f00866d4aeddffa25d7b9818f8f03c41",
   "artifactPath": ".code-harness/runs/r153/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/r153/analysis/change-analysis.cert.json",
-  "changeSetSha256": "efdc4eb2c05b27af493b825f54e2efa9026bb4c15f60c98626d09c1bc3a26ed1",
-  "entrypointInventorySha256": "07219998aa9d6357ab6949979d5f4ce74ef5b074485e3369f866fd920b6f1dd2",
+  "changeSetSha256": "7a9b69608648de784eb5be68f66a6cad49a08604498f128f6e0a004df01cd655",
+  "entrypointInventorySha256": "34c3b6aabe0c1855529d29f35dd87645335dcdade1615dac64ee330fe652a5bb",
   "runId": "r153",
   "status": "CERTIFIED"
 }
---- PASS: Test153AnalysisCertifyPublishesCertifiedBundle (1.80s)
+--- PASS: Test153AnalysisCertifyPublishesCertifiedBundle (1.81s)
 === RUN   Test153AnalysisCertifyRejectsRunIDPathMismatch
 --- PASS: Test153AnalysisCertifyRejectsRunIDPathMismatch (0.01s)
 === RUN   Test153AnalysisInventoryWritesRuntimeOwnedArtifact
 {
   "artifactPath": ".code-harness/runs/r153/analysis/entrypoint-inventory.json",
-  "changeSetSha256": "7d19d070192a3176695a923236bb4b5b3577417e5d068a89cb904b2b7add02ff",
+  "changeSetSha256": "e63fb8c8934693315d99b72b687a13e528097e9e9f0ffb97bc3b86bc5799ce07",
   "expectedEntryPoints": 0,
   "runId": "r153",
   "status": "COMPLETE"
@@ -56,11 +56,11 @@
 === RUN   Test162HotfixAnalysisSnapshotPublishesRuntimeOwnedCanonicalArtifact
 {
   "artifactPath": ".code-harness/runs/r162hotfix/analysis/change-set.json",
-  "headCommit": "9e6710bbf288c32f24dd31ce24c65cf76638d130",
-  "mergeBase": "9e6710bbf288c32f24dd31ce24c65cf76638d130",
-  "resolvedBaseCommit": "9e6710bbf288c32f24dd31ce24c65cf76638d130",
+  "headCommit": "906aad7641c9685565177ff16446ee4193005bf2",
+  "mergeBase": "906aad7641c9685565177ff16446ee4193005bf2",
+  "resolvedBaseCommit": "906aad7641c9685565177ff16446ee4193005bf2",
   "runId": "r162hotfix",
-  "snapshotSha256": "ac4399e0cf16fbe853c16b5e5b6738ecae8942f8dc1ab27c2102ba14fb66a00c",
+  "snapshotSha256": "c0773fa79a8da9273bb632b1ede19d80ab9cb62a7d4cb1a4c1af054857506ac3",
   "status": "SNAPSHOT_READY"
 }
 --- PASS: Test162HotfixAnalysisSnapshotPublishesRuntimeOwnedCanonicalArtifact (0.65s)
@@ -79,23 +79,23 @@ Usage of apply:
 === RUN   Test162HotfixCanonicalCertificateCannotDowngradeToLegacyAuthority
 {
   "artifactPath": ".code-harness/runs/r162canonical/analysis/change-set.json",
-  "headCommit": "6d81f2e7bd6e02bb318264a627395f60e0403e0b",
-  "mergeBase": "6d81f2e7bd6e02bb318264a627395f60e0403e0b",
-  "resolvedBaseCommit": "6d81f2e7bd6e02bb318264a627395f60e0403e0b",
+  "headCommit": "2628aca4134d661753d92956448aa7709c476d8d",
+  "mergeBase": "2628aca4134d661753d92956448aa7709c476d8d",
+  "resolvedBaseCommit": "2628aca4134d661753d92956448aa7709c476d8d",
   "runId": "r162canonical",
-  "snapshotSha256": "c8ec6c75e1417a694876a70ab60ec4229bf94e1a038f787627be1f0f93c516f6",
+  "snapshotSha256": "272a0792c70681c0100d424619646b5a35b9174175c657a7c34a72665c9e44fa",
   "status": "SNAPSHOT_READY"
 }
 {
-  "analysisSha256": "5217be49d7e97efb9137bc8a4f67c51bf7a985d5ef1b78af8da75903414a2b0c",
+  "analysisSha256": "9fe22e82957a47097a85942482c5f9d48956d49b96d7475957917cdbb7327ddb",
   "artifactPath": ".code-harness/runs/r162canonical/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/r162canonical/analysis/change-analysis.cert.json",
-  "changeSetSha256": "c8ec6c75e1417a694876a70ab60ec4229bf94e1a038f787627be1f0f93c516f6",
-  "entrypointInventorySha256": "bca8a4db4822c86fd93be6244f9a7a0bf62c32bb6c65d302c8f8f655871ce8bd",
+  "changeSetSha256": "272a0792c70681c0100d424619646b5a35b9174175c657a7c34a72665c9e44fa",
+  "entrypointInventorySha256": "0a6adb3bb6119584a8250794436e3bd57ef4a606f2e46f960ff43827d7182871",
   "runId": "r162canonical",
   "status": "CERTIFIED"
 }
---- PASS: Test162HotfixCanonicalCertificateCannotDowngradeToLegacyAuthority (1.09s)
+--- PASS: Test162HotfixCanonicalCertificateCannotDowngradeToLegacyAuthority (1.02s)
 === RUN   Test153ChainLoaderRejectsUncertifiedAnalysis
 --- PASS: Test153ChainLoaderRejectsUncertifiedAnalysis (0.01s)
 === RUN   Test153ChainDiscoverRejectsUncertifiedAnalysis
@@ -153,19 +153,19 @@ Usage of apply:
 }
 {
   "plan": {
-    "planId": "chain-write-100b047787b312ef91d62e5490a673937c9d2491db3c930fd328d96d675457f6",
+    "planId": "chain-write-b59f8aac51093673bd9c9517d559e25979f120fbed3062535a2b8845dbf35953",
     "runId": "run-153-seal-candidate",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-seal-candidate/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "7ca81313a1f23b9a922a018021727ef028a014947a624b04a5db36da786f73cf",
+    "analysisHash": "21b66e956b5a0cd0e5db5acfcfe4a90cc820a69225258eebf24cf632b73defcb",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-100b047787b312ef91d62e5490a673937c9d2491db3c930fd328d96d675457f6",
-  "planPath": ".code-harness/runs/run-153-seal-candidate/analysis/chain-write-plans/chain-write-100b047787b312ef91d62e5490a673937c9d2491db3c930fd328d96d675457f6.json",
+  "planId": "chain-write-b59f8aac51093673bd9c9517d559e25979f120fbed3062535a2b8845dbf35953",
+  "planPath": ".code-harness/runs/run-153-seal-candidate/analysis/chain-write-plans/chain-write-b59f8aac51093673bd9c9517d559e25979f120fbed3062535a2b8845dbf35953.json",
   "status": "SEALED"
 }
---- PASS: Test153WritePlanRejectsCandidateMutationAfterSealWithZeroProjectStateWrites (1.76s)
+--- PASS: Test153WritePlanRejectsCandidateMutationAfterSealWithZeroProjectStateWrites (1.79s)
 === RUN   Test153WritePlanRejectsCertifiedAnalysisMutationAfterSealWithZeroProjectStateWrites
 {
   "status": "COMPLETE",
@@ -215,19 +215,19 @@ Usage of apply:
 }
 {
   "plan": {
-    "planId": "chain-write-aec33647c82ea2caabe27e96de2d76d0f812bb287ed030166cadcd1877a4fd46",
+    "planId": "chain-write-d83b125aa3dc54daba73cb50b45998f32118e5ed6dc1aa99b475940362a60811",
     "runId": "run-153-seal-analysis",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-seal-analysis/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "50f1a3768481c1c28328c7731ebd0b9d391349128284b4d62a0f73f7ab2de0d2",
+    "analysisHash": "296048c54e288b5a92334e2222d3c639f4d0e94b17fbc02127201925bc3fc0c6",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-aec33647c82ea2caabe27e96de2d76d0f812bb287ed030166cadcd1877a4fd46",
-  "planPath": ".code-harness/runs/run-153-seal-analysis/analysis/chain-write-plans/chain-write-aec33647c82ea2caabe27e96de2d76d0f812bb287ed030166cadcd1877a4fd46.json",
+  "planId": "chain-write-d83b125aa3dc54daba73cb50b45998f32118e5ed6dc1aa99b475940362a60811",
+  "planPath": ".code-harness/runs/run-153-seal-analysis/analysis/chain-write-plans/chain-write-d83b125aa3dc54daba73cb50b45998f32118e5ed6dc1aa99b475940362a60811.json",
   "status": "SEALED"
 }
---- PASS: Test153WritePlanRejectsCertifiedAnalysisMutationAfterSealWithZeroProjectStateWrites (1.37s)
+--- PASS: Test153WritePlanRejectsCertifiedAnalysisMutationAfterSealWithZeroProjectStateWrites (1.45s)
 === RUN   Test153WritePlanRejectsExistingProjectStateMutationAfterSealWithZeroWrites
 {
   "status": "COMPLETE",
@@ -277,20 +277,20 @@ Usage of apply:
 }
 {
   "plan": {
-    "planId": "chain-write-61706be0e7e452cef94d6007999c245a876ca7f0492b98f48ead99ea55c8705b",
+    "planId": "chain-write-f0de189cd987be3839001a15f0863f47382c995f50d94b5876d7e24a34eb9250",
     "runId": "run-153-seal-existing",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-seal-existing/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "8a8b0b5ba03f14a46dccdee8a5cea9c48f4d6ecc63d1b656a16f90d18d27f780",
+    "analysisHash": "b0c61fbb2078f0838c4fd24a721cfed8c4d8dc2ab92ea1fff1d3704fa23e7d63",
     "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-61706be0e7e452cef94d6007999c245a876ca7f0492b98f48ead99ea55c8705b",
-  "planPath": ".code-harness/runs/run-153-seal-existing/analysis/chain-write-plans/chain-write-61706be0e7e452cef94d6007999c245a876ca7f0492b98f48ead99ea55c8705b.json",
+  "planId": "chain-write-f0de189cd987be3839001a15f0863f47382c995f50d94b5876d7e24a34eb9250",
+  "planPath": ".code-harness/runs/run-153-seal-existing/analysis/chain-write-plans/chain-write-f0de189cd987be3839001a15f0863f47382c995f50d94b5876d7e24a34eb9250.json",
   "status": "SEALED"
 }
---- PASS: Test153WritePlanRejectsExistingProjectStateMutationAfterSealWithZeroWrites (1.77s)
+--- PASS: Test153WritePlanRejectsExistingProjectStateMutationAfterSealWithZeroWrites (1.91s)
 === RUN   Test153PersistRejectsArbitraryCandidatePathRequest
 --- PASS: Test153PersistRejectsArbitraryCandidatePathRequest (0.01s)
 === RUN   TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState
@@ -340,7 +340,7 @@ Usage of apply:
   ],
   "unresolved": null
 }
---- PASS: TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState (0.95s)
+--- PASS: TestChainDiscoverUsesControlledRunRequestAndWritesOnlyRunState (0.99s)
 === RUN   TestChainDiscoverRejectsOutsideInputAndRunIDMismatch
 --- PASS: TestChainDiscoverRejectsOutsideInputAndRunIDMismatch (0.01s)
 === RUN   TestChainDiscoverRejectsRawTargetOrOutputCLIArguments
@@ -405,7 +405,7 @@ Usage of chain discover:
   ],
   "unresolved": null
 }
---- PASS: Test151DirectDiscoverSupportsFreshAddedControllerServiceMapperStack (0.68s)
+--- PASS: Test151DirectDiscoverSupportsFreshAddedControllerServiceMapperStack (0.71s)
 === RUN   Test153EditCommandRequiresChainMaintenanceCertifiedIntent
 {
   "status": "COMPLETE",
@@ -455,23 +455,23 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce",
+    "planId": "chain-write-42514faf42b525d539945735ec2810abb4a88d84307dbb370e8e73b2c5d9be3d",
     "runId": "run-153-edit-intent",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-intent/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "9eeb1390dabd36316b7e13223c38ceb04f175a9c9ae48b3d21bb69daec4e9767",
+    "analysisHash": "d1e284d55a7e2fc608f80b41be04b71fc9a0ce3900a87189b6b6def8d7e80eaa",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce",
-  "planPath": ".code-harness/runs/run-153-edit-intent/analysis/chain-write-plans/chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce.json",
+  "planId": "chain-write-42514faf42b525d539945735ec2810abb4a88d84307dbb370e8e73b2c5d9be3d",
+  "planPath": ".code-harness/runs/run-153-edit-intent/analysis/chain-write-plans/chain-write-42514faf42b525d539945735ec2810abb4a88d84307dbb370e8e73b2c5d9be3d.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-4b37f57d2ba203751d5968137b542dd073920dffe793c0304fe836e047fd6fce",
+  "planId": "chain-write-42514faf42b525d539945735ec2810abb4a88d84307dbb370e8e73b2c5d9be3d",
   "status": "PERSISTED"
 }
---- PASS: Test153EditCommandRequiresChainMaintenanceCertifiedIntent (2.11s)
+--- PASS: Test153EditCommandRequiresChainMaintenanceCertifiedIntent (2.15s)
 === RUN   Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite
 {
   "status": "COMPLETE",
@@ -520,11 +520,11 @@ Usage of chain discover:
   "unresolved": null
 }
 {
-  "analysisSha256": "87225d334c55c1ac77529436867957f1a39480b20510a5c73184ab3e05bb1692",
+  "analysisSha256": "23746ea4f9722585f6d6b4e6af7bd9308878088287ec09ae9ec17366409dcd66",
   "artifactPath": ".code-harness/runs/run-153-edit-command/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/run-153-edit-command/analysis/change-analysis.cert.json",
-  "changeSetSha256": "cc36316d325b2bdd1b9cdecc7d97c080b752a38c5d1bfb3e06e73437251bf509",
-  "entrypointInventorySha256": "27a68397552c8fc8afded667babe7730a63d335a2c60d8dc0d8ffe26009a3778",
+  "changeSetSha256": "54802ab6242226ef1fe44932367c108d54980bde44d2b17860c74a171620365c",
+  "entrypointInventorySha256": "bb796371218151c051215446f85ff11003fbe560b9effb57d77b88089017fd6f",
   "runId": "run-153-edit-command",
   "status": "CERTIFIED"
 }
@@ -576,20 +576,20 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356",
+    "planId": "chain-write-2c60d1a36a2645b1d7fcf6081f805a239a6b9df06093ebb4c890152749340f4c",
     "runId": "run-153-edit-command",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-command/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "87225d334c55c1ac77529436867957f1a39480b20510a5c73184ab3e05bb1692",
+    "analysisHash": "23746ea4f9722585f6d6b4e6af7bd9308878088287ec09ae9ec17366409dcd66",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356",
-  "planPath": ".code-harness/runs/run-153-edit-command/analysis/chain-write-plans/chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356.json",
+  "planId": "chain-write-2c60d1a36a2645b1d7fcf6081f805a239a6b9df06093ebb4c890152749340f4c",
+  "planPath": ".code-harness/runs/run-153-edit-command/analysis/chain-write-plans/chain-write-2c60d1a36a2645b1d7fcf6081f805a239a6b9df06093ebb4c890152749340f4c.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-000e66f0204fa1878a48f9627c6763f4ad7bf6fc3f5d5b10015bdcc5dc3c8356",
+  "planId": "chain-write-2c60d1a36a2645b1d7fcf6081f805a239a6b9df06093ebb4c890152749340f4c",
   "status": "PERSISTED"
 }
 {
@@ -601,7 +601,7 @@ Usage of chain discover:
     "name:\"OrderController.approve\"-\u003e\"订单审批新名称\""
   ]
 }
---- PASS: Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite (3.38s)
+--- PASS: Test153EditCommandCreatesCertifiedCandidateWithoutProjectStateWrite (3.53s)
 === RUN   Test153EditCandidatePersistsOnlyThroughWritePlan
 {
   "status": "COMPLETE",
@@ -650,11 +650,11 @@ Usage of chain discover:
   "unresolved": null
 }
 {
-  "analysisSha256": "c2e61130bcad21903aff868c91ed83c4430be42730e08c9d77339d89198f85ea",
+  "analysisSha256": "10e310c2860bc4e4afde18386d0c79959cee6546b074dc7bb4a4b706fcdc9dcf",
   "artifactPath": ".code-harness/runs/run-153-edit-persist/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/run-153-edit-persist/analysis/change-analysis.cert.json",
-  "changeSetSha256": "22e7b1e38955082e99045a275272e00896ac5ff08f74156256a218a9a4494009",
-  "entrypointInventorySha256": "def5b86f4dca7c7d8479dd205bb140bc402b09c8566142cffab0e7949e78e65f",
+  "changeSetSha256": "537ffe3035c768d0cc6812a0136644c62fe14590141cac2b51daab26cd9632f0",
+  "entrypointInventorySha256": "9439d130d4f63c9bd56c5d93ac7937f39be2d698bb1f4b6622b75e5b70e4b368",
   "runId": "run-153-edit-persist",
   "status": "CERTIFIED"
 }
@@ -706,20 +706,20 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9",
+    "planId": "chain-write-3afc0e22356f41689ba83e0a797b2ba95ad729fecd4b1d05ad223a118ac83669",
     "runId": "run-153-edit-persist",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-persist/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "c2e61130bcad21903aff868c91ed83c4430be42730e08c9d77339d89198f85ea",
+    "analysisHash": "10e310c2860bc4e4afde18386d0c79959cee6546b074dc7bb4a4b706fcdc9dcf",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9",
-  "planPath": ".code-harness/runs/run-153-edit-persist/analysis/chain-write-plans/chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9.json",
+  "planId": "chain-write-3afc0e22356f41689ba83e0a797b2ba95ad729fecd4b1d05ad223a118ac83669",
+  "planPath": ".code-harness/runs/run-153-edit-persist/analysis/chain-write-plans/chain-write-3afc0e22356f41689ba83e0a797b2ba95ad729fecd4b1d05ad223a118ac83669.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-e918725a61a2a5de6d2823a743d44d1cb1af7f425c1d46a157f77c3d7738e8b9",
+  "planId": "chain-write-3afc0e22356f41689ba83e0a797b2ba95ad729fecd4b1d05ad223a118ac83669",
   "status": "PERSISTED"
 }
 {
@@ -733,24 +733,24 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922",
+    "planId": "chain-write-f071a7d17d7c6c25bbad7201fa6b102b096ab290851fbe2ff77bd190079044d1",
     "runId": "run-153-edit-persist",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-persist/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "37814aeefff35435dbc733f81139698a54f46625940ababa7d08ce1b8d4dcc57",
-    "analysisHash": "c2e61130bcad21903aff868c91ed83c4430be42730e08c9d77339d89198f85ea",
+    "analysisHash": "10e310c2860bc4e4afde18386d0c79959cee6546b074dc7bb4a4b706fcdc9dcf",
     "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
     "previewSha256": "37814aeefff35435dbc733f81139698a54f46625940ababa7d08ce1b8d4dcc57"
   },
-  "planId": "chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922",
-  "planPath": ".code-harness/runs/run-153-edit-persist/analysis/chain-write-plans/chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922.json",
+  "planId": "chain-write-f071a7d17d7c6c25bbad7201fa6b102b096ab290851fbe2ff77bd190079044d1",
+  "planPath": ".code-harness/runs/run-153-edit-persist/analysis/chain-write-plans/chain-write-f071a7d17d7c6c25bbad7201fa6b102b096ab290851fbe2ff77bd190079044d1.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-3843416c8133a6fcd0d7df6b67190c4d3374705d683964e65fb396fe2af7f922",
+  "planId": "chain-write-f071a7d17d7c6c25bbad7201fa6b102b096ab290851fbe2ff77bd190079044d1",
   "status": "PERSISTED"
 }
---- PASS: Test153EditCandidatePersistsOnlyThroughWritePlan (4.12s)
+--- PASS: Test153EditCandidatePersistsOnlyThroughWritePlan (4.33s)
 === RUN   Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites
 {
   "status": "COMPLETE",
@@ -799,11 +799,11 @@ Usage of chain discover:
   "unresolved": null
 }
 {
-  "analysisSha256": "efb3888d56fef8e7d6d9d17c0a516615c82a7446f8339bd2daf8cf5722501c3a",
+  "analysisSha256": "96d803e2d1df20da2b27e7740b61d5b90633918d51f416947f335706ceabe90d",
   "artifactPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/change-analysis.cert.json",
-  "changeSetSha256": "4549f278aa4979bb18153a1c54e2ad7633890eeafb841fa04a62ede3f5174912",
-  "entrypointInventorySha256": "cf974a250384c0d2c308721b03633ebe2f290f0c2d5dc613c00b89efa73fbfbd",
+  "changeSetSha256": "dd921bef185f55b364d47a54ff4c704186276954b15f7254c35e282dea28c48b",
+  "entrypointInventorySha256": "2bf46be351f10ed20169dff15a48ab671f76be6ddf980ea8e50bf04399de8280",
   "runId": "run-153-edit-seal-tamper",
   "status": "CERTIFIED"
 }
@@ -855,20 +855,20 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819",
+    "planId": "chain-write-496ef2cf53876ea0554005691263c445cbccf75d17944085a46c3b1f72d71925",
     "runId": "run-153-edit-seal-tamper",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "efb3888d56fef8e7d6d9d17c0a516615c82a7446f8339bd2daf8cf5722501c3a",
+    "analysisHash": "96d803e2d1df20da2b27e7740b61d5b90633918d51f416947f335706ceabe90d",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819",
-  "planPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-write-plans/chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819.json",
+  "planId": "chain-write-496ef2cf53876ea0554005691263c445cbccf75d17944085a46c3b1f72d71925",
+  "planPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-write-plans/chain-write-496ef2cf53876ea0554005691263c445cbccf75d17944085a46c3b1f72d71925.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-f5030c8356826d5c7ca507e5f1888b3cb6d2d6cc5740065a5e0205fc4aa09819",
+  "planId": "chain-write-496ef2cf53876ea0554005691263c445cbccf75d17944085a46c3b1f72d71925",
   "status": "PERSISTED"
 }
 {
@@ -882,20 +882,20 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-500d9a905cdd8cfe46ae1254f8a6e0ba3c8dda862675306d15c42bca93d1987d",
+    "planId": "chain-write-51ac6526639bd85895709f467ea391aa6a1ec9869992fabdac9ce3770d2460cb",
     "runId": "run-153-edit-seal-tamper",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-edit-candidates/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "3c02d89a7953d89be934d1401b6926e1711bc8c9889ad975c18689408c6054ba",
-    "analysisHash": "efb3888d56fef8e7d6d9d17c0a516615c82a7446f8339bd2daf8cf5722501c3a",
+    "analysisHash": "96d803e2d1df20da2b27e7740b61d5b90633918d51f416947f335706ceabe90d",
     "expectedExistingHash": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094",
     "previewSha256": "3c02d89a7953d89be934d1401b6926e1711bc8c9889ad975c18689408c6054ba"
   },
-  "planId": "chain-write-500d9a905cdd8cfe46ae1254f8a6e0ba3c8dda862675306d15c42bca93d1987d",
-  "planPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-write-plans/chain-write-500d9a905cdd8cfe46ae1254f8a6e0ba3c8dda862675306d15c42bca93d1987d.json",
+  "planId": "chain-write-51ac6526639bd85895709f467ea391aa6a1ec9869992fabdac9ce3770d2460cb",
+  "planPath": ".code-harness/runs/run-153-edit-seal-tamper/analysis/chain-write-plans/chain-write-51ac6526639bd85895709f467ea391aa6a1ec9869992fabdac9ce3770d2460cb.json",
   "status": "SEALED"
 }
---- PASS: Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites (4.19s)
+--- PASS: Test153EditCandidateMutationAfterSealFailsWithZeroProjectStateWrites (4.21s)
 === RUN   Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite
 {
   "status": "COMPLETE",
@@ -944,11 +944,11 @@ Usage of chain discover:
   "unresolved": null
 }
 {
-  "analysisSha256": "ad10f9f584716516c3ea1bc31f39a4ee6fc6be8f2d4b1d51c1b3f05abd4a8863",
+  "analysisSha256": "c0f305cc4746d20107c80fcc6eba743d1c3d827b7cf8fcf42dba066523d8cde4",
   "artifactPath": ".code-harness/runs/run-153-edit-unverified/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/run-153-edit-unverified/analysis/change-analysis.cert.json",
-  "changeSetSha256": "f1fcddb501e8e8942f1f830da79b3f897dfad8f432d585c00227eca591177007",
-  "entrypointInventorySha256": "a873e75ce358c50c7ef6f154ff65014663eb4523b427a5d8f085b4e5890b84ae",
+  "changeSetSha256": "08e6aa169ddadf272609fcd7291e6bb770b583a97ed2c003d8fb5346067aebc1",
+  "entrypointInventorySha256": "e5ee9291eea0d117878212883ebce8bcea275bf47f4819bbc4df70ddc7ad0c25",
   "runId": "run-153-edit-unverified",
   "status": "CERTIFIED"
 }
@@ -1000,23 +1000,23 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e",
+    "planId": "chain-write-df7ce1c814db402b6e8b2d1762ad23c29973ba3490f452249ef75f0c4aa477c2",
     "runId": "run-153-edit-unverified",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-unverified/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "ad10f9f584716516c3ea1bc31f39a4ee6fc6be8f2d4b1d51c1b3f05abd4a8863",
+    "analysisHash": "c0f305cc4746d20107c80fcc6eba743d1c3d827b7cf8fcf42dba066523d8cde4",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e",
-  "planPath": ".code-harness/runs/run-153-edit-unverified/analysis/chain-write-plans/chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e.json",
+  "planId": "chain-write-df7ce1c814db402b6e8b2d1762ad23c29973ba3490f452249ef75f0c4aa477c2",
+  "planPath": ".code-harness/runs/run-153-edit-unverified/analysis/chain-write-plans/chain-write-df7ce1c814db402b6e8b2d1762ad23c29973ba3490f452249ef75f0c4aa477c2.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-a7201e366ff709e69325c4db015bef401028fe305914265db8c6d2ee35536a5e",
+  "planId": "chain-write-df7ce1c814db402b6e8b2d1762ad23c29973ba3490f452249ef75f0c4aa477c2",
   "status": "PERSISTED"
 }
---- PASS: Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite (3.37s)
+--- PASS: Test153EditCommandRejectsUnverifiedCodeFactWithoutCandidateWrite (3.43s)
 === RUN   Test153EditRequestSchemaRejectsEntryPointMutation
 {
   "status": "COMPLETE",
@@ -1065,11 +1065,11 @@ Usage of chain discover:
   "unresolved": null
 }
 {
-  "analysisSha256": "511eecb800a78b868f1b3da962ab1dfc4109e0c298eb3c458323e3a8527fbbdc",
+  "analysisSha256": "ed1a068a798230fe986485c12d3b78db5c3e5dab39fda8ea91e17e1f45db2c97",
   "artifactPath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/change-analysis.cert.json",
-  "changeSetSha256": "158742e9559bd1ae6f48c4f6236238a7447e74ac5a50eecf25240f80ac17f4ec",
-  "entrypointInventorySha256": "54c236f7dc278f6c8d8a77a473067513c7de2befffdad4bfa41b7187aa89dd21",
+  "changeSetSha256": "0a7e72f865b9bffe03cc884e08cf628d25cf69309c466a2d6d8c14d6f9de40d3",
+  "entrypointInventorySha256": "c2dd40a7d3afa22736eb6eec0ec3efc33a59f18fb60bcce9a451a2ac1ef0b408",
   "runId": "run-153-edit-entrypoint-forbidden",
   "status": "CERTIFIED"
 }
@@ -1121,23 +1121,23 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f",
+    "planId": "chain-write-64fe83f6647f712c28877dd96f6c46ee0c6652060eb3e7a1721850f3b7b8b073",
     "runId": "run-153-edit-entrypoint-forbidden",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "511eecb800a78b868f1b3da962ab1dfc4109e0c298eb3c458323e3a8527fbbdc",
+    "analysisHash": "ed1a068a798230fe986485c12d3b78db5c3e5dab39fda8ea91e17e1f45db2c97",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f",
-  "planPath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/chain-write-plans/chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f.json",
+  "planId": "chain-write-64fe83f6647f712c28877dd96f6c46ee0c6652060eb3e7a1721850f3b7b8b073",
+  "planPath": ".code-harness/runs/run-153-edit-entrypoint-forbidden/analysis/chain-write-plans/chain-write-64fe83f6647f712c28877dd96f6c46ee0c6652060eb3e7a1721850f3b7b8b073.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-ed065ab453e0629b41a65378665201b91f1ff5f03f833ece5a9e014a06daef7f",
+  "planId": "chain-write-64fe83f6647f712c28877dd96f6c46ee0c6652060eb3e7a1721850f3b7b8b073",
   "status": "PERSISTED"
 }
---- PASS: Test153EditRequestSchemaRejectsEntryPointMutation (2.98s)
+--- PASS: Test153EditRequestSchemaRejectsEntryPointMutation (3.06s)
 === RUN   Test153EditCommandRejectsNonRequestPath
 --- PASS: Test153EditCommandRejectsNonRequestPath (0.00s)
 === RUN   Test153EditRejectsJointWorkspaceAuthorityEscalation
@@ -1188,11 +1188,11 @@ Usage of chain discover:
   "unresolved": null
 }
 {
-  "analysisSha256": "b193021a848462bd600d43003cb8bf5dd45f7f96dcdb3e17881925a4023d5b3e",
+  "analysisSha256": "35aa596ff6662ed95248c7bf7a9bc4063c8bb08236817be0150941a1673e8930",
   "artifactPath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/change-analysis.cert.json",
-  "changeSetSha256": "dbf451aeb7b8d0eef384b683c7493b8836e31d460156d7397d1e10ce6f5cb412",
-  "entrypointInventorySha256": "9691d6bc81a0f319e83fa18ed422c43b45dd9f937367406e2314fedd3e390819",
+  "changeSetSha256": "e77f9777410137e8f560326048ef7837e9f507509fe79084efe98caf397a7fb2",
+  "entrypointInventorySha256": "f9474d177e7e4c661aeb05a96300627c7d0319eb731318e7d52299600df73da4",
   "runId": "run-153-edit-intent-escalation",
   "status": "CERTIFIED"
 }
@@ -1244,23 +1244,23 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257",
+    "planId": "chain-write-9a85a1d20ced5a069842dd8cf86e29baf4efbcc15e2b1c194a9d0ee4dcf96f0b",
     "runId": "run-153-edit-intent-escalation",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "b193021a848462bd600d43003cb8bf5dd45f7f96dcdb3e17881925a4023d5b3e",
+    "analysisHash": "35aa596ff6662ed95248c7bf7a9bc4063c8bb08236817be0150941a1673e8930",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257",
-  "planPath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/chain-write-plans/chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257.json",
+  "planId": "chain-write-9a85a1d20ced5a069842dd8cf86e29baf4efbcc15e2b1c194a9d0ee4dcf96f0b",
+  "planPath": ".code-harness/runs/run-153-edit-intent-escalation/analysis/chain-write-plans/chain-write-9a85a1d20ced5a069842dd8cf86e29baf4efbcc15e2b1c194a9d0ee4dcf96f0b.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-7c361b06e1bd407a6295629e6653edaa9e65ddce4ddb4c9a21029ffe2ea22257",
+  "planId": "chain-write-9a85a1d20ced5a069842dd8cf86e29baf4efbcc15e2b1c194a9d0ee4dcf96f0b",
   "status": "PERSISTED"
 }
---- PASS: Test153EditRejectsJointWorkspaceAuthorityEscalation (2.98s)
+--- PASS: Test153EditRejectsJointWorkspaceAuthorityEscalation (3.11s)
 === RUN   TestChainListShowAndValidateCommands
 {
   "chains": [
@@ -1299,7 +1299,7 @@ Usage of chain discover:
   "errors": [],
   "warnings": []
 }
---- PASS: TestChainListShowAndValidateCommands (0.94s)
+--- PASS: TestChainListShowAndValidateCommands (0.96s)
 === RUN   TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash
 {
   "candidatePath": ".code-harness/runs/run-task3/analysis/refresh-candidates/order-approve.yaml",
@@ -1363,48 +1363,48 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615",
+    "planId": "chain-write-3ce8982cb878ca98a228a7951aa24641b50d1c8514db1eb2276dd3d098914d74",
     "runId": "run-task3",
     "chainId": "order-approve",
     "candidatePath": ".code-harness/runs/run-task3/analysis/refresh-candidates/order-approve.yaml",
     "candidateHash": "a3441f544edb1b5c4b8ae4d9e26d0db90491ff3922d0d92ce315db50d23e3e3d",
-    "analysisHash": "2f211941404a2bbc03fc7e33822f67bf6207225b7ab1a51375289abdc3fa810d",
+    "analysisHash": "06863b21d7e4964be2a5e3a422b18092c72d9893bd67250df4cb6c62770b70ee",
     "expectedExistingHash": "da08c1678fcdfe7591f54d93d8b94dcdb0da4ba3a8bce63ffda53ceb4c236951",
     "previewSha256": "a3441f544edb1b5c4b8ae4d9e26d0db90491ff3922d0d92ce315db50d23e3e3d"
   },
-  "planId": "chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615",
-  "planPath": ".code-harness/runs/run-task3/analysis/chain-write-plans/chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615.json",
+  "planId": "chain-write-3ce8982cb878ca98a228a7951aa24641b50d1c8514db1eb2276dd3d098914d74",
+  "planPath": ".code-harness/runs/run-task3/analysis/chain-write-plans/chain-write-3ce8982cb878ca98a228a7951aa24641b50d1c8514db1eb2276dd3d098914d74.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-6a554505efb650c1e93f1702bb8a11e49a81ab90088414bab84b500b865f2615",
+  "planId": "chain-write-3ce8982cb878ca98a228a7951aa24641b50d1c8514db1eb2276dd3d098914d74",
   "status": "PERSISTED"
 }
---- PASS: TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash (2.11s)
+--- PASS: TestChainRefreshIsDiffFirstAndPersistUsesExpectedHash (2.19s)
 === RUN   TestChainPersistValidationFailureMakesZeroProjectStateWrites
---- PASS: TestChainPersistValidationFailureMakesZeroProjectStateWrites (1.31s)
+--- PASS: TestChainPersistValidationFailureMakesZeroProjectStateWrites (1.34s)
 === RUN   TestChainPersistNewDiscoveredCandidateAfterValidation
 {
   "plan": {
-    "planId": "chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043",
+    "planId": "chain-write-2bfddb0345a5456916a4673bea93222967a33ec5825c7e136c83393ec4dae8db",
     "runId": "run-new-chain",
     "chainId": "order-approve",
     "candidatePath": ".code-harness/runs/run-new-chain/analysis/discovered-chains/order-approve.yaml",
     "candidateHash": "71d22f8c9a2652df400433129eb5a355d052467d44fc13429a122a40b94a574c",
-    "analysisHash": "046024f7b6adfea311a1edbdc209fef198f8ee5c738e9cf439e715e78e8cf1f2",
+    "analysisHash": "848e76abb746b48d5397a478411bcac396e5125efc532b70956a9c68652f010f",
     "previewSha256": "98277afdd5d01703e2151ed976dbe92dcf80f9506ee038dbf5178ebe94aa3088"
   },
-  "planId": "chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043",
-  "planPath": ".code-harness/runs/run-new-chain/analysis/chain-write-plans/chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043.json",
+  "planId": "chain-write-2bfddb0345a5456916a4673bea93222967a33ec5825c7e136c83393ec4dae8db",
+  "planPath": ".code-harness/runs/run-new-chain/analysis/chain-write-plans/chain-write-2bfddb0345a5456916a4673bea93222967a33ec5825c7e136c83393ec4dae8db.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-0947bd3666613423f52b26cec1400af91a95dfc98c951841208d271f5d680043",
+  "planId": "chain-write-2bfddb0345a5456916a4673bea93222967a33ec5825c7e136c83393ec4dae8db",
   "status": "PERSISTED"
 }
---- PASS: TestChainPersistNewDiscoveredCandidateAfterValidation (1.70s)
+--- PASS: TestChainPersistNewDiscoveredCandidateAfterValidation (1.75s)
 === RUN   TestChainPersistValidatesDiscoveredBeforePromotingAccepted
---- PASS: TestChainPersistValidatesDiscoveredBeforePromotingAccepted (1.33s)
+--- PASS: TestChainPersistValidatesDiscoveredBeforePromotingAccepted (1.39s)
 === RUN   Test163Task2AffectedPersistRegression
 {
   "status": "COMPLETE",
@@ -1454,24 +1454,24 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7",
+    "planId": "chain-write-7b378d69797c0853622a2ae26343da37dc620cdf338d9c63de2eeb8c4779beb1",
     "runId": "run-163-affected-persist",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-163-affected-persist/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "3e749a4e40aca2b310a2e8fb7711066eaf1c66e1d4012839b269ee904aca66ca",
+    "analysisHash": "b4e347bc1dc75df92c2dc365dda38efbf5a9cbec6573097381468123e44ae46e",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7",
-  "planPath": ".code-harness/runs/run-163-affected-persist/analysis/chain-write-plans/chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7.json",
+  "planId": "chain-write-7b378d69797c0853622a2ae26343da37dc620cdf338d9c63de2eeb8c4779beb1",
+  "planPath": ".code-harness/runs/run-163-affected-persist/analysis/chain-write-plans/chain-write-7b378d69797c0853622a2ae26343da37dc620cdf338d9c63de2eeb8c4779beb1.json",
   "status": "SEALED"
 }
 {
-  "planId": "chain-write-ec595f136c13f9a710206cc45fe4af81a188b576fc6a3475673b7c7f9acd6cb7",
+  "planId": "chain-write-7b378d69797c0853622a2ae26343da37dc620cdf338d9c63de2eeb8c4779beb1",
   "status": "PERSISTED"
 }
     chain_persistence_regression_163_task2_test.go:27: AFFECTED_PERSIST_REGRESSION PASS
---- PASS: Test163Task2AffectedPersistRegression (2.63s)
+--- PASS: Test163Task2AffectedPersistRegression (1.78s)
 === RUN   Test163Task2ActiveContractsSplitProjectFromAffectedDiscovery
 --- PASS: Test163Task2ActiveContractsSplitProjectFromAffectedDiscovery (0.00s)
 === RUN   Test163Task2CleanProjectDiscoveryFindsExistingChain
@@ -1493,19 +1493,19 @@ Usage of chain discover:
 }
 {
   "plan": {
-    "planId": "chain-write-dea31099819efcef5d2c5adab039dea9badb55065019c31db67ec64dc0b40421",
+    "planId": "chain-write-2f2b132c170c2a5106e7f0e82400b749b067c4dbc6d0bd5448e8428b24836834",
     "runId": "run-task4-review",
     "chainId": "22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622",
     "candidatePath": ".code-harness/runs/run-task4-review/analysis/discovered-chains/22f511cab1e872c4ed9f29e3dfc747bed55752104a56e8f69c40d872a5d3f622.yaml",
     "candidateHash": "95117ab65c2b7d437f722425b936c19646b64fdf4e88240f1c1887415fcbeca4",
-    "analysisHash": "587810c1a7cd6aea3201faab59ae124abb251b5adcf9906ad762b45cae1d7204",
+    "analysisHash": "c0d13406e95ec7a7997bff0c58669f79e767925605f233bcb9ce98c9886c13cc",
     "previewSha256": "b0de99a3e41e0cd3fbced3c90e14dc47e3adac5d2c963681785d65f5691c5094"
   },
-  "planId": "chain-write-dea31099819efcef5d2c5adab039dea9badb55065019c31db67ec64dc0b40421",
-  "planPath": ".code-harness/runs/run-task4-review/analysis/chain-write-plans/chain-write-dea31099819efcef5d2c5adab039dea9badb55065019c31db67ec64dc0b40421.json",
+  "planId": "chain-write-2f2b132c170c2a5106e7f0e82400b749b067c4dbc6d0bd5448e8428b24836834",
+  "planPath": ".code-harness/runs/run-task4-review/analysis/chain-write-plans/chain-write-2f2b132c170c2a5106e7f0e82400b749b067c4dbc6d0bd5448e8428b24836834.json",
   "status": "SEALED"
 }
---- PASS: Test153ChainReviewContextLazyDiscoveryPublishesProvenanceAndCanSeal (1.90s)
+--- PASS: Test153ChainReviewContextLazyDiscoveryPublishesProvenanceAndCanSeal (1.94s)
 === RUN   Test153ChainReviewContextStaleTemporaryDiscoveryPublishesProvenance
 {
   "status": "READY",
@@ -1525,7 +1525,7 @@ Usage of chain discover:
   ],
   "unresolved": []
 }
---- PASS: Test153ChainReviewContextStaleTemporaryDiscoveryPublishesProvenance (0.98s)
+--- PASS: Test153ChainReviewContextStaleTemporaryDiscoveryPublishesProvenance (1.01s)
 === RUN   TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted
 {
   "status": "READY",
@@ -1540,11 +1540,11 @@ Usage of chain discover:
   "stale": [],
   "unresolved": []
 }
---- PASS: TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted (0.97s)
+--- PASS: TestChainReviewContextUsesVerifiedTargetedScopeAndReusesAccepted (0.98s)
 === RUN   TestChainReviewContextRejectsOutsideRequestAndCrossRunAnalysis
 --- PASS: TestChainReviewContextRejectsOutsideRequestAndCrossRunAnalysis (0.00s)
 === RUN   TestChainReviewContextRejectsUnverifiedScopeBeforeResolution
---- PASS: TestChainReviewContextRejectsUnverifiedScopeBeforeResolution (0.98s)
+--- PASS: TestChainReviewContextRejectsUnverifiedScopeBeforeResolution (1.01s)
 === RUN   Test162HotfixTask2ZeroArgUsageUsesRuntimeName
 --- PASS: Test162HotfixTask2ZeroArgUsageUsesRuntimeName (0.00s)
 === RUN   Test162HotfixTask2InvocationRequestSchemas
@@ -1604,7 +1604,7 @@ Usage of nav:
 === RUN   Test153ReportReviewRejectsUncertifiedAnalysis
 --- PASS: Test153ReportReviewRejectsUncertifiedAnalysis (0.01s)
 === RUN   Test164ReportReviewRejectsCertifiedAnalysisWithoutReviewerCertifiedFindings
---- PASS: Test164ReportReviewRejectsCertifiedAnalysisWithoutReviewerCertifiedFindings (1.24s)
+--- PASS: Test164ReportReviewRejectsCertifiedAnalysisWithoutReviewerCertifiedFindings (1.25s)
 === RUN   TestReportDispatchRecognizesReport
 --- PASS: TestReportDispatchRecognizesReport (0.00s)
 === RUN   TestReportReviewWritesArtifactAndDeletesTransport
@@ -1612,7 +1612,7 @@ Usage of nav:
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "a61a24d3279c3bc75b8d8ce3c6cabb285902595f9af3919d26f64f256e783b72",
+    "changeSetSha256": "bf46eba520cab074e592a4b08ad20502153d2e23e5e5e403029d673d5b64fa7b",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -1632,7 +1632,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "fe01573eaf1329290d14f68014d8cb761c3229ced5c77785b00d9e16189c775f"
+    "optionsHash": "140ce5e058b26d937667922fbff3f7fcc018ef1d620468b1d066d7e20e40c5ee"
   },
   "status": "READY"
 }
@@ -1671,8 +1671,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "a61a24d3279c3bc75b8d8ce3c6cabb285902595f9af3919d26f64f256e783b72",
-    "changeAnalysisSha256": "f05351d2c542a92e09d02886d9b5cbaf03ac5d77155e992baca50815c65e3d7a",
+    "changeSetSha256": "bf46eba520cab074e592a4b08ad20502153d2e23e5e5e403029d673d5b64fa7b",
+    "changeAnalysisSha256": "8691af519d77393d9d0539ec484f3f4b4d308b726295a1d548919960cc33bfeb",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -1730,12 +1730,121 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "84e7019de78c58572cd9c8bfb5cc8a8254038a30c0b7073acaeff7526797e35d"
+    "sha256": "5e8e99e1119e12fd31e8aef9352949a10ce1c544dcbe57bf987326eee26f73c4"
   },
   "status": "READY"
 }
-    report_test.go:22: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: TestReportReviewWritesArtifactAndDeletesTransport (3.74s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "5e8e99e1119e12fd31e8aef9352949a10ce1c544dcbe57bf987326eee26f73c4",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "5b4f6e098fa9ae2496f48478dda76d784e08b42446aea0288d2f46b7bb9f3a82"
+  },
+  "status": "READY"
+}
+    report_test.go:24: prepare Runtime-certified Reviewer findings: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: TestReportReviewWritesArtifactAndDeletesTransport (15.32s)
 === RUN   TestReportReviewRejectsInputOutsideRunRequests
 --- PASS: TestReportReviewRejectsInputOutsideRunRequests (0.00s)
 === RUN   TestReportApiDocWritesArtifactAndDeletesTransport
@@ -1749,7 +1858,7 @@ Usage of nav:
 === RUN   Test170NewRunIdentityDoesNotDependOnDiscoveryArtifact
 --- PASS: Test170NewRunIdentityDoesNotDependOnDiscoveryArtifact (0.00s)
 === RUN   Test170DispatchRequiresDiscoveryForNewRun
---- PASS: Test170DispatchRequiresDiscoveryForNewRun (0.09s)
+--- PASS: Test170DispatchRequiresDiscoveryForNewRun (0.04s)
 === RUN   Test170LegacyDispatchRoutingRemainsLegacy
 --- PASS: Test170LegacyDispatchRoutingRemainsLegacy (0.00s)
 === RUN   Test170NeedsMapFormalEvidenceByRole
@@ -1757,7 +1866,7 @@ Usage of nav:
 === RUN   Test170NeedsDoNotPairChainAndFilesByIndex
 --- PASS: Test170NeedsDoNotPairChainAndFilesByIndex (0.00s)
 === RUN   Test170BaseAdapterReturnsDeletedMethodAndMapperEvidence
---- PASS: Test170BaseAdapterReturnsDeletedMethodAndMapperEvidence (9.50s)
+--- PASS: Test170BaseAdapterReturnsDeletedMethodAndMapperEvidence (7.10s)
 === RUN   Test170UseTimeVerificationRejectsTamperedRuleContext
 --- PASS: Test170UseTimeVerificationRejectsTamperedRuleContext (0.00s)
 === RUN   Test170SortHelperSanity
@@ -1791,7 +1900,7 @@ Usage of nav:
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "a0502c85f2ab76d5a2887e046582d34e1396afb75f0ca0673ad62ae2aa1a0ab6",
+    "changeSetSha256": "824149092ef59f0585508882793c2dd3c3e6620e6cb9b6c15eefaeabd51b4cdd",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -1817,17 +1926,17 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "fe812aba22dc672ea461cc9edf80e37a6dfc28c98bc448ecb2294fc7492d5a1d"
+    "optionsHash": "41a386654ec43e0747da746bcab09934272666720a6e4607294b30ad0db86785"
   },
   "status": "READY"
 }
---- PASS: Test153ReviewSelectRejectsJointOriginAndOptionsRewriteWithValidHash (2.59s)
+--- PASS: Test153ReviewSelectRejectsJointOriginAndOptionsRewriteWithValidHash (2.54s)
 === RUN   Test160ReviewUnitsCommandWritesRuntimeOwnedManifest
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "349000211bf3e33cfbddd77d7890717152d449db9dfeba7872936105b8beeb5c",
+    "changeSetSha256": "870c52dc85f14b8431c283151bcbbfcd8e14fc8ba31afc8e0622f2d35c79745e",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -1847,7 +1956,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "dfcdc13883ae95f6bbc5e9636b280ecec08c1582afcaab25436bb98dd9dd1636"
+    "optionsHash": "60f87db3768a326f9307ad80b7682e04ad75b143980f230180ece6459c56d82b"
   },
   "status": "READY"
 }
@@ -1886,8 +1995,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "349000211bf3e33cfbddd77d7890717152d449db9dfeba7872936105b8beeb5c",
-    "changeAnalysisSha256": "306ed1c6fa406ddfc169f8d2f705cef01654afc03500211be994bbe778f856b9",
+    "changeSetSha256": "870c52dc85f14b8431c283151bcbbfcd8e14fc8ba31afc8e0622f2d35c79745e",
+    "changeAnalysisSha256": "0e8a74f92f6c143f1f1beafb70cc73038a6b18d5a6da93dc19993134e8d42f84",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -1945,11 +2054,11 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "5747bb968e96210ab3c7c8d959f440a4490f24199ddb34475b81a6c7a00eb9d9"
+    "sha256": "f1ead84f0ac2a159fd72f4165db240377306fdd0d93925b0de0c0f9a0d2f49b7"
   },
   "status": "READY"
 }
---- PASS: Test160ReviewUnitsCommandWritesRuntimeOwnedManifest (3.28s)
+--- PASS: Test160ReviewUnitsCommandWritesRuntimeOwnedManifest (3.27s)
 === RUN   Test160ReviewUnitsCommandRequiresRunID
 --- PASS: Test160ReviewUnitsCommandRequiresRunID (0.00s)
 === RUN   Test160ReviewUnitsCommandRejectsNonCanonicalRunID
@@ -1957,7 +2066,7 @@ Usage of nav:
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "ed4e5e33b0197aa5ac9f714ed1bf8cd038f7cb04a07494c2d76075d8b6e53272",
+    "changeSetSha256": "ab4bfe5de124db3aaf15d1abf507ec5db92b44b56a9a78c9ed42e707f0236b7b",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -1977,7 +2086,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "230ee1d7948975bde15a3dca263bf4d4a03e18bce75521e03c287c98d5920fe7"
+    "optionsHash": "44e19f51cfb80808f55de9d36ec74ae4d0efcbad915aeb78367bc4b06a3f1acc"
   },
   "status": "READY"
 }
@@ -2010,13 +2119,13 @@ Usage of nav:
   },
   "status": "SELECTED"
 }
---- PASS: Test160ReviewUnitsCommandRejectsNonCanonicalRunID (2.49s)
+--- PASS: Test160ReviewUnitsCommandRejectsNonCanonicalRunID (2.60s)
 === RUN   Test160ReviewDispatchCommandWritesRuntimeOwnedManifest
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "9c63964a50f1aea90a06ea0167bf5be4f23d03dadde412ebfe1d87685434f0a5",
+    "changeSetSha256": "d24ce2635d65de929f467f0d3ebd3e5171805eb08f384a8d021dc4a0146b9c34",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -2036,7 +2145,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "0ade62f17dc5910768eaccdf35268f37da31aa99f6ee40bd4c31e8ec5795b0e4"
+    "optionsHash": "d84a3e984ba64179a9add6315d9a616855f51656a9bcdd6bf153f34d354f2806"
   },
   "status": "READY"
 }
@@ -2075,8 +2184,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "9c63964a50f1aea90a06ea0167bf5be4f23d03dadde412ebfe1d87685434f0a5",
-    "changeAnalysisSha256": "86e7733d100d92340e1f3356475d3b99a0636293fd79de74b320ea0a2673b9bc",
+    "changeSetSha256": "d24ce2635d65de929f467f0d3ebd3e5171805eb08f384a8d021dc4a0146b9c34",
+    "changeAnalysisSha256": "6383efbd7fa54134993345ab423dc94b2e492084b697fa767a33f6ed42ddcfe8",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -2134,42 +2243,149 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "31fe363ed6bc71970aa49a75d0bb1837fe37270dee512df93311a0b95b78da86"
+    "sha256": "80b316ef871be5a1b74b9a899be0677abc9a0a6db5732df3b6613b4bf3b33a2e"
   },
   "status": "READY"
 }
-    review_precision_command_test.go:90: review dispatch: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test160ReviewDispatchCommandWritesRuntimeOwnedManifest (3.24s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "80b316ef871be5a1b74b9a899be0677abc9a0a6db5732df3b6613b4bf3b33a2e",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "8a11ee8400b6221594174f06f1e1c0b874168d792b319437d7ac85025f8fe224"
+  },
+  "status": "READY"
+}
+--- PASS: Test160ReviewDispatchCommandWritesRuntimeOwnedManifest (4.22s)
 === RUN   Test160ReviewDispatchCommandRequiresRunID
 --- PASS: Test160ReviewDispatchCommandRequiresRunID (0.00s)
 === RUN   Test160ReviewDispatchCommandRejectsNonCanonicalRunID
-    review_precision_command_test.go:113: review dispatch must reject non-canonical run id, got REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test160ReviewDispatchCommandRejectsNonCanonicalRunID (0.00s)
+--- PASS: Test160ReviewDispatchCommandRejectsNonCanonicalRunID (0.00s)
 === RUN   Test160ReviewCertifyFindingsRequiresInput
 --- PASS: Test160ReviewCertifyFindingsRequiresInput (0.00s)
 === RUN   Test160ReviewCertifyFindingsRejectsOutsideRunRequests
 --- PASS: Test160ReviewCertifyFindingsRejectsOutsideRunRequests (0.00s)
 === RUN   Test164Task3AnalysisCertifyAdvancesChangeAnalysisAndCertification
 {
-  "analysisSha256": "cfc5d31d603b11d0de5f903484cade1999b658ab7196683258cf038cabaf01b7",
+  "analysisSha256": "ac3cf5216d2860d409babf931e261703428c0349d68ddcc51b6d634a7d273269",
   "artifactPath": ".code-harness/runs/review-task3-cert-success/analysis/change-analysis.json",
   "certificatePath": ".code-harness/runs/review-task3-cert-success/analysis/change-analysis.cert.json",
-  "changeSetSha256": "2d78e30dbec7ef6468a69daf61fd1027bda60f2d74c88c0fcbb8fe06e5412d61",
-  "entrypointInventorySha256": "edfa6c01842619f6049f45cfd4fdf24dab64e490cb60b621039081ef39bf4837",
+  "changeSetSha256": "afd9f2f01c131f4f2bcd0cbc54ebd474ccf9d3f92695dffa19d3a17ca6847fc3",
+  "entrypointInventorySha256": "2465cef7d571d652e075a867f9a6246ca444d28e701d6f90fbc0ca67bd7a05a0",
   "runId": "review-task3-cert-success",
   "status": "CERTIFIED"
 }
---- PASS: Test164Task3AnalysisCertifyAdvancesChangeAnalysisAndCertification (1.12s)
+--- PASS: Test164Task3AnalysisCertifyAdvancesChangeAnalysisAndCertification (1.13s)
 === RUN   Test164Task3ChangeAnalysisAuthorityFailureTerminatesAtChangeAnalysis
---- PASS: Test164Task3ChangeAnalysisAuthorityFailureTerminatesAtChangeAnalysis (0.71s)
+--- PASS: Test164Task3ChangeAnalysisAuthorityFailureTerminatesAtChangeAnalysis (0.74s)
 === RUN   Test164Task3CertificationStaleSnapshotFailureTerminatesAtCertification
---- PASS: Test164Task3CertificationStaleSnapshotFailureTerminatesAtCertification (1.00s)
+--- PASS: Test164Task3CertificationStaleSnapshotFailureTerminatesAtCertification (1.05s)
 === RUN   Test164Task3ReviewPlanningCommandsAdvanceRuntimeProgress
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "9abc511d0831c060ffee9bf03a5030b65c4d7bb3e0b61677acf3019ca9d91d03",
+    "changeSetSha256": "207ef474881f1f86ec1f18de41520f8dc0874d09d484625ab47c5258d9ae612e",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -2189,7 +2405,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "8a0531e6025d370c5e62dd542bb911a2c20b849291565da44632262a1267be92"
+    "optionsHash": "5c80cdc82c23c50b7697fcd8cb7c4f48419aea76db9f9fe6944e061710171395"
   },
   "status": "READY"
 }
@@ -2228,8 +2444,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "9abc511d0831c060ffee9bf03a5030b65c4d7bb3e0b61677acf3019ca9d91d03",
-    "changeAnalysisSha256": "a5f52da268d2dccbc5def9cf37f5b090318d468565baee897facd479f201e51b",
+    "changeSetSha256": "207ef474881f1f86ec1f18de41520f8dc0874d09d484625ab47c5258d9ae612e",
+    "changeAnalysisSha256": "73caacfa1e0c121ad2d96b382e313a203a58712daa82fddf0187287cd35ca37a",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -2287,18 +2503,304 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "0d6981ca2b1ddf546a9a585d4bb428b313534185f7c7775e99db41b815fdc1f4"
+    "sha256": "626cba4eac8803f2a5396cf11a9be714dc06bc9a305a58a18f2f33f363000b45"
   },
   "status": "READY"
 }
-    review_progress_lifecycle_task3_test.go:45: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164Task3ReviewPlanningCommandsAdvanceRuntimeProgress (3.29s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "626cba4eac8803f2a5396cf11a9be714dc06bc9a305a58a18f2f33f363000b45",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "3a9e78f0066ba8d1059e20b91c9ada70538d34bd8afe85d8fbe9ecd471a9025b"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "207ef474881f1f86ec1f18de41520f8dc0874d09d484625ab47c5258d9ae612e",
+    "changeAnalysisSha256": "73caacfa1e0c121ad2d96b382e313a203a58712daa82fddf0187287cd35ca37a",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "626cba4eac8803f2a5396cf11a9be714dc06bc9a305a58a18f2f33f363000b45"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "626cba4eac8803f2a5396cf11a9be714dc06bc9a305a58a18f2f33f363000b45",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "3a9e78f0066ba8d1059e20b91c9ada70538d34bd8afe85d8fbe9ecd471a9025b"
+  },
+  "status": "READY"
+}
+--- PASS: Test164Task3ReviewPlanningCommandsAdvanceRuntimeProgress (5.90s)
 === RUN   Test164Task3ReviewPlanningFailureBlocksLaterStages
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "c337c67b1486712d1ddb8ff5b0531f6dbc85d1b090f84800875bae95dc2e4aa5",
+    "changeSetSha256": "cf78d113dddd348342202ae7195df1a4c06dd66de643f077db38cd1305310700",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -2318,7 +2820,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "1ac1e02a69e6e4ed82840be49c96673836c36943a24fd5be02ffc431181b89e2"
+    "optionsHash": "4eb1b108e3aebc445036577267e76f0e726759343eebdb3db827b81577ac4e50"
   },
   "status": "READY"
 }
@@ -2357,8 +2859,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "c337c67b1486712d1ddb8ff5b0531f6dbc85d1b090f84800875bae95dc2e4aa5",
-    "changeAnalysisSha256": "c666eb43584e6cb7d6a9dcd0d85f7b0bb43dd762a0c76f6d25c4fd4101234168",
+    "changeSetSha256": "cf78d113dddd348342202ae7195df1a4c06dd66de643f077db38cd1305310700",
+    "changeAnalysisSha256": "b8ea1bb9eda51975a1d6c3a0cf74961e61efcac66d21f46d6acfbdf0c24ff464",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -2416,18 +2918,195 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "12c53ef3e08274dd836bbd596018a7aa002d496dc1e06b74b56bad80c1411df5"
+    "sha256": "e042a9ee470d504f204522def18ff48a17c219731efc9b223ecb66ba16f86fbd"
   },
   "status": "READY"
 }
-    review_progress_lifecycle_task3_test.go:70: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164Task3ReviewPlanningFailureBlocksLaterStages (3.28s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "e042a9ee470d504f204522def18ff48a17c219731efc9b223ecb66ba16f86fbd",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "c6894243077595f3cb5110381b8027211b0507a0f75c98bcd8f71eee3f9b25ad"
+  },
+  "status": "READY"
+}
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-units.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "harnessVersion": "1.5.2",
+    "mode": "TARGETED",
+    "changeSetSha256": "cf78d113dddd348342202ae7195df1a4c06dd66de643f077db38cd1305310700",
+    "changeAnalysisSha256": "b8ea1bb9eda51975a1d6c3a0cf74961e61efcac66d21f46d6acfbdf0c24ff464",
+    "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
+    "units": [
+      {
+        "id": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "entryPoint": "OrderController.approve",
+        "chain": [
+          "OrderController.approve",
+          "OrderService.approve",
+          "OrderServiceImpl.approve",
+          "OrderMapper.updateStatus"
+        ],
+        "files": [
+          {
+            "path": "src/main/java/com/example/order/OrderController.java",
+            "role": "Controller",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderMapper.java",
+            "role": "Mapper",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderService.java",
+            "role": "Service",
+            "changed": false,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "role": "Service",
+            "changed": true,
+            "workspace": "current"
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "role": "MapperXml",
+            "changed": true,
+            "workspace": "current"
+          }
+        ],
+        "changedHunks": [
+          {
+            "path": "src/main/java/com/example/order/OrderServiceImpl.java",
+            "newStart": 1,
+            "newLines": 5
+          },
+          {
+            "path": "src/main/resources/mapper/OrderMapper.xml",
+            "newStart": 1,
+            "newLines": 1
+          }
+        ]
+      }
+    ],
+    "sha256": "e042a9ee470d504f204522def18ff48a17c219731efc9b223ecb66ba16f86fbd"
+  },
+  "status": "READY"
+}
+--- PASS: Test164Task3ReviewPlanningFailureBlocksLaterStages (5.88s)
 === RUN   Test164Task3ReviewerAuthorityFailureTerminatesReviewExecution
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "bc95026beea7d36f06d95ea2ee78a6e1064dd3e26df4a054adaf47c7763b2479",
+    "changeSetSha256": "cc74358f3fbce53b8d9734e6ba89bb3f727fda58747ef9ef1d1a3c4c0aa09dbe",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -2447,7 +3126,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "d217fbd422ca90a6831dc5a76929bfa609baa456576fdef30a73bbfada6b4a06"
+    "optionsHash": "d360c8fcee49a5511615c926c327e99e255e4bb9b6082b52929a063c5f1e5b86"
   },
   "status": "READY"
 }
@@ -2486,8 +3165,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "bc95026beea7d36f06d95ea2ee78a6e1064dd3e26df4a054adaf47c7763b2479",
-    "changeAnalysisSha256": "08ad307cc1071b42820d4b4002efa896388172b0fc7df89098cd3454996d3e5f",
+    "changeSetSha256": "cc74358f3fbce53b8d9734e6ba89bb3f727fda58747ef9ef1d1a3c4c0aa09dbe",
+    "changeAnalysisSha256": "94f8058e23b8a7338a02d109ea9f672678cf3e7c01f395363c4539c020069b07",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -2545,18 +3224,126 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "bda6450bb7a07c9869b490b110cbe887c373674795e45ba0f0b022faade76068"
+    "sha256": "12ba51931d4e0a1a352c1f2861e83efb779f3daf60af7d11989a0ecd1fcc46be"
   },
   "status": "READY"
 }
-    review_progress_lifecycle_task3_test.go:93: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164Task3ReviewerAuthorityFailureTerminatesReviewExecution (3.26s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "12ba51931d4e0a1a352c1f2861e83efb779f3daf60af7d11989a0ecd1fcc46be",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "bc0748fcd5743e5f5236823fd1ada0b976b2e4de86f88f9a1642a1131e43e0f6"
+  },
+  "status": "READY"
+}
+--- PASS: Test164Task3ReviewerAuthorityFailureTerminatesReviewExecution (4.26s)
 === RUN   Test164Task3FindingCertificationFailureIsAttributedAfterReviewerAuthority
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "9345c109800579e46e1cf4d509ecc01cfbcbaec913744f0e603a35b13ec557a6",
+    "changeSetSha256": "a21a1a5e941968f8da556c9518f920118126e6b3afc028a33af9a2cf5628004f",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -2576,7 +3363,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "cf771a362403f2da707808ef87bacf6096fe09c877d8ccdcaaca3dac76e5bafa"
+    "optionsHash": "5ae2c11381e8b1937cc30af0a2d8e425d5d23373ed5296e3f1f0948005fbab4d"
   },
   "status": "READY"
 }
@@ -2615,8 +3402,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "9345c109800579e46e1cf4d509ecc01cfbcbaec913744f0e603a35b13ec557a6",
-    "changeAnalysisSha256": "2c7c93131be4b77915166d086cb508b843f32f730e6cd26b9eeb39e74137fce3",
+    "changeSetSha256": "a21a1a5e941968f8da556c9518f920118126e6b3afc028a33af9a2cf5628004f",
+    "changeAnalysisSha256": "e0f2c5d60288280040a7caf631357373cc02f4d24406131751a852a6ba18c5d3",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -2674,18 +3461,126 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "03a49791fdce02d842c1acddf28492f3c78562e556ef5732a1d04adbfdd835f3"
+    "sha256": "ebcf5aebfb8984d3a8fbfba74bf26f4f6b472dd0af9b1d670122459351b17136"
   },
   "status": "READY"
 }
-    review_progress_lifecycle_task3_test.go:107: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164Task3FindingCertificationFailureIsAttributedAfterReviewerAuthority (3.25s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "ebcf5aebfb8984d3a8fbfba74bf26f4f6b472dd0af9b1d670122459351b17136",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "36ebae6eb7406d7619c2929b3f5a4b0fe93adb8b44e31ad04a9427089d848edd"
+  },
+  "status": "READY"
+}
+--- PASS: Test164Task3FindingCertificationFailureIsAttributedAfterReviewerAuthority (5.76s)
 === RUN   Test164Task3FindingCertificationAndReportCompleteRuntimeProgress
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "2e68b25489a60a2420e55723d1c0b101428fbab83413633fab92d5df5c62d87f",
+    "changeSetSha256": "20e12e620dc0d9c3ea02c8a0ace4a1525ac35818aafbcb8ce3beb34c89219abf",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -2705,7 +3600,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "1619abbce605594f866ae7ad9478f7a606c8680158394dc0a635e6eb481542e0"
+    "optionsHash": "65581a0c422b3f59629933c9d01249f01a7daa2e0a9944ae2a55a664c17d49de"
   },
   "status": "READY"
 }
@@ -2744,8 +3639,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "2e68b25489a60a2420e55723d1c0b101428fbab83413633fab92d5df5c62d87f",
-    "changeAnalysisSha256": "a4eaab2b5eccae07211e2cd9adc4c9ec54ecb791eef9ea6e83e7e4e75190084b",
+    "changeSetSha256": "20e12e620dc0d9c3ea02c8a0ace4a1525ac35818aafbcb8ce3beb34c89219abf",
+    "changeAnalysisSha256": "de4ee8b09ee48e145c79cba6111e4f5947418dc21d30139320563f29b8aefe46",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -2803,18 +3698,137 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "6b71467d5d5f54a2608217be07faa33c1aea6bfebd0064ce2024aeb7ffa773d0"
+    "sha256": "999c907241aaa665606a485ae791dec0ed552f978ba977764e22b7d75fcb0399"
   },
   "status": "READY"
 }
-    review_progress_lifecycle_task3_test.go:124: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164Task3FindingCertificationAndReportCompleteRuntimeProgress (3.29s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "999c907241aaa665606a485ae791dec0ed552f978ba977764e22b7d75fcb0399",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "98ddae95cc9c896fe5bfdbca1b6985123b1f4b073fe94edf7c00e22cf5b3d61a"
+  },
+  "status": "READY"
+}
+{
+  "certificatePath": ".code-harness/runs/run-task4-review/analysis/certified-findings.cert.json",
+  "findingCount": 0,
+  "findingsPath": ".code-harness/runs/run-task4-review/analysis/certified-findings.json",
+  "rejections": [],
+  "status": "CERTIFIED"
+}
+{
+  "reportPath": ".code-harness/runs/run-task4-review/review.md",
+  "status": "OK"
+}
+--- PASS: Test164Task3FindingCertificationAndReportCompleteRuntimeProgress (19.04s)
 === RUN   Test164Task3ReportFailureTerminatesAtReport
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "7e6b93aeb246b9014b73ef2646230131c9f57e298bb7a3e26bbca03345770c3a",
+    "changeSetSha256": "e2a91449c64238c96c2f7b33c84abc1af7621e54adeef93ccd6892ec938203c5",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -2834,7 +3848,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "ea7a68ebd259294ce3485b65897f711935605d52a8d50611e3d74dffb58778a3"
+    "optionsHash": "4395b6289d8024d8ddfa26743007a533f256625904f9bcd696ab4eecdd2ccd67"
   },
   "status": "READY"
 }
@@ -2873,8 +3887,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "7e6b93aeb246b9014b73ef2646230131c9f57e298bb7a3e26bbca03345770c3a",
-    "changeAnalysisSha256": "2edee5206a69e0cfb54c9a071bfc172b3582de74a62a7104deac9943e63d4b41",
+    "changeSetSha256": "e2a91449c64238c96c2f7b33c84abc1af7621e54adeef93ccd6892ec938203c5",
+    "changeAnalysisSha256": "915056aa62c5c78ae3e050480e81194f0adc54e754d3da68c98de55977c859ae",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -2932,18 +3946,133 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "9fc34f4f3e3126c093713e1d004f2564781ce0054d2837c0e366659dacaff6a8"
+    "sha256": "e694a35a5823e20054df5dab32901b3a8de6ce99d5219ec59d1a8605ca0dd89a"
   },
   "status": "READY"
 }
-    review_progress_lifecycle_task3_test.go:146: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164Task3ReportFailureTerminatesAtReport (3.27s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "e694a35a5823e20054df5dab32901b3a8de6ce99d5219ec59d1a8605ca0dd89a",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "9fc586ed2a3cb350af9512d1fa489efc32c0aaea375b18a77c49d6cc289c7ae6"
+  },
+  "status": "READY"
+}
+{
+  "certificatePath": ".code-harness/runs/run-task4-review/analysis/certified-findings.cert.json",
+  "findingCount": 0,
+  "findingsPath": ".code-harness/runs/run-task4-review/analysis/certified-findings.json",
+  "rejections": [],
+  "status": "CERTIFIED"
+}
+--- PASS: Test164Task3ReportFailureTerminatesAtReport (16.41s)
 === RUN   Test164Task3OpenCodeRendersOnlyRuntimeProgressEvents
 --- PASS: Test164Task3OpenCodeRendersOnlyRuntimeProgressEvents (0.00s)
 === RUN   Test164Task3ReviewerUnavailableFailsChangeAnalysisAtHostBoundary
---- PASS: Test164Task3ReviewerUnavailableFailsChangeAnalysisAtHostBoundary (0.02s)
+--- PASS: Test164Task3ReviewerUnavailableFailsChangeAnalysisAtHostBoundary (0.03s)
 === RUN   Test164Task3ReviewerUnavailableFailsReviewExecutionAtHostBoundary
---- PASS: Test164Task3ReviewerUnavailableFailsReviewExecutionAtHostBoundary (0.04s)
+--- PASS: Test164Task3ReviewerUnavailableFailsReviewExecutionAtHostBoundary (0.05s)
 === RUN   Test164Task3ReviewerUnavailableCannotFailNonReviewerStage
 --- PASS: Test164Task3ReviewerUnavailableCannotFailNonReviewerStage (0.01s)
 === RUN   Test164Task3OpenCodeHostFailureReportsRuntimeProgressBeforeHardStop
@@ -2951,47 +4080,47 @@ Usage of nav:
 === RUN   Test164Task3SnapshotSuccessAdvancesRuntimeProgress
 {
   "artifactPath": ".code-harness/runs/review-task3-snapshot-success/analysis/change-set.json",
-  "headCommit": "3b16c97dc39b1dc873e704f20792f6ae24fb0d7e",
-  "mergeBase": "3b16c97dc39b1dc873e704f20792f6ae24fb0d7e",
-  "resolvedBaseCommit": "3b16c97dc39b1dc873e704f20792f6ae24fb0d7e",
+  "headCommit": "c6340645fdcbf29e2eb6a940da7c1c7831f48e9d",
+  "mergeBase": "c6340645fdcbf29e2eb6a940da7c1c7831f48e9d",
+  "resolvedBaseCommit": "c6340645fdcbf29e2eb6a940da7c1c7831f48e9d",
   "runId": "review-task3-snapshot-success",
-  "snapshotSha256": "5c5841e1dbce3a307fc78fe30de4f39a2d1feb57bb0a0f30ba6576c3a64ea012",
+  "snapshotSha256": "459b57f84c24e99ee671dcbce5cffed0da852ff6533c5fa7fad67fe703f050cc",
   "status": "SNAPSHOT_READY"
 }
---- PASS: Test164Task3SnapshotSuccessAdvancesRuntimeProgress (0.67s)
+--- PASS: Test164Task3SnapshotSuccessAdvancesRuntimeProgress (0.70s)
 === RUN   Test164Task3SnapshotFailureTerminatesAtSnapshot
---- PASS: Test164Task3SnapshotFailureTerminatesAtSnapshot (0.32s)
+--- PASS: Test164Task3SnapshotFailureTerminatesAtSnapshot (0.34s)
 === RUN   Test164Task3ReviewBeginCreatesRuntimeOwnedProgress
 {
-  "progressPath": ".code-harness/runs/review-72e165e44217c339ebbca275b8395565/runtime/review-progress.json",
+  "progressPath": ".code-harness/runs/review-944e80b16a0d844e9c667e5362131d06/runtime/review-progress.json",
   "protocolVersion": "1.7",
-  "runId": "review-72e165e44217c339ebbca275b8395565",
-  "runPath": ".code-harness/runs/review-72e165e44217c339ebbca275b8395565",
+  "runId": "review-944e80b16a0d844e9c667e5362131d06",
+  "runPath": ".code-harness/runs/review-944e80b16a0d844e9c667e5362131d06",
   "status": "READY"
 }
 {
   "version": 1,
   "protocolVersion": "1.7",
-  "runId": "review-72e165e44217c339ebbca275b8395565",
+  "runId": "review-944e80b16a0d844e9c667e5362131d06",
   "status": "RUNNING",
   "currentStage": "SNAPSHOT",
-  "startedAt": "2026-09-14T01:58:21.6883524Z",
-  "updatedAt": "2026-09-14T01:58:21.6883524Z",
+  "startedAt": "2026-09-14T02:35:54.7608904Z",
+  "updatedAt": "2026-09-14T02:35:54.7608904Z",
   "stages": [
     {
       "index": 1,
       "total": 8,
       "name": "REVIEW_BEGIN",
       "status": "SUCCEEDED",
-      "startedAt": "2026-09-14T01:58:21.6883524Z",
-      "completedAt": "2026-09-14T01:58:21.6883524Z"
+      "startedAt": "2026-09-14T02:35:54.7608904Z",
+      "completedAt": "2026-09-14T02:35:54.7608904Z"
     },
     {
       "index": 2,
       "total": 8,
       "name": "SNAPSHOT",
       "status": "RUNNING",
-      "startedAt": "2026-09-14T01:58:21.6883524Z"
+      "startedAt": "2026-09-14T02:35:54.7608904Z"
     },
     {
       "index": 3,
@@ -3037,7 +4166,7 @@ Usage of nav:
       "total": 8,
       "stage": "REVIEW_BEGIN",
       "status": "RUNNING",
-      "timestamp": "2026-09-14T01:58:21.6883524Z",
+      "timestamp": "2026-09-14T02:35:54.7608904Z",
       "display": "[1/8] REVIEW_BEGIN RUNNING"
     },
     {
@@ -3046,7 +4175,7 @@ Usage of nav:
       "total": 8,
       "stage": "REVIEW_BEGIN",
       "status": "SUCCEEDED",
-      "timestamp": "2026-09-14T01:58:21.6883524Z",
+      "timestamp": "2026-09-14T02:35:54.7608904Z",
       "display": "[1/8] REVIEW_BEGIN PASS"
     },
     {
@@ -3055,7 +4184,7 @@ Usage of nav:
       "total": 8,
       "stage": "SNAPSHOT",
       "status": "RUNNING",
-      "timestamp": "2026-09-14T01:58:21.6883524Z",
+      "timestamp": "2026-09-14T02:35:54.7608904Z",
       "display": "[2/8] SNAPSHOT RUNNING"
     }
   ]
@@ -3074,20 +4203,20 @@ Usage of nav:
 === RUN   Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/report_review_unknown_field
 --- PASS: Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode (0.01s)
     --- PASS: Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/finding_certify_unknown_field (0.00s)
-    --- PASS: Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/report_review_unknown_field (0.01s)
+    --- PASS: Test162ReviewReliabilityTask1CommandsValidateSchemaBeforeStrictDecode/report_review_unknown_field (0.00s)
 === RUN   Test162ReviewReliabilityTask2BeginCreatesFreshRunWithoutSnapshot
 {
-  "progressPath": ".code-harness/runs/review-32f4e1737d03fbbe2d3ba2262a7d3c27/runtime/review-progress.json",
+  "progressPath": ".code-harness/runs/review-96167fb63a9002f07dbd7c1a08309d91/runtime/review-progress.json",
   "protocolVersion": "1.7",
-  "runId": "review-32f4e1737d03fbbe2d3ba2262a7d3c27",
-  "runPath": ".code-harness/runs/review-32f4e1737d03fbbe2d3ba2262a7d3c27",
+  "runId": "review-96167fb63a9002f07dbd7c1a08309d91",
+  "runPath": ".code-harness/runs/review-96167fb63a9002f07dbd7c1a08309d91",
   "status": "READY"
 }
 {
-  "progressPath": ".code-harness/runs/review-78b3093bc6c22af9fe7adbef3b0fc302/runtime/review-progress.json",
+  "progressPath": ".code-harness/runs/review-190dc0d499fde6965602812cf8871357/runtime/review-progress.json",
   "protocolVersion": "1.7",
-  "runId": "review-78b3093bc6c22af9fe7adbef3b0fc302",
-  "runPath": ".code-harness/runs/review-78b3093bc6c22af9fe7adbef3b0fc302",
+  "runId": "review-190dc0d499fde6965602812cf8871357",
+  "runPath": ".code-harness/runs/review-190dc0d499fde6965602812cf8871357",
   "status": "READY"
 }
 --- PASS: Test162ReviewReliabilityTask2BeginCreatesFreshRunWithoutSnapshot (0.02s)
@@ -3096,9 +4225,9 @@ Usage of nav:
 === RUN   Test153ReviewScopeRejectsUncertifiedAnalysis
 --- PASS: Test153ReviewScopeRejectsUncertifiedAnalysis (0.01s)
 === RUN   Test153ReviewScopeRejectsTamperedCertifiedAnalysis
---- PASS: Test153ReviewScopeRejectsTamperedCertifiedAnalysis (0.87s)
+--- PASS: Test153ReviewScopeRejectsTamperedCertifiedAnalysis (0.89s)
 === RUN   Test153ReviewScopeRejectsStaleCertifiedChangeSet
---- PASS: Test153ReviewScopeRejectsStaleCertifiedChangeSet (1.23s)
+--- PASS: Test153ReviewScopeRejectsStaleCertifiedChangeSet (1.24s)
 === RUN   Test153ReviewScopeAcceptsCertifiedAnalysis
 {
   "format": "json",
@@ -3127,7 +4256,7 @@ Usage of nav:
   },
   "status": "VALID"
 }
---- PASS: Test153ReviewScopeAcceptsCertifiedAnalysis (1.23s)
+--- PASS: Test153ReviewScopeAcceptsCertifiedAnalysis (1.28s)
 === RUN   TestValidateReviewScopeUsesScopedCoverageNotFullChangedSet
 {
   "format": "json",
@@ -3156,15 +4285,15 @@ Usage of nav:
   },
   "status": "VALID"
 }
---- PASS: TestValidateReviewScopeUsesScopedCoverageNotFullChangedSet (1.45s)
+--- PASS: TestValidateReviewScopeUsesScopedCoverageNotFullChangedSet (1.31s)
 === RUN   TestValidateReviewScopeRejectsMissingScopedReviewedFile
---- PASS: TestValidateReviewScopeRejectsMissingScopedReviewedFile (1.42s)
+--- PASS: TestValidateReviewScopeRejectsMissingScopedReviewedFile (1.30s)
 === RUN   Test153ReviewOptionsAutoSingleExecutesWithoutUserChoice
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "09278e265592f5ef9ccebec11b7d8316a3fafc79946430af3bf2fdf05b689538",
+    "changeSetSha256": "52c97bdd031cc4426deb1fc08b005e958e89a84e8fa4084e81087814c985cc97",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3184,7 +4313,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "fce80dd87b66f9e653de924e280948a3089ae23530f72cfee563dccd2a182dc0"
+    "optionsHash": "7e1a044c6e9534131910da774a9b57f292a714467caaa307519fb8e113be13f2"
   },
   "status": "READY"
 }
@@ -3217,13 +4346,13 @@ Usage of nav:
   },
   "status": "SELECTED"
 }
---- PASS: Test153ReviewOptionsAutoSingleExecutesWithoutUserChoice (2.75s)
+--- PASS: Test153ReviewOptionsAutoSingleExecutesWithoutUserChoice (2.59s)
 === RUN   Test153ReviewSelectRejectsStaleAndUnknownRuntimeOptions
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "81aa1b2db6980d01920b811bacd8dffd179826ae8d7db9b43216c145468249d5",
+    "changeSetSha256": "38b053accf6ee4131150b1e7a35b20099257f39d98ce9e81415381d0c1e8c495",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3243,17 +4372,17 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "6d5a370c80f824451057827bb84744ae9feed94c25ede7fa396584264f6aad66"
+    "optionsHash": "800ae3f515f4ab6bfb8556509f99b5b4f58649622fbcd028c7c2d802f7219686"
   },
   "status": "READY"
 }
---- PASS: Test153ReviewSelectRejectsStaleAndUnknownRuntimeOptions (3.25s)
+--- PASS: Test153ReviewSelectRejectsStaleAndUnknownRuntimeOptions (3.30s)
 === RUN   Test153ReviewSelectRejectsRehashedOptionSetDeletion
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "2234a8a5997cf80d25f84dbf96ce1608001534b57832a95ae3ec6078b947030b",
+    "changeSetSha256": "56fbe1f8bcb908d15edc9112f20e04bf5c55c81fad0e0956af6684fb5720d540",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3279,17 +4408,17 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "c3ca582aba425d833d0e804ae96a41e0927578b70c36da9b6e4e7c183808f7f7"
+    "optionsHash": "805f97478f1242a243f7691b70b29cb109e3f87331ce38d2863e5714f5de84a8"
   },
   "status": "READY"
 }
---- PASS: Test153ReviewSelectRejectsRehashedOptionSetDeletion (2.49s)
+--- PASS: Test153ReviewSelectRejectsRehashedOptionSetDeletion (2.52s)
 === RUN   Test153ReviewSelectRejectsJointOriginAndOptionsIntentRewrite
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "78bb4d717e6270840da9b6b514a7ea73665496b4ba18968c8d37cc07092cf124",
+    "changeSetSha256": "e55126e265dfbc8dd85fb55b0ffb392f4ab948ecd23d682e16e4cb00f1857a1c",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3315,17 +4444,17 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "134c02900611f53d81931cb97c34474105994377a00aa5b7ff09f7ed917a3992"
+    "optionsHash": "de5ee25a5514f8c5d789b2fcccc286b9208962987d7ce429ea9e337e3c2fd3a7"
   },
   "status": "READY"
 }
---- PASS: Test153ReviewSelectRejectsJointOriginAndOptionsIntentRewrite (2.50s)
+--- PASS: Test153ReviewSelectRejectsJointOriginAndOptionsIntentRewrite (2.57s)
 === RUN   Test153ExplicitTargetIsImmutableAndHashBound
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "d5121bc2c40ade9c543e4982b4130d40925412556bc630b9592354aca9ec81bb",
+    "changeSetSha256": "debbef97c4388914ffca06e1219c4c13e53aba49b9c3ad0d012efaf30012e892",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "TARGETED",
@@ -3346,17 +4475,17 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "73418400bbb0e908c48e598ac76d6d169d9e834d8d9e345e66c6892ec787123a"
+    "optionsHash": "c455ae2825a7a6f9e51114a5ca50c80958b36604038b51e592b220b1a0196303"
   },
   "status": "READY"
 }
---- PASS: Test153ExplicitTargetIsImmutableAndHashBound (2.50s)
+--- PASS: Test153ExplicitTargetIsImmutableAndHashBound (2.61s)
 === RUN   Test153ExplicitTargetAutoSinglePreservesReviewScopeTarget
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "b2e4f636fbaf2f6e12969ea2fc060ce387994d59a3e3dee1e4cba69a603308a0",
+    "changeSetSha256": "2908247fe938807e5c316f961d8b205fe5cad91f1b8321adf8ceb090c88237a1",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "TARGETED",
@@ -3377,7 +4506,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "ca6b3dcde6c47bf413190f49ff0ebdf311c18fd91197b3c660da73e99b96a3b4"
+    "optionsHash": "04505d0431461a5f6dbc299d2856959224b8a2d42944346bdaffafac15a3ad0c"
   },
   "status": "READY"
 }
@@ -3410,13 +4539,13 @@ Usage of nav:
   },
   "status": "SELECTED"
 }
---- PASS: Test153ExplicitTargetAutoSinglePreservesReviewScopeTarget (2.47s)
+--- PASS: Test153ExplicitTargetAutoSinglePreservesReviewScopeTarget (2.55s)
 === RUN   Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "d4b615e6109f0212693acb556488228952fa2b5145ea2ef3e2bdd8ca4eb3d596",
+    "changeSetSha256": "12edbc30a19f62920849cfcd423c76acb5fddfd3645656757e44cde1dcf36320",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "TARGETED",
@@ -3443,7 +4572,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "3467426f7695c424611532a1df0d510bab03f0257bdadfbab78c9bd3809ae9cd"
+    "optionsHash": "e8023795a5d95273b066f679332bec374282fe293bf9a0e8ed4b7c4e636e2c12"
   },
   "status": "READY"
 }
@@ -3505,15 +4634,15 @@ Usage of nav:
   },
   "status": "SELECTED"
 }
---- PASS: Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice (3.27s)
+--- PASS: Test153ExplicitTargetUserSelectionPreservesTargetForEveryUpstreamChoice (3.33s)
 === RUN   Test153ExplicitTargetWithoutMatchingChainStopsInsteadOfAutoFull
---- PASS: Test153ExplicitTargetWithoutMatchingChainStopsInsteadOfAutoFull (1.32s)
+--- PASS: Test153ExplicitTargetWithoutMatchingChainStopsInsteadOfAutoFull (1.36s)
 === RUN   Test164FindingCertificationRequiresReviewerHostAuthority
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "061058aaa0ac18af6c7cb303fc584ceeb82f77b6ba8163e6af9a9d27a8f18fc6",
+    "changeSetSha256": "82ebd0752bfaf7104c461f9dee75aa5cf36d1cac81497f0c1fd9670533850e0c",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3533,7 +4662,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "9d4c2cc58ba7fd18d3dd9073808c74b2e300be415114d1c3ef6f856ebdd7957f"
+    "optionsHash": "75b66e878be324096f4580200988273332ebcea318c16affb9cafcc0163752e8"
   },
   "status": "READY"
 }
@@ -3572,8 +4701,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "061058aaa0ac18af6c7cb303fc584ceeb82f77b6ba8163e6af9a9d27a8f18fc6",
-    "changeAnalysisSha256": "e64d2cb076de0f7a79b3b650348354132795c2e6d12e3d05fcb3f55b02398427",
+    "changeSetSha256": "82ebd0752bfaf7104c461f9dee75aa5cf36d1cac81497f0c1fd9670533850e0c",
+    "changeAnalysisSha256": "746b7cd9e8e70512803f8febaa23061ab867cf1e49e084268c4287c08d83ed90",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -3631,18 +4760,126 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "a7703a6b5a5cc9118da07900016f219765562943bb796706f179e022f350a784"
+    "sha256": "74c00cc74a10a0ada3987159b8ce35da9d796bf635e6cbc32f08e1837e059fe9"
   },
   "status": "READY"
 }
-    reviewer_findings_report_164_test.go:153: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164FindingCertificationRequiresReviewerHostAuthority (3.28s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "74c00cc74a10a0ada3987159b8ce35da9d796bf635e6cbc32f08e1837e059fe9",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "efb6029df36755f482488926b9b6b703d3b5920a3ff982665529dc791cdcdc0b"
+  },
+  "status": "READY"
+}
+--- PASS: Test164FindingCertificationRequiresReviewerHostAuthority (4.10s)
 === RUN   Test164ReviewerCertifiedEmptyFindingsDrivePassedReport
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "fe797fac4d3ea8af841d0b160f9def11350d3c47e67d0e95cda4e2f1ec7654a0",
+    "changeSetSha256": "02a48053e5e35893b28e51751c20c0c64e12ea32e3f6095d948038c2e6560594",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3662,7 +4899,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "daf9d70094d3b07d8779254ca9e8fbfac4966813678ec9dc3e8854e089527357"
+    "optionsHash": "d059d1656896d43998948db7ae0bc5486a947d4f5a45f67e561bb57bfcc13745"
   },
   "status": "READY"
 }
@@ -3701,8 +4938,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "fe797fac4d3ea8af841d0b160f9def11350d3c47e67d0e95cda4e2f1ec7654a0",
-    "changeAnalysisSha256": "b26f18094b7d0d6bfcb0317fbe83dfead524f1afbe002dd5897ce91531cdd0d1",
+    "changeSetSha256": "02a48053e5e35893b28e51751c20c0c64e12ea32e3f6095d948038c2e6560594",
+    "changeAnalysisSha256": "ed407113d5a0f14d0a87979bc30aff028eccb09033b27dee2a9b0e82de7f5372",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -3760,12 +4997,121 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "6a132ef476f611556c696476ba64342e087348d33b61b620ecf9353fb51ce6fe"
+    "sha256": "cb38ffec8a0daebd7e1b22660e9a78d9b8fd4771780333e9da0d0070f1ba736e"
   },
   "status": "READY"
 }
-    reviewer_findings_report_164_test.go:172: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: Test164ReviewerCertifiedEmptyFindingsDrivePassedReport (3.27s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "cb38ffec8a0daebd7e1b22660e9a78d9b8fd4771780333e9da0d0070f1ba736e",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-ca24bcd98bbc684926e7fbbf4ce5e5dab24148ebcb6a4d0519e322e6e602e75e",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "d42fb6bcb3fe7e13cd3813ede3094729f4fd3b6830972853ec2063dea055ae8c"
+  },
+  "status": "READY"
+}
+    reviewer_findings_report_164_test.go:174: Reviewer-authorized finding certification failed: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
+--- FAIL: Test164ReviewerCertifiedEmptyFindingsDrivePassedReport (16.43s)
 === RUN   Test153Task6ArtifactAuthorityReleaseContract
 --- PASS: Test153Task6ArtifactAuthorityReleaseContract (0.00s)
 === RUN   Test153Task6ChainEditAndReleaseContract
@@ -3781,7 +5127,7 @@ Usage of nav:
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "ac5cfe4c8ebe329d8092292a3c095e7323e9230685920164bda500c49fa1f9f8",
+    "changeSetSha256": "f4a11f8ab549f944a8e6741aaf2e5084e828b29f516bc2bf5fb6fb33b83a5b3c",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3801,7 +5147,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "d80abe08a0d5db722637e47e75ebf9b68f100189f4fea45514ac47b49d6b100b"
+    "optionsHash": "f55f74c7f12d1bd8221d3e35bfca332d4fc7c51c6bfcaf1eadeeb950453e6467"
   },
   "status": "READY"
 }
@@ -3840,8 +5186,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "ac5cfe4c8ebe329d8092292a3c095e7323e9230685920164bda500c49fa1f9f8",
-    "changeAnalysisSha256": "2a20eb4a5295b0fd037ba5f087585f325b7a942f1e0884039416fc5cc44c9e8b",
+    "changeSetSha256": "f4a11f8ab549f944a8e6741aaf2e5084e828b29f516bc2bf5fb6fb33b83a5b3c",
+    "changeAnalysisSha256": "e2e91cccf686c0ad6fe20a83f77e6d837d852392c2e16eb8bdb2ec24393e80e1",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -3899,18 +5245,126 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "0eec0c5148e40a1f3e960dae4286263a21a1a99d4e80fe0d1bacab39045417c1"
+    "sha256": "6ce518cd4eb0748e9fb1d7f9ce6b8113c3dbf7f02962e56ae4cc0f538a4bfaf8"
   },
   "status": "READY"
 }
-    task4_blocker_regression_test.go:19: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: TestTask4LoadCertifiedAndReportRejectSourceMutationAfterCertification (3.27s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "6ce518cd4eb0748e9fb1d7f9ce6b8113c3dbf7f02962e56ae4cc0f538a4bfaf8",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "edbb2fa1ea4c5c65030d7cc15ebff0d2e99da63314e29865b9eb629eec6b79c8"
+  },
+  "status": "READY"
+}
+--- PASS: TestTask4LoadCertifiedAndReportRejectSourceMutationAfterCertification (8.31s)
 === RUN   TestTask4ProposalBytesMutationReturnsCertifiedFindingsStale
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "18f3a0212c38048812c416d862c24b772a1b04a301c371ac42add4752e723517",
+    "changeSetSha256": "a253a0b1395d1f8228af4fac718c1bfc5f328691a99f09c380c26310f3043940",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -3930,7 +5384,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "d98148281e1d854262c50e6b70e9b1c480984af733a498915b384c40e9ad653d"
+    "optionsHash": "0e4f0d3f6ee2e4e35f1826c21caeebac93763e7e48bf38ca7b1151a398bbe1d8"
   },
   "status": "READY"
 }
@@ -3969,8 +5423,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "18f3a0212c38048812c416d862c24b772a1b04a301c371ac42add4752e723517",
-    "changeAnalysisSha256": "7d45aaca24fd160d3b6dbf79bc57759f16361b3f4f7ffc470e339918d7f74a39",
+    "changeSetSha256": "a253a0b1395d1f8228af4fac718c1bfc5f328691a99f09c380c26310f3043940",
+    "changeAnalysisSha256": "0e54cd703bac05ea74bcc2d8534c3599149e2cbf9bd8d372fc28600a18f87d74",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -4028,18 +5482,126 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "236d9cd6767aad5b1d39870f85238baea6c549a277922346544310c8dbaa0c03"
+    "sha256": "6d7163bb7778dfe6e2d9648a79084aa4b99bdcccad31b7244004737a57e27120"
   },
   "status": "READY"
 }
-    task4_blocker_regression_test.go:43: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: TestTask4ProposalBytesMutationReturnsCertifiedFindingsStale (3.21s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "6d7163bb7778dfe6e2d9648a79084aa4b99bdcccad31b7244004737a57e27120",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "edf4547e4665ecf72a12be1611d33df8d3011fa3e4dba780d0b678e3a17add80"
+  },
+  "status": "READY"
+}
+--- PASS: TestTask4ProposalBytesMutationReturnsCertifiedFindingsStale (6.78s)
 === RUN   TestTask4CertifiedFindingsHashTamperKeepsHashMismatchCode
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "ee00898e1b778a50005546afb89c8479a146f86f10dec1a6c1a47fef871b60d5",
+    "changeSetSha256": "79bab024094f1fd5ef637cf81f718e1c8bd5fbc8f834662411cbb174f202e12e",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -4059,7 +5621,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "8c6949b85ba0d7f2177646d2ca1c60b8d72983757afa0fe432086ad6cd6d7070"
+    "optionsHash": "d88769dc10bb9615530cb4554e9e1d5f8ea154d079a318ae4e4e572c3d970513"
   },
   "status": "READY"
 }
@@ -4098,8 +5660,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "ee00898e1b778a50005546afb89c8479a146f86f10dec1a6c1a47fef871b60d5",
-    "changeAnalysisSha256": "79012edf0a4f7d5323fb30e8b46f88418caf5c9c525720af0b049004ce36de15",
+    "changeSetSha256": "79bab024094f1fd5ef637cf81f718e1c8bd5fbc8f834662411cbb174f202e12e",
+    "changeAnalysisSha256": "2025c650b57413deb49a6859747f4fbdca40beac3e5a4a4de0a5ea046a92daeb",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -4157,18 +5719,126 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "bc1335620f84500a13e8229195831d19837767185034e114cc5477e3d34dc5a2"
+    "sha256": "faec920016ebed25c3bdbace975aee697c94359b7d232ca4d37aa273ac3174c9"
   },
   "status": "READY"
 }
-    task4_blocker_regression_test.go:54: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: TestTask4CertifiedFindingsHashTamperKeepsHashMismatchCode (3.23s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "faec920016ebed25c3bdbace975aee697c94359b7d232ca4d37aa273ac3174c9",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "952f3694220b261e20ac6de7b281528bd7838b24cb07b1fbf0dbb97176ae2398"
+  },
+  "status": "READY"
+}
+--- PASS: TestTask4CertifiedFindingsHashTamperKeepsHashMismatchCode (6.50s)
 === RUN   TestTask4TargetedCertificateRejectsFullReport
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "d977b66889d970ffc26b15a245f650d049059e87fa627c43ed66f52a740959ea",
+    "changeSetSha256": "567758816ad51740322c2667c167f81683720c676283cc19aad30c2f51388f6e",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -4188,7 +5858,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "a2ce0b6a204dc8956b95fc6b984bce4328be5b387f192f94266284272a892191"
+    "optionsHash": "fb00a4716328b7c2d12c5afee12a3a38727e88160cffe888dfbdd2d1b7c5261d"
   },
   "status": "READY"
 }
@@ -4227,8 +5897,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "d977b66889d970ffc26b15a245f650d049059e87fa627c43ed66f52a740959ea",
-    "changeAnalysisSha256": "1fef286ab51db562979f29bedcfc52039f5bcc4a08d09c6752c3823aa4d26c65",
+    "changeSetSha256": "567758816ad51740322c2667c167f81683720c676283cc19aad30c2f51388f6e",
+    "changeAnalysisSha256": "60a00f84751b2cd8695088b833d4d86e712b7beeaaebedf4e4ae3419038c00a4",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -4286,18 +5956,126 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "59d32424db12f6723f4be01d8f17e6480dd621f7b9765c36850de1942e14d33f"
+    "sha256": "28937dfe44f96e118964717c12f1fec5eeddb3122795a90cd7c1c32076ef25ac"
   },
   "status": "READY"
 }
-    task4_blocker_regression_test.go:75: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: TestTask4TargetedCertificateRejectsFullReport (3.27s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "28937dfe44f96e118964717c12f1fec5eeddb3122795a90cd7c1c32076ef25ac",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "145c6b217132d9bf47dcbcfa9d8b26ff83eb078da5810b9e194ee5d36ebd4293"
+  },
+  "status": "READY"
+}
+--- PASS: TestTask4TargetedCertificateRejectsFullReport (8.86s)
 === RUN   TestTask4TargetedCertificateRejectsWrongTargetOrScopedFiles
 {
   "artifactPath": ".code-harness/runs/run-task4-review/analysis/review-options.json",
   "options": {
     "runId": "run-task4-review",
-    "changeSetSha256": "3ef6e3fef75387f56cc17b2376cf8f0ddfa317a66dd2321d204c12ecb0000fab",
+    "changeSetSha256": "3214782bf8005cbc47a602a541bbbcaf1d6dd659bd6d96de7ba1360fe0cd93dd",
     "entrypointCompleteness": "COMPLETE",
     "intent": {
       "mode": "FULL"
@@ -4317,7 +6095,7 @@ Usage of nav:
         "status": "VALID"
       }
     ],
-    "optionsHash": "a728bc6cf47ef96dd9889e8ea9e3330f0edfb1cf3e74c20a8b5cc10f8b74f115"
+    "optionsHash": "413c8611962bbf27afeb64c686137060fbe4be9fd8d08b30dfd53dcd7bb91325"
   },
   "status": "READY"
 }
@@ -4356,8 +6134,8 @@ Usage of nav:
     "runId": "run-task4-review",
     "harnessVersion": "1.5.2",
     "mode": "TARGETED",
-    "changeSetSha256": "3ef6e3fef75387f56cc17b2376cf8f0ddfa317a66dd2321d204c12ecb0000fab",
-    "changeAnalysisSha256": "a100704c340c0144cbee2094be5bdc06c7ed756225e8eea07bcde8b526474991",
+    "changeSetSha256": "3214782bf8005cbc47a602a541bbbcaf1d6dd659bd6d96de7ba1360fe0cd93dd",
+    "changeAnalysisSha256": "e2f22575f1d6c914255326d950f0a0b7a34703a0a4f5cefef799adef0074c9f2",
     "reviewScopeSha256": "2046f964378706396021540a0adc84888b9cbd8beaad5751c22038645365201f",
     "units": [
       {
@@ -4415,12 +6193,120 @@ Usage of nav:
         ]
       }
     ],
-    "sha256": "9a42f7c960cac7bdda12ce2ddafc712f8beeb18e47316e2814be05762f59699e"
+    "sha256": "e668741857f3d626f9117dc498b51b09b66d817b28772d2885dfeb53cacff820"
   },
   "status": "READY"
 }
-    task4_blocker_regression_test.go:85: review dispatch fixture: REVIEW_PROGRESS_READ_FAILED: open .code-harness\runs\run-task4-review\runtime\review-progress.json: The system cannot find the path specified.
---- FAIL: TestTask4TargetedCertificateRejectsWrongTargetOrScopedFiles (3.22s)
+{
+  "artifactPath": ".code-harness/runs/run-task4-review/analysis/rule-dispatch.json",
+  "manifest": {
+    "runId": "run-task4-review",
+    "reviewUnitsSha256": "e668741857f3d626f9117dc498b51b09b66d817b28772d2885dfeb53cacff820",
+    "ruleCatalogSha256": "a987c102bb8c24fcf13f3288362d5d82f6dbf1648233fb0c49a0633b8c35423a",
+    "dispatches": [
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-BIND-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-CONTRACT-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "RESOURCE_RELATION",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-ISOLATION-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "MYBATIS-SQL-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHANGED_RANGE",
+          "RESOURCE_RELATION"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:MapperXml"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-001",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-002",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      },
+      {
+        "reviewUnitId": "RU-c143134bcd44c7a8aefe116509c53e8fc0481d214fdeea0478790f91d94f370c",
+        "ruleId": "SPRING-TX-003",
+        "ruleVersion": 1,
+        "kind": "AGENT",
+        "severityDefault": "high",
+        "requiredEvidence": [
+          "CHAIN",
+          "SYMBOL"
+        ],
+        "dispatchReason": [
+          "CHANGED_ROLE:Service"
+        ]
+      }
+    ],
+    "sha256": "4f7f3a43bfb61e92b90fdd7ba2b53a3b2407dca6b18bd1063fdb929af6a26803"
+  },
+  "status": "READY"
+}
+--- PASS: TestTask4TargetedCertificateRejectsWrongTargetOrScopedFiles (9.89s)
 === RUN   Test152AnalyzeChangeDeclaresVerifiedWorkspaceFallback
 --- PASS: Test152AnalyzeChangeDeclaresVerifiedWorkspaceFallback (0.00s)
 === RUN   Test152WorkspaceToolsAreGloballyAllowlisted
@@ -4428,23 +6314,23 @@ Usage of nav:
 === RUN   Test152WindowsSmokeContainsRealAnalyzeChangeDiscoverBootstrap
 --- PASS: Test152WindowsSmokeContainsRealAnalyzeChangeDiscoverBootstrap (0.00s)
 === RUN   Test152RealDualProjectWorkspaceBusinessRegression
---- PASS: Test152RealDualProjectWorkspaceBusinessRegression (0.67s)
+--- PASS: Test152RealDualProjectWorkspaceBusinessRegression (2.01s)
 === RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions
 === RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/version_mismatch
 === RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/not_configured
 === RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/ambiguous_override
 === RUN   Test152RealDualProjectWorkspaceBusinessFailureRegressions/source_missing
---- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions (2.25s)
-    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/version_mismatch (0.52s)
-    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/not_configured (0.54s)
-    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/ambiguous_override (0.67s)
-    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/source_missing (0.52s)
+--- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions (3.13s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/version_mismatch (0.87s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/not_configured (0.96s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/ambiguous_override (0.74s)
+    --- PASS: Test152RealDualProjectWorkspaceBusinessFailureRegressions/source_missing (0.57s)
 === RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets
 === RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/source_directory
 === RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/single_current_file
 === RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/multiple_candidates
 === RUN   Test163FinalBusinessASTFixtureHonorsQueryTargets/dependency_file
---- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets (0.42s)
+--- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets (0.46s)
     --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/source_directory (0.00s)
     --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/single_current_file (0.00s)
     --- PASS: Test163FinalBusinessASTFixtureHonorsQueryTargets/multiple_candidates (0.00s)
@@ -4461,5 +6347,5 @@ Usage of nav:
 === RUN   Test152Task5RequiresRealDualProjectWindowsE2E
 --- PASS: Test152Task5RequiresRealDualProjectWindowsE2E (0.00s)
 FAIL
-FAIL	codea-harness-tools/cmd/codea-dcep-tools	153.505s
+FAIL	codea-harness-tools/cmd/codea-dcep-tools	242.446s
 FAIL
