@@ -44,6 +44,7 @@ func setupTask170AutoChainCommand(t *testing.T, runID string) string {
 	withTempProject(t)
 	installChangeAnalysisSchema(t)
 	installReviewScopeSchema(t)
+	writeFile(t, filepath.Join("src", "main", "resources", "mapper", "OrderMapper.xml"), "<mapper/>")
 	analysisPath := filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")
 	writeFile(t, analysisPath, validChainDiscoveryAnalysis())
 	prepareCommittedCertifiedAnalysisFixture153(t, runID, analysisPath)
