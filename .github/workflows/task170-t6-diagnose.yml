@@ -1,0 +1,97 @@
+name: task170-t6-diagnose
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t6]
+    paths:
+      - '.github/workflows/task170-t6-diagnose.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap locked modules
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go mod download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git restore --source=HEAD -- go.mod go.sum
+      - name: Download accepted 1.6.4.final release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision pinned ast-grep
+        shell: pwsh
+        run: |
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'task170-accepted-rc'
+          $installZip = Join-Path $artifactRoot 'codea-harness-1.6.4-windows-x64-install.zip'
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          Expand-Archive -Path $installZip -DestinationPath $stage -Force
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          $actualHash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne '61bb00d4dbac70f9c61748bf48431f6d42d557e321fc02839c7192eb237d11e4') { throw 'pinned ast-grep hash changed' }
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Reproduce subsystem and persist compact failure evidence
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'task170-t6-subsystem.log'
+          go test ./internal/reviewscope ./internal/chain ./cmd/codea-dcep-tools -count=1 -v 2>&1 | Tee-Object -FilePath $log
+          $goExit = $LASTEXITCODE
+          $lines = Get-Content $log
+          $interesting = New-Object System.Collections.Generic.List[string]
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '--- FAIL:|^FAIL\s|^FAIL$|Error Trace:|Error:|expected|actual|want|got|panic:|fatal:') {
+              $start = [Math]::Max(0, $i - 12)
+              $end = [Math]::Min($lines.Count - 1, $i + 30)
+              for ($j = $start; $j -le $end; $j++) { $interesting.Add($lines[$j]) }
+              $interesting.Add('---')
+            }
+          }
+          if ($interesting.Count -eq 0) {
+            $start = [Math]::Max(0, $lines.Count - 400)
+            for ($j = $start; $j -lt $lines.Count; $j++) { $interesting.Add($lines[$j]) }
+          }
+          $out = Join-Path $env:GITHUB_WORKSPACE '.github/task170-t6-subsystem-diagnosis.txt'
+          @(
+            "head=$((git rev-parse HEAD).Trim())",
+            "exit=$goExit",
+            'command=go test ./internal/reviewscope ./internal/chain ./cmd/codea-dcep-tools -count=1 -v',
+            '--- evidence ---'
+          ) + $interesting | Set-Content -Path $out -Encoding utf8
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add $out
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m 'test(t6): capture subsystem failure evidence'
+            git push origin HEAD:feature/1.7-integrated-t6
+          }
+          if ($goExit -eq 0) { Write-Output 'TASK170_T6_DIAG_UNEXPECTED_PASS' } else { Write-Output 'TASK170_T6_DIAG_CAPTURED_FAILURE' }
