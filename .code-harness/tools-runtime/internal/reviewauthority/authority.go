@@ -24,7 +24,6 @@ const (
 )
 
 var artifactID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-var sessionID = regexp.MustCompile(`^ses_[A-Za-z0-9_-]+$`)
 
 type Receipt struct {
 	Version        int    `json:"version"`
@@ -81,7 +80,10 @@ func Verify(repoRoot, runID string, kind Kind, proposalPath string) (Receipt, er
 	if receipt.Version != 1 || receipt.Host != "opencode" || receipt.Source != "opencode-tool-context" || receipt.RunID != runID || receipt.ProposalKind != kind || receipt.Agent != "reviewer" {
 		return Receipt{}, hardStop("Reviewer authority receipt identity mismatch")
 	}
-	if !sessionID.MatchString(receipt.SessionID) || strings.TrimSpace(receipt.MessageID) == "" {
+	// OpenCode Host identifiers are opaque. Do not bind Runtime authority to a
+	// vendor-specific prefix/character format; authenticity is established by
+	// the exported child-session and exact completed submission attestation below.
+	if strings.TrimSpace(receipt.SessionID) == "" || strings.TrimSpace(receipt.MessageID) == "" {
 		return Receipt{}, hardStop("Reviewer Host session/message identity missing or invalid")
 	}
 	if filepath.ToSlash(filepath.Clean(receipt.ProposalPath)) != expectedProposal {
