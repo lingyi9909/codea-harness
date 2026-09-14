@@ -24,6 +24,7 @@ codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --
 codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
 codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
 codea-dcep-tools.exe review begin
+codea-dcep-tools.exe review knowledge --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis snapshot --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis inventory --input .code-harness/runs/<runId>/requests/<file>.json
 codea-dcep-tools.exe analysis certify --input .code-harness/runs/<runId>/requests/<file>.json
@@ -147,7 +148,7 @@ committed = mergeBase → HEAD
 
 确定性定位 Java 类/接口/枚举/方法声明。底层当前为 ast-grep，但 Contract 不暴露 ast-grep pattern。
 
-### `find_references(symbol, scope?) -> ReferenceSearchResult`
+### `find_references(symbol, scope?) -> SymbolSearchResult`
 
 确定性定位项目内部直接引用/调用。用于 changed Service 反向寻找 Controller/Service 上游，以及调用链继续展开。
 
@@ -558,3 +559,15 @@ codea-dcep-tools.exe review context --input .code-harness/runs/<runId>/requests/
 ```
 
 唯一请求字段是 `runId` 和 `phase`（`DISCOVERY` 或 `RULES`）。DISCOVERY 从同 run 的 `analysis/change-set.json` 派生，产出 `analysis/review-call-context.json`；RULES 只在 Certified ChangeAnalysis、ReviewUnit、RuleDispatch 已就绪时执行，产出 `analysis/review-rule-context.json`，成功后由 Runtime 内部完成 REVIEW_PLANNING → REVIEW_EXECUTION。固定每阶段预算为 40 files / 200 candidates / 1 MiB source / 15s，向上 3 层、向下 6 层；超限保留 issue/BLOCKED，不扩大原 review selection。该命令只用于 Review，不是通用索引、Snapshot 或跨 run cache。
+
+## Review Knowledge（1.7 T7，内部）
+
+```text
+codea-dcep-tools.exe review knowledge --input .code-harness/runs/<runId>/requests/<name>.json
+```
+
+唯一请求字段是 `runId`，且只允许 same-run 的 1.7 `REVIEW_PLANNING` 阶段调用。正式顺序是 `ReviewUnit → knowledge → final RuleDispatch → RULES context`；Agent 不得注入 `teamRoot`、source、预算或额外 roots。
+
+Runtime 只读取项目显式 `.code-harness/context.yaml` 绑定的 PROJECT/TEAM 本地文件，不扫描相邻目录、不访问 URL、不执行同步，也不把 `source` / `approvalRef` 当作可执行地址。缺少 `context.yaml` 时写出 `NOT_CONFIGURED`，技术 Review 继续；配置非法时写出 `INVALID` 且不得扩大读取范围。磁盘只保存 `analysis/review-knowledge.json` 的元数据、规则 frontmatter 和摘要，不保存知识文档正文。
+
+final RuleDispatch 通过 `knowledgeSha256` 绑定本次 knowledge authority，并只把 READY BusinessCheck 转成临时 `BUSINESS:<sourceId>:<ruleId>` AGENT 规则。Finding certification 前 Runtime 会重新读取当前 binding 和被依赖文件；正文、teamRoot、source 或摘要变化必须 fail closed。T7 只完成知识读取、适用性、dispatch 与 freshness 绑定；`BUSINESS_RULE` 的正式 Evidence/Host completion check 属于 T8，因此 T7 不能宣称业务规则 Finding 已完成认证。
