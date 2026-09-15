@@ -23,17 +23,9 @@ type reviewOptionsRequest struct {
 
 func runReview(args []string) error {
 	if len(args) == 0 {
-		return errors.New("review requires start, status, cancel, finish, options, or select")
+		return errors.New("review requires options or select")
 	}
 	switch args[0] {
-	case "start":
-		return runReviewStart180(args[1:])
-	case "status":
-		return runReviewStatus180(args[1:])
-	case "cancel":
-		return runReviewCancel180(args[1:])
-	case "finish":
-		return runReviewFinish180(args[1:])
 	case "options":
 		return runReviewOptions(args[1:])
 	case "select":
