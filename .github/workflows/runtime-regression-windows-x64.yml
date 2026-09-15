@@ -48,6 +48,22 @@ jobs:
           & '.code-harness/bin/ast-grep.exe' --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Pinned OpenCode native export smoke test
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'opencode native & npm'
+          npm.cmd install --global --prefix $prefix opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $native = Join-Path $prefix 'node_modules/opencode-ai/bin/opencode.exe'
+          $version = & $native --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($version.Trim() -ne '1.18.25') { throw "OpenCode version mismatch: $version" }
+          $env:CODEA_OPENCODE_INTEGRATION_PREFIX = $prefix
+          "CODEA_OPENCODE_INTEGRATION_PREFIX=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          go test -v -count=1 ./internal/reviewauthority -run '^TestWindowsPinnedOpenCodeExportSmoke$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Review regression tests
         working-directory: .code-harness/tools-runtime
         shell: pwsh

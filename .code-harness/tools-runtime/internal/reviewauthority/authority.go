@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,12 +107,20 @@ func Verify(repoRoot, runID string, kind Kind, proposalPath string) (Receipt, er
 }
 
 func exportOpenCodeSession(repoRoot, id string) ([]byte, error) {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd.exe", "/d", "/s", "/c", "opencode export "+id)
-	} else {
-		cmd = exec.Command("opencode", "export", id)
+	launcher, err := exec.LookPath("opencode")
+	if err != nil {
+		return nil, err
 	}
+	if runtime.GOOS == "windows" {
+		launcher, err = nativeOpenCodeExecutable(launcher)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// The pinned OpenCode yargs parser uses populate--, so "--", id would
+	// select the latest session instead of the requested one. An explicit
+	// named value preserves even leading-dash opaque IDs as one argument.
+	cmd := exec.Command(launcher, "export", "--sessionID="+id)
 	cmd.Dir = repoRoot
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -198,17 +207,81 @@ func sameJSON(a, b []byte) bool {
 	if err := adec.Decode(&av); err != nil {
 		return false
 	}
+	var extra any
+	if err := adec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return false
+	}
 	bdec := json.NewDecoder(bytes.NewReader(b))
 	bdec.UseNumber()
 	if err := bdec.Decode(&bv); err != nil {
 		return false
 	}
-	ac, err := json.Marshal(av)
-	if err != nil {
+	if err := bdec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return false
 	}
-	bc, err := json.Marshal(bv)
-	return err == nil && bytes.Equal(ac, bc)
+	return sameJSONValue(av, bv)
+}
+
+func sameJSONValue(a, b any) bool {
+	switch a := a.(type) {
+	case json.Number:
+		b, ok := b.(json.Number)
+		return ok && canonicalJSONNumber(a) == canonicalJSONNumber(b)
+	case []any:
+		b, ok := b.([]any)
+		if !ok || len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if !sameJSONValue(a[i], b[i]) {
+				return false
+			}
+		}
+		return true
+	case map[string]any:
+		b, ok := b.(map[string]any)
+		if !ok || len(a) != len(b) {
+			return false
+		}
+		for key, value := range a {
+			other, ok := b[key]
+			if !ok || !sameJSONValue(value, other) {
+				return false
+			}
+		}
+		return true
+	default:
+		// The remaining decoded JSON values are nil, strings, and booleans.
+		return a == b
+	}
+}
+
+// canonicalJSONNumber compares exact decimal values without float rounding or
+// allocating the value of a potentially enormous exponent. Its input has
+// already been validated by the JSON decoder.
+func canonicalJSONNumber(number json.Number) string {
+	digits := number.String()
+	sign := ""
+	if strings.HasPrefix(digits, "-") {
+		sign = "-"
+		digits = digits[1:]
+	}
+	var exponent big.Int
+	if i := strings.IndexAny(digits, "eE"); i >= 0 {
+		exponent.SetString(digits[i+1:], 10)
+		digits = digits[:i]
+	}
+	if i := strings.IndexByte(digits, '.'); i >= 0 {
+		exponent.Sub(&exponent, big.NewInt(int64(len(digits)-i-1)))
+		digits = digits[:i] + digits[i+1:]
+	}
+	digits = strings.TrimLeft(digits, "0")
+	if digits == "" {
+		return "0"
+	}
+	coefficient := strings.TrimRight(digits, "0")
+	exponent.Add(&exponent, big.NewInt(int64(len(digits)-len(coefficient))))
+	return sign + coefficient + "e" + exponent.String()
 }
 
 func stringValue(v any) string {

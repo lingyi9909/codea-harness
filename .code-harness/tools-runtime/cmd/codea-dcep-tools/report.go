@@ -90,7 +90,7 @@ func runReviewReport(args []string) error {
 	}
 
 	authoritative := buildCertifiedReviewRequest153(proposal, certified, cert, verifiedScope, machine)
-	if err := applyCertifiedFindingAuthority164(runID, cert, &authoritative); err != nil {
+	if err := verifyCertifiedFindingAuthority164(runID, cert); err != nil {
 		return failReport(err)
 	}
 	path, err := report.Write(".", authoritative)

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,31 @@ import (
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/changeset"
 )
+
+// Route a copied native test executable as the OpenCode export fixture. No
+// shell wrapper handles the opaque session ID, including in full Windows CI.
+func init() {
+	if runtime.GOOS != "windows" || filepath.Base(os.Args[0]) != "opencode.exe" || os.Getenv("CODEA_TEST_OPENCODE_EXPORT") == "" {
+		return
+	}
+	data, err := os.ReadFile(os.Getenv("CODEA_TEST_OPENCODE_EXPORT"))
+	var exported struct {
+		Info struct {
+			ID string `json:"id"`
+		} `json:"info"`
+	}
+	if err == nil {
+		err = json.Unmarshal(data, &exported)
+	}
+	if err != nil || len(os.Args) != 3 || os.Args[1] != "export" || os.Args[2] != "--sessionID="+exported.Info.ID {
+		fmt.Fprintln(os.Stderr, "invalid native export fixture invocation", err)
+		os.Exit(2)
+	}
+	if _, err := os.Stdout.Write(data); err != nil {
+		os.Exit(2)
+	}
+	os.Exit(0)
+}
 
 func writeReviewerAuthorityTestReceipt(t *testing.T, root, runID, kind, proposalRel string) {
 	t.Helper()
@@ -85,11 +111,22 @@ func installReviewerAuthorityExportShim(t *testing.T, runID, kind, sessionID, me
 	if err := os.WriteFile(unixShim, []byte("#!/bin/sh\ncat \"$CODEA_TEST_OPENCODE_EXPORT\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	windowsShim := filepath.Join(shimDir, "opencode.cmd")
-	if err := os.WriteFile(windowsShim, []byte("@echo off\r\ntype \"%CODEA_TEST_OPENCODE_EXPORT%\"\r\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS == "windows" {
+		self, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		native := filepath.Join(shimDir, "opencode.exe")
+		if err := os.Link(self, native); err != nil {
+			data, readErr := os.ReadFile(self)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if writeErr := os.WriteFile(native, data, 0o755); writeErr != nil {
+				t.Fatal(writeErr)
+			}
+		}
+	} else {
 		if err := os.Chmod(unixShim, 0o755); err != nil {
 			t.Fatal(err)
 		}

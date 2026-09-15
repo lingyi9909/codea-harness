@@ -191,3 +191,80 @@ func Test164ReviewerCertifiedEmptyFindingsDrivePassedReport(t *testing.T) {
 		}
 	}
 }
+
+func Test164ReviewerCertifiedNonemptyFindingsDriveFailedReport(t *testing.T) {
+	withTempProject(t)
+	request := prepareTask164FindingCertification(t, true)
+	dispatchBytes, err := os.ReadFile(".code-harness/runs/run-task4-review/analysis/rule-dispatch.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dispatch struct {
+		Dispatches []struct {
+			RuleID       string `json:"ruleId"`
+			ReviewUnitID string `json:"reviewUnitId"`
+		} `json:"dispatches"`
+	}
+	if err := json.Unmarshal(dispatchBytes, &dispatch); err != nil {
+		t.Fatal(err)
+	}
+	unitID := ""
+	for _, d := range dispatch.Dispatches {
+		if d.RuleID == "SPRING-TX-001" {
+			unitID = d.ReviewUnitID
+			break
+		}
+	}
+	if unitID == "" {
+		t.Fatalf("fixture missing SPRING-TX-001: %s", dispatchBytes)
+	}
+	proposal := []map[string]any{{
+		"proposalId": "P-REPORT-1", "reviewUnitId": unitID, "ruleId": "SPRING-TX-001",
+		"category": "PRODUCTION_CODE", "severity": "high",
+		"anchor":       map[string]any{"kind": "SYMBOL", "path": "src/main/java/com/example/order/OrderServiceImpl.java", "symbol": "OrderServiceImpl.approve"},
+		"evidenceRefs": []map[string]any{{"kind": "CHAIN", "value": "OrderServiceImpl.approve"}, {"kind": "SYMBOL", "value": "OrderServiceImpl.approve", "path": "src/main/java/com/example/order/OrderServiceImpl.java"}},
+		"problem":      "审批操作缺少事务边界", "impact": "事务边界失效", "recommendation": "修复事务边界",
+		"needsTest": true, "introducedByChange": false, "confidence": 0.9,
+	}}
+	proposalBytes, err := json.Marshal(proposal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposalRel := ".code-harness/runs/run-task4-review/requests/finding-proposals.json"
+	writeFile(t, proposalRel, string(proposalBytes))
+	writeReviewerAuthorityTestReceipt(t, ".", "run-task4-review", "findings", proposalRel)
+	if err := run([]string{"review", "certify-findings", "--input", request}); err != nil {
+		t.Fatalf("genuine runtime certification failed: %v", err)
+	}
+	setBytes, err := os.ReadFile(".code-harness/runs/run-task4-review/analysis/certified-findings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var set struct {
+		Findings []json.RawMessage `json:"findings"`
+	}
+	if err := json.Unmarshal(setBytes, &set); err != nil {
+		t.Fatal(err)
+	}
+	if len(set.Findings) != 1 {
+		t.Fatalf("expected one Runtime-certified finding, got %d: %s", len(set.Findings), setBytes)
+	}
+	transport := writeTask164ReportTransport(t, "run-task4-review")
+	if err := run([]string{"report", "review", "--input", transport}); err != nil {
+		t.Fatalf("report must render genuine Runtime-certified finding: %v", err)
+	}
+	reportBytes, err := os.ReadFile(".code-harness/runs/run-task4-review/review.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"| 评审结果 | ❌ 未通过 |", "| 问题数量 | 1 |", "OrderServiceImpl.approve", "审批操作缺少事务边界", "事务边界失效", "修复事务边界"} {
+		if !strings.Contains(string(reportBytes), want) {
+			t.Fatalf("certified finding report missing %q: %s", want, reportBytes)
+		}
+	}
+	for _, forbidden := range []string{"agent-version", "agent-base", "agent-head", "src/main/java/Evil.java"} {
+		if strings.Contains(string(reportBytes), forbidden) {
+			t.Fatalf("transport authority leaked into final report: %s", forbidden)
+		}
+	}
+}
