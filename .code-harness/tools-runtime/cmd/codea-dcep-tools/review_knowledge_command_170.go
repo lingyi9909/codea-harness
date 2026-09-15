@@ -305,5 +305,6 @@ func runReviewKnowledge170(args []string) error {
 		"artifactPath":    artifactPath,
 		"knowledgeSha256": knowledgeSHA,
 		"manifest":        loaded.Manifest,
+		"documents":       loaded.Documents,
 	}, true)
 }
