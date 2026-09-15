@@ -26,6 +26,12 @@ func verifyEvidence160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewr
 	}
 	for _, required := range dispatch.RequiredEvidence {
 		kind := strings.ToUpper(strings.TrimSpace(required))
+		if kind == "CONTEXT_RELATION" {
+			if !hasCurrentContextRelation170(verified) {
+				return nil, "", findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "rule %s requires CURRENT CONTEXT_RELATION evidence", dispatch.RuleID)
+			}
+			continue
+		}
 		if kind != "" && !kinds[kind] {
 			return nil, "", findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "rule %s requires %s evidence", dispatch.RuleID, kind)
 		}

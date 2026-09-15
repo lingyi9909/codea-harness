@@ -48,8 +48,8 @@ func verifyContextRelationEvidence170(ctx VerifyContext, unit reviewunit.Unit, r
 	if side == "" {
 		side = relation.From.Side
 	}
-	if side != "CURRENT" || relation.From.Side != "CURRENT" {
-		return EvidenceRef{}, findingError160("CONTEXT_RELATION_NOT_VERIFIED", "BASE relation cannot prove current behavior")
+	if side != relation.From.Side || (side != "BASE" && side != "CURRENT") {
+		return EvidenceRef{}, findingError160("CONTEXT_RELATION_NOT_VERIFIED", "relation source side mismatch")
 	}
 	if strings.TrimSpace(ref.Value) != "" {
 		matched := false
@@ -68,7 +68,7 @@ func verifyContextRelationEvidence170(ctx VerifyContext, unit reviewunit.Unit, r
 	v.Kind = "CONTEXT_RELATION"
 	v.RelationID = relation.ID
 	v.Workspace = relation.From.Workspace
-	v.SourceSide = "CURRENT"
+	v.SourceSide = side
 	return v, nil
 }
 
@@ -145,11 +145,24 @@ func validateRelationDispatch170(ctx VerifyContext, unit reviewunit.Unit, ruleID
 	return nil
 }
 
+func hasCurrentContextRelation170(refs []EvidenceRef) bool {
+	for _, ref := range refs {
+		if strings.EqualFold(strings.TrimSpace(ref.Kind), "CONTEXT_RELATION") && strings.EqualFold(strings.TrimSpace(ref.SourceSide), "CURRENT") {
+			return true
+		}
+	}
+	return false
+}
+
 func hasBusinessCodeEvidence170(refs []EvidenceRef) bool {
 	for _, ref := range refs {
 		switch strings.ToUpper(strings.TrimSpace(ref.Kind)) {
-		case "CHANGED_RANGE", "SOURCE_RANGE", "SYMBOL", "CHAIN", "RESOURCE_RELATION", "CONTEXT_RELATION":
+		case "CHANGED_RANGE", "SOURCE_RANGE", "SYMBOL", "CHAIN", "RESOURCE_RELATION":
 			return true
+		case "CONTEXT_RELATION":
+			if strings.EqualFold(strings.TrimSpace(ref.SourceSide), "CURRENT") {
+				return true
+			}
 		}
 	}
 	return false
