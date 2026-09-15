@@ -82,7 +82,8 @@ jobs:
           $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
           New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
           Copy-Item -LiteralPath $source -Destination $target -Force
-          Write-Output "TASK170_T8_APPROVED_AST_GREP PASS sha256=$actualHash"
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "TASK170_T8_APPROVED_AST_GREP PASS sha256=$actualHash path=$target"
       - name: Go format guard
         shell: pwsh
         run: |
