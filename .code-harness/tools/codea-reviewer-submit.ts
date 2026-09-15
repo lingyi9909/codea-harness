@@ -8,7 +8,7 @@ const runID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 function canonicalTarget(kind: "change-analysis" | "findings", id: string) {
   const file = kind === "change-analysis" ? "change-analysis-proposal.json" : "finding-proposals.json"
   const receipt = kind === "change-analysis" ? "change-analysis-reviewer-authority.json" : "finding-reviewer-authority.json"
-  return { file, receipt }
+  return { file, receipt, checks: kind === "findings" ? "review-checks.json" : null }
 }
 
 async function atomicWrite(target: string, data: string) {
@@ -19,11 +19,12 @@ async function atomicWrite(target: string, data: string) {
 }
 
 export default tool({
-  description: "Submit a Codea Harness semantic proposal from the independent Reviewer. Host identity is recorded for Runtime certification.",
+  description: "Submit a Codea Harness semantic proposal from the independent Reviewer. Findings submissions also bind Reviewer check completion declarations.",
   args: {
     kind: tool.schema.enum(["change-analysis", "findings"]),
     runId: tool.schema.string(),
     proposal: tool.schema.string().describe("Exact JSON payload for the semantic proposal"),
+    checks: tool.schema.string().optional().describe("For kind=findings, exact JSON array of review check completion declarations"),
   },
   async execute(args, context) {
     if (context.agent !== "reviewer") {
@@ -35,6 +36,7 @@ export default tool({
     if (!runID.test(args.runId)) {
       throw new Error("invalid runId")
     }
+
     let parsed: unknown
     try {
       parsed = JSON.parse(args.proposal)
@@ -45,8 +47,26 @@ export default tool({
       if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
         throw new Error("REVIEWER_MALFORMED_OUTPUT: change-analysis proposal must be a JSON object")
       }
+      if (args.checks !== undefined && args.checks.trim() !== "") {
+        throw new Error("REVIEWER_MALFORMED_OUTPUT: change-analysis must not submit review checks")
+      }
     } else if (!Array.isArray(parsed)) {
       throw new Error("REVIEWER_MALFORMED_OUTPUT: findings proposal must be a JSON array")
+    }
+
+    let parsedChecks: unknown = undefined
+    if (args.kind === "findings") {
+      if (args.checks === undefined) {
+        throw new Error("REVIEWER_MALFORMED_OUTPUT: findings requires checks JSON array")
+      }
+      try {
+        parsedChecks = JSON.parse(args.checks)
+      } catch (error) {
+        throw new Error(`REVIEWER_MALFORMED_OUTPUT: checks is not JSON: ${String(error)}`)
+      }
+      if (!Array.isArray(parsedChecks)) {
+        throw new Error("REVIEWER_MALFORMED_OUTPUT: checks must be a JSON array")
+      }
     }
 
     const target = canonicalTarget(args.kind, args.runId)
@@ -54,9 +74,10 @@ export default tool({
     const proposalPath = path.resolve(requestsRoot, target.file)
     const receiptPath = path.resolve(requestsRoot, target.receipt)
     const proposalText = `${JSON.stringify(parsed, null, 2)}\n`
-    const sha256 = createHash("sha256").update(proposalText, "utf8").digest("hex")
-    const receipt = {
-      version: 1,
+    const proposalSha256 = createHash("sha256").update(proposalText, "utf8").digest("hex")
+
+    const receipt: Record<string, unknown> = {
+      version: args.kind === "findings" ? 2 : 1,
       host: "opencode",
       source: "opencode-tool-context",
       runId: args.runId,
@@ -65,10 +86,18 @@ export default tool({
       sessionId: context.sessionID,
       messageId: context.messageID,
       proposalPath: path.relative(context.worktree, proposalPath).split(path.sep).join("/"),
-      proposalSha256: sha256,
+      proposalSha256,
     }
 
     await atomicWrite(proposalPath, proposalText)
+    if (args.kind === "findings" && target.checks !== null) {
+      const checksPath = path.resolve(requestsRoot, target.checks)
+      const checksText = `${JSON.stringify(parsedChecks, null, 2)}\n`
+      const checksSha256 = createHash("sha256").update(checksText, "utf8").digest("hex")
+      await atomicWrite(checksPath, checksText)
+      receipt.checksPath = path.relative(context.worktree, checksPath).split(path.sep).join("/")
+      receipt.checksSha256 = checksSha256
+    }
     await atomicWrite(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)
     return `REVIEWER_PROPOSAL_SUBMITTED kind=${args.kind} runId=${args.runId} sessionId=${context.sessionID}`
   },

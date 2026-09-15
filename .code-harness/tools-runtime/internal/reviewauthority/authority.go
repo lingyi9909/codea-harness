@@ -37,6 +37,8 @@ type Receipt struct {
 	MessageID      string `json:"messageId"`
 	ProposalPath   string `json:"proposalPath"`
 	ProposalSHA256 string `json:"proposalSha256"`
+	ChecksPath     string `json:"checksPath,omitempty"`
+	ChecksSHA256   string `json:"checksSha256,omitempty"`
 }
 
 type sessionExport struct {
@@ -78,8 +80,14 @@ func Verify(repoRoot, runID string, kind Kind, proposalPath string) (Receipt, er
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return Receipt{}, hardStop("Reviewer authority receipt contains trailing JSON")
 	}
-	if receipt.Version != 1 || receipt.Host != "opencode" || receipt.Source != "opencode-tool-context" || receipt.RunID != runID || receipt.ProposalKind != kind || receipt.Agent != "reviewer" {
+	if receipt.Host != "opencode" || receipt.Source != "opencode-tool-context" || receipt.RunID != runID || receipt.ProposalKind != kind || receipt.Agent != "reviewer" {
 		return Receipt{}, hardStop("Reviewer authority receipt identity mismatch")
+	}
+	if kind == ChangeAnalysis && receipt.Version != 1 {
+		return Receipt{}, hardStop("change-analysis Reviewer receipt must use v1")
+	}
+	if kind == Findings && receipt.Version != 2 {
+		return Receipt{}, hardStop("findings Reviewer receipt must use v2")
 	}
 	if !sessionID.MatchString(receipt.SessionID) || strings.TrimSpace(receipt.MessageID) == "" {
 		return Receipt{}, hardStop("Reviewer Host session/message identity missing or invalid")
@@ -87,17 +95,30 @@ func Verify(repoRoot, runID string, kind Kind, proposalPath string) (Receipt, er
 	if filepath.ToSlash(filepath.Clean(receipt.ProposalPath)) != expectedProposal {
 		return Receipt{}, hardStop("Reviewer authority receipt proposal path mismatch")
 	}
-	sum := sha256.Sum256(proposalBytes)
-	actual := hex.EncodeToString(sum[:])
-	if !strings.EqualFold(actual, receipt.ProposalSHA256) {
+	if !strings.EqualFold(hashBytes170(proposalBytes), receipt.ProposalSHA256) {
 		return Receipt{}, hardStop("Reviewer authority receipt proposal hash mismatch")
+	}
+
+	var checksBytes []byte
+	if kind == Findings {
+		expectedChecks := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "requests", "review-checks.json"))
+		if filepath.ToSlash(filepath.Clean(receipt.ChecksPath)) != expectedChecks {
+			return Receipt{}, hardStop("Reviewer authority receipt checks path mismatch")
+		}
+		checksBytes, err = os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(expectedChecks)))
+		if err != nil {
+			return Receipt{}, hardStop("Reviewer checks unavailable: " + err.Error())
+		}
+		if !strings.EqualFold(hashBytes170(checksBytes), receipt.ChecksSHA256) {
+			return Receipt{}, hardStop("Reviewer authority receipt checks hash mismatch")
+		}
 	}
 
 	exportBytes, err := exportOpenCodeSession(repoRoot, receipt.SessionID)
 	if err != nil {
 		return Receipt{}, hardStop("Reviewer Host session attestation unavailable: " + err.Error())
 	}
-	if err := verifySessionAttestation(exportBytes, receipt, proposalBytes); err != nil {
+	if err := verifySessionAttestation170(exportBytes, receipt, proposalBytes, checksBytes); err != nil {
 		return Receipt{}, hardStop("Reviewer Host session attestation invalid: " + err.Error())
 	}
 	return receipt, nil
@@ -125,6 +146,16 @@ func exportOpenCodeSession(repoRoot, id string) ([]byte, error) {
 }
 
 func verifySessionAttestation(exportBytes []byte, receipt Receipt, proposalBytes []byte) error {
+	return verifySessionAttestation170(exportBytes, receipt, proposalBytes, nil)
+}
+
+func verifySessionAttestation170(exportBytes []byte, receipt Receipt, proposalBytes, checksBytes []byte) error {
+	if receipt.ProposalKind == Findings && receipt.Version != 2 {
+		return errors.New("findings attestation requires v2 receipt")
+	}
+	if receipt.ProposalKind == ChangeAnalysis && receipt.Version != 1 {
+		return errors.New("change-analysis attestation requires v1 receipt")
+	}
 	var exported sessionExport
 	dec := json.NewDecoder(bytes.NewReader(exportBytes))
 	dec.UseNumber()
@@ -171,21 +202,29 @@ func verifySessionAttestation(exportBytes []byte, receipt Receipt, proposalBytes
 				continue
 			}
 			input, ok := mapValue(state["input"])
-			if !ok {
-				continue
-			}
-			if stringValue(input["runId"]) != receipt.RunID || Kind(stringValue(input["kind"])) != receipt.ProposalKind {
+			if !ok || stringValue(input["runId"]) != receipt.RunID || Kind(stringValue(input["kind"])) != receipt.ProposalKind {
 				continue
 			}
 			proposal, ok := input["proposal"].(string)
 			if !ok || !sameJSON([]byte(proposal), proposalBytes) {
 				continue
 			}
+			if receipt.ProposalKind == Findings {
+				checks, ok := input["checks"].(string)
+				if !ok || !sameJSON([]byte(checks), checksBytes) {
+					return errors.New("receipt message checks do not match v2 Reviewer submission")
+				}
+			}
 			return nil
 		}
 		return errors.New("receipt message has no matching completed Reviewer submission tool call")
 	}
 	return errors.New("receipt message id not found in exported Reviewer session")
+}
+
+func hashBytes170(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func sameJSON(a, b []byte) bool {

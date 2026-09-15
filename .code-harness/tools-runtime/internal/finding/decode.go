@@ -93,6 +93,14 @@ func validateProposalShape160(p Proposal) error {
 
 func validateEvidenceShape160(e EvidenceRef) error {
 	kind := strings.ToUpper(strings.TrimSpace(e.Kind))
+	relationMeta := strings.TrimSpace(e.RelationID) != "" || strings.TrimSpace(e.Workspace) != "" || strings.TrimSpace(e.SourceSide) != ""
+	businessMeta := strings.TrimSpace(e.SourceID) != "" || strings.TrimSpace(e.RuleID) != "" || strings.TrimSpace(e.SourceSHA256) != ""
+	if kind != "CONTEXT_RELATION" && relationMeta {
+		return fmt.Errorf("%s evidence must not contain relation metadata", kind)
+	}
+	if kind != "BUSINESS_RULE" && businessMeta {
+		return fmt.Errorf("%s evidence must not contain business metadata", kind)
+	}
 	switch kind {
 	case "SYMBOL", "CHAIN":
 		if strings.TrimSpace(e.Value) == "" {
@@ -105,6 +113,18 @@ func validateEvidenceShape160(e EvidenceRef) error {
 	case "RESOURCE_RELATION":
 		if strings.TrimSpace(e.Path) == "" {
 			return fmt.Errorf("RESOURCE_RELATION evidence requires path")
+		}
+	case "CONTEXT_RELATION":
+		if strings.TrimSpace(e.RelationID) == "" {
+			return fmt.Errorf("CONTEXT_RELATION evidence requires relationId")
+		}
+		side := strings.ToUpper(strings.TrimSpace(e.SourceSide))
+		if side != "" && side != "BASE" && side != "CURRENT" {
+			return fmt.Errorf("CONTEXT_RELATION evidence has invalid sourceSide %q", e.SourceSide)
+		}
+	case "BUSINESS_RULE":
+		if strings.TrimSpace(e.SourceID) == "" || strings.TrimSpace(e.RuleID) == "" || !validSHA160(strings.TrimSpace(e.SourceSHA256)) {
+			return fmt.Errorf("BUSINESS_RULE evidence requires sourceId, ruleId and lowercase sourceSha256")
 		}
 	default:
 		return fmt.Errorf("unsupported evidence kind %q", e.Kind)

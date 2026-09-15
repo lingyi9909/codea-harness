@@ -5,67 +5,23 @@
   "additionalProperties": false,
   "required": ["runId", "harnessVersion", "changeSetSha256", "changeAnalysisSha256", "reviewUnitsSha256", "ruleDispatchSha256", "findingProposalsSha256", "findings", "sha256"],
   "properties": {
-    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
-    "harnessVersion": {"type": "string", "minLength": 1},
-    "changeSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "changeAnalysisSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "reviewUnitsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "ruleDispatchSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "findingProposalsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "findings": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/finding"}
-    },
-    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}, "harnessVersion": {"type": "string", "minLength": 1},
+    "changeSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "changeAnalysisSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "reviewUnitsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "ruleDispatchSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "findingProposalsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "knowledgeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "reviewChecksSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "reviewContext": {"$ref": "#/$defs/reviewContext"},
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
   },
   "$defs": {
-    "anchor": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind"],
-      "properties": {
-        "kind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]},
-        "path": {"type": "string", "minLength": 1},
-        "line": {"type": "integer", "minimum": 1},
-        "symbol": {"type": "string", "minLength": 1}
-      },
-      "allOf": [
-        {"if": {"properties": {"kind": {"const": "LINE"}}}, "then": {"required": ["path", "line"]}},
-        {"if": {"properties": {"kind": {"const": "SYMBOL"}}}, "then": {"required": ["path", "symbol"]}},
-        {"if": {"properties": {"kind": {"const": "FILE"}}}, "then": {"required": ["path"]}}
-      ]
-    },
+    "anchor": {"type": "object", "additionalProperties": false, "required": ["kind"], "properties": {"kind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]}, "path": {"type": "string", "minLength": 1}, "line": {"type": "integer", "minimum": 1}, "symbol": {"type": "string", "minLength": 1}}, "allOf": [{"if": {"properties": {"kind": {"const": "LINE"}}}, "then": {"required": ["path", "line"]}}, {"if": {"properties": {"kind": {"const": "SYMBOL"}}}, "then": {"required": ["path", "symbol"]}}, {"if": {"properties": {"kind": {"const": "FILE"}}}, "then": {"required": ["path"]}}]},
     "evidence": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind"],
-      "properties": {
-        "kind": {"enum": ["SYMBOL", "SOURCE_RANGE", "CHANGED_RANGE", "RESOURCE_RELATION", "CHAIN"]},
-        "value": {"type": "string", "minLength": 1},
-        "path": {"type": "string", "minLength": 1},
-        "startLine": {"type": "integer", "minimum": 1},
-        "endLine": {"type": "integer", "minimum": 1}
-      }
+      "type": "object", "additionalProperties": false, "required": ["kind"],
+      "properties": {"kind": {"enum": ["SYMBOL", "SOURCE_RANGE", "CHANGED_RANGE", "RESOURCE_RELATION", "CHAIN", "CONTEXT_RELATION", "BUSINESS_RULE"]}, "value": {"type": "string", "minLength": 1}, "path": {"type": "string", "minLength": 1}, "startLine": {"type": "integer", "minimum": 1}, "endLine": {"type": "integer", "minimum": 1}, "relationId": {"type": "string", "minLength": 1}, "workspace": {"type": "string", "minLength": 1}, "sourceSide": {"enum": ["BASE", "CURRENT"]}, "sourceId": {"type": "string", "minLength": 1}, "ruleId": {"type": "string", "minLength": 1}, "sourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+      "allOf": [{"if": {"properties": {"kind": {"const": "CONTEXT_RELATION"}}, "required": ["kind"]}, "then": {"required": ["relationId"]}, "else": {"not": {"anyOf": [{"required": ["relationId"]}, {"required": ["workspace"]}, {"required": ["sourceSide"]}]}}}, {"if": {"properties": {"kind": {"const": "BUSINESS_RULE"}}, "required": ["kind"]}, "then": {"required": ["sourceId", "ruleId", "sourceSha256"]}, "else": {"not": {"anyOf": [{"required": ["sourceId"]}, {"required": ["ruleId"]}, {"required": ["sourceSha256"]}]}}}]
     },
-    "finding": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "ruleId", "reviewUnitId", "category", "severity", "anchor", "evidenceRefs", "problem", "impact", "recommendation", "needsTest", "introducedByChange", "confidence"],
-      "properties": {
-        "id": {"type": "string", "pattern": "^CF-[0-9a-f]{16}$"},
-        "ruleId": {"type": "string", "minLength": 1},
-        "reviewUnitId": {"type": "string", "minLength": 1},
-        "category": {"enum": ["PRODUCTION_CODE", "TEST_VALIDITY"]},
-        "severity": {"enum": ["critical", "high", "medium", "low"]},
-        "anchor": {"$ref": "#/$defs/anchor"},
-        "evidenceRefs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
-        "problem": {"type": "string", "minLength": 1},
-        "impact": {"type": "string", "minLength": 1},
-        "recommendation": {"type": "string", "minLength": 1},
-        "needsTest": {"type": "boolean"},
-        "introducedByChange": {"type": "boolean"},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
-      }
-    }
+    "finding": {"type": "object", "additionalProperties": false, "required": ["id", "ruleId", "reviewUnitId", "category", "severity", "anchor", "evidenceRefs", "problem", "impact", "recommendation", "needsTest", "introducedByChange", "confidence"], "properties": {"id": {"type": "string", "pattern": "^CF-[0-9a-f]{16}$"}, "ruleId": {"type": "string", "minLength": 1}, "reviewUnitId": {"type": "string", "minLength": 1}, "category": {"enum": ["PRODUCTION_CODE", "TEST_VALIDITY"]}, "severity": {"enum": ["critical", "high", "medium", "low"]}, "anchor": {"$ref": "#/$defs/anchor"}, "evidenceRefs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}}, "problem": {"type": "string", "minLength": 1}, "impact": {"type": "string", "minLength": 1}, "recommendation": {"type": "string", "minLength": 1}, "needsTest": {"type": "boolean"}, "introducedByChange": {"type": "boolean"}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}}},
+    "blockedCheck": {"type": "object", "additionalProperties": false, "required": ["reviewUnitId", "ruleId", "reasons"], "properties": {"reviewUnitId": {"type": "string", "minLength": 1}, "ruleId": {"type": "string", "minLength": 1}, "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}}},
+    "reviewContext": {"type": "object", "additionalProperties": false, "required": ["status", "blockedChecks"], "properties": {"status": {"enum": ["COMPLETE", "PARTIAL"]}, "blockedChecks": {"type": "array", "items": {"$ref": "#/$defs/blockedCheck"}}}}
   }
 }

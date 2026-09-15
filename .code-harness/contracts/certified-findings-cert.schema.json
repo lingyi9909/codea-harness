@@ -12,6 +12,8 @@
     "reviewUnitsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "ruleDispatchSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "findingProposalsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "knowledgeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "reviewChecksSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "mode": {"enum": ["FULL", "TARGETED"]},
     "scopeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
   }

@@ -13,43 +13,32 @@
       "category": {"enum": ["PRODUCTION_CODE", "TEST_VALIDITY"]},
       "severity": {"enum": ["critical", "high", "medium", "low"]},
       "anchor": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["kind"],
-        "properties": {
-          "kind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]},
-          "path": {"type": "string", "minLength": 1},
-          "line": {"type": "integer", "minimum": 1},
-          "symbol": {"type": "string", "minLength": 1}
-        },
+        "type": "object", "additionalProperties": false, "required": ["kind"],
+        "properties": {"kind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]}, "path": {"type": "string", "minLength": 1}, "line": {"type": "integer", "minimum": 1}, "symbol": {"type": "string", "minLength": 1}},
         "allOf": [
           {"if": {"properties": {"kind": {"const": "LINE"}}}, "then": {"required": ["path", "line"]}},
           {"if": {"properties": {"kind": {"const": "SYMBOL"}}}, "then": {"required": ["symbol"]}},
           {"if": {"properties": {"kind": {"const": "FILE"}}}, "then": {"required": ["path"]}}
         ]
       },
-      "evidenceRefs": {
-        "type": "array",
-        "minItems": 1,
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["kind"],
-          "properties": {
-            "kind": {"enum": ["SYMBOL", "SOURCE_RANGE", "CHANGED_RANGE", "RESOURCE_RELATION", "CHAIN"]},
-            "value": {"type": "string", "minLength": 1},
-            "path": {"type": "string", "minLength": 1},
-            "startLine": {"type": "integer", "minimum": 1},
-            "endLine": {"type": "integer", "minimum": 1}
-          }
-        }
+      "evidenceRefs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
+      "problem": {"type": "string", "minLength": 1}, "impact": {"type": "string", "minLength": 1}, "recommendation": {"type": "string", "minLength": 1},
+      "needsTest": {"type": "boolean"}, "introducedByChange": {"type": "boolean"}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+    }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object", "additionalProperties": false, "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["SYMBOL", "SOURCE_RANGE", "CHANGED_RANGE", "RESOURCE_RELATION", "CHAIN", "CONTEXT_RELATION", "BUSINESS_RULE"]},
+        "value": {"type": "string", "minLength": 1}, "path": {"type": "string", "minLength": 1}, "startLine": {"type": "integer", "minimum": 1}, "endLine": {"type": "integer", "minimum": 1},
+        "relationId": {"type": "string", "minLength": 1}, "workspace": {"type": "string", "minLength": 1}, "sourceSide": {"enum": ["BASE", "CURRENT"]},
+        "sourceId": {"type": "string", "minLength": 1}, "ruleId": {"type": "string", "minLength": 1}, "sourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       },
-      "problem": {"type": "string", "minLength": 1},
-      "impact": {"type": "string", "minLength": 1},
-      "recommendation": {"type": "string", "minLength": 1},
-      "needsTest": {"type": "boolean"},
-      "introducedByChange": {"type": "boolean"},
-      "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      "allOf": [
+        {"if": {"properties": {"kind": {"const": "CONTEXT_RELATION"}}, "required": ["kind"]}, "then": {"required": ["relationId"]}, "else": {"not": {"anyOf": [{"required": ["relationId"]}, {"required": ["workspace"]}, {"required": ["sourceSide"]}]}}},
+        {"if": {"properties": {"kind": {"const": "BUSINESS_RULE"}}, "required": ["kind"]}, "then": {"required": ["sourceId", "ruleId", "sourceSha256"]}, "else": {"not": {"anyOf": [{"required": ["sourceId"]}, {"required": ["ruleId"]}, {"required": ["sourceSha256"]}]}}}
+      ]
     }
   }
 }
