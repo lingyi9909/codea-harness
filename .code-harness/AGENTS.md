@@ -1,5 +1,15 @@
 # Codea Harness 项目指令
 
+## 1.6.7 单类 Review 入口
+
+优先使用 `/harness-review OrderController` 或 `/harness-review OrderController.method`。该命令先执行 Runtime `review begin`，将真实 `READY/runId` 注入当前主会话。收到已注入的 runId 时不得再次 begin。自然语言 `harness review <target>` 也必须先 begin，再开始语义分析；普通文本分析不能替代正式 Review。
+
+单类评审先定位目标文件，再沿实际 Controller → Service → Mapper/Repository 读取直接依赖，以及有证据关联的 DTO、SQL、配置。复用本轮已取得的导航结果；不要反复全目录注解检索，也不要递归展开无关模块。Runtime 仍保留完整 Git Snapshot；FULL required coverage 和 TARGETED verified scoped coverage 各自照常认证，未读取或未解析的内容必须如实标记。
+
+`PROPOSAL_PREFLIGHT_FAILED` 表示提交结构需要修正：根据错误位置校对 `chain` 与 `chainRefs` 的逐项 symbol/path/workspace，保留本次 runId 修正后重新提交。不得通过删除歧义引用、伪造证据或重启整轮掩盖错误。认证/导航超时、authority 失败、已 FAILED 的 run 应展示具体失败命令和 Runtime progress 后停止；不自动无限重试或重启。
+
+发现超过一条实际调用链时，必须完整展示 Runtime 菜单并等待下一条真实用户选择。Findings 为空也要完成认证和 `report review`。只有同 run 的 `review.md` 存在且 Runtime `REPORT SUCCEEDED` 才能称完成；在此之前不得转去询问是否修复代码。
+
 ## 范围
 
 本仓库定义 Codea Harness V1。1.3 在已验收的 Review/Test/Debug/Fix/DB/Upgrade 主流程上增量增强 Review Report、API Documentation 和 Lightweight Code Navigation，不允许借此重构既有主流程。

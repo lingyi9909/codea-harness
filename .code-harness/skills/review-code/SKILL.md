@@ -14,6 +14,8 @@ output_schema: .code-harness/contracts/finding-proposals.schema.json
 
 本 Skill 由当前主 Agent 在主会话内直接执行，不派生 Reviewer 子 Agent。语义结果通过 `codea-reviewer-submit` 提交（保留历史工具名）；认证和报告继续由 Runtime 执行。多调用链必须遵守 AGENTS.md 的真实下一条用户消息选择门禁。
 
+单类 Review 只在 Runtime 认证的定向范围内读取实际依赖；复用本轮导航结果。提交前校对 proposal 结构，预检失败在同 run 修正。语义分析或空 Findings 都不是完成标志：必须由 Runtime 认证 Findings 并生成正式 `review.md`，再讨论代码修复。
+
 ## 前置硬门禁
 
 本 Skill 不得自行决定 Review 是否完整，必须消费 Controlled Runtime 已验证的门禁结果。

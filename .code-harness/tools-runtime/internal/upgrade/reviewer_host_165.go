@@ -23,7 +23,7 @@ func prepareReviewerHostPatch(o Options, oldVersion, newVersion string) (*review
 		return nil, err
 	}
 	txn := &reviewerHostTransaction{projectRoot: filepath.Dir(filepath.Clean(o.TargetDir)), sourceRoot: filepath.Join(o.SourceDir, reviewerHostUpgradeRoot)}
-	for _, rel := range reviewerHostFiles164 {
+	for _, rel := range reviewerHostFilesForVersion(newVersion) {
 		src := filepath.Join(txn.sourceRoot, filepath.FromSlash(rel))
 		if err := regularHostPath165(o.SourceDir, "host/"+rel); err != nil {
 			return nil, err
@@ -89,7 +89,8 @@ func reviewerHostHashes165(root, version string, required bool) (map[string]stri
 	}
 	out := map[string]string{}
 	fields := [][3]string{{"path", "upgradeSource", "sha256"}, {"command", "commandUpgradeSource", "commandSha256"}, {"submissionTool", "submissionToolUpgradeSource", "submissionToolSha256"}}
-	for i, rel := range reviewerHostFiles164 {
+	fields = append(fields, [3]string{"primaryCommand", "primaryCommandUpgradeSource", "primaryCommandSha256"})
+	for i, rel := range reviewerHostFilesForVersion(version) {
 		f := fields[i]
 		if h[f[0]] != rel || h[f[1]] != "host/"+rel {
 			return nil, fmt.Errorf("Reviewer Host manifest path mismatch: %s", rel)
@@ -101,6 +102,13 @@ func reviewerHostHashes165(root, version string, required bool) (map[string]stri
 		out[rel] = h[f[2]]
 	}
 	return out, nil
+}
+
+func reviewerHostFilesForVersion(version string) []string {
+	if version == "1.6.7" {
+		return append(append([]string(nil), reviewerHostFiles164...), ".opencode/commands/harness-review.md")
+	}
+	return reviewerHostFiles164
 }
 
 // Inspect each fixed path component so a symlink cannot redirect the Host

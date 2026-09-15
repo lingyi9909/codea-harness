@@ -51,43 +51,91 @@ func LoadVerifyContext(repoRoot, runID, astGrepPath string) (VerifyContext, erro
 	ranges := map[string]nav.SymbolInfo{}
 	if strings.TrimSpace(astGrepPath) != "" {
 		navigator := nav.Navigator{RepoRoot: root, AstGrepPath: astGrepPath}
-		counts := map[string]int{}
-		unique := map[string]nav.SymbolInfo{}
-		seenIdentity := map[string]bool{}
-		for _, loc := range analysisValue.SymbolLocations {
-			ref, ok := symbolid.FromLocation(loc.Workspace, loc.Path, loc.Symbol)
-			if !ok || ref.Workspace != symbolid.CurrentWorkspace || !strings.HasSuffix(strings.ToLower(ref.Path), ".java") {
-				continue
-			}
-			key, _ := symbolid.Key(ref)
-			if seenIdentity[key] {
-				continue
-			}
-			seenIdentity[key] = true
-			info, err := navigator.GetSymbolInfo(context.Background(), ref.Symbol, ref.Path)
-			if err != nil {
-				return VerifyContext{}, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "resolve symbol %s at %s with pinned navigation: %v", ref.Symbol, ref.Path, err)
-			}
-			ranges[key] = info
-			counts[ref.Symbol]++
-			unique[ref.Symbol] = info
-		}
-		// Preserve the legacy bare-symbol lookup only when it is authoritative.
-		// Ambiguous symbols are available exclusively through their exact identity.
-		for symbol, count := range counts {
-			if count == 1 {
-				ranges[symbol] = unique[symbol]
-			}
+		ranges, err = loadSymbolRanges167(root, analysisValue.SymbolLocations, navigator)
+		if err != nil {
+			return VerifyContext{}, err
 		}
 	}
 	return VerifyContext{
-		trusted: true,
-		repoRoot: root,
-		analysis: analysisValue,
-		units: units,
-		dispatch: dispatch,
+		trusted:      true,
+		repoRoot:     root,
+		analysis:     analysisValue,
+		units:        units,
+		dispatch:     dispatch,
 		symbolRanges: ranges,
 	}, nil
+}
+
+type symbolInfoBatcher167 interface {
+	GetSymbolInfos(context.Context, []string, string) (map[string]nav.SymbolInfo, error)
+}
+
+func loadSymbolRanges167(root string, locations []analysisruntime.SymbolLocation, navigator symbolInfoBatcher167) (map[string]nav.SymbolInfo, error) {
+	type request struct{ key, symbol string }
+	byPath := map[string][]request{}
+	pathOrder := []string{}
+	seenIdentity := map[string]bool{}
+	for _, loc := range locations {
+		ref, ok := symbolid.FromLocation(loc.Workspace, loc.Path, loc.Symbol)
+		if !ok || ref.Workspace != symbolid.CurrentWorkspace || !strings.HasSuffix(strings.ToLower(ref.Path), ".java") {
+			continue
+		}
+		key, _ := symbolid.Key(ref)
+		if seenIdentity[key] {
+			continue
+		}
+		seenIdentity[key] = true
+		if _, ok := byPath[ref.Path]; !ok {
+			pathOrder = append(pathOrder, ref.Path)
+		}
+		byPath[ref.Path] = append(byPath[ref.Path], request{key: key, symbol: ref.Symbol})
+	}
+	ranges := map[string]nav.SymbolInfo{}
+	counts := map[string]int{}
+	unique := map[string]nav.SymbolInfo{}
+	beforeHashes := map[string][32]byte{}
+	for _, path := range pathOrder {
+		absolute := filepath.Join(root, filepath.FromSlash(path))
+		before, err := os.ReadFile(absolute)
+		if err != nil {
+			return nil, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "read symbol file %s before pinned navigation: %v", path, err)
+		}
+		beforeHashes[path] = sha256.Sum256(before)
+	}
+	for _, path := range pathOrder {
+		symbols := make([]string, 0, len(byPath[path]))
+		for _, req := range byPath[path] {
+			symbols = append(symbols, req.symbol)
+		}
+		infos, err := navigator.GetSymbolInfos(context.Background(), symbols, path)
+		if err != nil {
+			return nil, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "resolve symbols at %s with pinned navigation: %v", path, err)
+		}
+		for _, req := range byPath[path] {
+			info, ok := infos[req.symbol]
+			if !ok {
+				return nil, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "pinned navigation omitted symbol %s at %s", req.symbol, path)
+			}
+			ranges[req.key] = info
+			counts[req.symbol]++
+			unique[req.symbol] = info
+		}
+	}
+	for _, path := range pathOrder {
+		after, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			return nil, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "read symbol file %s after pinned navigation: %v", path, err)
+		}
+		if beforeHashes[path] != sha256.Sum256(after) {
+			return nil, findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol file %s changed during pinned navigation", path)
+		}
+	}
+	for symbol, count := range counts {
+		if count == 1 {
+			ranges[symbol] = unique[symbol]
+		}
+	}
+	return ranges, nil
 }
 
 func Verify(ctx VerifyContext, p Proposal) (VerifiedProposal, error) {

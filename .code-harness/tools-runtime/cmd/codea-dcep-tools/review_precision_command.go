@@ -214,6 +214,17 @@ func runReviewCertifyFindings160(args []string) error {
 	if candidate != expectedProposals || candidate != strings.ReplaceAll(req.ProposalsPath, "\\", "/") {
 		return fmt.Errorf("FINDING_PROPOSALS_PATH_INVALID: must be %s", expectedProposals)
 	}
+	proposalBytes, err := os.ReadFile(filepath.FromSlash(candidate))
+	if err != nil {
+		return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: %w", err)
+	}
+	if err := validateReviewContract153("finding-proposals.schema.json", proposalBytes); err != nil {
+		return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: %w", err)
+	}
+	proposals, err := finding.DecodeProposals(proposalBytes)
+	if err != nil {
+		return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: %w", err)
+	}
 	authorityPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "requests", "finding-reviewer-authority.json"))
 	receipt, err := reviewauthority.Verify(".", runID, reviewauthority.Findings, candidate)
 	if err != nil {
@@ -233,17 +244,6 @@ func runReviewCertifyFindings160(args []string) error {
 	}
 	failCertification := func(err error) error {
 		return failReviewProgressStage164(runID, reviewprogress.StageFindingCertification, "FINDING_CERTIFICATION_FAILED", err)
-	}
-	proposalBytes, err := os.ReadFile(filepath.FromSlash(candidate))
-	if err != nil {
-		return failCertification(fmt.Errorf("FINDING_PROPOSALS_READ_FAILED: %w", err))
-	}
-	if err := validateReviewContract153("finding-proposals.schema.json", proposalBytes); err != nil {
-		return failCertification(fmt.Errorf("FINDING_PROPOSALS_SCHEMA_INVALID: %w", err))
-	}
-	proposals, err := finding.DecodeProposals(proposalBytes)
-	if err != nil {
-		return failCertification(err)
 	}
 	verifyCtx, err := finding.LoadVerifyContext(".", runID, filepath.Join(".code-harness", "bin", "ast-grep.exe"))
 	if err != nil {

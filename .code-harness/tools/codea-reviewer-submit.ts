@@ -5,6 +5,77 @@ import path from "node:path"
 
 const runID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
+type ObjectValue = Record<string, unknown>
+function object(value: unknown, label: string): ObjectValue {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`PROPOSAL_PREFLIGHT_FAILED: ${label} must be an object`)
+  return value as ObjectValue
+}
+function text(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`PROPOSAL_PREFLIGHT_FAILED: ${label} must be nonempty text`)
+  return value.trim()
+}
+function array(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`PROPOSAL_PREFLIGHT_FAILED: ${label} must be an array`)
+  return value
+}
+function ref(value: unknown, label: string) {
+  const r = object(value, label)
+  const source = text(r.path, `${label}.path`).replaceAll("\\", "/")
+  const file = path.posix.normalize(source)
+  if (source.startsWith("/") || file === "." || file === ".." || file.startsWith("../")) throw new Error(`PROPOSAL_PREFLIGHT_FAILED: invalid ${label}.path`)
+  const symbol = text(r.symbol, `${label}.symbol`)
+  const workspace = r.workspace === undefined ? "current" : text(r.workspace, `${label}.workspace`)
+  return { symbol, key: `${workspace}\0${file}\0${symbol}` }
+}
+
+// This is a cheap submission check, not certification. Runtime subsequently
+// validates the complete schema, live evidence, coverage and Host attestation.
+function preflight(kind: string, value: unknown) {
+  if (kind === "selection") return
+  if (kind === "findings") {
+    for (const [i, item] of array(value, "findings").entries()) {
+      const finding = object(item, `findings[${i}]`)
+      for (const key of ["proposalId", "reviewUnitId", "ruleId", "category", "severity", "problem", "impact", "recommendation"]) text(finding[key], `findings[${i}].${key}`)
+      object(finding.anchor, `findings[${i}].anchor`)
+      array(finding.evidenceRefs, `findings[${i}].evidenceRefs`)
+      if (typeof finding.needsTest !== "boolean" || typeof finding.introducedByChange !== "boolean" || typeof finding.confidence !== "number") throw new Error(`PROPOSAL_PREFLIGHT_FAILED: findings[${i}] has invalid flags/confidence`)
+    }
+    return
+  }
+  const proposal = object(value, "change-analysis")
+  for (const key of ["changedFileRoles", "affectedControllers", "callChains", "symbolLocations", "resourceRelations", "externalDependencies", "riskAreas"]) array(proposal[key], key)
+  const coverage = object(proposal.reviewCoverage, "reviewCoverage")
+  text(coverage.status, "reviewCoverage.status")
+  array(coverage.reviewedFiles, "reviewCoverage.reviewedFiles")
+  array(coverage.unresolvedSymbols, "reviewCoverage.unresolvedSymbols")
+  const exact = new Set<string>()
+  const symbols = new Map<string, Set<string>>()
+  for (const location of proposal.symbolLocations as unknown[]) {
+    const r = ref(location, "symbolLocation")
+    exact.add(r.key)
+    const keys = symbols.get(r.symbol) ?? new Set<string>()
+    keys.add(r.key)
+    symbols.set(r.symbol, keys)
+  }
+  function resolve(symbolValue: unknown, reference: unknown, label: string) {
+    const symbol = text(symbolValue, label)
+    if (reference !== undefined) {
+      const r = ref(reference, label)
+      if (r.symbol !== symbol || !exact.has(r.key)) throw new Error(`PROPOSAL_PREFLIGHT_FAILED: ${label} must match its symbol and exact symbolLocation`)
+    } else if (symbols.get(symbol)?.size !== 1) {
+      throw new Error(`PROPOSAL_PREFLIGHT_FAILED: ${label} has missing or ambiguous symbolLocations; provide exact refs`)
+    }
+  }
+  for (const [i, value] of (proposal.callChains as unknown[]).entries()) {
+    const chain = object(value, `callChains[${i}]`)
+    const nodes = array(chain.chain, `callChains[${i}].chain`)
+    const refs = chain.chainRefs === undefined ? [] : array(chain.chainRefs, `callChains[${i}].chainRefs`)
+    if (refs.length && refs.length !== nodes.length) throw new Error(`PROPOSAL_PREFLIGHT_FAILED: callChains[${i}] chainRefs length=${refs.length} chain length=${nodes.length}; provide one ref per node in order, then resubmit this run`)
+    resolve(chain.entryPoint, chain.entryPointRef, `callChains[${i}].entryPointRef`)
+    nodes.forEach((node, j) => resolve(node, refs[j], `callChains[${i}].chainRefs[${j}]`))
+  }
+}
+
 function canonicalTarget(kind: "change-analysis" | "findings" | "selection", id: string) {
   if (kind === "selection") return { file: "review-selection.json", receipt: "review-selection-authority.json" }
   const file = kind === "change-analysis" ? "change-analysis-proposal.json" : "finding-proposals.json"
@@ -49,6 +120,7 @@ export default tool({
       throw new Error("REVIEWER_MALFORMED_OUTPUT: findings proposal must be a JSON array")
     }
 
+    preflight(args.kind, parsed)
     const target = canonicalTarget(args.kind, args.runId)
     const requestsRoot = path.resolve(context.worktree, ".code-harness", "runs", args.runId, "requests")
     const proposalPath = path.resolve(requestsRoot, target.file)

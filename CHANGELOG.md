@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.7
+
+- 批量注解/符号导航，每个文件复用一次 AST 扫描；异常输出、越界结果、文件变化继续拒绝。
+- 提交前校验 chainRefs 与精确符号引用，结构错误可在同 run 修正，不提前消耗认证阶段。
+- 新增主会话 `/harness-review` 正式入口，先生成 runId，保留多调用链真实人工选择，直到 Runtime 生成 review.md。
+- Windows 安装/升级包同步管理入口命令，保留用户配置及修改冲突保护。
+
 ## 1.6.6
 
 - 主 Agent 在主会话中完成 ChangeAnalysis 和 Findings，保留 Runtime Snapshot、证据认证和报告生成；不再强制 Reviewer 子会话。

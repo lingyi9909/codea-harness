@@ -188,6 +188,17 @@ func runAnalysisCertify(args []string) error {
 	if !analysisArtifactID153.MatchString(req.RunID) {
 		return errors.New("analysis certify request contains invalid runId")
 	}
+    // Correctable proposal errors must not consume the semantic stage.
+    if req.ProposalPath != "" {
+        expected := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "requests", "change-analysis-proposal.json"))
+        if strings.ReplaceAll(req.ProposalPath, "\\", "/") != expected { return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: invalid proposal path; expected %s", expected) }
+        proposal, err := os.ReadFile(filepath.FromSlash(expected))
+        if err != nil { return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: %w", err) }
+        if err := validateReviewContract153("change-analysis-proposal.schema.json", proposal); err != nil { return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: %w", err) }
+        var semantic analysisruntime.ChangeAnalysis
+        if err := json.Unmarshal(proposal, &semantic); err != nil { return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: %w", err) }
+        if err := analysisruntime.ValidateSemanticProposalRefs167(semantic); err != nil { return fmt.Errorf("PROPOSAL_PREFLIGHT_FAILED: %w; correct proposal in this run and resubmit", err) }
+    }
 	authorityPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "requests", "change-analysis-reviewer-authority.json"))
 	receipt, err := reviewauthority.Verify(".", req.RunID, reviewauthority.ChangeAnalysis, req.ProposalPath)
  if err != nil {

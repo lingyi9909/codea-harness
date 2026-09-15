@@ -12,8 +12,8 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	version, err := os.ReadFile(filepath.Join(root, ".code-harness", "VERSION"))
 	if err != nil { t.Fatal(err) }
 	currentVersion := strings.TrimSpace(string(version))
-	if currentVersion != "1.6.6" {
-		t.Fatalf("VERSION must match current release 1.6.6, got %q", currentVersion)
+	if currentVersion != "1.6.7" {
+		t.Fatalf("VERSION must match current release 1.6.7, got %q", currentVersion)
 	}
 
 	changelog, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))

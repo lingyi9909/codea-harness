@@ -9,6 +9,9 @@ import (
 type interfaceRunner struct{}
 
 func (interfaceRunner) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
+	if len(args) > 0 && args[0] == "scan" {
+		return []byte(`{"file":"src/main/java/OrderService.java","range":{"start":{"line":0,"column":0},"end":{"line":4,"column":1}},"text":"public interface OrderService { }"}` + "\n"), nil
+	}
 	pattern := ""
 	for i, arg := range args {
 		if arg == "--pattern" && i+1 < len(args) {

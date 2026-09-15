@@ -38,6 +38,9 @@ func crossesReviewerHostBoundary(oldV, newV [3]int) bool {
 }
 
 func prepareReviewerHostTransaction(o Options, oldV, newV [3]int) (*reviewerHostTransaction, error) {
+	if cmp(oldV, [3]int{1, 6, 4}) >= 0 && cmp(oldV, [3]int{1, 6, 7}) < 0 && newV == [3]int{1, 6, 7} {
+		return prepareReviewerHostPatch(o, fmt.Sprintf("%d.%d.%d", oldV[0], oldV[1], oldV[2]), "1.6.7")
+	}
 	if oldV == [3]int{1, 6, 4} && newV == [3]int{1, 6, 5} {
 		return prepareReviewerHostPatch(o, "1.6.4", "1.6.5")
 	}
