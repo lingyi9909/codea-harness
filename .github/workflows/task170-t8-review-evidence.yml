@@ -1,0 +1,138 @@
+name: task170-t8-review-evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.7-integrated-t8]
+    paths:
+      - '.code-harness/tools-runtime/internal/finding/**'
+      - '.code-harness/tools-runtime/internal/report/**'
+      - '.code-harness/tools-runtime/internal/reviewauthority/**'
+      - '.code-harness/tools-runtime/internal/knowledge/**'
+      - '.code-harness/tools-runtime/internal/schema/**'
+      - '.code-harness/tools-runtime/internal/reviewrules/**'
+      - '.code-harness/tools-runtime/cmd/codea-dcep-tools/**'
+      - '.code-harness/tools/**'
+      - '.code-harness/contracts/**'
+      - '.code-harness/agents/**'
+      - '.code-harness/skills/review-code/**'
+      - '.code-harness/AGENTS.md'
+      - '.github/workflows/task170-t8-review-evidence.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  t8-review-evidence:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Normalize checkout line endings
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git reset --hard HEAD
+          $status = @(git status --short)
+          if ($status.Count -ne 0) { throw "canonical checkout normalization left dirty state: $($status -join '; ')" }
+          Write-Output 'TASK170_T8_CANONICAL_LF PASS'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap existing locked modules
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local }
+        run: |
+          go mod download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git restore --source=HEAD -- go.mod go.sum
+          git diff --exit-code -- go.mod go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'module bootstrap changed locked go.mod/go.sum content' }
+          Write-Output 'TASK170_T8_MODULE_BOOTSTRAP PASS'
+      - name: Verify accepted T7 lineage
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 4c77b80ef68d4c419b6c015d06910d83eea4f01c HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'T8 branch is not based on accepted T7 exact HEAD' }
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'baseline working tree has differences' }
+          Write-Output "TASK170_T8_BASELINE PASS head=$((git rev-parse HEAD).Trim())"
+      - name: Download accepted 1.6.4.final release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision approved pinned ast-grep
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          Expand-Archive -Path (Join-Path $env:RUNNER_TEMP 'task170-accepted-rc/codea-harness-1.6.4-windows-x64-install.zip') -DestinationPath $stage -Force
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          $actualHash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne '61bb00d4dbac70f9c61748bf48431f6d42d557e321fc02839c7192eb237d11e4') { throw 'pinned ast-grep hash changed' }
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          Write-Output "TASK170_T8_APPROVED_AST_GREP PASS sha256=$actualHash"
+      - name: Go format guard
+        shell: pwsh
+        run: |
+          $changed = @(git diff --name-only 4c77b80ef68d4c419b6c015d06910d83eea4f01c HEAD -- '*.go')
+          $files = @($changed | ForEach-Object { Join-Path $env:GITHUB_WORKSPACE ($_ -replace '/', [IO.Path]::DirectorySeparatorChar) })
+          if ($files.Count -gt 0) {
+            $bad = @(gofmt -l $files)
+            if ($bad.Count -gt 0) { throw "gofmt required: $($bad -join '; ')" }
+          }
+          Write-Output "TASK170_T8_GOFMT PASS files=$($files.Count)"
+      - name: T8 context evidence and report gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/finding ./internal/report -run Test170 -count=1
+      - name: T8 supplement gate
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/knowledge ./internal/finding ./internal/reviewauthority ./internal/report ./internal/schema ./cmd/codea-dcep-tools -run Test170 -count=1
+      - name: T8 affected subsystem regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/finding ./internal/report ./internal/schema ./internal/reviewrules ./internal/reviewauthority ./cmd/codea-dcep-tools -count=1
+      - name: Verify zero dependency drift
+        shell: pwsh
+        run: |
+          git diff --exit-code -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'tests changed go.mod/go.sum' }
+          git diff --exit-code 4c77b80ef68d4c419b6c015d06910d83eea4f01c HEAD -- .code-harness/tools-runtime/go.mod .code-harness/tools-runtime/go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'T8 committed go.mod/go.sum drift' }
+          Write-Output 'TASK170_T8_DEPENDENCY_DRIFT PASS'
+      - name: Full Go regression
+        id: full-regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: |
+          go test ./... -count=1 2>&1 | Tee-Object -FilePath task170-t8-full-go-regression.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload full regression evidence
+        if: always() && steps.full-regression.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: task170-t8-full-go-regression
+          path: .code-harness/tools-runtime/task170-t8-full-go-regression.log
+          if-no-files-found: error
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go vet ./...
