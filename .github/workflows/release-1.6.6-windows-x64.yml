@@ -213,7 +213,10 @@ jobs:
         shell: pwsh
         run: |
           $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
-          python .github/scripts/release166-primary-host-regression.py --opencode $native --tool-source .code-harness/tools/codea-reviewer-submit.ts
+          $sdk = Join-Path $env:RUNNER_TEMP 'primary Host SDK & npm'
+          npm.cmd install --prefix $sdk --ignore-scripts --no-audit --no-fund --save-exact @opencode-ai/plugin@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python .github/scripts/release166-primary-host-regression.py --opencode $native --tool-source .code-harness/tools/codea-reviewer-submit.ts --sdk-root $sdk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Full Runtime regression

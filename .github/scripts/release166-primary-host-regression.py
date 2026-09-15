@@ -8,9 +8,11 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
+from urllib.request import ProxyHandler, build_opener
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 RUN_ID = "release166-primary-host"
@@ -75,12 +77,21 @@ class Provider(BaseHTTPRequestHandler):
             self.wfile.write(raw)
         self.wfile.flush()
 
+    def do_GET(self):
+        raw = b'{"ready":true}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def do_POST(self):
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
             names = [t.get("function", {}).get("name", "") for t in body.get("tools", [])]
             messages = body.get("messages", [])
             self.server.requests.append({"phase": self.server.phase, "names": names, "messages": messages})
+            print(f"PRIMARY166_PROVIDER request={len(self.server.requests)} phase={self.server.phase} tools={len(names)} messages={len(messages)}", flush=True)
             if not names:  # Native title/summary requests have no tool registry.
                 self.reply(body, content="Primary Host regression")
                 return
@@ -123,8 +134,11 @@ def command(argv, cwd, env, timeout=90):
         else:
             os.killpg(process.pid, signal.SIGKILL)
         stdout, stderr = process.communicate(timeout=15)
-        raise RuntimeError(f"command timed out: {argv}\n{stdout[-3000:]}\n{stderr[-3000:]}")
-    require(process.returncode == 0, f"command failed ({process.returncode}): {argv}\n{stdout[-4000:]}\n{stderr[-4000:]}")
+        print(f"PRIMARY166_CHILD_TIMEOUT argv={argv}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}", file=sys.stderr, flush=True)
+        raise RuntimeError(f"command timed out after {timeout}s: {argv}")
+    if process.returncode != 0:
+        print(f"PRIMARY166_CHILD_FAILED argv={argv}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}", file=sys.stderr, flush=True)
+        raise RuntimeError(f"command failed ({process.returncode}): {argv}")
     return stdout
 
 
@@ -181,13 +195,24 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--opencode", required=True, type=Path)
     parser.add_argument("--tool-source", required=True, type=Path)
+    parser.add_argument("--sdk-root", required=True, type=Path, help="npm install prefix containing real @opencode-ai/plugin@1.18.25 and its lockfile")
     args = parser.parse_args()
-    binary, source = args.opencode.resolve(), args.tool_source.resolve()
+    binary, source, sdk_root = args.opencode.resolve(), args.tool_source.resolve(), args.sdk_root.resolve()
     require(binary.is_file() and source.is_file(), "native OpenCode binary and tool source are required")
+    sdk = read_json(sdk_root / "node_modules" / "@opencode-ai" / "plugin" / "package.json")
+    require(sdk.get("name") == "@opencode-ai/plugin" and sdk.get("version") == "1.18.25", "real pinned plugin SDK required")
+    sdk_lock = read_json(sdk_root / "package-lock.json")
+    require(sdk_lock.get("packages", {}).get("", {}).get("dependencies", {}).get("@opencode-ai/plugin") == "1.18.25", "pinned SDK lockfile required")
     server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     server.requests, server.errors, server.phase = [], [], "analysis"
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    stop_heartbeat = threading.Event()
+    def heartbeat():
+        while not stop_heartbeat.wait(15):
+            print(f"PRIMARY166_PROVIDER heartbeat phase={server.phase} requests={len(server.requests)} errors={server.errors}", flush=True)
+    heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
+    heartbeat_thread.start()
     try:
         with tempfile.TemporaryDirectory(prefix="Codea 166 primary Host & ") as temp:
             temp = Path(temp)
@@ -203,6 +228,20 @@ def main():
             # Isolate global user configuration and sessions; never overwrite HOME.
             for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"):
                 env[key] = str(temp / key.lower())
+            # Config waits for embedded npm reify before loading tools. Supply a
+            # genuine pinned install up front, including the matching npm lock,
+            # so cold registry bootstrap is a separate visible CI step.
+            for config_dir in (project / ".opencode", Path(env["XDG_CONFIG_HOME"]) / "opencode"):
+                config_dir.mkdir(parents=True, exist_ok=True)
+                for name in ("package.json", "package-lock.json"):
+                    shutil.copyfile(sdk_root / name, config_dir / name)
+                shutil.copytree(sdk_root / "node_modules", config_dir / "node_modules")
+            print("PRIMARY166_SDK_BOOTSTRAP PASS package=@opencode-ai/plugin version=1.18.25 configs=2", flush=True)
+            for key in ("NO_PROXY", "no_proxy"):
+                env[key] = ",".join(filter(None, [env.get(key, ""), "127.0.0.1", "localhost", "::1"]))
+            with build_opener(ProxyHandler({})).open(f"http://127.0.0.1:{server.server_port}/health", timeout=5) as health:
+                require(json.load(health) == {"ready": True}, "fixture provider not ready")
+            print("PRIMARY166_PROVIDER_READY PASS loopback=true", flush=True)
             env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
             env["OPENCODE_DISABLE_AUTOUPDATE"] = "true"
             env["OPENCODE_CONFIG_CONTENT"] = "{}"
@@ -235,6 +274,9 @@ def main():
             print("RELEASE166_PRIMARY_HOST_USER_SELECTION PASS resumed=true actualUserReply=true noDelegation=true", flush=True)
             print("RELEASE166_PRIMARY_HOST_REGRESSION PASS opencode=1.18.25", flush=True)
     finally:
+        print(f"PRIMARY166_PROVIDER_FINAL phase={server.phase} requests={len(server.requests)} errors={server.errors}", flush=True)
+        stop_heartbeat.set()
+        heartbeat_thread.join(timeout=5)
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
