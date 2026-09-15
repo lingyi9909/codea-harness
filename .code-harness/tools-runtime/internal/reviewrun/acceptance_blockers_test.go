@@ -137,24 +137,30 @@ func Test180LiveOldLockIsNotStolenByAge(t *testing.T) {
 	}
 }
 
-func Test180OldUnlockDoesNotDeleteNewOwnersLock(t *testing.T) {
+func Test180OldUnlockCannotReleaseNewOwner(t *testing.T) {
 	runDir := t.TempDir()
 	unlockOld, err := acquireRunLock(context.Background(), runDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lockPath := filepath.Join(runDir, ".review-180.lock")
-	if err := os.Remove(lockPath); err != nil {
-		t.Fatal(err)
-	}
+	unlockOld()
+
 	unlockNew, err := acquireRunLock(context.Background(), runDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer unlockNew()
 
+	// A stale callback from the previous owner must be harmless.
 	unlockOld()
-	if _, err := os.Stat(lockPath); err != nil {
-		t.Fatalf("old owner deleted new owner's lock: %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	thirdUnlock, err := acquireRunLock(ctx, runDir)
+	if err == nil {
+		thirdUnlock()
+		t.Fatal("stale unlock released the current owner's lock")
+	}
+	if !strings.Contains(err.Error(), "REVIEW_RUN_BUSY") {
+		t.Fatalf("unexpected lock error: %v", err)
 	}
 }
