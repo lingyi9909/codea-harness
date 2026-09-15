@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.6
+
+- 主 Agent 在主会话中完成 ChangeAnalysis 和 Findings，保留 Runtime Snapshot、证据认证和报告生成；不再强制 Reviewer 子会话。
+- 多调用链选择绑定当前菜单、真实的下一条用户回复和 completed Host submission；缺失范围、旧菜单和 LIST 不能进入评审。
+- Windows 请求兼容单个 UTF-8 BOM，仍严格拒绝非法 JSON/编码，不修改认证 artifact。
+- 新增 Windows 1.6.4/1.6.5 → 1.6.6 Host 工具升级，校验 ownership/hash 并保护用户修改和项目状态。
+
 ## 1.6.5 - 2026-09-15
 
 - **Review report repair**：非空 Certified Findings 正常进入 Runtime 报告渲染；JSON 数字等价表示（如 `1.0` 与 `1`）不会误伤 submission attestation。

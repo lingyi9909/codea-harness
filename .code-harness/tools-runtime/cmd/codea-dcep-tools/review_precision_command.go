@@ -17,6 +17,7 @@ import (
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/finding"
 	"codea-harness-tools/internal/requestcontract"
+	"codea-harness-tools/internal/requestjson"
 	"codea-harness-tools/internal/reviewauthority"
 	"codea-harness-tools/internal/reviewprogress"
 	"codea-harness-tools/internal/reviewrules"
@@ -192,7 +193,7 @@ func runReviewCertifyFindings160(args []string) error {
 	if err := verifyReviewTransportPath153(runID, cleanInput); err != nil {
 		return err
 	}
-	requestBytes, err := os.ReadFile(cleanInput)
+	requestBytes, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("FINDING_CERTIFY_REQUEST_READ_FAILED: %w", err)
 	}
@@ -214,8 +215,18 @@ func runReviewCertifyFindings160(args []string) error {
 		return fmt.Errorf("FINDING_PROPOSALS_PATH_INVALID: must be %s", expectedProposals)
 	}
 	authorityPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "requests", "finding-reviewer-authority.json"))
-	if _, err := reviewauthority.Verify(".", runID, reviewauthority.Findings, candidate); err != nil {
+	receipt, err := reviewauthority.Verify(".", runID, reviewauthority.Findings, candidate)
+	if err != nil {
 		return failReviewProgressStage164(runID, reviewprogress.StageReviewExecution, "REVIEW_EXECUTION_AUTHORITY_FAILED", err)
+	}
+	if reviewauthority.PrimaryFlow(".") {
+		_, owner, err := analysisruntime.LoadCertified(".", filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "analysis", "change-analysis.json")))
+		if err != nil {
+			return failReviewProgressStage164(runID, reviewprogress.StageReviewExecution, "REVIEW_EXECUTION_AUTHORITY_FAILED", err)
+		}
+		if receipt.Version != 2 || owner.SemanticSessionID == "" || receipt.SessionID != owner.SemanticSessionID {
+			return failReviewProgressStage164(runID, reviewprogress.StageReviewExecution, "REVIEW_EXECUTION_AUTHORITY_FAILED", fmt.Errorf("PRIMARY_AGENT_REQUIRED: findings must use the analysis primary session"))
+		}
 	}
 	if err := advanceReviewProgressStage164(runID, reviewprogress.StageReviewExecution, candidate, authorityPath); err != nil {
 		return err

@@ -142,7 +142,7 @@ func certifyCanonical162(root string, req CertifyRequest, runtime certificationR
 	recorder.doc.TimingMS.CoverageValidation = elapsedMillis164(stageStarted)
 
 	stageStarted = time.Now()
-	cert, err = publishCertifiedAnalysis162(root, req.RunID, canonicalAnalysis, inventory, live, certifyIntent)
+	cert, err = publishCertifiedAnalysis162(root, req.RunID, canonicalAnalysis, inventory, live, certifyIntent, req.SemanticSessionID)
 	recorder.doc.TimingMS.Publish = elapsedMillis164(stageStarted)
 	if err != nil {
 		return Certificate{}, err
@@ -219,7 +219,7 @@ func assembleCanonicalAnalysis162(proposalBytes []byte, snapshot changeset.Snaps
 	return data, typed, nil
 }
 
-func publishCertifiedAnalysis162(root, runID string, canonicalAnalysis []byte, inventory EntrypointInventory, snapshot changeset.Snapshot, certifyIntent Intent) (Certificate, error) {
+func publishCertifiedAnalysis162(root, runID string, canonicalAnalysis []byte, inventory EntrypointInventory, snapshot changeset.Snapshot, certifyIntent Intent, semanticSessionID string) (Certificate, error) {
 	inventoryBytes, err := json.MarshalIndent(inventory, "", "  ")
 	if err != nil {
 		return Certificate{}, fmt.Errorf("ENTRYPOINT_INVENTORY_ENCODE_FAILED: %w", err)
@@ -241,6 +241,7 @@ func publishCertifiedAnalysis162(root, runID string, canonicalAnalysis []byte, i
 		return Certificate{}, fmt.Errorf("RUNTIME_VERSION_UNAVAILABLE: empty VERSION")
 	}
 	cert := Certificate{
+ SemanticSessionID: semanticSessionID,
 		RunID: runID,
 		RuntimeVersion: runtimeVersion,
 		AnalysisSHA256: hashBytes153(canonicalAnalysis),
@@ -267,6 +268,7 @@ func publishCertifiedAnalysis162(root, runID string, canonicalAnalysis []byte, i
 	if err := schema.ValidateJSON(certSchema, certBytes); err != nil {
 		return Certificate{}, fmt.Errorf("ANALYSIS_CERT_SCHEMA_INVALID: %w", err)
 	}
+	if err := SealPrimarySessionAuthority(root, cert); err != nil { return Certificate{}, err }
 	if err := sealChainMaintenanceAuthority153(root, cert); err != nil {
 		return Certificate{}, err
 	}

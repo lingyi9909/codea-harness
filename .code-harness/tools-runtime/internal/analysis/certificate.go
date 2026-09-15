@@ -15,6 +15,7 @@ import (
 )
 
 type Certificate struct {
+ SemanticSessionID string `json:"semanticSessionId,omitempty"`
 	RunID                     string `json:"runId"`
 	RuntimeVersion            string `json:"runtimeVersion"`
 	AnalysisSHA256            string `json:"analysisSha256"`
@@ -146,6 +147,7 @@ func loadCertifiedWithRuntime153(root, analysisPath string, runtime certificatio
 	if !certificationIntentsEqual153(cert.Intent, inventory.Intent) {
 		return ChangeAnalysis{}, Certificate{}, fmt.Errorf("CERTIFICATE_INTENT_AUTHORITY_MISMATCH")
 	}
+	if err := verifyPrimarySessionAuthority166(root, cert); err != nil { return ChangeAnalysis{}, Certificate{}, err }
 	if err := verifyChainMaintenanceAuthority153(root, cert); err != nil {
 		return ChangeAnalysis{}, Certificate{}, err
 	}

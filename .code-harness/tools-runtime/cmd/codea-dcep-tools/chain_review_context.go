@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"codea-harness-tools/internal/chain"
+	"codea-harness-tools/internal/requestjson"
 	"codea-harness-tools/internal/reviewscope"
 	"codea-harness-tools/internal/schema"
 )
@@ -34,7 +35,7 @@ func runChainReviewContext(args []string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("read chain review-context request: %w", err)
 	}

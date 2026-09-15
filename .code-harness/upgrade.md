@@ -1,10 +1,12 @@
 # Codea Harness 升级入口
 
-## 1.6.5 补丁升级
+## 1.6.6 补丁升级
 
-当前升级包：`codea-harness-1.6.5-windows-x64-upgrade.zip`。本次已登记并验证的补丁升级起点为 1.6.4；1.6.3 请先升级到 1.6.4。1.6.4 → 1.6.5 不新增配置迁移，保留项目配置、业务 chains 与历史 runs。
+当前升级包：`codea-harness-1.6.6-windows-x64-upgrade.zip`。本次登记的补丁升级起点为 1.6.4 或 1.6.5；1.6.3 请先升级到 1.6.4。升级到 1.6.6 不新增配置迁移，保留项目配置、业务 chains 与历史 runs。
 
 新版 Runtime 同时更新 `.opencode/agents/reviewer.md`、`.opencode/commands/harness-review-reviewer.md`、`.opencode/tools/codea-reviewer-submit.ts`。目标包 Host 哈希必须匹配 manifest；已有文件内容不同且不匹配已安装 manifest 的归属哈希时，停止为 `MANUAL_ACTION_REQUIRED`，不得让 Agent 手动覆盖。
+
+升级成功后重启 OpenCode 并开启新的主会话，重新加载主 Agent 提交工具与 1.6.6 指令，再执行 `harness review`。不要在仍缓存旧 Reviewer 委派指令的会话中继续评审。
 
 ## 必须使用正式 Windows Release
 
@@ -35,7 +37,7 @@ codea-harness-<version>-windows-x64-upgrade.zip
 > - `bin/codea-dcep-tools.exe`
 > - `bin/ast-grep.exe`
 >
-> 安装和升级必须使用 `package-windows-x64` 生成的正式离线包。
+> 安装和升级必须使用 `Release 1.6.6 - Windows x64` 生成的正式离线包。
 
 ## 固定升级 Bootstrap
 

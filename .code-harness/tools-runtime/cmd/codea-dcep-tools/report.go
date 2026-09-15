@@ -14,8 +14,10 @@ import (
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/report"
 	"codea-harness-tools/internal/requestcontract"
+	"codea-harness-tools/internal/requestjson"
 	"codea-harness-tools/internal/reviewprogress"
 	"codea-harness-tools/internal/reviewscope"
+	"codea-harness-tools/internal/reviewselection"
 )
 
 func runReport(args []string) error {
@@ -52,7 +54,7 @@ func runReviewReport(args []string) error {
 	if err := verifyReviewTransportPath153(runID, cleanInput); err != nil {
 		return failReport(err)
 	}
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return failReport(fmt.Errorf("read review report request: %w", err))
 	}
@@ -77,6 +79,10 @@ func runReviewReport(args []string) error {
 		return failReport(fmt.Errorf("encode Certified ChangeAnalysis for report: %w", err))
 	}
 	selectionJSON, err := reviewSelectionProposal153(proposal)
+	if err != nil {
+		return failReport(err)
+	}
+	selectionJSON, err = reviewselection.ReportScopeJSON(".", runID, certifiedJSON, selectionJSON)
 	if err != nil {
 		return failReport(err)
 	}

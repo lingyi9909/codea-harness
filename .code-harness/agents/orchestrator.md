@@ -11,10 +11,10 @@ version: 9
 | 意图 | Agent / Skill | READY |
 |---|---|---|
 | `harness init` | Project Adapter | 否 |
-| `harness review` | Orchestrator → Runtime + independent Reviewer phases | 否 |
-| `harness review list` | Orchestrator → Runtime + independent Reviewer phases（LIST） | 否 |
-| `harness review <Class>` | Orchestrator → Runtime + independent Reviewer phases（TARGETED CLASS） | 否 |
-| `harness review <Class.method>` | Orchestrator → Runtime + independent Reviewer phases（TARGETED METHOD） | 否 |
+| `harness review` | 主 Agent → Runtime + 主会话语义评审 | 否 |
+| `harness review list` | 主 Agent → Runtime + 主会话语义评审（LIST） | 否 |
+| `harness review <Class>` | 主 Agent → Runtime + 主会话语义评审（TARGETED CLASS） | 否 |
+| `harness review <Class.method>` | 主 Agent → Runtime + 主会话语义评审（TARGETED METHOD） | 否 |
 | `harness api-doc <target>` | API Doc Agent → discover-api → generate-api-doc | 否 |
 | `harness chain list` | Orchestrator → validate-chain | 否 |
 | `harness chain show <id\|target>` | Orchestrator → validate-chain | 否 |
@@ -987,26 +987,22 @@ report review
 
 该 Gate 是 Agent/Orchestrator turn 行为约束；不得声称 Controlled Runtime 能密码学证明某个 selection 是真实用户输入。Runtime 原有 optionsHash、selectionId、scope verification 仍负责机器 authority。
 
-## 1.6.4 Review Host Authority Flow
+## 1.6.6 主 Agent Review 流程
 
-The only supported product-level review ownership is:
+`harness review` 全程由当前主 Agent 编排，并在同一主会话内执行 `analyze-change` 和 `review-code` 的语义工作。本文此前的 Reviewer.analyze-change / Reviewer.review-code 是评审职责名称，不代表必须派生子 Agent。不得调用 task/generic subagent/harness-review-reviewer 来替代本次主 Agent 评审。
 
-```text
-Main Agent / Orchestrator
-→ review begin
-→ Runtime snapshot
-→ independent Reviewer CHANGE_ANALYSIS
-→ Runtime certification
-→ Runtime planning
-→ independent Reviewer FINDINGS
-→ Runtime finding certification
-→ Runtime report
-```
+固定顺序：`review begin → analysis snapshot → 主 Agent analyze-change → analysis certify → review options → review select → review units → review dispatch → 主 Agent review-code → review certify-findings → report review`。
 
-Reviewer owns only the two semantic proposal phases: `CHANGE_ANALYSIS` and `FINDINGS`. Reviewer does not own routing, Runtime execution, certification, planning, progress, final report rendering, or failure recovery.
+主 Agent 使用已经安装的 `codea-reviewer-submit` 工具提交语义 JSON，kind 分别为 `change-analysis` 和 `findings`，runId 必须来自本次 `review begin`。工具名称为升级兼容保留，现支持主 Agent；不得因为名称包含 reviewer 就派生子会话。工具自动写入无 BOM proposal 和 Host receipt；主 Agent 不得手工补造 receipt。Runtime 验证当前项目的主会话、对应 assistant message 和 completed submission，把主会话 ID 绑定到分析证书；后续人工选择和 Findings 必须来自该同一主会话，再执行 Snapshot、证据、Coverage、规则及范围认证。
 
-Main Agent / Orchestrator owns routing, Runtime invocation, Reviewer delegation, Runtime progress rendering, and fail-closed handling. It must use the official Runtime commands `review progress --run-id <runId>` to render `events[].display` and `review reviewer-unavailable --run-id <runId>` when the independent Reviewer Host cannot produce a valid same-run proposal.
+每次 Runtime 调用后用 `review progress --run-id <runId>` 展示 `events[].display`。没有证据的问题不生成 Finding；空 Findings 也必须走 certification 和正式 report。工具未加载或 Host export 失败时，明确报告安装/会话问题；不能假报成功或改写 Runtime artifact。
 
-The Main Agent / Orchestrator may create only same-run `requests/**` request files. Reviewer proposals must enter the same run only through `codea-reviewer-submit`. `analysis/**`, `review.md`, and `.code-harness/chains/**` remain Runtime/Framework-owned. No semantic fallback to the Main Agent is permitted when Reviewer fails.
+### 多调用链必须人工选择
 
-OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.
+`USER_SELECTION` 时完整原样展示 Runtime 返回的 `selectionPrompt`（全部 C1..Cn、调用链及 exact 路径、当前 runId 和完整 optionsHash），然后立即结束当前 Assistant Turn。明确提示下一条用户消息使用 `选择 C1`、`选择 C1,C2`、`全部`（仅 FULL intent）或 `仅列出`。显式 Controller target 的“全部”应提示用户使用列出的全部 selectionIds，例如 `选择 C1,C2`，仍生成 TARGETED。
+
+收到下一条明确用户回复后，用 `codea-reviewer-submit` 的 kind=`selection` 提交标准 ReviewSelectionRequest JSON（runId/mode/optionsHash/selectionIds），然后以生成的 `requests/review-selection.json` 调用 Runtime `review select`。Runtime 会核验当前主会话中菜单之后真实的用户文本、completed tool call 和当前 optionsHash。不得由 Agent 猜测、默认 ALL、复用旧菜单或手工伪造人工选择。LIST 只列出调用链，不能继续 Findings 或 report。
+
+AUTO_FULL/AUTO_SINGLE 保持自动选择，可直接写 request 调用 `review select`。正式编排先形成 Runtime scope，再执行 units/dispatch；多调用链缺少 scope 绝不能默认为 FULL。
+
+请求文件统一 UTF-8 无 BOM；Runtime 兼容 Windows 工具写入的单个 UTF-8 BOM，但 malformed JSON、UTF-16、重复 BOM、未知字段及篡改 artifact 仍被拒绝。

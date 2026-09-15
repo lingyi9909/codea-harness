@@ -15,6 +15,7 @@ import (
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/requestcontract"
+ "codea-harness-tools/internal/requestjson"
 	"codea-harness-tools/internal/reviewauthority"
 	"codea-harness-tools/internal/reviewprogress"
 	"codea-harness-tools/internal/schema"
@@ -57,7 +58,7 @@ func runAnalysisSnapshot162(args []string) error {
 
 	pathRunID, cleanInput, err := validateAnalysisRequestPath153(*inputPath)
 	if err != nil { return err }
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil { return fmt.Errorf("read ChangeSet snapshot request: %w", err) }
 	if err := requestcontract.Validate("change-set-request.schema.json", data); err != nil {
 		return fmt.Errorf("CHANGE_SET_REQUEST_SCHEMA_INVALID: %w", err)
@@ -129,7 +130,7 @@ func runAnalysisInventory(args []string) error {
 
 	pathRunID, cleanInput, err := validateAnalysisRequestPath153(*inputPath)
 	if err != nil { return err }
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil { return fmt.Errorf("read entrypoint inventory request: %w", err) }
 	if err := requestcontract.Validate("analysis-inventory-request.schema.json", data); err != nil {
 		return fmt.Errorf("ANALYSIS_INVENTORY_REQUEST_SCHEMA_INVALID: %w", err)
@@ -174,7 +175,7 @@ func runAnalysisCertify(args []string) error {
 
 	pathRunID, cleanInput, err := validateAnalysisRequestPath153(*inputPath)
 	if err != nil { return err }
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil { return fmt.Errorf("read analysis certify request: %w", err) }
 	if err := requestcontract.Validate("analysis-certify-request.schema.json", data); err != nil {
 		return fmt.Errorf("ANALYSIS_CERTIFY_REQUEST_SCHEMA_INVALID: %w", err)
@@ -188,9 +189,12 @@ func runAnalysisCertify(args []string) error {
 		return errors.New("analysis certify request contains invalid runId")
 	}
 	authorityPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "requests", "change-analysis-reviewer-authority.json"))
-	if _, err := reviewauthority.Verify(".", req.RunID, reviewauthority.ChangeAnalysis, req.ProposalPath); err != nil {
+	receipt, err := reviewauthority.Verify(".", req.RunID, reviewauthority.ChangeAnalysis, req.ProposalPath)
+ if err != nil {
 		return failReviewProgressStage164(req.RunID, reviewprogress.StageChangeAnalysis, "CHANGE_ANALYSIS_AUTHORITY_FAILED", err)
 	}
+ if reviewauthority.PrimaryFlow(".") && receipt.Version != 2 { return failReviewProgressStage164(req.RunID, reviewprogress.StageChangeAnalysis,"CHANGE_ANALYSIS_AUTHORITY_FAILED",fmt.Errorf("PRIMARY_AGENT_REQUIRED: 1.6.6 review must use the primary session")) }
+ if receipt.Version == 2 { req.SemanticSessionID = receipt.SessionID }
 	if err := advanceReviewProgressStage164(req.RunID, reviewprogress.StageChangeAnalysis, req.ProposalPath, authorityPath); err != nil {
 		return err
 	}

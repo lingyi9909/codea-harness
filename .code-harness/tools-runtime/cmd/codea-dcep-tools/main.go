@@ -19,6 +19,7 @@ import (
 	"codea-harness-tools/internal/dbguard"
 	"codea-harness-tools/internal/dbmysql"
 	"codea-harness-tools/internal/nav"
+	"codea-harness-tools/internal/requestjson"
 	"codea-harness-tools/internal/schema"
 	"codea-harness-tools/internal/selection"
 	"codea-harness-tools/internal/upgrade"
@@ -389,7 +390,7 @@ func runDBQuery(args []string) error {
 	if !safeDBRunsPath(*inputPath) {
 		return errors.New("db query input outside .code-harness/runs is not allowed")
 	}
-	data, err := os.ReadFile(*inputPath)
+	data, err := requestjson.ReadFile(*inputPath)
 	if err != nil {
 		return fmt.Errorf("read db query request: %w", err)
 	}

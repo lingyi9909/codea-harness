@@ -5,7 +5,8 @@ import path from "node:path"
 
 const runID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
-function canonicalTarget(kind: "change-analysis" | "findings", id: string) {
+function canonicalTarget(kind: "change-analysis" | "findings" | "selection", id: string) {
+  if (kind === "selection") return { file: "review-selection.json", receipt: "review-selection-authority.json" }
   const file = kind === "change-analysis" ? "change-analysis-proposal.json" : "finding-proposals.json"
   const receipt = kind === "change-analysis" ? "change-analysis-reviewer-authority.json" : "finding-reviewer-authority.json"
   return { file, receipt }
@@ -19,16 +20,15 @@ async function atomicWrite(target: string, data: string) {
 }
 
 export default tool({
-  description: "Submit a Codea Harness semantic proposal from the independent Reviewer. Host identity is recorded for Runtime certification.",
+  description: "Submit main Agent review analysis, findings, or a real user selection. The historical tool name is retained for upgrade compatibility; no Reviewer subagent is required.",
   args: {
-    kind: tool.schema.enum(["change-analysis", "findings"]),
+    kind: tool.schema.enum(["change-analysis", "findings", "selection"]),
     runId: tool.schema.string(),
     proposal: tool.schema.string().describe("Exact JSON payload for the semantic proposal"),
   },
   async execute(args, context) {
-    if (context.agent !== "reviewer") {
-      throw new Error("MAIN_AGENT_REVIEWER_FALLBACK_FORBIDDEN: codea-reviewer-submit requires Host agent=reviewer")
-    }
+    if (!context.agent) throw new Error("PRIMARY_AGENT_IDENTITY_MISSING")
+    if (args.kind === "selection" && context.agent === "reviewer") throw new Error("HUMAN_SELECTION_REQUIRES_PRIMARY_AGENT")
     if (!context.sessionID || !context.messageID) {
       throw new Error("REVIEWER_UNAVAILABLE: Host did not provide Reviewer session/message identity")
     }
@@ -41,7 +41,7 @@ export default tool({
     } catch (error) {
       throw new Error(`REVIEWER_MALFORMED_OUTPUT: proposal is not JSON: ${String(error)}`)
     }
-    if (args.kind === "change-analysis") {
+    if (args.kind !== "findings") {
       if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
         throw new Error("REVIEWER_MALFORMED_OUTPUT: change-analysis proposal must be a JSON object")
       }
@@ -56,7 +56,7 @@ export default tool({
     const proposalText = `${JSON.stringify(parsed, null, 2)}\n`
     const sha256 = createHash("sha256").update(proposalText, "utf8").digest("hex")
     const receipt = {
-      version: 1,
+      version: context.agent === "reviewer" ? 1 : 2,
       host: "opencode",
       source: "opencode-tool-context",
       runId: args.runId,

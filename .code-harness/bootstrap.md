@@ -14,60 +14,25 @@
 8. 不得修改业务代码、测试代码、`pom.xml` 或 `application` 配置文件。
 9. 未经用户明确同意，不得修改目标项目根目录的 `AGENTS.md`。
 
-## OpenCode Reviewer Host Gate（1.6.4）
+## 1.6.6 主 Agent Review 流程
 
-首次接入后，所有 `harness review` 语义阶段还必须读取：
+`harness review` 全程由当前主 Agent 编排，并在同一主会话内执行 `analyze-change` 和 `review-code` 的语义工作。本文此前的 Reviewer.analyze-change / Reviewer.review-code 是评审职责名称，不代表必须派生子 Agent。不得调用 task/generic subagent/harness-review-reviewer 来替代本次主 Agent 评审。
 
-```text
-.code-harness/contracts/reviewer-host-contract.md
-```
+固定顺序：`review begin → analysis snapshot → 主 Agent analyze-change → analysis certify → review options → review select → review units → review dispatch → 主 Agent review-code → review certify-findings → report review`。
 
-正式 release 必须把 canonical Reviewer 注册为项目级 OpenCode subagent：
+主 Agent 使用已经安装的 `codea-reviewer-submit` 工具提交语义 JSON，kind 分别为 `change-analysis` 和 `findings`，runId 必须来自本次 `review begin`。工具名称为升级兼容保留，现支持主 Agent；不得因为名称包含 reviewer 就派生子会话。工具自动写入无 BOM proposal 和 Host receipt；主 Agent 不得手工补造 receipt。Runtime 验证当前项目的主会话、对应 assistant message 和 completed submission，把主会话 ID 绑定到分析证书；后续人工选择和 Findings 必须来自该同一主会话，再执行 Snapshot、证据、Coverage、规则及范围认证。
 
-```text
-.opencode/agents/reviewer.md
-mode: subagent
-```
+每次 Runtime 调用后用 `review progress --run-id <runId>` 展示 `events[].display`。没有证据的问题不生成 Finding；空 Findings 也必须走 certification 和正式 report。工具未加载或 Host export 失败时，明确报告安装/会话问题；不能假报成功或改写 Runtime artifact。
 
-`harness review` 的 semantic analysis 与 finding proposal 必须由该独立 Reviewer child session 执行；Main Agent / Orchestrator 只负责路由、Runtime 调用和门禁，不得代替 Reviewer 做 semantic review。
+### 多调用链必须人工选择
 
-`.code-harness/agents/orchestrator.md` 中已有的 `Reviewer.analyze-change` / `Reviewer.review-code` 仅是 semantic shorthand。1.6.4 支持的 OpenCode 产品路径必须把这两个语义阶段绑定到项目级 `harness-review-reviewer` command，由它委派 `independent reviewer subagent child session`；不得把 shorthand 解释为 Main Agent / Orchestrator 本地执行 Reviewer 语义工作。
+`USER_SELECTION` 时完整原样展示 Runtime 返回的 `selectionPrompt`（全部 C1..Cn、调用链及 exact 路径、当前 runId 和完整 optionsHash），然后立即结束当前 Assistant Turn。明确提示下一条用户消息使用 `选择 C1`、`选择 C1,C2`、`全部`（仅 FULL intent）或 `仅列出`。显式 Controller target 的“全部”应提示用户使用列出的全部 selectionIds，例如 `选择 C1,C2`，仍生成 TARGETED。
 
-固定 Host binding：
+收到下一条明确用户回复后，用 `codea-reviewer-submit` 的 kind=`selection` 提交标准 ReviewSelectionRequest JSON（runId/mode/optionsHash/selectionIds），然后以生成的 `requests/review-selection.json` 调用 Runtime `review select`。Runtime 会核验当前主会话中菜单之后真实的用户文本、completed tool call 和当前 optionsHash。不得由 Agent 猜测、默认 ALL、复用旧菜单或手工伪造人工选择。LIST 只列出调用链，不能继续 Findings 或 report。
 
-```text
-CHANGE_ANALYSIS
--> harness-review-reviewer
--> independent reviewer child session
--> codea-reviewer-submit
--> requests/change-analysis-proposal.json + Reviewer Host authority receipt
--> Runtime analysis certify
+AUTO_FULL/AUTO_SINGLE 保持自动选择，可直接写 request 调用 `review select`。正式编排先形成 Runtime scope，再执行 units/dispatch；多调用链缺少 scope 绝不能默认为 FULL。
 
-FINDINGS
--> harness-review-reviewer
--> independent reviewer child session
--> codea-reviewer-submit
--> requests/finding-proposals.json + Reviewer Host authority receipt
--> Runtime review certify-findings
-```
-
-如果 Reviewer 无法 resolve/start/invoke/complete，child session crash/cancel，或者没有产出可供 Runtime 校验的有效 proposal，OpenCode Host 必须先调用唯一的 failure-only Runtime 信号：
-
-```text
-codea-dcep-tools.exe review reviewer-unavailable --run-id <runId>
-```
-
-该命令不接受 `--stage`、自定义 failure code、advance 或 complete 参数。Runtime 必须自行读取当前 review progress，并且只允许当前 `CHANGE_ANALYSIS` 或 `REVIEW_EXECUTION` 失败为 `REVIEWER_UNAVAILABLE`；它不能产生 PASS、不能推进阶段、不能修改其他阶段。
-
-命令返回后固定输出并立即停止：
-
-```text
-REVIEWER_UNAVAILABLE
-MANUAL_ACTION_REQUIRED
-HARD STOP
-```
-
-Host failure 上报后不得继续 Runtime `analysis certify` 或 `review certify-findings`，也不得继续 review planning/selection/units/dispatch、finding certification 或 report publication；不得由 Main Agent / Orchestrator 生成 semantic proposal 作为 fallback。可再次调用只读 `review progress --run-id <runId>` 展示 Runtime 已记录的失败事件，但不得尝试恢复或跳过失败阶段。
+请求文件统一 UTF-8 无 BOM；Runtime 兼容 Windows 工具写入的单个 UTF-8 BOM，但 malformed JSON、UTF-16、重复 BOM、未知字段及篡改 artifact 仍被拒绝。
 
 ## Runtime Review Progress Gate（1.6.4 Task 3）
 
@@ -91,32 +56,8 @@ Runtime command failure -> 当前 stage FAILED，后续 stage BLOCKED
 Runtime terminal success -> REPORT SUCCEEDED
 ```
 
-`review progress` 是严格只读接口。不得向 Agent、Reviewer 或 prompt 暴露任何 progress advance/complete 或任意 fail mutation 命令；阶段推进只能发生在 snapshot、Reviewer authority verification、certification、planning/dispatch、finding certification、report publication 等既有 Runtime-owned 成功/失败边界内部。唯一例外是上述 `review reviewer-unavailable` failure-only Host 信号：它没有成功权威，只能要求 Runtime 对当前 Reviewer-dependent stage 执行 fail-closed。
+`review progress` 是严格只读接口。不得向 Agent、Reviewer 或 prompt 暴露任何 progress advance/complete 或任意 fail mutation 命令；阶段推进只能发生在 snapshot、Reviewer authority verification、certification、planning/dispatch、finding certification、report publication 等既有 Runtime-owned 成功/失败边界内部。保留的 `review reviewer-unavailable` 是 failure-only 兼容信号，不能推进成功阶段。
 
 ---
 
-`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行；涉及 Reviewer semantic phase 时，必须同时受上述 1.6.4 Host binding 和 Runtime Review Progress Gate 覆盖。
-
-## 1.6.4 Review Host Authority Flow
-
-The only supported product-level review ownership is:
-
-```text
-Main Agent / Orchestrator
-→ review begin
-→ Runtime snapshot
-→ independent Reviewer CHANGE_ANALYSIS
-→ Runtime certification
-→ Runtime planning
-→ independent Reviewer FINDINGS
-→ Runtime finding certification
-→ Runtime report
-```
-
-Reviewer owns only the two semantic proposal phases: `CHANGE_ANALYSIS` and `FINDINGS`. Reviewer does not own routing, Runtime execution, certification, planning, progress, final report rendering, or failure recovery.
-
-Main Agent / Orchestrator owns routing, Runtime invocation, Reviewer delegation, Runtime progress rendering, and fail-closed handling. It must use the official Runtime commands `review progress --run-id <runId>` to render `events[].display` and `review reviewer-unavailable --run-id <runId>` when the independent Reviewer Host cannot produce a valid same-run proposal.
-
-The Main Agent / Orchestrator may create only same-run `requests/**` request files. Reviewer proposals must enter the same run only through `codea-reviewer-submit`. `analysis/**`, `review.md`, and `.code-harness/chains/**` remain Runtime/Framework-owned. No semantic fallback to the Main Agent is permitted when Reviewer fails.
-
-OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`. The resolved Reviewer Host must be a subagent whose effective permissions deny `bash`, `task`, and generic edit/write authority while allowing the dedicated `codea-reviewer-submit` tool; the Reviewer command must resolve to `agent=reviewer` and `subtask=true`.
+`bootstrap.md` 是用户第一次接入 Codea Harness 时唯一需要主动指定读取的文件。后续所有操作（`harness review`、`harness test` 等）由 Orchestrator 按 `.code-harness/agents/orchestrator.md` 中的路由自动执行；涉及 Reviewer semantic phase 时，必须同时受上述 1.6.6 主 Agent 提交约定 和 Runtime Review Progress Gate 覆盖。

@@ -13,12 +13,12 @@ import (
 // The patch release updates the existing Host registration in the same
 // transaction as the framework. Installed hashes authorize replacement only
 // when the live bytes still match; user edits never become managed implicitly.
-func prepareReviewerHostPatch165(o Options) (*reviewerHostTransaction, error) {
-	wanted, err := reviewerHostHashes165(o.SourceDir, "1.6.5", true)
+func prepareReviewerHostPatch(o Options, oldVersion, newVersion string) (*reviewerHostTransaction, error) {
+	wanted, err := reviewerHostHashes165(o.SourceDir, newVersion, true)
 	if err != nil {
 		return nil, err
 	}
-	owned, err := reviewerHostHashes165(o.TargetDir, "1.6.4", false)
+	owned, err := reviewerHostHashes165(o.TargetDir, oldVersion, false)
 	if err != nil {
 		return nil, err
 	}

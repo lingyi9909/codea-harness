@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"codea-harness-tools/internal/requestcontract"
+	"codea-harness-tools/internal/requestjson"
 	"codea-harness-tools/internal/reviewselection"
 	"codea-harness-tools/internal/schema"
 )
@@ -47,7 +48,7 @@ func runReviewOptions(args []string) error {
 	if err != nil {
 		return err
 	}
-	requestBytes, err := os.ReadFile(cleanInput)
+	requestBytes, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("read review options request: %w", err)
 	}
@@ -95,7 +96,7 @@ func runReviewOptions(args []string) error {
 	if err := atomicReviewWrite153(artifactPath, optionsBytes); err != nil {
 		return err
 	}
-	return writeJSONAndStatus(map[string]any{"status": "READY", "artifactPath": filepath.ToSlash(artifactPath), "options": options}, true)
+	return writeJSONAndStatus(map[string]any{"status": "READY", "artifactPath": filepath.ToSlash(artifactPath), "options": options, "selectionPrompt": reviewselection.SelectionPrompt(options)}, true)
 }
 
 func runReviewSelect(args []string) error {
@@ -111,7 +112,7 @@ func runReviewSelect(args []string) error {
 	if err != nil {
 		return err
 	}
-	requestBytes, err := os.ReadFile(cleanInput)
+	requestBytes, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("read review selection request: %w", err)
 	}
@@ -127,6 +128,9 @@ func runReviewSelect(args []string) error {
 	}
 	scope, err := reviewselection.VerifyAndBuildScope(".", req)
 	if err != nil {
+		return err
+	}
+	if err := reviewselection.RecordSelection(".", req); err != nil {
 		return err
 	}
 	if strings.EqualFold(req.Mode, "LIST") {

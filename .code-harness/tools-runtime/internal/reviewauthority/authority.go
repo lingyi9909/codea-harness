@@ -22,6 +22,7 @@ type Kind string
 const (
 	ChangeAnalysis Kind = "change-analysis"
 	Findings       Kind = "findings"
+	Selection      Kind = "selection"
 )
 
 var artifactID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -47,7 +48,7 @@ type sessionExport struct {
 	} `json:"messages"`
 }
 
-func Verify(repoRoot, runID string, kind Kind, proposalPath string) (Receipt, error) {
+func Verify(repoRoot, runID string, kind Kind, proposalPath string, selectionMenu ...string) (Receipt, error) {
 	if !artifactID.MatchString(runID) {
 		return Receipt{}, hardStop("invalid runId")
 	}
@@ -78,7 +79,7 @@ func Verify(repoRoot, runID string, kind Kind, proposalPath string) (Receipt, er
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return Receipt{}, hardStop("Reviewer authority receipt contains trailing JSON")
 	}
-	if receipt.Version != 1 || receipt.Host != "opencode" || receipt.Source != "opencode-tool-context" || receipt.RunID != runID || receipt.ProposalKind != kind || receipt.Agent != "reviewer" {
+	if (receipt.Version != 1 && receipt.Version != 2) || receipt.Host != "opencode" || receipt.Source != "opencode-tool-context" || receipt.RunID != runID || receipt.ProposalKind != kind || strings.TrimSpace(receipt.Agent) == "" || (receipt.Version == 1 && receipt.Agent != "reviewer") || (kind == Selection && receipt.Version != 2) {
 		return Receipt{}, hardStop("Reviewer authority receipt identity mismatch")
 	}
 	// OpenCode Host identifiers are opaque. Do not bind Runtime authority to a
@@ -100,7 +101,15 @@ func Verify(repoRoot, runID string, kind Kind, proposalPath string) (Receipt, er
 	if err != nil {
 		return Receipt{}, hardStop("Reviewer Host session attestation unavailable: " + err.Error())
 	}
-	if err := verifySessionAttestation(exportBytes, receipt, proposalBytes); err != nil {
+	if receipt.Version == 2 {
+		if err := verifyPrimaryDirectory(repoRoot, exportBytes); err != nil {
+			return Receipt{}, hardStop(err.Error())
+		}
+		if kind == Selection && (len(selectionMenu) != 1 || selectionMenu[0] == "") {
+			return Receipt{}, hardStop("HUMAN_SELECTION_REQUIRED: full Runtime menu missing")
+		}
+	}
+	if err := verifySessionAttestation(exportBytes, receipt, proposalBytes, selectionMenu...); err != nil {
 		return Receipt{}, hardStop("Reviewer Host session attestation invalid: " + err.Error())
 	}
 	return receipt, nil
@@ -135,7 +144,10 @@ func exportOpenCodeSession(repoRoot, id string) ([]byte, error) {
 	return out, nil
 }
 
-func verifySessionAttestation(exportBytes []byte, receipt Receipt, proposalBytes []byte) error {
+func verifySessionAttestation(exportBytes []byte, receipt Receipt, proposalBytes []byte, selectionMenu ...string) error {
+	if receipt.Version == 2 {
+		return verifyPrimarySession(exportBytes, receipt, proposalBytes, selectionMenu...)
+	}
 	var exported sessionExport
 	dec := json.NewDecoder(bytes.NewReader(exportBytes))
 	dec.UseNumber()
@@ -307,6 +319,8 @@ func normalizeToolName(name string) string {
 func canonicalPaths(runID string, kind Kind) (string, string, error) {
 	root := filepath.ToSlash(filepath.Join(".code-harness", "runs", runID, "requests"))
 	switch kind {
+	case Selection:
+		return root + "/review-selection.json", "review-selection-authority.json", nil
 	case ChangeAnalysis:
 		return root + "/change-analysis-proposal.json", "change-analysis-reviewer-authority.json", nil
 	case Findings:

@@ -131,7 +131,7 @@ func Test164Task3ReviewerUnavailableCannotFailNonReviewerStage(t *testing.T) {
 	}
 }
 
-func Test164Task3OpenCodeHostFailureReportsRuntimeProgressBeforeHardStop(t *testing.T) {
+func Test166PrimaryHostFailureKeepsRuntimeProgressAuthority(t *testing.T) {
 	bootstrapPath := filepath.Clean(filepath.Join("..", "..", "..", "bootstrap.md"))
 	data, err := os.ReadFile(bootstrapPath)
 	if err != nil {
@@ -139,10 +139,10 @@ func Test164Task3OpenCodeHostFailureReportsRuntimeProgressBeforeHardStop(t *test
 	}
 	text := string(data)
 	for _, required := range []string{
-		"codea-dcep-tools.exe review reviewer-unavailable --run-id <runId>",
-		"resolve/start/invoke/complete",
-		"REVIEWER_UNAVAILABLE",
-		"不得继续 Runtime `analysis certify` 或 `review certify-findings`",
+		"codea-reviewer-submit",
+ "review progress --run-id <runId>",
+ "不能假报成功或改写 Runtime artifact",
+ "Host export 失败",
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("bootstrap missing Reviewer Host failure progress contract %q", required)

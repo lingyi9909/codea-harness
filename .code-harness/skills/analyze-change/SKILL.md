@@ -2,7 +2,7 @@
 name: analyze-change
 description: 消费 Runtime Canonical ChangeSet Snapshot，并按 FULL/TARGETED 意图通过受控 Code Navigation 与资源关系证据建立可机器验证的 semantic ChangeAnalysis Proposal。
 version: 7
-agent: reviewer
+agent: orchestrator
 tools:
   - read_code
   - find_symbol
@@ -17,6 +17,10 @@ output_schema: .code-harness/contracts/change-analysis-proposal.schema.json
 ---
 
 # 分析代码变更
+
+## 1.6.6 执行身份
+
+本 Skill 由当前主 Agent 在主会话内直接执行，不派生 Reviewer 子 Agent。语义结果通过 `codea-reviewer-submit` 提交（保留历史工具名）；认证和报告继续由 Runtime 执行。多调用链必须遵守 AGENTS.md 的真实下一条用户消息选择门禁。
 
 ## 目标
 

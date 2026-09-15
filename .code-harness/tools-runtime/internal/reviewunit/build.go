@@ -15,6 +15,7 @@ import (
 	"codea-harness-tools/internal/changeset"
 	"codea-harness-tools/internal/projectpath"
 	"codea-harness-tools/internal/reviewscope"
+ "codea-harness-tools/internal/reviewselection"
 	"codea-harness-tools/internal/schema"
 	"codea-harness-tools/internal/symbolid"
 )
@@ -76,6 +77,7 @@ func loadFacts160(input BuildInput) (buildFacts160, error) {
 	var meta analysisMeta160
 	if err := json.Unmarshal(analysisBytes, &meta); err != nil { return buildFacts160{}, fmt.Errorf("REVIEW_UNIT_ANALYSIS_DECODE_FAILED: %w", err) }
 
+	if err := reviewselection.VerifyExecutionScope(root, runID); err != nil { return buildFacts160{}, err }
 	scopePath := filepath.Join(root, ".code-harness", "runs", runID, "analysis", "review-scope.json")
 	var scope reviewscope.Selection
 	var scopeSHA string

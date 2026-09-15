@@ -13,6 +13,7 @@ import (
 
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/chain"
+	"codea-harness-tools/internal/requestjson"
 )
 
 var loadCertifiedAnalysis153 = analysisruntime.LoadCertified
@@ -137,7 +138,7 @@ func runChainDiscover(args []string) error {
 	if err != nil {
 		return err
 	}
-	requestBytes, err := os.ReadFile(cleanInput)
+	requestBytes, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("read chain discovery request: %w", err)
 	}
@@ -210,7 +211,7 @@ func runChainRefresh(args []string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return err
 	}
@@ -278,7 +279,7 @@ func runChainSealPersist(args []string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return err
 	}
@@ -313,7 +314,7 @@ func runChainPersist(args []string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return err
 	}

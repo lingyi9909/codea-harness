@@ -19,6 +19,8 @@ import (
 var artifactID153 = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 type CertifyRequest struct {
+ // Populated only after CLI Host verification, never accepted from request JSON.
+ SemanticSessionID string `json:"-"`
 	RunID              string `json:"runId"`
 	DraftPath          string `json:"draftPath,omitempty"`
 	BaseRef            string `json:"baseRef,omitempty"`
@@ -122,7 +124,7 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 	if _, err := coverage.VerifyAnalysisJSON(canonicalAnalysis); err != nil { return Certificate{}, fmt.Errorf("ANALYSIS_COVERAGE_INVALID: %w", err) }
 
 	if snapshot.ResolvedBaseCommit != "" && snapshot.GitStateSHA256 != "" {
-		return publishCertifiedAnalysis162(root, req.RunID, canonicalAnalysis, inventory, snapshot, certifyIntent)
+		return publishCertifiedAnalysis162(root, req.RunID, canonicalAnalysis, inventory, snapshot, certifyIntent, req.SemanticSessionID)
 	}
 
 	inventoryBytes, err := json.MarshalIndent(inventory, "", "  ")
@@ -137,7 +139,7 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 	runtimeVersion := strings.TrimSpace(string(versionBytes))
 	if runtimeVersion == "" { return Certificate{}, fmt.Errorf("RUNTIME_VERSION_UNAVAILABLE: empty VERSION") }
 	cert := Certificate{
-		RunID: req.RunID, RuntimeVersion: runtimeVersion, AnalysisSHA256: hashBytes153(canonicalAnalysis),
+		SemanticSessionID: req.SemanticSessionID, RunID: req.RunID, RuntimeVersion: runtimeVersion, AnalysisSHA256: hashBytes153(canonicalAnalysis),
 		ChangeSetSHA256: snapshot.SHA256, EntrypointInventorySHA256: hashBytes153(inventoryBytes), BaseRef: snapshot.BaseRef, Head: snapshot.Head,
 		Intent: &Intent{Mode: certifyIntent.Mode, Target: certifyIntent.Target},
 	}
@@ -147,6 +149,7 @@ func certifyWithRuntime153(root string, req CertifyRequest, runtime certificatio
 	certSchema, err := os.ReadFile(filepath.Join(root, ".code-harness", "contracts", "change-analysis-cert.schema.json"))
 	if err != nil { return Certificate{}, fmt.Errorf("ANALYSIS_CERT_SCHEMA_READ_FAILED: %w", err) }
 	if err := schema.ValidateJSON(certSchema, certBytes); err != nil { return Certificate{}, fmt.Errorf("ANALYSIS_CERT_SCHEMA_INVALID: %w", err) }
+	if err := SealPrimarySessionAuthority(root, cert); err != nil { return Certificate{}, err }
 	if err := sealChainMaintenanceAuthority153(root, cert); err != nil { return Certificate{}, err }
 
 	analysisDir := filepath.Join(root, ".code-harness", "runs", req.RunID, "analysis")

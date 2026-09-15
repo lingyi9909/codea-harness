@@ -2,13 +2,17 @@
 name: review-code
 description: 在 FULL 或 Runtime 已验证的 TARGETED Review Scope 完整后执行 Finding Proposal Review；Java/Mapper/YML 生产变更按证据评审，测试代码只执行 Test Validity Gate。
 version: 4
-agent: reviewer
+agent: orchestrator
 tools:
   - read_code
 output_schema: .code-harness/contracts/finding-proposals.schema.json
 ---
 
 # 评审变更代码
+
+## 1.6.6 执行身份
+
+本 Skill 由当前主 Agent 在主会话内直接执行，不派生 Reviewer 子 Agent。语义结果通过 `codea-reviewer-submit` 提交（保留历史工具名）；认证和报告继续由 Runtime 执行。多调用链必须遵守 AGENTS.md 的真实下一条用户消息选择门禁。
 
 ## 前置硬门禁
 

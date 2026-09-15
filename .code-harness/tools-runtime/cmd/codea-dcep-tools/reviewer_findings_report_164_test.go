@@ -193,8 +193,19 @@ func Test164ReviewerCertifiedEmptyFindingsDrivePassedReport(t *testing.T) {
 }
 
 func Test164ReviewerCertifiedNonemptyFindingsDriveFailedReport(t *testing.T) {
+	testCertifiedNonemptyReport(t, false)
+}
+func Test166PrimaryCertifiedNonemptyFindingsDriveFailedReport(t *testing.T) {
+	testCertifiedNonemptyReport(t, true)
+}
+func testCertifiedNonemptyReport(t *testing.T, primary bool) {
 	withTempProject(t)
-	request := prepareTask164FindingCertification(t, true)
+	var request string
+	if primary {
+		request = primaryFindingFixture166(t)
+	} else {
+		request = prepareTask164FindingCertification(t, true)
+	}
 	dispatchBytes, err := os.ReadFile(".code-harness/runs/run-task4-review/analysis/rule-dispatch.json")
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +243,11 @@ func Test164ReviewerCertifiedNonemptyFindingsDriveFailedReport(t *testing.T) {
 	}
 	proposalRel := ".code-harness/runs/run-task4-review/requests/finding-proposals.json"
 	writeFile(t, proposalRel, string(proposalBytes))
-	writeReviewerAuthorityTestReceipt(t, ".", "run-task4-review", "findings", proposalRel)
+	if primary {
+		writePrimaryReceipt166(t, ".", "run-task4-review", "findings", proposalRel, "harness review", "")
+	} else {
+		writeReviewerAuthorityTestReceipt(t, ".", "run-task4-review", "findings", proposalRel)
+	}
 	if err := run([]string{"review", "certify-findings", "--input", request}); err != nil {
 		t.Fatalf("genuine runtime certification failed: %v", err)
 	}
@@ -250,6 +265,19 @@ func Test164ReviewerCertifiedNonemptyFindingsDriveFailedReport(t *testing.T) {
 		t.Fatalf("expected one Runtime-certified finding, got %d: %s", len(set.Findings), setBytes)
 	}
 	transport := writeTask164ReportTransport(t, "run-task4-review")
+	if primary {
+		raw, err := os.ReadFile(transport)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var req report.ReviewRequest
+		if err = json.Unmarshal(raw, &req); err != nil {
+			t.Fatal(err)
+		}
+		req.Coverage.CallChains = []report.CallChain{{EntryPoint: "EvilController.fake", Chain: []string{"EvilController.fake"}}}
+		raw, _ = json.Marshal(req)
+		writeFile(t, transport, string(raw))
+	}
 	if err := run([]string{"report", "review", "--input", transport}); err != nil {
 		t.Fatalf("report must render genuine Runtime-certified finding: %v", err)
 	}
@@ -262,7 +290,7 @@ func Test164ReviewerCertifiedNonemptyFindingsDriveFailedReport(t *testing.T) {
 			t.Fatalf("certified finding report missing %q: %s", want, reportBytes)
 		}
 	}
-	for _, forbidden := range []string{"agent-version", "agent-base", "agent-head", "src/main/java/Evil.java"} {
+	for _, forbidden := range []string{"agent-version", "agent-base", "agent-head", "src/main/java/Evil.java", "EvilController.fake"} {
 		if strings.Contains(string(reportBytes), forbidden) {
 			t.Fatalf("transport authority leaked into final report: %s", forbidden)
 		}

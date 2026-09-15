@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"codea-harness-tools/internal/chain"
+	"codea-harness-tools/internal/requestjson"
 	"codea-harness-tools/internal/schema"
 )
 
@@ -26,7 +27,7 @@ func runChainEdit(args []string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(cleanInput)
+	data, err := requestjson.ReadFile(cleanInput)
 	if err != nil {
 		return fmt.Errorf("read chain edit request: %w", err)
 	}

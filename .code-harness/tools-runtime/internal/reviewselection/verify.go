@@ -13,6 +13,7 @@ import (
 
 	analysisruntime "codea-harness-tools/internal/analysis"
 	"codea-harness-tools/internal/chain"
+	"codea-harness-tools/internal/reviewauthority"
 	"codea-harness-tools/internal/reviewscope"
 )
 
@@ -44,6 +45,9 @@ func validateSelectionAgainstOptions153(options Options, req SelectionRequest) (
 	case DecisionUser:
 		switch mode {
 		case "FULL":
+			if options.Intent.Mode == "TARGETED" {
+				return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: explicit target requires TARGETED selection")
+			}
 			if len(req.SelectionIDs) != 0 {
 				return nil, fmt.Errorf("REVIEW_SELECTION_SCOPE_INVALID: FULL must not contain selectionIds")
 			}
@@ -141,6 +145,27 @@ func VerifyAndBuildScope(root string, req SelectionRequest) (reviewscope.Selecti
 		return reviewscope.Selection{}, fmt.Errorf("REVIEW_OPTIONS_STALE: stored options differ from authoritative Runtime rebuild")
 	}
 
+	if reviewauthority.PrimaryFlow(root) && authoritative.Decision == DecisionUser {
+		proposalPath := filepath.ToSlash(filepath.Join(".code-harness", "runs", req.RunID, "requests", "review-selection.json"))
+		receipt, err := reviewauthority.Verify(root, req.RunID, reviewauthority.Selection, proposalPath, SelectionPrompt(authoritative))
+		if err != nil {
+			return reviewscope.Selection{}, fmt.Errorf("HUMAN_SELECTION_REQUIRED: %w", err)
+		}
+		if cert.SemanticSessionID == "" || receipt.SessionID != cert.SemanticSessionID {
+			return reviewscope.Selection{}, fmt.Errorf("HUMAN_SELECTION_REQUIRED: selection must use the analysis primary session")
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(proposalPath)))
+		if err != nil {
+			return reviewscope.Selection{}, err
+		}
+		var submitted SelectionRequest
+		if err := decodeStrictReviewArtifact153(data, &submitted); err != nil {
+			return reviewscope.Selection{}, err
+		}
+		if !reflect.DeepEqual(submitted, req) {
+			return reviewscope.Selection{}, fmt.Errorf("HUMAN_SELECTION_REQUIRED: request differs from submitted user choice")
+		}
+	}
 	selected, err := validateSelectionAgainstOptions153(authoritative, req)
 	if err != nil {
 		return reviewscope.Selection{}, err
