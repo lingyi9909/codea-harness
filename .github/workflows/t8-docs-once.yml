@@ -1,0 +1,117 @@
+name: t8-docs-once
+
+on:
+  push:
+    branches: [feature/1.7-integrated-t8]
+    paths:
+      - '.github/workflows/t8-docs-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Append T8 reviewer check protocol
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git reset --hard HEAD
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+
+          $reviewer = '.code-harness/agents/reviewer.md'
+          $reviewerText = [IO.File]::ReadAllText($reviewer)
+          if (-not $reviewerText.Contains('## 1.7 T8 Review Evidence + Completion Protocol')) {
+            $reviewerText += @'
+
+## 1.7 T8 Review Evidence + Completion Protocol
+
+Finding Review 必须同时提交 `finding-proposals.json` 与 `review-checks.json`，并通过 `codea-reviewer-submit` 的 FINDINGS v2 在**同一个 Reviewer Host invocation** 中原子提交。`review-checks.json` 对每个 Runtime READY 的 dispatched rule 都必须有且只有一条声明；即使该规则产生 0 个 Finding Proposal，也必须声明本次是否完成检查。
+
+每条 check 固定为：
+
+```json
+{"reviewUnitId":"<RU>","ruleId":"<rule>","status":"COMPLETED|INCOMPLETE","reason":"<reason>","sourceIds":[]}
+```
+
+- `COMPLETED` 表示 Reviewer 已实际完成该 READY rule 的检查，不等于“发现问题”。
+- `INCOMPLETE` 必须给出 reason，并使 Runtime ReviewContext 为 `PARTIAL`；最终只能 `MANUAL_ACTION_REQUIRED`，不得 PASSED。
+- Runtime 已标记 `BLOCKED` 的 rule 不能被 Reviewer 用 `COMPLETED` 恢复为可检查状态。
+- BUSINESS rule 声明 `COMPLETED` 时，`sourceIds[]` 必须包含本次实际读取的 RULES source；未读取业务规则源不得声称完成。
+
+T8 新 evidence 只允许引用 Runtime 当前 authority：
+
+```text
+CONTEXT_RELATION → relationId + verified current/base relation metadata
+BUSINESS_RULE    → sourceId + ruleId + sourceSha256
+```
+
+`CONTEXT_RELATION` 必须能回到 same-run verified RULES `review-context.json`，不得信任磁盘自报 relation。`BUSINESS_RULE` 必须绑定当前 `review-knowledge.json`、当前 RuleDispatch、当前 ReviewUnit，并同时具有真实代码 evidence；知识文档本身不得作为 Finding anchor。BASE relation 可以作为 before/after 对比 evidence，但不能单独证明 current behavior。
+
+Runtime 最终把 `ReviewContextSummary170 {status, blockedChecks}`、`knowledgeSha256`、`reviewChecksSha256` 写入 Certified Findings/Certificate，并在读取正式报告前重新验证当前 authority。`PARTIAL` 时已有 Certified Finding 仍必须保留展示，不能因为未完成检查而被吞掉。
+'@
+            [IO.File]::WriteAllText($reviewer, $reviewerText, $utf8)
+          }
+
+          $agents = '.code-harness/AGENTS.md'
+          $agentsText = [IO.File]::ReadAllText($agents)
+          if (-not $agentsText.Contains('## 1.7 T8 Reviewer Check Authority')) {
+            $agentsText += @'
+
+## 1.7 T8 Reviewer Check Authority
+
+FINDINGS 阶段的 Reviewer Host 必须使用 `codea-reviewer-submit` v2，同一 Host invocation 原子提交：
+
+```text
+requests/finding-proposals.json
+requests/review-checks.json
+requests/finding-reviewer-authority.json
+```
+
+Authority receipt 必须同时绑定 proposal/checks 的 path + sha256；ChangeAnalysis proposal 继续使用 v1，不得混用或降级 Findings v2。Runtime 只接受 same-run、same Reviewer Host invocation 的双 artifact attestation。
+
+`review-checks.json` 必须覆盖每个 Runtime READY dispatched rule。Reviewer `COMPLETED` 只证明执行了该检查；0 Finding 仍要有 COMPLETED check。Reviewer `INCOMPLETE` 或 Runtime BLOCKED 都使 ReviewContext 为 PARTIAL，并强制 `MANUAL_ACTION_REQUIRED`；不得由 Agent 把 BLOCKED 改写成 COMPLETED。
+
+业务规则 check 的 `sourceIds[]` 必须证明 RULES source 已实际读取；BUSINESS_RULE evidence 必须绑定当前 knowledge source/rule/digest、当前 RuleDispatch/ReviewUnit 和真实代码 evidence，knowledge 文档不能作为 Finding anchor。CONTEXT_RELATION evidence 必须来自 same-run verified RULES context；磁盘自报 relation 不构成 authority。
+
+Certified Findings/Certificate 必须绑定 `knowledgeSha256` 与 `reviewChecksSha256`，消费时重新验证当前 knowledge/check bytes 与上游 Runtime authority。ReviewContext=PARTIAL 不得 PASSED，且已经认证的 findings 仍必须保留在最终报告。
+'@
+            [IO.File]::WriteAllText($agents, $agentsText, $utf8)
+          }
+
+          $skill = '.code-harness/skills/review-code/SKILL.md'
+          $skillText = [IO.File]::ReadAllText($skill)
+          if (-not $skillText.Contains('## 1.7 T8 Evidence 与 Review Check 输出')) {
+            $skillText += @'
+
+## 1.7 T8 Evidence 与 Review Check 输出
+
+本 Skill 的 FINDINGS 输出不是只有 Proposal。Reviewer 必须为每个 Runtime READY dispatched rule 同步形成一条 `review-checks.json` 声明，并与 `finding-proposals.json` 一起交给 `codea-reviewer-submit` v2；不得分两次 Host invocation 提交，也不得沿用 Findings v1 receipt。
+
+```text
+COMPLETED  = 已实际检查该 READY rule；允许 0 个 Proposal
+INCOMPLETE = 检查无法完整完成，reason 必填，最终 PARTIAL
+```
+
+Runtime BLOCKED 的 rule 不允许 Reviewer 声明 COMPLETED。业务规则只有在实际读取对应 RULES source 后才可 COMPLETED，且 `sourceIds[]` 必须包含该 sourceId。
+
+T8 evidence：
+
+- `CONTEXT_RELATION`：必须引用 same-run Runtime verified RULES context 的 `relationId`；BASE relation只能用于对比，不能单独证明 current behavior。
+- `BUSINESS_RULE`：必须给出 `sourceId / ruleId / sourceSha256`，绑定当前 `review-knowledge.json` 与当前 dispatch，并同时提供 `CHANGED_RANGE`、`SYMBOL`、`SOURCE_RANGE`、`RESOURCE_RELATION`、`CHAIN` 或 current `CONTEXT_RELATION` 等真实代码 evidence。业务知识文档不得成为 Finding anchor。
+
+ReviewContext 为 PARTIAL 时不得输出 PASSED。已有通过 Runtime certification 的 findings 仍要保留给最终报告，未完成检查通过 `blockedChecks` 单独展示。
+'@
+            [IO.File]::WriteAllText($skill, $skillText, $utf8)
+          }
+
+          git add -- $reviewer $agents $skill
+          if ((git diff --cached --name-only).Count -eq 0) { Write-Output 'TASK170_T8_DOCS_NO_CHANGES'; exit 0 }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs(review): document task 8 evidence and completion protocol'
+          git push origin HEAD:feature/1.7-integrated-t8
