@@ -36,12 +36,9 @@ func task153Task6RequireContains(t *testing.T, text string, required ...string) 
 }
 
 func Test153Task6ControllerCompletenessReleaseContract(t *testing.T) {
-	workflow := task153Task6Read(t, ".github/workflows/task153-chain-reliability.yml")
+	// The standalone Task153 workflow was retired. Keep the retained script
+	// contract; fresh full Go tests and vet run in runtime-regression-windows-x64.yml.
 	script := task153Task6Read(t, ".github/scripts/task153-real-review-chain-regression.ps1")
-	task153Task6RequireContains(t, workflow,
-		"runs-on: windows-latest",
-		"Task 1 Controller EntryPoint completeness gate",
-	)
 	task153Task6RequireContains(t, script,
 		"CONTROLLER_ENTRYPOINTS 3/3",
 		"INCOMPLETE_DRAFT_REJECTED",
