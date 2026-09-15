@@ -2,7 +2,9 @@ package finding
 
 import (
 	"codea-harness-tools/internal/analysis"
+	"codea-harness-tools/internal/knowledge"
 	"codea-harness-tools/internal/nav"
+	"codea-harness-tools/internal/reviewcontext"
 	"codea-harness-tools/internal/reviewrules"
 	"codea-harness-tools/internal/reviewunit"
 )
@@ -24,11 +26,17 @@ type Anchor struct {
 }
 
 type EvidenceRef struct {
-	Kind      string `json:"kind"`
-	Value     string `json:"value,omitempty"`
-	Path      string `json:"path,omitempty"`
-	StartLine int    `json:"startLine,omitempty"`
-	EndLine   int    `json:"endLine,omitempty"`
+	Kind         string `json:"kind"`
+	Value        string `json:"value,omitempty"`
+	Path         string `json:"path,omitempty"`
+	StartLine    int    `json:"startLine,omitempty"`
+	EndLine      int    `json:"endLine,omitempty"`
+	RelationID   string `json:"relationId,omitempty"`
+	Workspace    string `json:"workspace,omitempty"`
+	SourceSide   string `json:"sourceSide,omitempty"`
+	SourceID     string `json:"sourceId,omitempty"`
+	RuleID       string `json:"ruleId,omitempty"`
+	SourceSHA256 string `json:"sourceSha256,omitempty"`
 }
 
 type Proposal struct {
@@ -54,10 +62,12 @@ type VerifiedProposal struct {
 }
 
 type VerifyContext struct {
-	trusted      bool
-	repoRoot     string
-	analysis     analysis.ChangeAnalysis
-	units        reviewunit.Manifest
-	dispatch     reviewrules.Manifest
-	symbolRanges map[string]nav.SymbolInfo
+	trusted          bool
+	repoRoot         string
+	analysis         analysis.ChangeAnalysis
+	units            reviewunit.Manifest
+	dispatch         reviewrules.Manifest
+	symbolRanges     map[string]nav.SymbolInfo
+	reviewContext170 *reviewcontext.Context170
+	knowledge170     *knowledge.Manifest170
 }

@@ -16,6 +16,9 @@ func verifyEvidence160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewr
 	if err != nil {
 		return nil, "", err
 	}
+	if err := validateRelationDispatch170(ctx, unit, dispatch.RuleID, verified); err != nil {
+		return nil, "", err
+	}
 	kinds := map[string]bool{}
 	for _, v := range verified {
 		kind := strings.ToUpper(strings.TrimSpace(v.Kind))
@@ -26,6 +29,9 @@ func verifyEvidence160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewr
 		if kind != "" && !kinds[kind] {
 			return nil, "", findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "rule %s requires %s evidence", dispatch.RuleID, kind)
 		}
+	}
+	if strings.HasPrefix(strings.TrimSpace(dispatch.RuleID), "BUSINESS:") && !hasBusinessCodeEvidence170(verified) {
+		return nil, "", findingError160("BUSINESS_RULE_CODE_EVIDENCE_REQUIRED", "business rule finding requires verified code evidence")
 	}
 	data, err := json.Marshal(verified)
 	if err != nil {
@@ -63,6 +69,20 @@ func verifyEvidenceRef160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceR
 	v := ref
 	v.Kind = strings.ToUpper(strings.TrimSpace(ref.Kind))
 	v.Value = strings.TrimSpace(ref.Value)
+	v.RelationID = strings.TrimSpace(ref.RelationID)
+	v.Workspace = strings.TrimSpace(ref.Workspace)
+	v.SourceSide = strings.ToUpper(strings.TrimSpace(ref.SourceSide))
+	v.SourceID = strings.TrimSpace(ref.SourceID)
+	v.RuleID = strings.TrimSpace(ref.RuleID)
+	v.SourceSHA256 = strings.TrimSpace(ref.SourceSHA256)
+
+	if v.Kind != "CONTEXT_RELATION" && (v.RelationID != "" || v.Workspace != "" || v.SourceSide != "") {
+		return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "relation metadata is only valid for CONTEXT_RELATION")
+	}
+	if v.Kind != "BUSINESS_RULE" && (v.SourceID != "" || v.RuleID != "" || v.SourceSHA256 != "") {
+		return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "business metadata is only valid for BUSINESS_RULE")
+	}
+
 	if ref.Path != "" {
 		p, ok := safeFindingPath160(ref.Path)
 		if !ok {
@@ -112,6 +132,10 @@ func verifyEvidenceRef160(ctx VerifyContext, unit reviewunit.Unit, ref EvidenceR
 		if v.Path == "" || !resourceRelationVerified160(ctx, unit, v) {
 			return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "resource relation is not verified")
 		}
+	case "CONTEXT_RELATION":
+		return verifyContextRelationEvidence170(ctx, unit, v)
+	case "BUSINESS_RULE":
+		return verifyBusinessRuleEvidence170(ctx, unit, v)
 	default:
 		return EvidenceRef{}, findingError160("FINDING_EVIDENCE_NOT_VERIFIED", "unsupported evidence kind %q", v.Kind)
 	}

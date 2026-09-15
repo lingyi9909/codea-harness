@@ -25,15 +25,18 @@ type CertifiedFinding struct {
 }
 
 type CertifiedSet struct {
-	RunID                  string             `json:"runId"`
-	HarnessVersion         string             `json:"harnessVersion"`
-	ChangeSetSHA256        string             `json:"changeSetSha256"`
-	ChangeAnalysisSHA256   string             `json:"changeAnalysisSha256"`
-	ReviewUnitsSHA256      string             `json:"reviewUnitsSha256"`
-	RuleDispatchSHA256     string             `json:"ruleDispatchSha256"`
-	FindingProposalsSHA256 string             `json:"findingProposalsSha256"`
-	Findings               []CertifiedFinding `json:"findings"`
-	SHA256                 string             `json:"sha256"`
+	RunID                  string                   `json:"runId"`
+	HarnessVersion         string                   `json:"harnessVersion"`
+	ChangeSetSHA256        string                   `json:"changeSetSha256"`
+	ChangeAnalysisSHA256   string                   `json:"changeAnalysisSha256"`
+	ReviewUnitsSHA256      string                   `json:"reviewUnitsSha256"`
+	RuleDispatchSHA256     string                   `json:"ruleDispatchSha256"`
+	FindingProposalsSHA256 string                   `json:"findingProposalsSha256"`
+	KnowledgeSHA256        string                   `json:"knowledgeSha256,omitempty"`
+	ReviewChecksSHA256     string                   `json:"reviewChecksSha256,omitempty"`
+	ReviewContext          *ReviewContextSummary170 `json:"reviewContext,omitempty"`
+	Findings               []CertifiedFinding       `json:"findings"`
+	SHA256                 string                   `json:"sha256"`
 }
 
 type Certificate struct {
@@ -44,6 +47,8 @@ type Certificate struct {
 	ReviewUnitsSHA256       string `json:"reviewUnitsSha256"`
 	RuleDispatchSHA256      string `json:"ruleDispatchSha256"`
 	FindingProposalsSHA256  string `json:"findingProposalsSha256"`
+	KnowledgeSHA256         string `json:"knowledgeSha256,omitempty"`
+	ReviewChecksSHA256      string `json:"reviewChecksSha256,omitempty"`
 	Mode                    string `json:"mode"`
 	ScopeSHA256             string `json:"scopeSha256,omitempty"`
 }
@@ -63,6 +68,9 @@ type CertifyContext struct {
 	ReviewUnitsSHA256      string
 	RuleDispatchSHA256     string
 	FindingProposalsSHA256 string
+	KnowledgeSHA256        string
+	ReviewChecksSHA256     string
+	ReviewContext          *ReviewContextSummary170
 	Mode                   string
 	ScopeSHA256            string
 }
@@ -76,6 +84,12 @@ func Certify(ctx CertifyContext, proposals []Proposal) (CertifiedSet, Certificat
 	}
 	if !validSHA160(ctx.ChangeSetSHA256) || !validSHA160(ctx.ChangeAnalysisSHA256) || !validSHA160(ctx.ReviewUnitsSHA256) || !validSHA160(ctx.RuleDispatchSHA256) || !validSHA160(ctx.FindingProposalsSHA256) {
 		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_CONTEXT_INVALID", "authority hashes must be lowercase sha256")
+	}
+	if ctx.KnowledgeSHA256 != "" && !validSHA160(ctx.KnowledgeSHA256) {
+		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_CONTEXT_INVALID", "knowledgeSha256 must be lowercase sha256")
+	}
+	if ctx.ReviewChecksSHA256 != "" && !validSHA160(ctx.ReviewChecksSHA256) {
+		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_CONTEXT_INVALID", "reviewChecksSha256 must be lowercase sha256")
 	}
 	mode := strings.ToUpper(strings.TrimSpace(ctx.Mode))
 	if mode != "FULL" && mode != "TARGETED" {
@@ -101,13 +115,29 @@ func Certify(ctx CertifyContext, proposals []Proposal) (CertifiedSet, Certificat
 		verified = append(verified, result)
 	}
 	sort.Slice(rejections, func(i, j int) bool { return rejections[i].ProposalID < rejections[j].ProposalID })
-	set := CertifiedSet{RunID: ctx.RunID, HarnessVersion: strings.TrimSpace(ctx.HarnessVersion), ChangeSetSHA256: ctx.ChangeSetSHA256, ChangeAnalysisSHA256: ctx.ChangeAnalysisSHA256, ReviewUnitsSHA256: ctx.ReviewUnitsSHA256, RuleDispatchSHA256: ctx.RuleDispatchSHA256, FindingProposalsSHA256: ctx.FindingProposalsSHA256, Findings: dedupVerified160(verified)}
+	set := CertifiedSet{
+		RunID: ctx.RunID, HarnessVersion: strings.TrimSpace(ctx.HarnessVersion), ChangeSetSHA256: ctx.ChangeSetSHA256,
+		ChangeAnalysisSHA256: ctx.ChangeAnalysisSHA256, ReviewUnitsSHA256: ctx.ReviewUnitsSHA256,
+		RuleDispatchSHA256: ctx.RuleDispatchSHA256, FindingProposalsSHA256: ctx.FindingProposalsSHA256,
+		KnowledgeSHA256: strings.TrimSpace(ctx.KnowledgeSHA256), ReviewChecksSHA256: strings.TrimSpace(ctx.ReviewChecksSHA256),
+		ReviewContext: ctx.ReviewContext, Findings: dedupVerified160(verified),
+	}
 	unsigned, err := canonicalCertifiedSet160(set, false)
-	if err != nil { return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_ENCODE_FAILED", "%v", err) }
+	if err != nil {
+		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_ENCODE_FAILED", "%v", err)
+	}
 	set.SHA256 = hashFindingBytes160(unsigned)
 	setBytes, err := canonicalCertifiedSet160(set, true)
-	if err != nil { return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_ENCODE_FAILED", "%v", err) }
-	cert := Certificate{RunID: ctx.RunID, CertifiedFindingsSHA256: hashFindingBytes160(setBytes), ChangeSetSHA256: ctx.ChangeSetSHA256, ChangeAnalysisSHA256: ctx.ChangeAnalysisSHA256, ReviewUnitsSHA256: ctx.ReviewUnitsSHA256, RuleDispatchSHA256: ctx.RuleDispatchSHA256, FindingProposalsSHA256: ctx.FindingProposalsSHA256, Mode: mode, ScopeSHA256: strings.TrimSpace(ctx.ScopeSHA256)}
+	if err != nil {
+		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_ENCODE_FAILED", "%v", err)
+	}
+	cert := Certificate{
+		RunID: ctx.RunID, CertifiedFindingsSHA256: hashFindingBytes160(setBytes), ChangeSetSHA256: ctx.ChangeSetSHA256,
+		ChangeAnalysisSHA256: ctx.ChangeAnalysisSHA256, ReviewUnitsSHA256: ctx.ReviewUnitsSHA256,
+		RuleDispatchSHA256: ctx.RuleDispatchSHA256, FindingProposalsSHA256: ctx.FindingProposalsSHA256,
+		KnowledgeSHA256: strings.TrimSpace(ctx.KnowledgeSHA256), ReviewChecksSHA256: strings.TrimSpace(ctx.ReviewChecksSHA256),
+		Mode: mode, ScopeSHA256: strings.TrimSpace(ctx.ScopeSHA256),
+	}
 	if cert.ScopeSHA256 != "" && !validSHA160(cert.ScopeSHA256) {
 		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_CONTEXT_INVALID", "scopeSha256 must be lowercase sha256")
 	}
@@ -116,32 +146,51 @@ func Certify(ctx CertifyContext, proposals []Proposal) (CertifiedSet, Certificat
 
 func canonicalCertifiedSet160(set CertifiedSet, includeSHA bool) ([]byte, error) {
 	candidate := set
-	if !includeSHA { candidate.SHA256 = "" }
-	if candidate.Findings == nil { candidate.Findings = []CertifiedFinding{} }
+	if !includeSHA {
+		candidate.SHA256 = ""
+	}
+	if candidate.Findings == nil {
+		candidate.Findings = []CertifiedFinding{}
+	}
+	if candidate.ReviewContext != nil && candidate.ReviewContext.BlockedChecks == nil {
+		candidate.ReviewContext.BlockedChecks = []BlockedCheck170{}
+	}
 	data, err := json.MarshalIndent(candidate, "", "  ")
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return append(data, '\n'), nil
 }
 
 func canonicalCertificate160(cert Certificate) ([]byte, error) {
 	data, err := json.MarshalIndent(cert, "", "  ")
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return append(data, '\n'), nil
 }
 
 func hashFindingBytes160(data []byte) string { return fmt.Sprintf("%x", sha256.Sum256(data)) }
 
 func validSHA160(value string) bool {
-	if len(value) != 64 { return false }
+	if len(value) != 64 {
+		return false
+	}
 	for _, ch := range value {
-		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') { return false }
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			return false
+		}
 	}
 	return true
 }
 
 func findingCode160(err error) string {
-	if err == nil { return "" }
+	if err == nil {
+		return ""
+	}
 	text := err.Error()
-	if idx := strings.IndexByte(text, ':'); idx > 0 { return strings.TrimSpace(text[:idx]) }
+	if idx := strings.IndexByte(text, ':'); idx > 0 {
+		return strings.TrimSpace(text[:idx])
+	}
 	return "FINDING_REJECTED"
 }
