@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"codea-harness-tools/internal/schema"
@@ -16,11 +17,45 @@ func WriteCertified(repoRoot string, set CertifiedSet, cert Certificate) error {
 	if !findingRunID160.MatchString(set.RunID) || set.RunID != cert.RunID {
 		return findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "set/certificate runId mismatch")
 	}
-	if set.ChangeSetSHA256 != cert.ChangeSetSHA256 || set.ChangeAnalysisSHA256 != cert.ChangeAnalysisSHA256 || set.ReviewUnitsSHA256 != cert.ReviewUnitsSHA256 || set.RuleDispatchSHA256 != cert.RuleDispatchSHA256 || set.FindingProposalsSHA256 != cert.FindingProposalsSHA256 {
+	if set.ChangeSetSHA256 != cert.ChangeSetSHA256 || set.ChangeAnalysisSHA256 != cert.ChangeAnalysisSHA256 || set.ReviewUnitsSHA256 != cert.ReviewUnitsSHA256 || set.RuleDispatchSHA256 != cert.RuleDispatchSHA256 || set.FindingProposalsSHA256 != cert.FindingProposalsSHA256 || set.KnowledgeSHA256 != cert.KnowledgeSHA256 || set.ReviewChecksSHA256 != cert.ReviewChecksSHA256 {
 		return findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "certificate authority hashes do not match Certified Findings")
 	}
 	if strings.TrimSpace(set.HarnessVersion) == "" || !validSHA160(set.ChangeSetSHA256) || !validSHA160(set.ChangeAnalysisSHA256) || !validSHA160(set.ReviewUnitsSHA256) || !validSHA160(set.RuleDispatchSHA256) || !validSHA160(set.FindingProposalsSHA256) {
 		return findingError160("CERTIFIED_FINDINGS_INVALID", "invalid Certified Findings identity")
+	}
+	is170 := strings.HasPrefix(strings.TrimSpace(set.HarnessVersion), "1.7")
+	if is170 {
+		if !validSHA160(set.KnowledgeSHA256) || !validSHA160(set.ReviewChecksSHA256) || set.ReviewContext == nil {
+			return findingError160("CERTIFIED_FINDINGS_INVALID", "1.7 Certified Findings require knowledge/checks hashes and reviewContext")
+		}
+		if err := validateReviewContextSummary170(set.ReviewContext); err != nil {
+			return err
+		}
+		authority, err := LoadVerifyContext(root, set.RunID, "")
+		if err != nil {
+			return findingError160("CERTIFIED_FINDINGS_STALE", "upstream Runtime authority stale before publish: %v", err)
+		}
+		fresh, err := prepareCertifyContext170(CertifyContext{
+			Verify:                 authority,
+			RunID:                  set.RunID,
+			HarnessVersion:         set.HarnessVersion,
+			ChangeSetSHA256:        set.ChangeSetSHA256,
+			ChangeAnalysisSHA256:   set.ChangeAnalysisSHA256,
+			ReviewUnitsSHA256:      set.ReviewUnitsSHA256,
+			RuleDispatchSHA256:     set.RuleDispatchSHA256,
+			FindingProposalsSHA256: set.FindingProposalsSHA256,
+			KnowledgeSHA256:        set.KnowledgeSHA256,
+			ReviewChecksSHA256:     set.ReviewChecksSHA256,
+			ReviewContext:          set.ReviewContext,
+			Mode:                   cert.Mode,
+			ScopeSHA256:            cert.ScopeSHA256,
+		})
+		if err != nil {
+			return findingError160("CERTIFIED_FINDINGS_STALE", "1.7 authority changed before publish: %v", err)
+		}
+		if fresh.KnowledgeSHA256 != set.KnowledgeSHA256 || fresh.ReviewChecksSHA256 != set.ReviewChecksSHA256 || !reflect.DeepEqual(fresh.ReviewContext, set.ReviewContext) {
+			return findingError160("CERTIFIED_FINDINGS_STALE", "1.7 review authority differs before publish")
+		}
 	}
 	mode := strings.ToUpper(strings.TrimSpace(cert.Mode))
 	if mode != "FULL" && mode != "TARGETED" {
@@ -68,7 +103,6 @@ func WriteCertified(repoRoot string, set CertifiedSet, cert Certificate) error {
 	if err := atomicFindingWrite160(filepath.Join(analysisDir, "certified-findings.json"), setBytes); err != nil {
 		return err
 	}
-	// Publish certificate last so a consumer never sees a new certificate before its set.
 	if err := atomicFindingWrite160(filepath.Join(analysisDir, "certified-findings.cert.json"), certBytes); err != nil {
 		return err
 	}
@@ -126,8 +160,17 @@ func LoadCertifiedWithCertificate(repoRoot, runID string) (CertifiedSet, Certifi
 	if cert.RunID != runID || set.RunID != runID || cert.CertifiedFindingsSHA256 != hashFindingBytes160(setBytes) {
 		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "run/artifact identity mismatch")
 	}
-	if set.ChangeSetSHA256 != cert.ChangeSetSHA256 || set.ChangeAnalysisSHA256 != cert.ChangeAnalysisSHA256 || set.ReviewUnitsSHA256 != cert.ReviewUnitsSHA256 || set.RuleDispatchSHA256 != cert.RuleDispatchSHA256 || set.FindingProposalsSHA256 != cert.FindingProposalsSHA256 {
+	if set.ChangeSetSHA256 != cert.ChangeSetSHA256 || set.ChangeAnalysisSHA256 != cert.ChangeAnalysisSHA256 || set.ReviewUnitsSHA256 != cert.ReviewUnitsSHA256 || set.RuleDispatchSHA256 != cert.RuleDispatchSHA256 || set.FindingProposalsSHA256 != cert.FindingProposalsSHA256 || set.KnowledgeSHA256 != cert.KnowledgeSHA256 || set.ReviewChecksSHA256 != cert.ReviewChecksSHA256 {
 		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "certificate authority hashes differ from set")
+	}
+	is170 := strings.HasPrefix(strings.TrimSpace(set.HarnessVersion), "1.7")
+	if is170 {
+		if !validSHA160(set.KnowledgeSHA256) || !validSHA160(set.ReviewChecksSHA256) || set.ReviewContext == nil {
+			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_IDENTITY_MISMATCH", "1.7 review authority fields are missing")
+		}
+		if err := validateReviewContextSummary170(set.ReviewContext); err != nil {
+			return CertifiedSet{}, Certificate{}, err
+		}
 	}
 	current := []struct {
 		name string
@@ -139,19 +182,23 @@ func LoadCertifiedWithCertificate(repoRoot, runID string) (CertifiedSet, Certifi
 		{"RULE_DISPATCH", filepath.Join(analysisDir, "rule-dispatch.json"), cert.RuleDispatchSHA256},
 		{"FINDING_PROPOSALS", filepath.Join(root, ".code-harness", "runs", runID, "requests", "finding-proposals.json"), cert.FindingProposalsSHA256},
 	}
-	for _, authority := range current {
-		data, err := os.ReadFile(authority.path)
+	if is170 {
+		current = append(current, struct {
+			name string
+			path string
+			want string
+		}{"REVIEW_CHECKS", filepath.Join(root, ".code-harness", "runs", runID, "requests", "review-checks.json"), cert.ReviewChecksSHA256})
+	}
+	for _, authorityFile := range current {
+		data, err := os.ReadFile(authorityFile.path)
 		if err != nil {
-			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "CHANGED_%s_HASH_MISMATCH: read authority: %v", authority.name, err)
+			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "CHANGED_%s_HASH_MISMATCH: read authority: %v", authorityFile.name, err)
 		}
-		if hashFindingBytes160(data) != authority.want {
-			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "CHANGED_%s_HASH_MISMATCH: authority bytes changed", authority.name)
+		if hashFindingBytes160(data) != authorityFile.want {
+			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "CHANGED_%s_HASH_MISMATCH: authority bytes changed", authorityFile.name)
 		}
 	}
 
-	// Re-enter the existing Runtime authority instead of trusting unchanged run artifacts.
-	// This revalidates Certified ChangeAnalysis against the current Working Tree/Change Set,
-	// ReviewUnit/ReviewScope identity, current Runtime VERSION, and current RuleDispatch/catalog.
 	authority, err := LoadVerifyContext(root, runID, "")
 	if err != nil {
 		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "upstream Runtime authority stale: %v", err)
@@ -163,7 +210,49 @@ func LoadCertifiedWithCertificate(repoRoot, runID string) (CertifiedSet, Certifi
 	if authority.units.ReviewScopeSHA256 != strings.TrimSpace(cert.ScopeSHA256) {
 		return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "Runtime ReviewScope identity differs from certificate")
 	}
+	if is170 {
+		fresh, err := prepareCertifyContext170(CertifyContext{
+			Verify:                 authority,
+			RunID:                  runID,
+			HarnessVersion:         set.HarnessVersion,
+			ChangeSetSHA256:        set.ChangeSetSHA256,
+			ChangeAnalysisSHA256:   set.ChangeAnalysisSHA256,
+			ReviewUnitsSHA256:      set.ReviewUnitsSHA256,
+			RuleDispatchSHA256:     set.RuleDispatchSHA256,
+			FindingProposalsSHA256: set.FindingProposalsSHA256,
+			KnowledgeSHA256:        set.KnowledgeSHA256,
+			ReviewChecksSHA256:     set.ReviewChecksSHA256,
+			ReviewContext:          set.ReviewContext,
+			Mode:                   cert.Mode,
+			ScopeSHA256:            cert.ScopeSHA256,
+		})
+		if err != nil {
+			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "1.7 Runtime authority stale: %v", err)
+		}
+		if fresh.KnowledgeSHA256 != set.KnowledgeSHA256 || fresh.ReviewChecksSHA256 != set.ReviewChecksSHA256 || !reflect.DeepEqual(fresh.ReviewContext, set.ReviewContext) {
+			return CertifiedSet{}, Certificate{}, findingError160("CERTIFIED_FINDINGS_STALE", "1.7 review authority differs from certificate")
+		}
+	}
 	return set, cert, nil
+}
+
+func validateReviewContextSummary170(summary *ReviewContextSummary170) error {
+	if summary == nil {
+		return findingError160("CERTIFIED_FINDINGS_INVALID", "reviewContext is required")
+	}
+	switch summary.Status {
+	case "COMPLETE":
+		if len(summary.BlockedChecks) != 0 {
+			return findingError160("CERTIFIED_FINDINGS_INVALID", "COMPLETE reviewContext contains blocked checks")
+		}
+	case "PARTIAL":
+		if len(summary.BlockedChecks) == 0 {
+			return findingError160("CERTIFIED_FINDINGS_INVALID", "PARTIAL reviewContext requires blocked checks")
+		}
+	default:
+		return findingError160("CERTIFIED_FINDINGS_INVALID", "invalid reviewContext status %q", summary.Status)
+	}
+	return nil
 }
 
 func validateFindingArtifactSchema160(root, name string, data []byte) error {

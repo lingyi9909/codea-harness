@@ -27,19 +27,18 @@ type ReviewContextSummary170 struct {
 
 func ValidateCheckResults170(ctx VerifyContext, checks []CheckResult170) (ReviewContextSummary170, error) {
 	dispatched := map[string]bool{}
-	required := map[string]bool{}
 	for _, d := range ctx.dispatch.Dispatches {
-		key := d.ReviewUnitID + "\x00" + d.RuleID
-		dispatched[key] = true
-		required[key] = true
+		dispatched[d.ReviewUnitID+"\x00"+d.RuleID] = true
 	}
 
+	required := map[string]bool{}
 	blocked := map[string]BlockedCheck170{}
 	if ctx.reviewContext170 != nil {
 		for _, check := range ctx.reviewContext170.Checks {
 			key := check.ReviewUnitID + "\x00" + check.RuleID
-			if check.Status == "BLOCKED" {
-				delete(required, key)
+			if check.Status == "READY" {
+				required[key] = true
+			} else if check.Status == "BLOCKED" {
 				blocked[key] = BlockedCheck170{ReviewUnitID: check.ReviewUnitID, RuleID: check.RuleID, Reasons: blockedReason170("RUNTIME_BLOCKED", check.Reasons)}
 			}
 		}
@@ -47,10 +46,19 @@ func ValidateCheckResults170(ctx VerifyContext, checks []CheckResult170) (Review
 	if ctx.knowledge170 != nil {
 		for _, check := range ctx.knowledge170.Checks {
 			key := check.ReviewUnitID + "\x00" + check.RuleKey
-			if check.Status == "BLOCKED" {
-				delete(required, key)
+			if check.Status == "READY" {
+				required[key] = true
+			} else if check.Status == "BLOCKED" {
 				blocked[key] = BlockedCheck170{ReviewUnitID: check.ReviewUnitID, RuleID: check.RuleKey, Reasons: blockedReason170("KNOWLEDGE_BLOCKED", check.Reasons)}
 			}
+		}
+		switch ctx.knowledge170.Status {
+		case "INVALID", "PARTIAL":
+			reasons := append([]string(nil), ctx.knowledge170.Issues...)
+			if len(reasons) == 0 {
+				reasons = []string{"knowledge unavailable"}
+			}
+			blocked["RUNTIME\x00BUSINESS_KNOWLEDGE"] = BlockedCheck170{ReviewUnitID: "RUNTIME", RuleID: "BUSINESS_KNOWLEDGE", Reasons: blockedReason170("KNOWLEDGE_UNAVAILABLE", reasons)}
 		}
 	}
 
@@ -67,9 +75,6 @@ func ValidateCheckResults170(ctx VerifyContext, checks []CheckResult170) (Review
 		seen[key] = true
 		if !dispatched[key] {
 			return ReviewContextSummary170{}, fmt.Errorf("REVIEW_CHECK_NOT_DISPATCHED: %s/%s", result.ReviewUnitID, result.RuleID)
-		}
-		if _, runtimeBlocked := blocked[key]; runtimeBlocked {
-			continue
 		}
 		if result.Status != "COMPLETED" && result.Status != "INCOMPLETE" {
 			return ReviewContextSummary170{}, fmt.Errorf("REVIEW_CHECK_INVALID_STATUS: %s", result.Status)
