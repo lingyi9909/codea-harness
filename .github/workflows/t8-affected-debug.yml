@@ -1,0 +1,82 @@
+name: t8-affected-debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.7-integrated-t8]
+    paths:
+      - '.github/workflows/t8-affected-debug.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  affected-package:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: finding
+            package: ./internal/finding
+          - id: report
+            package: ./internal/report
+          - id: schema
+            package: ./internal/schema
+          - id: reviewrules
+            package: ./internal/reviewrules
+          - id: reviewauthority
+            package: ./internal/reviewauthority
+          - id: dcep-tools
+            package: ./cmd/codea-dcep-tools
+    name: affected-${{ matrix.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.10'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap locked modules
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local }
+        run: go mod download
+      - name: Download accepted 1.6.4.final release candidate
+        if: matrix.id == 'finding' || matrix.id == 'dcep-tools'
+        uses: actions/download-artifact@v4
+        with:
+          name: codea-harness-1.6.4-release-candidate-439d9618591657b80d4670f1d9f3b5909d378447
+          path: ${{ runner.temp }}/task170-accepted-rc
+          github-token: ${{ github.token }}
+          repository: lingyi9909/codea-harness
+          run-id: 34561342970
+      - name: Provision approved pinned ast-grep
+        if: matrix.id == 'finding' || matrix.id == 'dcep-tools'
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'task170-approved-install'
+          Expand-Archive -Path (Join-Path $env:RUNNER_TEMP 'task170-accepted-rc/codea-harness-1.6.4-windows-x64-install.zip') -DestinationPath $stage -Force
+          $source = Join-Path $stage '.code-harness/bin/ast-grep.exe'
+          $actualHash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne '61bb00d4dbac70f9c61748bf48431f6d42d557e321fc02839c7192eb237d11e4') { throw 'pinned ast-grep hash changed' }
+          $target = Join-Path $env:GITHUB_WORKSPACE '.code-harness/bin/ast-grep.exe'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+          Copy-Item -LiteralPath $source -Destination $target -Force
+          "CODEA_AST_GREP=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Run affected package
+        id: affected
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: |
+          go test ${{ matrix.package }} -count=1 2>&1 | Tee-Object -FilePath "t8-affected-${{ matrix.id }}.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload package log
+        if: always() && steps.affected.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: t8-affected-${{ matrix.id }}
+          path: .code-harness/tools-runtime/t8-affected-${{ matrix.id }}.log
+          if-no-files-found: error
