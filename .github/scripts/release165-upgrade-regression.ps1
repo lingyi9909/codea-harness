@@ -39,7 +39,10 @@ try {
     $target = Join-Path $project '.code-harness'
     $oldManifest = Get-Content (Join-Path $target 'RELEASE-MANIFEST.json') -Raw | ConvertFrom-Json
     if ([string]$oldManifest.version -cne '1.6.4' -or [string]$oldManifest.buildCommit -cne $oldHead) { throw 'baseline manifest mismatch' }
-    Copy-Item (Join-Path $target 'harness.template.yaml') (Join-Path $target 'harness.yaml')
+    # A configured business project supplies its review base; the raw template
+    # deliberately leaves it empty until initialization.
+    $config = (Get-Content (Join-Path $target 'harness.template.yaml') -Raw).Replace('baseRef: ""', 'baseRef: origin/main')
+    Write-File (Join-Path $target 'harness.yaml') $config
     foreach ($rel in @('project.md','database.yaml','chains/user.yaml','runs/previous/review.md','tools/user-note.txt')) {
         Write-File (Join-Path $target $rel) "user sentinel $rel`n"
     }
