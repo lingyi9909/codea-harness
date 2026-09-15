@@ -58,7 +58,10 @@ func Load170(in LoadInput170) (LoadResult170, error) {
 		if pi != pj {
 			return pi < pj
 		}
-		return ordered[i].source.ID < ordered[j].source.ID
+		if pi < 2 {
+			return ordered[i].source.ID < ordered[j].source.ID
+		}
+		return false
 	})
 
 	records := make([]SourceRecord170, len(in.Binding.Sources))
@@ -193,7 +196,6 @@ func Load170(in LoadInput170) (LoadResult170, error) {
 		}
 	}
 	sortManifest170(&result.Manifest)
-	sort.Slice(result.Documents, func(i, j int) bool { return result.Documents[i].SourceID < result.Documents[j].SourceID })
 	return result, nil
 }
 
@@ -204,10 +206,7 @@ func sourcePriority170(source Source170) int {
 	if source.Required {
 		return 1
 	}
-	if source.Kind == "REFERENCE" {
-		return 2
-	}
-	return 3
+	return 2
 }
 
 func sourceRoot170(repoRoot, teamRoot, root string) (string, error) {
