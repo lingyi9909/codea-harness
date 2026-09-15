@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.5 - 2026-09-15
+
+- **Review report repair**：非空 Certified Findings 正常进入 Runtime 报告渲染；JSON 数字等价表示（如 `1.0` 与 `1`）不会误伤 submission attestation。
+- **Windows Reviewer invocation**：接受 opaque OpenCode session identity，以原生进程安全传参执行 session export。
+- **Call-chain selection**：按实际调用链分支生成选项，Controller 多链入口进入人工选择流程，仅评审选中子集。真实用户 Host turn 的不可伪造绑定仍为已知待修项，不宣称门禁完全不可绕过。
+- **1.6.4 → 1.6.5 offline upgrade**：通过正常版本递增交付修复。Reviewer Host 三份资源按 manifest 哈希验证并参与同一升级/回滚事务；用户修改冲突在写入前停止，业务配置、chains 和历史 runs 保留。
+- **Windows release evidence**：正式包验证真实 1.6.4 已发布制品到 1.6.5 的升级、完整 Runtime regression 和 go vet，随包提供 exact HEAD、SHA256 与验收清单。
+
 ## 1.6.4 - 2026-09-09
 
 - **Batch Entrypoint Inventory**：`analysis certify` 的 Current/Base Controller EntryPoint 扫描改为 snapshot-bounded batch AST execution，Entrypoint AST 子进程固定为最多 4 个；Base source 改为单次 `git cat-file --batch`，禁止 per-file `merge-base` / `git show` 回退，同时保持既有 Controller/endpoint semantic authority、stable ordering 与 completeness fail-closed。

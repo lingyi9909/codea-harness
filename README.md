@@ -56,10 +56,10 @@ Release ZIP = 可安装/可升级产品
 
 ## 首次安装
 
-1.6.4 首次安装必须使用正式 Release 产物：
+1.6.5 首次安装必须使用正式 Release 产物：
 
 ```text
-codea-harness-1.6.4-windows-x64-install.zip
+codea-harness-1.6.5-windows-x64-install.zip
 ```
 
 > ⚠ **不要使用 GitHub Source ZIP / `Code → Download ZIP` / `git clone` 目录替代 Release package。** Source 不含正式 Windows Runtime，也不是可安装产品。
@@ -125,7 +125,7 @@ INSTALL_EXISTING_OPENCODE_CONFLICT
 使用：
 
 ```text
-codea-harness-1.5.0-windows-x64-upgrade.zip
+codea-harness-1.6.5-windows-x64-upgrade.zip
 ```
 
 解压后顶层直接得到 `.code-harness-upgrade/`。升级入口固定为：
@@ -444,3 +444,13 @@ go vet ./...
 ```
 
 Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 1.5 Chain/Review/Apply/Upgrade suites、全量 Go test/vet、真实 ast-grep Navigation smoke、正式 install/upgrade ZIP layout、Manifest、**真实 accepted 1.4.0 baseline → 1.5.0** live upgrade、`harness.yaml/project.md/database.yaml/runs/**/chains/**` preservation、stale framework removal、Runtime replacement、installed `chain validate` capability probe、source/stage/backup cleanup 和 artifact upload。
+
+### 1.6.4 用户升级到 1.6.5
+
+下载 `Release 1.6.5 - Windows x64` 成功构建的 `codea-harness-1.6.5-windows-x64-upgrade` 制品，解压到业务项目根目录，确保 `.code-harness-upgrade/` 与现有 `.code-harness/` 并列。在 OpenCode 中发送：
+
+```text
+读取 .code-harness-upgrade/upgrade.md，执行升级
+```
+
+结果必须为 `UPGRADED`，版本为 1.6.4 → 1.6.5。不要手改 VERSION 或重新初始化。1.6.3 用户先使用已认证的 1.6.4 升级包，再升级到 1.6.5。
