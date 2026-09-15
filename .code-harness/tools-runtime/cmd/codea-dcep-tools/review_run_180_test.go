@@ -1,0 +1,91 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func Test180ReviewStartCommandWritesIncompleteReport(t *testing.T) {
+	withTempProject(t)
+	if err := run([]string{"review", "start"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(".code-harness", "runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || !entries[0].IsDir() {
+		t.Fatalf("expected exactly one review run directory, got %+v", entries)
+	}
+	runID := entries[0].Name()
+	reportPath := filepath.Join(".code-harness", "runs", runID, "review.md")
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte("评审未完成")) {
+		t.Fatalf("missing incomplete report marker: %s", data)
+	}
+	if bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
+		t.Fatal("BOM")
+	}
+	if err := run([]string{"review", "status", "--run-id", runID}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func Test180ReviewCancelCommandKeepsSameReport(t *testing.T) {
+	withTempProject(t)
+	if err := run([]string{"review", "start"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(".code-harness", "runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one run, got %d", len(entries))
+	}
+	runID := entries[0].Name()
+	if err := run([]string{"review", "cancel", "--run-id", runID, "--reason", "user cancelled"}); err != nil {
+		t.Fatal(err)
+	}
+	reportPath := filepath.Join(".code-harness", "runs", runID, "review.md")
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte("评审已取消")) {
+		t.Fatalf("cancel did not update same report: %s", data)
+	}
+}
+
+func Test180ReviewFinishCommandRejectsRunIDMismatch(t *testing.T) {
+	withTempProject(t)
+	if err := run([]string{"review", "start"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(".code-harness", "runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID := entries[0].Name()
+	requestsDir := filepath.Join(".code-harness", "runs", runID, "requests")
+	if err := os.MkdirAll(requestsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]any{"runId": "review-00000000000000000000000000000000", "reads": []any{}, "findings": []any{}, "pendingRisks": []any{}, "gaps": []any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(requestsDir, "finish.json")
+	if err := os.WriteFile(input, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"review", "finish", "--input", input}); err == nil {
+		t.Fatal("expected body/path runId mismatch rejection")
+	}
+}

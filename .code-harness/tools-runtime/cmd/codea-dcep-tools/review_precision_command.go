@@ -27,6 +27,14 @@ import (
 func runReview160(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
+		case "start":
+			return runReviewStart180(args[1:])
+		case "status":
+			return runReviewStatus180(args[1:])
+		case "cancel":
+			return runReviewCancel180(args[1:])
+		case "finish":
+			return runReviewFinish180(args[1:])
 		case "begin":
 			return runReviewBegin162(args[1:])
 		case "progress":
