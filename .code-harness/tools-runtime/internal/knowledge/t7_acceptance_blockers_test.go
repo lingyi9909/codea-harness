@@ -9,7 +9,7 @@ import (
 
 func Test170KnowledgeRequiredMustBeExplicitForEverySource(t *testing.T) {
 	missing := map[string]string{
-		"reference": "version: 1\nprojectId: p\nsources:\n  - id: ref\n    root: PROJECT\n    path: docs/ref.md\n    kind: REFERENCE\n",
+		"reference":  "version: 1\nprojectId: p\nsources:\n  - id: ref\n    root: PROJECT\n    path: docs/ref.md\n    kind: REFERENCE\n",
 		"experience": "version: 1\nprojectId: p\nsources:\n  - id: exp\n    root: PROJECT\n    path: docs/exp.md\n    kind: EXPERIENCE\n",
 	}
 	for name, raw := range missing {
