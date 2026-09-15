@@ -2,6 +2,10 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
+## 1.6.7 Review 使用入口
+
+升级后重启 OpenCode，开启主会话，输入 `/harness-review OrderController` 或 `/harness-review OrderController.method`。命令会先创建真实 runId；多调用链必须等待你选择；最终由 Runtime 生成同 run 的 `review.md`。普通文本分析不代表正式 Review 已完成。
+
 ## 1.5.0
 
 1. **Chain Management**：新增一链一 YAML 的业务 Chain Project State，以及 `harness chain list/show/discover/refresh/validate`、lazy discovery、exact canonicalization、STALE 检测和用户确认后的安全持久化。
@@ -56,10 +60,10 @@ Release ZIP = 可安装/可升级产品
 
 ## 首次安装
 
-1.6.6 首次安装必须使用正式 Release 产物：
+1.6.7 首次安装必须使用正式 Release 产物：
 
 ```text
-codea-harness-1.6.6-windows-x64-install.zip
+codea-harness-1.6.7-windows-x64-install.zip
 ```
 
 > ⚠ **不要使用 GitHub Source ZIP / `Code → Download ZIP` / `git clone` 目录替代 Release package。** Source 不含正式 Windows Runtime，也不是可安装产品。
@@ -74,7 +78,7 @@ install.ps1
 .opencode/tools/codea-reviewer-submit.ts
 ```
 
-**不要只复制 `.code-harness/`。** 1.6.6 主 Agent Review 的提交工具位于 package root 中的 `.opencode/**`；同包的三个受管 Host 资源应一起安装。正常评审不再需要 Reviewer 子会话。
+**不要只复制 `.code-harness/`。** 1.6.7 主 Agent Review 的提交工具位于 package root 中的 `.opencode/**`；同包的四个受管 Host 资源应一起安装。正常评审不再需要 Reviewer 子会话。
 
 从解压后的 package root 执行：
 
@@ -125,7 +129,7 @@ INSTALL_EXISTING_OPENCODE_CONFLICT
 使用：
 
 ```text
-codea-harness-1.6.6-windows-x64-upgrade.zip
+codea-harness-1.6.7-windows-x64-upgrade.zip
 ```
 
 解压后顶层直接得到 `.code-harness-upgrade/`。升级入口固定为：
@@ -445,14 +449,14 @@ go vet ./...
 
 Windows x64 Release Gate 由 `.github/workflows/package-windows-x64.yml` 执行，覆盖 1.5 Chain/Review/Apply/Upgrade suites、全量 Go test/vet、真实 ast-grep Navigation smoke、正式 install/upgrade ZIP layout、Manifest、**真实 accepted 1.4.0 baseline → 1.5.0** live upgrade、`harness.yaml/project.md/database.yaml/runs/**/chains/**` preservation、stale framework removal、Runtime replacement、installed `chain validate` capability probe、source/stage/backup cleanup 和 artifact upload。
 
-### 1.6.4 / 1.6.5 用户升级到 1.6.6
+### 1.6.4 / 1.6.5 / 1.6.6 用户升级到 1.6.7
 
-下载 `Release 1.6.6 - Windows x64` 成功构建的 `codea-harness-1.6.6-windows-x64-upgrade` 制品，解压到业务项目根目录，确保 `.code-harness-upgrade/` 与现有 `.code-harness/` 并列。在 OpenCode 中发送：
+下载 `Release 1.6.7 - Windows x64` 成功构建的 `codea-harness-1.6.7-windows-x64-upgrade` 制品，解压到业务项目根目录，确保 `.code-harness-upgrade/` 与现有 `.code-harness/` 并列。在 OpenCode 中发送：
 
 ```text
 读取 .code-harness-upgrade/upgrade.md，执行升级
 ```
 
-结果必须为 `UPGRADED`，目标版本 1.6.6。不要手改 VERSION 或重新初始化。1.6.3 用户先使用已认证的 1.6.4 升级包，再升级到 1.6.6。
+结果必须为 `UPGRADED`，目标版本 1.6.7。不要手改 VERSION 或重新初始化。1.6.3 用户先使用已认证的 1.6.4 升级包，再升级到 1.6.7。
 
 升级后重启 OpenCode，开启新的主会话，让 Host 重新加载提交工具和新版指令，然后执行 `harness review`。多调用链会先展示菜单，等待你明确回复 `选择 C1` / `选择 C1,C2`，不会自动选全部。
