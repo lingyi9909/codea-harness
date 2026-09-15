@@ -248,28 +248,23 @@ func selectedCallChains153(root string, selected []ChainOption, analysis analysi
 		if err != nil {
 			return nil, err
 		}
-		nodes := make([]string, 0, len(candidate.Nodes))
-		for _, node := range candidate.Nodes {
-			nodes = append(nodes, strings.TrimSpace(node.Symbol))
+		if !candidateContainsCallChain153(candidate, option.CallChain) {
+			return nil, fmt.Errorf("selected Chain %s does not contain selected callChain", candidate.ID)
 		}
-		for _, entry := range candidate.EntryPoints {
-			sequence := append([]string{strings.TrimSpace(entry.Symbol)}, nodes...)
-			matched := false
-			for _, current := range analysis.CallChains {
-				if current.EntryPoint != entry.Symbol || !reflect.DeepEqual(current.Chain, sequence) {
-					continue
-				}
-				keyBytes, _ := json.Marshal(current)
-				key := string(keyBytes)
-				if !seen[key] {
-					out = append(out, reviewscope.CallChain{EntryPoint: current.EntryPoint, Chain: append([]string(nil), current.Chain...)})
-					seen[key] = true
-				}
+		matched := false
+		for _, current := range analysis.CallChains {
+			if reflect.DeepEqual(reviewscope.CallChain(current), option.CallChain) {
 				matched = true
+				break
 			}
-			if !matched {
-				return nil, fmt.Errorf("selected Chain %s has no exact certified callChain for %s", candidate.ID, entry.Symbol)
-			}
+		}
+		if !matched {
+			return nil, fmt.Errorf("selected Chain %s has no exact certified callChain", candidate.ID)
+		}
+		key := callChainKey153(option.CallChain)
+		if !seen[key] {
+			out = append(out, option.CallChain)
+			seen[key] = true
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {

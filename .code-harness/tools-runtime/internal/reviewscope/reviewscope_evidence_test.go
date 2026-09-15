@@ -37,7 +37,7 @@ const evidenceAnalysis = `{
   }
 }`
 
-func TestControllerClassMustSelectAllConfirmedTargetChains(t *testing.T) {
+func TestControllerClassAllowsConfirmedTargetSubset(t *testing.T) {
 	selection := []byte(`{
       "mode":"TARGETED",
       "target":{"symbol":"OrderController","kind":"CLASS"},
@@ -46,12 +46,12 @@ func TestControllerClassMustSelectAllConfirmedTargetChains(t *testing.T) {
       ],
       "scopedFiles":["module-a/src/main/java/OrderController.java","module-a/src/main/java/OrderService.java"]
     }`)
-	if _, err := reviewscope.Verify(selection, []byte(evidenceAnalysis)); err == nil || !strings.Contains(err.Error(), "all confirmed Controller chains") {
-		t.Fatalf("Controller CLASS partial chain selection must be rejected, err=%v", err)
+	if _, err := reviewscope.Verify(selection, []byte(evidenceAnalysis)); err != nil {
+		t.Fatalf("Controller CLASS confirmed subset must be accepted, err=%v", err)
 	}
 }
 
-func TestControllerMethodMustSelectAllConfirmedMethodChains(t *testing.T) {
+func TestControllerMethodAllowsConfirmedBranchSubset(t *testing.T) {
 	analysis := strings.Replace(evidenceAnalysis,
 		`{"entryPoint":"OrderController.cancel","chain":["OrderController.cancel","OrderService.cancel"]},`,
 		`{"entryPoint":"OrderController.approve","chain":["OrderController.approve","AuditService.record"]},`, 1)
@@ -66,8 +66,8 @@ func TestControllerMethodMustSelectAllConfirmedMethodChains(t *testing.T) {
       ],
       "scopedFiles":["module-a/src/main/java/OrderController.java","module-a/src/main/java/OrderService.java"]
     }`)
-	if _, err := reviewscope.Verify(selection, []byte(analysis)); err == nil || !strings.Contains(err.Error(), "all confirmed Controller chains") {
-		t.Fatalf("Controller METHOD partial chain selection must be rejected, err=%v", err)
+	if _, err := reviewscope.Verify(selection, []byte(analysis)); err != nil {
+		t.Fatalf("Controller METHOD confirmed subset must be accepted, err=%v", err)
 	}
 }
 
@@ -111,4 +111,14 @@ func TestExactSymbolPathsAllowCorrectModule(t *testing.T) {
 	if _, err := reviewscope.Verify(selection, []byte(evidenceAnalysis)); err != nil {
 		t.Fatalf("exact navigation paths should pass: %v", err)
 	}
+}
+
+func TestControllerSubsetRejectsMixedUnrelatedEntryPoints(t *testing.T) {
+ for _, target := range []reviewscope.Target{{Symbol:"OrderController", Kind:"CLASS"}, {Symbol:"OrderController.approve", Kind:"METHOD"}} {
+  selected := []reviewscope.CallChain{
+   {EntryPoint:"OrderController.approve", Chain:[]string{"OrderController.approve","OrderService.approve"}},
+   {EntryPoint:"AdminController.approve", Chain:[]string{"AdminController.approve","OrderService.approve"}},
+  }
+  if _, err := reviewscope.BuildTargetedSelectionForTarget(selected, []byte(evidenceAnalysis), target); err == nil { t.Fatalf("unrelated entrypoint accepted for %+v", target) }
+ }
 }

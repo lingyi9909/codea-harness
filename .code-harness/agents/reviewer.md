@@ -152,20 +152,14 @@ Reviewer 不拥有 Review mode/Chain option 的最终选择权。所有选择必
 plain harness review:
   0 valid Chains  → AUTO_FULL，直接 FULL，不询问
   1 valid Chain   → AUTO_SINGLE，直接 TARGETED，不询问
-  2+ valid Chains → USER_SELECTION；先由用户选择“全部评审 / 按业务链评审 / 仅查看调用链”
+  2+ 实际调用链 → USER_SELECTION；展示 Runtime C1..Cn 和“全部评审 / 仅查看调用链”，结束当前 Turn，等待下一条用户消息
 ```
 
-当用户在 2+ 场景选择“按业务链评审”时，Reviewer 只能展示 Runtime 的 C1..Cn，并把用户选中的 exact selectionIds + current optionsHash 交回 Runtime；不得自己构造 ID、根据名称 fuzzy 匹配、默认 ALL 或在 optionsHash 变化后复用旧选择。用户选择“全部评审”时由 Runtime 生成 FULL scope；选择“仅查看调用链”时不得调用 `review-code`。
+无显式 target 时，Reviewer 只能展示 Runtime 的 C1..Cn，并把用户选中的 exact selectionIds + current optionsHash 交回 Runtime；不得自己构造 ID、根据名称 fuzzy 匹配、默认 ALL 或在 optionsHash 变化后复用旧选择。用户选择“全部评审”时由 Runtime 生成 FULL scope；选择“仅查看调用链”时不得调用 `review-code`。
 
-显式 target 固定如下：
+显式 target（包括 Controller CLASS/METHOD 与下游 target）统一消费 Runtime ReviewOptions：1 条实际调用链自动继续，2+ 实际调用链必须展示 Runtime C1..Cn（入口、完整分支、chainId/source/status），立即结束当前 Assistant Turn，等待下一条用户消息明确选择。重复 Business Chain context 不增加选项数，同入口不同分支是不同选项。
 
-```text
-Controller CLASS  → direct TARGETED；自动包含该 Controller 当前 Change Set 中全部 machine-required confirmed chains；不展示 Chain 菜单
-Controller METHOD → direct TARGETED；自动包含该 method 当前 Change Set 中全部 machine-required confirmed branches；不展示 Chain 菜单
-Service/其他下游 target → 1 条上游 Chain 自动继续；2+ 条上游 Chain 才进入 Runtime-bound 用户选择
-```
-
-Controller direct TARGETED 最终必须经过 Runtime `reviewscope.Verify`；任何漏掉 required Controller branch 的 scope 都必须拒绝。Review Scope Selection 仍不等于 Test/Fix Approval。
+显式 target 始终保持 TARGETED；允许选中 confirmed 子集，ALL 使用 TARGETED + 全部当前 selectionIds，不提供 FULL。Runtime `reviewscope.Verify` 必须验证每条选中的 Controller 链入口归属原 target、exact certified chain/refs 与 scopedFiles；不得补回未选中的分支。Review Scope Selection 仍不等于 Test/Fix Approval。
 
 ## `harness review list`
 
@@ -438,4 +432,4 @@ report-review.json           → .code-harness/contracts/report-review-request.s
 
 当 same-run Runtime `review options` 返回 `USER_SELECTION` 时，Reviewer 必须把控制权交回 Orchestrator 进行用户选择，并立即停止当前 Assistant Turn 的 Review 执行。在收到**下一条用户消息**并由 Runtime `review select` 形成 verified FULL/TARGETED/LIST scope 之前，不得调用 `review-code`，**不得进入 Finding Proposal**，不得创建 `finding-proposals.json`，也不得触发 Finding Certification 或 Review Report。
 
-AUTO_FULL / AUTO_SINGLE 保持既有自动继续语义；本 Gate 只约束 USER_SELECTION 和显式下游 target 的多上游选择场景。
+AUTO_FULL / AUTO_SINGLE 保持既有自动继续语义；本 Gate 适用于所有 USER_SELECTION，包括显式 Controller CLASS/METHOD 与下游 target；不得默认 ALL。

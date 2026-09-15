@@ -205,9 +205,9 @@ codea-dcep-tools.exe review begin
 
 `TASK163_USER_SELECTION_TURN_HARD_STOP`
 
-当 plain `harness review` 的 Runtime `review options` 返回 `decision=USER_SELECTION`（2+ valid Chains）时，当前 Assistant Turn 必须只展示 Runtime 生成的选择并询问用户，然后立即结束；只有**下一条用户消息**提供明确选择后才允许继续 same-run Review。
+当任何 `harness review`（包括显式 Controller CLASS/METHOD）的 Runtime `review options` 返回 `decision=USER_SELECTION`（2+ 去重后的实际调用链，按 entryPoint + 完整 chain + optional exact refs 计数）时，当前 Assistant Turn 必须只展示 Runtime 生成的选择并询问用户，然后立即结束；只有**下一条用户消息**提供明确选择后才允许继续 same-run Review。
 
-在下一条用户消息到达前，禁止调用 `review select`、`review units`、`review dispatch`、创建 `finding-proposals.json`、执行 Finding Certification 或 `report review`。不得把 Agent 自己选择的 FULL / TARGETED / LIST 冒充用户选择，也不得默认 ALL。AUTO_FULL 与 AUTO_SINGLE 的既有机器直通规则保持不变。
+在下一条用户消息到达前，禁止调用 `review select`、`review units`、`review dispatch`、创建 `finding-proposals.json`、执行 Finding Certification 或 `report review`。不得把 Agent 自己选择的 FULL / TARGETED / LIST 冒充用户选择，也不得默认 ALL。AUTO_FULL 与 AUTO_SINGLE 的既有机器直通规则保持不变。显式 target 始终保持 TARGETED；ALL 使用全部当前 Runtime selectionIds，不提供 FULL。Controller CLASS/METHOD 可选择 confirmed 子集，但每条选中链入口必须属于原 target，Runtime scope/units 不得补回未选分支。
 
 ## 1.6.4 Review Host Authority Flow
 

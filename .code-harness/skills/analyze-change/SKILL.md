@@ -253,17 +253,19 @@ from
 
 ### 1.5.3 Review Selection Authority Override
 
-本节旧的 1.4 target 解析规则继续定义“如何构造/验证 TARGETED scope”，但不再授权 Agent 自己决定 plain `harness review` 的模式。固定为：`analysis snapshot → semantic proposal → analysis certify → completeness gate → review options`；0 Chain=AUTO_FULL、1 Chain=AUTO_SINGLE、2+ Chain=USER_SELECTION。只有 2+ 且用户选择“按业务链评审”时才展示 Runtime C1..Cn。显式 Controller/Controller.method 继续 direct TARGETED，自动包含全部 machine-required branches，不展示 Controller/Chain 选择；显式 Service/其他下游 target 仅在 2+ 上游 Chain 时选择。所有最终 TARGETED scope 仍必须通过 Runtime `reviewscope.Verify`，Agent 不得发明 selectionId/optionsHash 或绕过 Controller 防漏链。
+固定顺序：`analysis snapshot → semantic proposal → analysis certify → completeness gate → review options`。Runtime 按去重后的实际 callChain（entryPoint + 完整 chain + optional exact refs）计数：0=AUTO_FULL、1=AUTO_SINGLE、2+=USER_SELECTION；Business Chain context 数量不能代替实际调用链数量。所有 2+ 场景，包括 Controller CLASS/METHOD，都必须展示 Runtime C1..Cn 菜单并结束当前 Assistant Turn，只有下一条用户消息明确选择后才能继续。不得默认 ALL，不得自行生成 selectionId/optionsHash。
 
-TARGETED 的选择数据继续使用独立 `.code-harness/contracts/review-scope.schema.json`；本 Hotfix 不改变 ReviewScopeSelection 业务语义。
+显式 target 保持 TARGETED，允许用户选中 confirmed 子集；ALL 使用 TARGETED + 全部当前 selectionIds，不提供 FULL。Runtime 最终验证 exact selected callChain/refs、原 target、exact paths 与 scoped coverage，不得扩回整个 Business Chain。
+
+TARGETED 的选择数据继续使用独立 `.code-harness/contracts/review-scope.schema.json`；ReviewScopeSelection 的字段结构保持不变。
 
 28. 从 Certified `ChangeAnalysis.callChains[]` 解析 target，并用 `symbolLocations[].role` 判断 target 属于 Controller 还是 Service/其他下游角色；不得靠命名后缀猜角色。
 29. 多链语义保持：
 
 ```text
-Controller CLASS  → 自动包含该 Controller 当前 Change Set 中全部相关 confirmed chains
-Controller METHOD → 自动包含该 method 当前 Change Set 中全部相关 confirmed chains
-Service/其他下游 target → 1 条链自动继续；2+ 条上游业务链才要求用户选择
+Controller CLASS  → 每条选中链的 entryPoint 必须属于该 class；允许 confirmed 子集
+Controller METHOD → 每条选中链的 entryPoint 必须等于该 method；允许 confirmed 分支子集
+所有 target → 1 条自动继续；2+ 条展示 Runtime 菜单，结束当前 Turn，等待下一条用户消息
 ```
 
 30. `selectedCallChains` 必须是 confirmed chains 的真实子集。
@@ -280,7 +282,7 @@ role/source 合法：MapperXml/MAPPER_STATEMENT 或 YamlConfig/CONFIG_REFERENCE
 33. 满足上述条件的 changed Mapper.xml/YML 必须加入 TARGETED scopedFiles；遗漏时 Runtime 拒绝。与 selected chain 无关的 changed resource 必须留在完整 Change Set，但不得加入本次 scopedFiles。
 34. **无法证明关联时不得加入 TARGETED scopedFiles**；不得为了“多看一点”把 UserMapper.xml 或无关 YML 塞进定向 Scope。
 35. 读取所有 verified scopedFiles；任一缺失都必须 PARTIAL。
-36. Controlled Runtime `reviewscope.Verify` 必须基于 Certified ChangeAnalysis 重新验证：selected chain、Controller 防漏链、Java exact path、resource relation exact path、required resources、scoped coverage。
+36. Controlled Runtime `reviewscope.Verify` 必须基于 Certified ChangeAnalysis 重新验证：selected chain、Controller 每条选中链入口归属原 target 与 exact scoped paths、Java exact path、resource relation exact path、required resources、scoped coverage。
 37. TARGETED 不允许使用 FULL Coverage 去要求 unrelated changed files 被读取；但也不得仅凭 Agent 自报 COMPLETE 放行。
 
 ## F. `harness review list`

@@ -3,6 +3,8 @@ package reviewselection
 import (
 	"strings"
 	"testing"
+
+	"codea-harness-tools/internal/reviewscope"
 )
 
 func Test153ReviewOptionsDecisionZeroOneTwo(t *testing.T) {
@@ -14,8 +16,8 @@ func Test153ReviewOptionsDecisionZeroOneTwo(t *testing.T) {
 		auto     int
 	}{
 		{name: "zero", chains: nil, decision: DecisionAutoFull, auto: 0},
-		{name: "one", chains: []ChainOption{{ChainID: "order", EntryPoints: []string{"OrderController.create"}, Source: "ACCEPTED", Status: "VALID"}}, decision: DecisionAutoSingle, auto: 1},
-		{name: "two", chains: []ChainOption{{ChainID: "refund", EntryPoints: []string{"RefundController.refund"}, Source: "ACCEPTED", Status: "VALID"}, {ChainID: "order", EntryPoints: []string{"OrderController.create"}, Source: "TEMPORARY", Status: "TEMPORARY"}}, decision: DecisionUser, auto: 0},
+		{name: "one", chains: []ChainOption{{ChainID: "order", EntryPoints: []string{"OrderController.create"}, CallChain: reviewscope.CallChain{EntryPoint: "OrderController.create", Chain: []string{"OrderController.create"}}, Source: "ACCEPTED", Status: "VALID"}}, decision: DecisionAutoSingle, auto: 1},
+		{name: "two", chains: []ChainOption{{ChainID: "refund", EntryPoints: []string{"RefundController.refund"}, CallChain: reviewscope.CallChain{EntryPoint: "RefundController.refund", Chain: []string{"RefundController.refund"}}, Source: "ACCEPTED", Status: "VALID"}, {ChainID: "order", EntryPoints: []string{"OrderController.create"}, CallChain: reviewscope.CallChain{EntryPoint: "OrderController.create", Chain: []string{"OrderController.create"}}, Source: "TEMPORARY", Status: "TEMPORARY"}}, decision: DecisionUser, auto: 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -35,8 +37,8 @@ func Test153ReviewOptionsStableSortBeforeSelectionIDs(t *testing.T) {
 		ChangeSetSHA256: strings.Repeat("b", 64),
 		EntrypointCompleteness: "COMPLETE",
 		Chains: []ChainOption{
-			{ChainID: "z-chain", EntryPoints: []string{"ZController.run"}, Source: "ACCEPTED", Status: "VALID"},
-			{ChainID: "a-chain", EntryPoints: []string{"AController.run"}, Source: "ACCEPTED", Status: "VALID"},
+			{ChainID: "z-chain", EntryPoints: []string{"ZController.run"}, CallChain: reviewscope.CallChain{EntryPoint: "ZController.run", Chain: []string{"ZController.run"}}, Source: "ACCEPTED", Status: "VALID"},
+			{ChainID: "a-chain", EntryPoints: []string{"AController.run"}, CallChain: reviewscope.CallChain{EntryPoint: "AController.run", Chain: []string{"AController.run"}}, Source: "ACCEPTED", Status: "VALID"},
 		},
 	}, strings.Repeat("a", 64))
 	if err != nil { t.Fatal(err) }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -23,11 +24,12 @@ const (
 )
 
 type ChainOption struct {
-	SelectionID string   `json:"selectionId"`
-	ChainID     string   `json:"chainId"`
-	EntryPoints []string `json:"entryPoints"`
-	Source      string   `json:"source"`
-	Status      string   `json:"status"`
+	SelectionID string                `json:"selectionId"`
+	ChainID     string                `json:"chainId"`
+	EntryPoints []string              `json:"entryPoints"`
+	Source      string                `json:"source"`
+	Status      string                `json:"status"`
+	CallChain   reviewscope.CallChain `json:"callChain"`
 }
 
 type Options struct {
@@ -113,6 +115,15 @@ func BuildOptionsForIntent(root string, certifiedAnalysisPath string, intent ana
 		return Options{}, fmt.Errorf("REVIEW_OPTIONS_CHAIN_RESOLUTION_PARTIAL: %s", strings.Join(resolved.Unresolved, "; "))
 	}
 
+	eligible := make([]reviewscope.CallChain, 0, len(analysis.CallChains))
+	for _, current := range analysis.CallChains {
+		eligible = append(eligible, reviewscope.CallChain(current))
+	}
+	if intent.Mode == "TARGETED" {
+		eligible = selection.SelectedCallChains
+	}
+	mapped := map[string]bool{}
+
 	chains := make([]ChainOption, 0, len(resolved.Contexts))
 	for _, ctx := range resolved.Contexts {
 		var candidate chain.Chain
@@ -140,15 +151,22 @@ func BuildOptionsForIntent(root string, certifiedAnalysisPath string, intent ana
 		default:
 			return Options{}, fmt.Errorf("REVIEW_OPTIONS_CHAIN_SOURCE_INVALID: %s", ctx.Source)
 		}
-		entryPoints := make([]string, 0, len(candidate.EntryPoints))
-		for _, entry := range candidate.EntryPoints {
-			if symbol := strings.TrimSpace(entry.Symbol); symbol != "" {
-				entryPoints = append(entryPoints, symbol)
+		for _, current := range eligible {
+			payload := reviewscope.CallChain(current)
+			if candidateContainsCallChain153(candidate, payload) {
+				chains = append(chains, ChainOption{ChainID: candidate.ID, EntryPoints: []string{current.EntryPoint}, Source: source, Status: status, CallChain: payload})
+				mapped[callChainKey153(payload)] = true
 			}
 		}
-		entryPoints = uniqueSorted153(entryPoints)
-		chains = append(chains, ChainOption{ChainID: candidate.ID, EntryPoints: entryPoints, Source: source, Status: status})
 	}
+	// Projection must never turn an unmapped certified chain into an automatic
+	// zero/single decision. Chain resolution and menu projection must agree.
+	for _, payload := range eligible {
+		if !mapped[callChainKey153(payload)] {
+			return Options{}, fmt.Errorf("REVIEW_OPTIONS_CHAIN_RESOLUTION_PARTIAL: certified callChain %q has no matching Business Chain context", payload.EntryPoint)
+		}
+	}
+
 	return finalizeOptions153(Options{
 		RunID:                  cert.RunID,
 		ChangeSetSHA256:        cert.ChangeSetSHA256,
@@ -197,7 +215,7 @@ func matchingCallChains153(target string, all []analysisruntime.CallChain) []rev
 			matched = true
 		}
 		if matched {
-			out = append(out, reviewscope.CallChain{EntryPoint: candidate.EntryPoint, Chain: append([]string(nil), candidate.Chain...)})
+			out = append(out, reviewscope.CallChain(candidate))
 		}
 	}
 	return out
@@ -266,7 +284,7 @@ func finalizeOptions153(in Options, analysisHash string) (Options, error) {
 		out.Chains[i].EntryPoints = uniqueSorted153(out.Chains[i].EntryPoints)
 	}
 	sort.Slice(out.Chains, func(i, j int) bool {
-		left, right := strings.Join(out.Chains[i].EntryPoints, "\x00"), strings.Join(out.Chains[j].EntryPoints, "\x00")
+		left, right := callChainKey153(out.Chains[i].CallChain), callChainKey153(out.Chains[j].CallChain)
 		if left != right {
 			return left < right
 		}
@@ -275,6 +293,18 @@ func finalizeOptions153(in Options, analysisHash string) (Options, error) {
 		}
 		return out.Chains[i].Source < out.Chains[j].Source
 	})
+	// Multiple Business Chains may certify the same semantic call chain. Keep
+	// one deterministic provenance representative, never inflate the menu.
+	unique := make([]ChainOption, 0, len(out.Chains))
+	seen := map[string]bool{}
+	for _, option := range out.Chains {
+		key := callChainKey153(option.CallChain)
+		if !seen[key] {
+			unique = append(unique, option)
+			seen[key] = true
+		}
+	}
+	out.Chains = unique
 	for i := range out.Chains {
 		out.Chains[i].SelectionID = fmt.Sprintf("C%d", i+1)
 	}
@@ -319,4 +349,29 @@ func uniqueSorted153(values []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Business Chain files group entries over a shared node sequence; selection
+// authority is the exact certified call-chain payload, including optional refs.
+func candidateContainsCallChain153(candidate chain.Chain, payload reviewscope.CallChain) bool {
+	nodes := make([]string, 0, len(candidate.Nodes))
+	for _, node := range candidate.Nodes {
+		nodes = append(nodes, strings.TrimSpace(node.Symbol))
+	}
+	normalized := make([]string, len(payload.Chain))
+	for i, symbol := range payload.Chain {
+		normalized[i] = strings.TrimSpace(symbol)
+	}
+	entryPoint := strings.TrimSpace(payload.EntryPoint)
+	for _, entry := range candidate.EntryPoints {
+		if strings.TrimSpace(entry.Symbol) == entryPoint && reflect.DeepEqual(append([]string{entryPoint}, nodes...), normalized) {
+			return true
+		}
+	}
+	return false
+}
+
+func callChainKey153(payload reviewscope.CallChain) string {
+	data, _ := json.Marshal(payload)
+	return string(data)
 }

@@ -1,13 +1,12 @@
 package reviewscope_test
 
 import (
-	"strings"
 	"testing"
 
 	"codea-harness-tools/internal/reviewscope"
 )
 
-func Test153ExplicitControllerMethodRequiresAllConfirmedBranches(t *testing.T) {
+func Test153ExplicitControllerMethodAllowsConfirmedBranchSubset(t *testing.T) {
 	analysis := []byte(`{
 	  "changedFiles":[
 	    {"path":"src/main/java/OrderController.java"},
@@ -41,8 +40,8 @@ func Test153ExplicitControllerMethodRequiresAllConfirmedBranches(t *testing.T) {
 	  ],
 	  "scopedFiles":["src/main/java/OrderController.java","src/main/java/OrderService.java"]
 	}`)
-	if _, err := reviewscope.Verify(partial, analysis); err == nil || !strings.Contains(err.Error(), "must include all confirmed Controller chains") {
-		t.Fatalf("explicit Controller method must reject omitted branch, err=%v", err)
+	if _, err := reviewscope.Verify(partial, analysis); err != nil {
+		t.Fatalf("explicit Controller method must allow selected branch, err=%v", err)
 	}
 
 	complete := []byte(`{

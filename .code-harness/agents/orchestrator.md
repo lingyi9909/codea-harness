@@ -36,11 +36,11 @@ version: 9
 ```text
 harness review      → Runtime ReviewOptions 决策（AUTO_FULL / AUTO_SINGLE / USER_SELECTION）
 harness review list → LIST
-harness review <Class>        → direct TARGETED CLASS；自动包含该 Controller 全部机器要求分支，不展示 Controller/Chain 选择
-harness review <Class.method> → direct TARGETED METHOD；自动包含该 method 全部机器要求分支，不展示 Controller/Chain 选择
+harness review <Class>        → TARGETED CLASS；Runtime 按实际调用链数量决定 AUTO_SINGLE / USER_SELECTION
+harness review <Class.method> → TARGETED METHOD；Runtime 按实际调用链数量决定 AUTO_SINGLE / USER_SELECTION
 ```
 
-只有 plain `harness review` 和显式 Service/其他下游 target 的多上游场景使用 ReviewOptions 选择。显式 Controller/Controller.method 不进入 2+ Chain 菜单；最终 direct TARGETED scope 仍必须通过 Runtime `reviewscope.Verify` 的 Controller 防漏链校验。
+所有 Review 都使用 Runtime ReviewOptions；2+ 实际调用链（包括 Controller CLASS/METHOD）必须展示 C1..Cn 菜单，结束当前 Assistant Turn，等待下一条用户消息明确选择。显式 target 保持 TARGETED；ALL 表示以 TARGETED 提交全部当前 selectionIds，不提供 FULL。
 
 测试计划仍使用精确 `planId` 审批；生产修复仍使用精确 `fixPlanId` 审批；模糊肯定不构成审批。历史 Existing Test 不自动修改。对 GENERATED_BY_PLAN 测试仍保留最多 2 轮 repair 计数，但 Task 4 后每个实际发生变化的 repair patch 都必须生成新的 patch identity 与新 planId，并在审批前重新 Runtime seal 后再获得精确批准，旧批准不得授权不同 bytes。`harness api-doc` 全程只读，API target selection 不是测试/修复审批。
 
@@ -459,12 +459,12 @@ plain `harness review` 不再预先固定为 FULL。它必须以 same-run Runtim
 6. Runtime `review options` 生成并持久化 Runtime-owned review-options.json
 7. decision=AUTO_FULL（0 valid Chains）→ 不询问用户，立即 `review select`：mode=FULL、无 selectionIds、current optionsHash
 8. decision=AUTO_SINGLE（1 valid Chain）→ 不询问用户，立即 `review select`：mode=TARGETED、exact autoSelectionIds、current optionsHash
-9. decision=USER_SELECTION（2+ valid Chains）→ 此时才展示一级选择：
+9. decision=USER_SELECTION（2+ 实际调用链）→ 展示 Runtime C1..Cn（入口、完整分支、chainId/source/status）和以下选择，立即结束当前 Assistant Turn；下一条用户消息明确选择后才继续：
    1) 全部评审
    2) 按业务链评审
    3) 仅查看调用链
    - 选择“全部评审” → `review select` mode=FULL、无 Chain IDs
-   - 选择“按业务链评审” → 再展示 Runtime 生成的 C1..Cn，多选/编号 fallback；不得默认 ALL
+   - 选择具体 C1..Cn → 提交用户选中的 Runtime selectionIds，多选/编号 fallback；不得默认 ALL
    - 选择“仅查看调用链” → `review select` mode=LIST；不授权 Finding Review
    - 空选择/取消 → STOP
 10. Runtime `review select` 必须校验 current optionsHash、Runtime-bound selection IDs，并生成 FULL/TARGETED verified scope；stale/forged/invalid scope 全部 fail closed
@@ -476,7 +476,7 @@ plain `harness review` 不再预先固定为 FULL。它必须以 same-run Runtim
 
 `AUTO_SINGLE` 是机器执行规则，不得出现“请选择唯一 Controller/Chain”的冗余提示。`USER_SELECTION` 只是说明存在 2+ valid Chain options；用户仍可明确选择 FULL 或 LIST，只有选择“按业务链评审”时才提交 TARGETED Runtime Chain IDs。
 
-显式 `harness review <Class>` / `<Class.method>` 不走上述 plain ReviewOptions 一级菜单，继续使用下文 direct TARGETED 流程，并由 Runtime 强制包含 Controller target 的全部 required confirmed branches。
+显式 `harness review <Class>` / `<Class.method>` 同样消费 Runtime ReviewOptions；2+ 实际调用链必须进入用户菜单并结束当前 Turn。用户可选择任意有效子集或 ALL；ALL 仍以 TARGETED 提交全部当前 selectionIds，保留原 target，不提供 FULL。
 
 用户可见顺序固定为：
 
@@ -527,26 +527,19 @@ plain `harness review` 不再预先固定为 FULL。它必须以 same-run Runtim
 6. Runtime/Reviewer 使用 symbolLocations.role 判断 target 是否为 Controller；不得靠类名后缀猜角色
 7. 从 confirmed callChains 中解析与 target 有证据关系的链
 8. 0 条 → NO_REVIEW_TARGET → STOP
-9. Controller CLASS → 自动包含该 Controller 当前 Change Set 中全部相关 confirmed chains
-10. Controller METHOD → 自动包含该 method 当前 Change Set 中全部相关 confirmed chains
-11. Service/其他下游 target：1 条 → AUTO_SINGLE；2+ 条上游业务链 → WAITING_REVIEW_SCOPE_SELECTION
+9. Runtime review options 按去重后的实际 callChain（entryPoint + 完整 chain + exact refs）生成 C1..Cn
+10. 所有 target（包括 Controller CLASS/METHOD）：1 条 → AUTO_SINGLE；2+ 条 → USER_SELECTION，展示菜单并立即结束当前 Assistant Turn
+11. 下一条用户消息明确选择后才调用 review select；选中子集保持 TARGETED；ALL 使用全部当前 selectionIds，不提供 FULL
 12. scopedFiles 只能取自 symbolLocations 的 exact repository path；同 basename 的其他模块文件不能替代
 13. 生成 ReviewScopeSelection(target/selectedCallChains/scopedFiles)
 14. Controlled Runtime validate review-scope.schema.json --change-analysis <Certified ChangeAnalysis>
-15. Runtime 重新验证 Controller 防漏链、selected chains、exact scoped paths 与 scoped coverage
+15. Runtime 重新验证 Controller 每条选中链的入口归属、certified selected chains、exact scoped paths 与 scoped coverage
 16. Runtime 机器 scoped coverage != COMPLETE → MANUAL_ACTION_REQUIRED review.md → STOP
 17. COMPLETE 后才调用 reviewer.review-code；TARGETED 只允许 Runtime verified scopedFiles / selectedCallChains
 18. Controlled Runtime Renderer 再验证 Finding.file ∈ verified scopedFiles 后生成 TARGETED review.md
 ```
 
-Controller target 不进入用户“挑部分链”流程：
-
-```text
-Controller CLASS  → 自动包含全部相关 confirmed chains
-Controller METHOD → 自动包含该 method 全部相关 confirmed chains
-```
-
-只有 Service/其他下游 target 在解析到 2+ 条上游业务链时才允许用户选择：
+所有 target（包括 Controller CLASS/METHOD）在 Runtime 返回 2+ 实际调用链时都要求用户选择；相同入口的不同分支分别展示，重复 Business Chain context 不增加选项数。选项须展示 Runtime callChain 的入口、完整分支和 chainId/source/status：
 
 - 宿主支持结构化多选 → native multi-select；
 - 否则 numbered fallback：`1` / `1,3` / `ALL`；
@@ -555,7 +548,7 @@ Controller METHOD → 自动包含该 method 全部相关 confirmed chains
 - Review Scope Selection 不等于 Test/Fix Approval；
 - `ALL`/编号选择都不能替代 `批准 <planId>` 或 `批准 <fixPlanId>`。
 
-最终 `ReviewScopeSelection` 必须通过 Runtime `reviewscope.Verify`。如果 Controller CLASS/METHOD 漏掉 required confirmed chain，或 scopedFiles 不等于 Code Navigation exact path evidence，Runtime 必须拒绝，不能依赖 Agent 提示词自律。
+最终 `ReviewScopeSelection` 必须通过 Runtime `reviewscope.Verify`。Controller CLASS/METHOD 允许用户选中的 confirmed 子集；每条选中链的 entryPoint 必须属于原 target（METHOD exact entryPoint，CLASS owning class）。混入其他 Controller 或 scopedFiles 不符合 Code Navigation exact path evidence 时 Runtime 必须拒绝。
 
 TARGETED 报告必须包含：
 
@@ -977,7 +970,7 @@ report-review.json           → .code-harness/contracts/report-review-request.s
 
 `TASK163_USER_SELECTION_TURN_HARD_STOP`
 
-当 Runtime `review options` 返回 `decision=USER_SELECTION` 时，Orchestrator 必须把当前 Runtime 生成的 FULL / LIST 入口和 C1..Cn Chain 选项展示给用户并要求明确选择，随后**立即结束当前 Assistant Turn**。只有**下一条用户消息**明确表达“全部评审”、具体 Runtime selectionIds/编号，或“仅查看调用链”后，才允许继续当前 same-run authority chain。
+当 Runtime `review options` 返回 `decision=USER_SELECTION` 时，Orchestrator 必须把当前 Runtime 生成的 C1..Cn 调用链选项展示给用户并要求明确选择（无 target 可选 FULL / LIST；显式 target 可选子集 / ALL / LIST，ALL 使用 TARGETED + 全部 selectionIds，不提供 FULL），随后**立即结束当前 Assistant Turn**。只有**下一条用户消息**明确表达“全部评审”、具体 Runtime selectionIds/编号，或“仅查看调用链”后，才允许继续当前 same-run authority chain。
 
 在 USER_SELECTION 的同一 Assistant Turn 内一律禁止：
 
@@ -990,7 +983,7 @@ review certify-findings
 report review
 ```
 
-不得自动构造 FULL，不得自动构造 TARGETED，也不得默认 LIST/ALL。用户下一条消息选择“全部评审”时才构造当前 `optionsHash` 绑定的 FULL selection；选择一个或多个 C1..Cn 时才构造 TARGETED selection；明确选择仅查看调用链时才构造 LIST。空选择/取消必须 STOP。若下一条用户消息到达时 current optionsHash / same-run authority 已 stale，必须 fail closed 或重建 options，禁止复用旧选择。
+不得自动构造 FULL，不得自动构造 TARGETED，也不得默认 LIST/ALL。无显式 target 且用户下一条消息选择“全部评审”时才构造当前 `optionsHash` 绑定的 FULL selection；显式 target 的 ALL 必须构造 TARGETED + 全部当前 selectionIds，保持原 target；选择一个或多个 C1..Cn 时才构造 TARGETED selection；明确选择仅查看调用链时才构造 LIST。空选择/取消必须 STOP。若下一条用户消息到达时 current optionsHash / same-run authority 已 stale，必须 fail closed 或重建 options，禁止复用旧选择。
 
 该 Gate 是 Agent/Orchestrator turn 行为约束；不得声称 Controlled Runtime 能密码学证明某个 selection 是真实用户输入。Runtime 原有 optionsHash、selectionId、scope verification 仍负责机器 authority。
 

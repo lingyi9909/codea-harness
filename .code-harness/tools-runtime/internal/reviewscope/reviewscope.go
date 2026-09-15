@@ -145,7 +145,7 @@ func Verify(selectionJSON, changeAnalysisJSON []byte) (Selection, error) {
 	targetRole, err := resolveTargetRole(*selection.Target, evidence, selection.SelectedCallChains)
 	if err != nil { return Selection{}, err }
 	if targetRole == "Controller" {
-		if err := verifyAllControllerChains(*selection.Target, selection.SelectedCallChains, analysis.CallChains); err != nil { return Selection{}, err }
+		if err := verifySelectedControllerChains(*selection.Target, selection.SelectedCallChains); err != nil { return Selection{}, err }
 	}
 
 	allowedPaths, requiredPaths, err := exactScopePaths(*selection.Target, selection.SelectedCallChains, evidence, analysis.ResourceRelations, changedRoles)
@@ -508,17 +508,13 @@ func parentSymbol(symbol string) string {
 	return symbol[:index]
 }
 
-func verifyAllControllerChains(target Target, selected, all []CallChain) error {
-	required := make([]CallChain, 0)
-	for _, chain := range all {
-		if target.Kind == "METHOD" {
-			if strings.TrimSpace(chain.EntryPoint) == strings.TrimSpace(target.Symbol) { required = append(required, chain) }
-			continue
-		}
-		if className(chain.EntryPoint, "METHOD") == className(target.Symbol, "CLASS") { required = append(required, chain) }
+func verifySelectedControllerChains(target Target, selected []CallChain) error {
+	for _, chain := range selected {
+		entry := strings.TrimSpace(chain.EntryPoint)
+		matches := entry == strings.TrimSpace(target.Symbol)
+		if target.Kind == "CLASS" { matches = parentSymbol(entry) == strings.TrimSpace(target.Symbol) }
+		if !matches { return fmt.Errorf("Controller target %q does not own selected entrypoint %q", target.Symbol, entry) }
 	}
-	if len(required) == 0 { return fmt.Errorf("Controller target %q has no confirmed call chains", target.Symbol) }
-	if !sameChainSet(selected, required) { return fmt.Errorf("Controller target %q must include all confirmed Controller chains; selected=%d required=%d", target.Symbol, len(selected), len(required)) }
 	return nil
 }
 

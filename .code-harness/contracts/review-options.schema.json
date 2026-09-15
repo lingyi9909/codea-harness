@@ -38,17 +38,75 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["selectionId", "chainId", "entryPoints", "source", "status"],
+        "required": ["selectionId", "chainId", "entryPoints", "source", "status", "callChain"],
         "properties": {
           "selectionId": {"type": "string", "pattern": "^C[1-9][0-9]*$"},
           "chainId": {"type": "string", "minLength": 1, "maxLength": 128},
           "entryPoints": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
           "source": {"enum": ["ACCEPTED", "TEMPORARY"]},
-          "status": {"enum": ["VALID", "TEMPORARY"]}
+          "status": {"enum": ["VALID", "TEMPORARY"]},
+          "callChain": {"$ref": "#/$defs/callChain"}
         }
       }
     },
     "optionsHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "callChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entryPoint",
+        "chain"
+      ],
+      "properties": {
+        "entryPoint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chain": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "entryPointRef": {
+          "$ref": "#/$defs/symbolRef"
+        },
+        "chainRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/symbolRef"
+          }
+        }
+      }
+    },
+    "symbolRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "symbol"
+      ],
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?:[^./:][^/:]*|\\.[^./:][^/:]*)(?:/(?:[^./:][^/:]*|\\.[^./:][^/:]*))*$"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
   },
   "allOf": [
     {
