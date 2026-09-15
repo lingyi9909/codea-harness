@@ -12,7 +12,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const schemaResource = "schema.json"
+// A stable in-memory URI avoids cwd-dependent file-URL normalization on
+// Windows (notably spaces, percent escapes and local $ref fragments).
+const schemaResource = "https://codea-harness.invalid/schema.json"
 
 func compile(schemaBytes []byte) (*jsonschema.Schema, error) {
 	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaBytes))
