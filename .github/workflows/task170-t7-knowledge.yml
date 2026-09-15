@@ -36,10 +36,13 @@ jobs:
       - name: Verify no temporary T7 residue
         shell: pwsh
         run: |
+          $forbidden = @('.github/workflows/t7-gofmt-once.yml')
+          $present = @($forbidden | Where-Object { Test-Path $_ })
           $dynamic = @(Get-ChildItem '.code-harness/tools-runtime' -File -ErrorAction SilentlyContinue | Where-Object {
             $_.Name -like 'task170*t7*patch*' -or $_.Name -like 'task170*t7*debug*'
           } | ForEach-Object { $_.FullName })
-          if ($dynamic.Count -ne 0) { throw "temporary T7 residue remains: $($dynamic -join '; ')" }
+          $present += $dynamic
+          if ($present.Count -ne 0) { throw "temporary T7 residue remains: $($present -join '; ')" }
           Write-Output 'TASK170_T7_TEMP_RESIDUE PASS'
       - uses: actions/setup-go@v7
         with:
