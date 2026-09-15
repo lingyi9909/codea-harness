@@ -15,6 +15,9 @@ import (
 )
 
 func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrules.Dispatch, anchor Anchor, evidence []EvidenceRef) (Anchor, string, error) {
+	if knowledgeAnchorForbidden170(ctx, anchor) {
+		return Anchor{}, "", findingError160("KNOWLEDGE_ANCHOR_FORBIDDEN", "knowledge documents cannot become code anchors")
+	}
 	resolved := anchor
 	switch anchor.Kind {
 	case AnchorLine:
@@ -102,19 +105,19 @@ func verifyAnchor160(ctx VerifyContext, unit reviewunit.Unit, dispatch reviewrul
 }
 
 func verifyCurrentSymbol160(ctx VerifyContext, unit reviewunit.Unit, symbol string) (info struct {
-	Symbol string
-	Path string
+	Symbol    string
+	Path      string
 	LineStart int
-	LineEnd int
+	LineEnd   int
 }, symbolPath string, err error) {
 	return verifyCurrentSymbolAtPath160(ctx, unit, symbol, "")
 }
 
 func verifyCurrentSymbolAtPath160(ctx VerifyContext, unit reviewunit.Unit, symbol, claimedPath string) (info struct {
-	Symbol string
-	Path string
+	Symbol    string
+	Path      string
 	LineStart int
-	LineEnd int
+	LineEnd   int
 }, symbolPath string, err error) {
 	symbol = strings.TrimSpace(symbol)
 	if symbol == "" {
@@ -172,7 +175,9 @@ func verifyCurrentSymbolAtPath160(ctx VerifyContext, unit reviewunit.Unit, symbo
 		return info, "", findingError160("FINDING_ANCHOR_NOT_VERIFIED", "symbol %s has ambiguous current paths inside ReviewUnit", symbol)
 	}
 	currentPath := ""
-	for p := range candidates { currentPath = p }
+	for p := range candidates {
+		currentPath = p
+	}
 
 	ref := symbolid.Ref{Workspace: symbolid.CurrentWorkspace, Path: currentPath, Symbol: symbol}
 	key, _ := symbolid.Key(ref)
