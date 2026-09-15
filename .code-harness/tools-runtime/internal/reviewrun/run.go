@@ -19,6 +19,7 @@ type runState struct {
 	CreatedAt     string   `json:"createdAt"`
 	Project       string   `json:"project"`
 	ReportPath    string   `json:"reportPath"`
+	ReportSHA256  string   `json:"reportSha256,omitempty"`
 	ScopeReady    bool     `json:"scopeReady"`
 	Coverage      string   `json:"coverage"`
 	SelectedIDs   []string `json:"selectedIds"`
@@ -117,26 +118,27 @@ func Status(root, runID string) (Outcome, error) {
 	if err != nil {
 		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath}, nil
 	}
+	reportSHA := bytesSHA256(report)
 	meta, err := parseReportMeta(report)
 	if err != nil || meta.RunID != runID {
-		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: bytesSHA256(report)}, nil
+		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
 	}
 	if meta.Execution == "CANCELLED" || state.Cancelled {
-		return Outcome{RunID: runID, Execution: "CANCELLED", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: bytesSHA256(report)}, nil
+		return Outcome{RunID: runID, Execution: "CANCELLED", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
 	}
-	if meta.Execution != "COMPLETE" || meta.ResultSHA256 == "" {
-		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: bytesSHA256(report)}, nil
+	if meta.Execution != "COMPLETE" || meta.ResultSHA256 == "" || state.ReportSHA256 == "" || state.ReportSHA256 != reportSHA {
+		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
 	}
 
 	resultBytes, err := os.ReadFile(filepath.Join(runDir, "result.json"))
 	if err != nil || bytesSHA256(resultBytes) != meta.ResultSHA256 {
-		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: bytesSHA256(report)}, nil
+		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
 	}
 	var result resultEnvelope
 	if err := json.Unmarshal(resultBytes, &result); err != nil || result.RunID != runID {
-		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: bytesSHA256(report)}, nil
+		return Outcome{RunID: runID, Execution: "INCOMPLETE", ReviewConclusion: "UNDETERMINED", Coverage: stateCoverage(state), ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
 	}
-	return Outcome{RunID: runID, Execution: "COMPLETE", ReviewConclusion: result.ReviewConclusion, Coverage: result.Coverage, ReportPath: state.ReportPath, ReportSHA256: bytesSHA256(report)}, nil
+	return Outcome{RunID: runID, Execution: "COMPLETE", ReviewConclusion: result.ReviewConclusion, Coverage: result.Coverage, ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
 }
 
 func Cancel(root, runID, reason string) (Outcome, error) {
@@ -197,6 +199,7 @@ func loadRun(root, runID string) (string, runState, error) {
 	if state.SchemaVersion != SchemaVersion || state.RunID != runID {
 		return "", runState{}, fmt.Errorf("REVIEW_RUN_INVALID")
 	}
+	state.ReportPath = filepath.Join(runDir, "review.md")
 	return runDir, state, nil
 }
 
@@ -278,21 +281,33 @@ func atomicWrite(path string, data []byte) error {
 
 func acquireRunLock(ctx context.Context, runDir string) (func(), error) {
 	lockPath := filepath.Join(runDir, ".review-180.lock")
+	token, err := newLockToken()
+	if err != nil {
+		return nil, err
+	}
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err == nil {
-			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
-			_ = f.Close()
-			return func() { _ = os.Remove(lockPath) }, nil
+			if _, writeErr := fmt.Fprintf(f, "%d %s\n", os.Getpid(), token); writeErr != nil {
+				_ = f.Close()
+				_ = os.Remove(lockPath)
+				return nil, fmt.Errorf("REVIEW_RUN_LOCK_WRITE_FAILED: %w", writeErr)
+			}
+			if syncErr := f.Sync(); syncErr != nil {
+				_ = f.Close()
+				_ = os.Remove(lockPath)
+				return nil, fmt.Errorf("REVIEW_RUN_LOCK_WRITE_FAILED: %w", syncErr)
+			}
+			if closeErr := f.Close(); closeErr != nil {
+				_ = os.Remove(lockPath)
+				return nil, fmt.Errorf("REVIEW_RUN_LOCK_WRITE_FAILED: %w", closeErr)
+			}
+			return func() { releaseRunLock(lockPath, token) }, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, fmt.Errorf("REVIEW_RUN_LOCK_FAILED: %w", err)
-		}
-		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > 2*time.Minute {
-			_ = os.Remove(lockPath)
-			continue
 		}
 		select {
 		case <-ctx.Done():
@@ -300,4 +315,24 @@ func acquireRunLock(ctx context.Context, runDir string) (func(), error) {
 		case <-ticker.C:
 		}
 	}
+}
+
+func newLockToken() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("REVIEW_RUN_LOCK_TOKEN_FAILED: %w", err)
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+func releaseRunLock(lockPath, token string) {
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) != 2 || fields[1] != token {
+		return
+	}
+	_ = os.Remove(lockPath)
 }

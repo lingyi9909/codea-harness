@@ -52,8 +52,12 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 	if !state.ScopeReady {
 		return Outcome{}, fmt.Errorf("REVIEW_FINISH_SCOPE_NOT_READY")
 	}
-	if stateCoverage(state) != "COMPLETE" && len(req.Gaps) == 0 {
-		req.Gaps = []string{"评审范围存在未覆盖部分"}
+	coverage := stateCoverage(state)
+	if coverage != "COMPLETE" || len(req.Gaps) > 0 {
+		err := fmt.Errorf("REVIEW_FINISH_COVERAGE_INCOMPLETE")
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
 	}
 
 	if err := validateFinishRequest(root, req); err != nil {
@@ -81,10 +85,6 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		return Outcome{}, existingErr
 	}
 
-	coverage := stateCoverage(state)
-	if len(req.Gaps) > 0 {
-		coverage = "PARTIAL"
-	}
 	conclusion := conclusionFor(coverage, req)
 	result := resultEnvelope{
 		SchemaVersion:    SchemaVersion,
@@ -146,17 +146,19 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		return Outcome{}, fmt.Errorf("REVIEW_REPORT_READBACK_FAILED: %w", err)
 	}
 	meta, err := parseReportMeta(readback)
-	if err != nil || meta.RunID != req.RunID || meta.Execution != "COMPLETE" || meta.ResultSHA256 != resultSHA {
+	if err != nil || meta.RunID != req.RunID || meta.Execution != "COMPLETE" || meta.ResultSHA256 != resultSHA || !bytes.Equal(readback, report) {
 		if err == nil {
-			err = fmt.Errorf("report metadata mismatch")
+			err = fmt.Errorf("report content or metadata mismatch")
 		}
 		return Outcome{}, fmt.Errorf("REVIEW_REPORT_VERIFY_FAILED: %w", err)
 	}
+	reportSHA := bytesSHA256(readback)
+	state.ReportSHA256 = reportSHA
 	state.LastError = ""
 	if err := writeState(runDir, state); err != nil {
 		return Outcome{}, fmt.Errorf("REVIEW_RUN_FINAL_STATE_WRITE_FAILED: %w", err)
 	}
-	return Outcome{RunID: req.RunID, Execution: "COMPLETE", ReviewConclusion: conclusion, Coverage: coverage, ReportPath: state.ReportPath, ReportSHA256: bytesSHA256(readback)}, nil
+	return Outcome{RunID: req.RunID, Execution: "COMPLETE", ReviewConclusion: conclusion, Coverage: coverage, ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
 }
 
 func loadExistingResult(runDir string) (resultEnvelope, []byte, error) {
@@ -177,75 +179,135 @@ func loadExistingResult(runDir string) (resultEnvelope, []byte, error) {
 }
 
 func normalizeFinishRequest(req *FinishRequest) {
-	if req.Reads == nil { req.Reads = []ReadRef{} }
-	if req.Findings == nil { req.Findings = []Finding{} }
-	if req.PendingRisks == nil { req.PendingRisks = []string{} }
-	if req.Gaps == nil { req.Gaps = []string{} }
+	if req.Reads == nil {
+		req.Reads = []ReadRef{}
+	}
+	if req.Findings == nil {
+		req.Findings = []Finding{}
+	}
+	if req.PendingRisks == nil {
+		req.PendingRisks = []string{}
+	}
+	if req.Gaps == nil {
+		req.Gaps = []string{}
+	}
 	for i := range req.Findings {
-		if req.Findings[i].Evidence == nil { req.Findings[i].Evidence = []Evidence{} }
+		if req.Findings[i].Evidence == nil {
+			req.Findings[i].Evidence = []Evidence{}
+		}
 	}
 }
 
 func validateFinishRequest(root string, req FinishRequest) error {
 	rootAbs, err := filepath.Abs(root)
-	if err != nil { return fmt.Errorf("REVIEW_FINISH_ROOT_FAILED: %w", err) }
+	if err != nil {
+		return fmt.Errorf("REVIEW_FINISH_ROOT_FAILED: %w", err)
+	}
 	reads := make(map[string]ReadRef, len(req.Reads))
 	for _, ref := range req.Reads {
 		key, err := validateReadRef(rootAbs, ref)
-		if err != nil { return err }
-		if _, exists := reads[key]; exists { return fmt.Errorf("REVIEW_FINISH_DUPLICATE_READ: %s", ref.Path) }
+		if err != nil {
+			return err
+		}
+		if _, exists := reads[key]; exists {
+			return fmt.Errorf("REVIEW_FINISH_DUPLICATE_READ: %s", ref.Path)
+		}
 		reads[key] = ref
 	}
 	seenFinding := map[string]bool{}
 	for _, finding := range req.Findings {
-		if strings.TrimSpace(finding.ID) == "" || seenFinding[finding.ID] { return fmt.Errorf("REVIEW_FINISH_FINDING_ID_INVALID") }
+		if strings.TrimSpace(finding.ID) == "" || seenFinding[finding.ID] {
+			return fmt.Errorf("REVIEW_FINISH_FINDING_ID_INVALID")
+		}
 		seenFinding[finding.ID] = true
-		switch finding.Severity { case "CRITICAL", "HIGH", "MEDIUM", "LOW": default: return fmt.Errorf("REVIEW_FINISH_SEVERITY_INVALID: %q", finding.Severity) }
-		if strings.TrimSpace(finding.Problem) == "" || strings.TrimSpace(finding.Impact) == "" || strings.TrimSpace(finding.Recommendation) == "" || strings.TrimSpace(finding.Verification) == "" { return fmt.Errorf("REVIEW_FINISH_FINDING_FIELDS_REQUIRED: %s", finding.ID) }
+		switch finding.Severity {
+		case "CRITICAL", "HIGH", "MEDIUM", "LOW":
+		default:
+			return fmt.Errorf("REVIEW_FINISH_SEVERITY_INVALID: %q", finding.Severity)
+		}
+		if strings.TrimSpace(finding.Problem) == "" || strings.TrimSpace(finding.Impact) == "" || strings.TrimSpace(finding.Recommendation) == "" || strings.TrimSpace(finding.Verification) == "" {
+			return fmt.Errorf("REVIEW_FINISH_FINDING_FIELDS_REQUIRED: %s", finding.ID)
+		}
 		for _, ev := range finding.Evidence {
 			key := readKey(ev.Ref)
 			ref, ok := reads[key]
-			if !ok || ref != ev.Ref { return fmt.Errorf("REVIEW_FINISH_EVIDENCE_READ_NOT_DECLARED: %s", ev.Ref.Path) }
-			if strings.TrimSpace(ev.Quote) == "" { return fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_REQUIRED: %s", finding.ID) }
-			if err := verifyEvidenceQuote(rootAbs, ev); err != nil { return err }
+			if !ok || ref != ev.Ref {
+				return fmt.Errorf("REVIEW_FINISH_EVIDENCE_READ_NOT_DECLARED: %s", ev.Ref.Path)
+			}
+			if strings.TrimSpace(ev.Quote) == "" {
+				return fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_REQUIRED: %s", finding.ID)
+			}
+			if err := verifyEvidenceQuote(rootAbs, ev); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func validateReadRef(rootAbs string, ref ReadRef) (string, error) {
-	if strings.TrimSpace(ref.Path) == "" || filepath.IsAbs(ref.Path) { return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path) }
+	if strings.TrimSpace(ref.Path) == "" || filepath.IsAbs(ref.Path) {
+		return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path)
+	}
 	clean := filepath.Clean(filepath.FromSlash(ref.Path))
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) { return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path) }
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path)
+	}
 	abs := filepath.Join(rootAbs, clean)
 	rel, err := filepath.Rel(rootAbs, abs)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path) }
-	if strings.HasPrefix(filepath.ToSlash(rel), ".code-harness/runs/") { return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path) }
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path)
+	}
+	if strings.HasPrefix(filepath.ToSlash(rel), ".code-harness/runs/") {
+		return "", fmt.Errorf("REVIEW_FINISH_READ_PATH_INVALID: %q", ref.Path)
+	}
 	data, err := os.ReadFile(abs)
-	if err != nil { return "", fmt.Errorf("REVIEW_FINISH_READ_FAILED: %s: %w", ref.Path, err) }
-	if ref.SHA256 != bytesSHA256(data) { return "", fmt.Errorf("REVIEW_FINISH_READ_STALE: %s", ref.Path) }
+	if err != nil {
+		return "", fmt.Errorf("REVIEW_FINISH_READ_FAILED: %s: %w", ref.Path, err)
+	}
+	if ref.SHA256 != bytesSHA256(data) {
+		return "", fmt.Errorf("REVIEW_FINISH_READ_STALE: %s", ref.Path)
+	}
 	lines := bytes.Split(data, []byte("\n"))
-	if ref.StartLine < 1 || ref.EndLine < ref.StartLine || ref.EndLine > len(lines) { return "", fmt.Errorf("REVIEW_FINISH_READ_RANGE_INVALID: %s", ref.Path) }
+	if ref.StartLine < 1 || ref.EndLine < ref.StartLine || ref.EndLine > len(lines) {
+		return "", fmt.Errorf("REVIEW_FINISH_READ_RANGE_INVALID: %s", ref.Path)
+	}
 	return readKey(ref), nil
 }
 
 func verifyEvidenceQuote(rootAbs string, ev Evidence) error {
 	data, err := os.ReadFile(filepath.Join(rootAbs, filepath.Clean(filepath.FromSlash(ev.Ref.Path))))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	lines := bytes.Split(data, []byte("\n"))
 	segment := bytes.Join(lines[ev.Ref.StartLine-1:ev.Ref.EndLine], []byte("\n"))
-	if !bytes.Contains(segment, []byte(ev.Quote)) { return fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH: %s", ev.Ref.Path) }
+	if !bytes.Contains(segment, []byte(ev.Quote)) {
+		return fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH: %s", ev.Ref.Path)
+	}
 	return nil
 }
 
-func readKey(ref ReadRef) string { return fmt.Sprintf("%s|%s|%d|%d", filepath.ToSlash(filepath.Clean(ref.Path)), ref.SHA256, ref.StartLine, ref.EndLine) }
+func readKey(ref ReadRef) string {
+	return fmt.Sprintf("%s|%s|%d|%d", filepath.ToSlash(filepath.Clean(ref.Path)), ref.SHA256, ref.StartLine, ref.EndLine)
+}
 
 func conclusionFor(coverage string, req FinishRequest) string {
-	if coverage != "COMPLETE" { return "UNDETERMINED" }
+	if coverage != "COMPLETE" {
+		return "UNDETERMINED"
+	}
 	severities := make([]string, 0, len(req.Findings))
-	for _, finding := range req.Findings { severities = append(severities, finding.Severity) }
+	for _, finding := range req.Findings {
+		severities = append(severities, finding.Severity)
+	}
 	sort.Strings(severities)
-	for _, s := range severities { if s == "CRITICAL" || s == "HIGH" { return "BLOCKING" } }
-	if len(req.Findings) > 0 || len(req.PendingRisks) > 0 { return "ACTION_REQUIRED" }
+	for _, s := range severities {
+		if s == "CRITICAL" || s == "HIGH" {
+			return "BLOCKING"
+		}
+	}
+	if len(req.Findings) > 0 || len(req.PendingRisks) > 0 {
+		return "ACTION_REQUIRED"
+	}
 	return "NO_ISSUES_FOUND"
 }
