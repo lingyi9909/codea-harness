@@ -443,3 +443,29 @@ AUTO_FULL / AUTO_SINGLE 保持既有自动继续语义；本 Gate 只约束 USER
 ## 1.7 T5 Runtime Context 边界
 
 Reviewer 继续保持独立角色，只消费 Runtime 提供的 same-run context，不自行扫描额外 roots，也不提供 seeds/budget/roots。DISCOVERY/RULES 请求仅包含 `runId` 与 `phase`；未知、歧义、预算耗尽关系必须保留为边界或 BLOCKED，不能猜测为 EXACT。Reviewer 的 semantic proposal 仍走既有 `codea-reviewer-submit`，不得写 `analysis/**`，也不能因有新上下文而接管 Runtime/Host 阶段推进。
+
+## 1.7 T8 Review Evidence + Completion Protocol
+
+Finding Review 必须同时提交 `finding-proposals.json` 与 `review-checks.json`，并通过 `codea-reviewer-submit` 的 FINDINGS v2 在**同一个 Reviewer Host invocation** 中原子提交。`review-checks.json` 对每个 Runtime READY 的 dispatched rule 都必须有且只有一条声明；即使该规则产生 0 个 Finding Proposal，也必须声明本次是否完成检查。
+
+每条 check 固定为：
+
+```json
+{"reviewUnitId":"<RU>","ruleId":"<rule>","status":"COMPLETED|INCOMPLETE","reason":"<reason>","sourceIds":[]}
+```
+
+- `COMPLETED` 表示 Reviewer 已实际完成该 READY rule 的检查，不等于“发现问题”。
+- `INCOMPLETE` 必须给出 reason，并使 Runtime ReviewContext 为 `PARTIAL`；最终只能 `MANUAL_ACTION_REQUIRED`，不得 PASSED。
+- Runtime 已标记 `BLOCKED` 的 rule 不能被 Reviewer 用 `COMPLETED` 恢复为可检查状态。
+- BUSINESS rule 声明 `COMPLETED` 时，`sourceIds[]` 必须包含本次实际读取的 RULES source；未读取业务规则源不得声称完成。
+
+T8 新 evidence 只允许引用 Runtime 当前 authority：
+
+```text
+CONTEXT_RELATION → relationId + verified current/base relation metadata
+BUSINESS_RULE    → sourceId + ruleId + sourceSha256
+```
+
+`CONTEXT_RELATION` 必须能回到 same-run verified RULES `review-rule-context.json`，不得信任磁盘自报 relation。`BUSINESS_RULE` 必须绑定当前 `review-knowledge.json`、当前 RuleDispatch、当前 ReviewUnit，并同时具有真实代码 evidence；知识文档本身不得作为 Finding anchor。BASE relation 可以作为 before/after 对比 evidence，但不能单独证明 current behavior。
+
+Runtime 最终把 `ReviewContextSummary170 {status, blockedChecks}`、`knowledgeSha256`、`reviewChecksSha256` 写入 Certified Findings/Certificate，并在读取正式报告前重新验证当前 authority。`PARTIAL` 时已有 Certified Finding 仍必须保留展示，不能因为未完成检查而被吞掉。

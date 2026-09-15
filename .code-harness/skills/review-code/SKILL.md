@@ -233,3 +233,21 @@ workspace dependency finding
 ### 1.7 T6 AUTO_TEMPORARY Chain 约束
 
 正常 `harness review` 的 Chain 维护策略由 Runtime 固定为 `AUTO_TEMPORARY`，不是 Agent 参数。Review request 不得携带 `allowTemporaryForStale`，不得先要求用户执行 refresh，也不得自动调用 `chain seal-persist` / `chain persist`。saved Chain 只可提供名称、备注和历史/删除解释；当前调用关系必须来自本次 same-run Certified ChangeAnalysis。saved YAML 损坏但当前分析可恢复时，Runtime 继续使用本次临时 Chain并给出一次提示；入口已删除时只保留删除说明，不得把旧节点当 CURRENT。真正的多业务链 `USER_SELECTION`、显式 Controller/Controller.method 的 direct TARGETED 与机器防漏链门禁保持原语义。
+
+## 1.7 T8 Evidence 与 Review Check 输出
+
+本 Skill 的 FINDINGS 输出不是只有 Proposal。Reviewer 必须为每个 Runtime READY dispatched rule 同步形成一条 `review-checks.json` 声明，并与 `finding-proposals.json` 一起交给 `codea-reviewer-submit` v2；不得分两次 Host invocation 提交，也不得沿用 Findings v1 receipt。
+
+```text
+COMPLETED  = 已实际检查该 READY rule；允许 0 个 Proposal
+INCOMPLETE = 检查无法完整完成，reason 必填，最终 PARTIAL
+```
+
+Runtime BLOCKED 的 rule 不允许 Reviewer 声明 COMPLETED。业务规则只有在实际读取对应 RULES source 后才可 COMPLETED，且 `sourceIds[]` 必须包含该 sourceId。
+
+T8 evidence：
+
+- `CONTEXT_RELATION`：必须引用 same-run Runtime verified RULES context 的 `relationId`；BASE relation只能用于对比，不能单独证明 current behavior。
+- `BUSINESS_RULE`：必须给出 `sourceId / ruleId / sourceSha256`，绑定当前 `review-knowledge.json` 与当前 dispatch，并同时提供 `CHANGED_RANGE`、`SYMBOL`、`SOURCE_RANGE`、`RESOURCE_RELATION`、`CHAIN` 或 current `CONTEXT_RELATION` 等真实代码 evidence。业务知识文档不得成为 Finding anchor。
+
+ReviewContext 为 PARTIAL 时不得输出 PASSED。已有通过 Runtime certification 的 findings 仍要保留给最终报告，未完成检查通过 `blockedChecks` 单独展示。

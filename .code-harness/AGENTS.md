@@ -246,3 +246,21 @@ OpenCode Host compatibility for 1.6.4 is certified against `opencode-ai@1.18.25`
 - 自动 Review 不得调用 `chain seal-persist` / `chain persist`，不得覆盖 manual name/notes；Project State 写入仍只允许显式 Chain Management 的 exact planId 授权流程。
 - saved entry 已删除时只记录删除说明并排除当前 context；关系不完整/歧义时 fail closed 为 PARTIAL/unresolved，不得让用户猜目标。
 - `AUTO_TEMPORARY` 不改变 `AUTO_FULL / AUTO_SINGLE / USER_SELECTION`，不取消真实多业务链选择；显式 Controller/Controller.method 仍 direct TARGETED 并保留机器防漏链。
+
+## 1.7 T8 Reviewer Check Authority
+
+FINDINGS 阶段的 Reviewer Host 必须使用 `codea-reviewer-submit` v2，同一 Host invocation 原子提交：
+
+```text
+requests/finding-proposals.json
+requests/review-checks.json
+requests/finding-reviewer-authority.json
+```
+
+Authority receipt 必须同时绑定 proposal/checks 的 path + sha256；ChangeAnalysis proposal 继续使用 v1，不得混用或降级 Findings v2。Runtime 只接受 same-run、same Reviewer Host invocation 的双 artifact attestation。
+
+`review-checks.json` 必须覆盖每个 Runtime READY dispatched rule。Reviewer `COMPLETED` 只证明执行了该检查；0 Finding 仍要有 COMPLETED check。Reviewer `INCOMPLETE` 或 Runtime BLOCKED 都使 ReviewContext 为 PARTIAL，并强制 `MANUAL_ACTION_REQUIRED`；不得由 Agent 把 BLOCKED 改写成 COMPLETED。
+
+业务规则 check 的 `sourceIds[]` 必须证明 RULES source 已实际读取；BUSINESS_RULE evidence 必须绑定当前 knowledge source/rule/digest、当前 RuleDispatch/ReviewUnit 和真实代码 evidence，knowledge 文档不能作为 Finding anchor。CONTEXT_RELATION evidence 必须来自 same-run verified RULES context；磁盘自报 relation 不构成 authority。
+
+Certified Findings/Certificate 必须绑定 `knowledgeSha256` 与 `reviewChecksSha256`，消费时重新验证当前 knowledge/check bytes 与上游 Runtime authority。ReviewContext=PARTIAL 不得 PASSED，且已经认证的 findings 仍必须保留在最终报告。
