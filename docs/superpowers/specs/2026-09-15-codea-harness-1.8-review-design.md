@@ -4,6 +4,8 @@
 
 实施计划：[1.8 实施计划](../plans/2026-09-15-codea-harness-1.8-review-plan.md)。报告样稿：[汇报版示例](../../examples/2026-09-15-codea-harness-1.8-review-report-example.md)。样稿是虚构排版案例，不是本仓评审结果。
 
+研发交接：[五项独立任务书与分派入口](../../tasks/codea-harness-1.8/README.md)。任务依次验收，当前仅 T1 可分派；产品代码尚未开始。
+
 源码核对基线：`970573a6d2147733b773c0de0c124d9324914ae8`（main，1.6.7）。它有 Windows Runtime/打包成功记录，但用户随后报告实际 Agent 仍只输出聊天总结，因此**不是“真实模型端到端使用已验收”的基线**。
 
 ## 1. 决策与暂停范围

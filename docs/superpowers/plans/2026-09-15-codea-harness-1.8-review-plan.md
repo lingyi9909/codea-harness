@@ -1,6 +1,6 @@
 # Codea Harness 1.8 Review Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 本计划不授权派生研发 Agent；按用户当前约束执行，完成一项后提供独立验收结果。
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 本计划不授权派生研发 Agent；按用户当前约束执行，完成一项后提供独立验收结果。人工研发可直接执行，不要求安装这些技能。
 
 **Goal:** 交付找链、人工选链、主 Agent 评审、一次提交即生成汇报版报告的离线 Windows Review。
 
@@ -11,6 +11,8 @@
 **Spec:** [1.8 正式设计](../specs/2026-09-15-codea-harness-1.8-review-design.md)。报告版式：[样稿](../../examples/2026-09-15-codea-harness-1.8-review-report-example.md)。必须从同一文档提交读取。
 
 **Status:** 仅设计与实施计划已交付，以下任务尚未实施。1.7 已暂停；产品位置核对点为 `970573a6d2147733b773c0de0c124d9324914ae8`，不是实际私有模型使用验收证据。
+
+**研发分派入口：** [独立任务书、依赖与统一验收要求](../../tasks/codea-harness-1.8/README.md)。用户已要求拆分交给研发；T1 可分派，T2–T5 等待各自前置验收。本次只整理文档，未执行产品开发。
 
 ## Global Constraints
 
@@ -26,7 +28,7 @@
 - ast-grep 0.42.1 Windows ZIP SHA256：fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83。
 - CI Go 1.23.12、原生 OpenCode 1.18.25 为现有工具核对点；不得因此要求内网用户在线升级或安装 SDK。
 - 每个任务先写可观察失败案例，再做最小实现，执行相关回归，提交 exact HEAD 证据。新增测试匹配 0 个不得算通过。
-- 本计划没有授权直接开发全部任务或发布。按用户明确的后续执行指令启动 T1；任务验收与正式发布必须按设计第 9 节分层标注。
+- 按负责人分派启动 T1；每 Task 验收后再推进下一项，不一次性自动开发全部任务或发布。任务验收与正式发布必须按设计第 9 节分层标注。
 
 ## 目录和边界
 
