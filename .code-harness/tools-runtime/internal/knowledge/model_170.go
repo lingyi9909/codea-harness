@@ -71,8 +71,8 @@ type Manifest170 struct {
 }
 
 type Document170 struct {
-	SourceID string
-	Content  string
+	SourceID string `json:"sourceId"`
+	Content  string `json:"content"`
 }
 
 type LoadResult170 struct {
