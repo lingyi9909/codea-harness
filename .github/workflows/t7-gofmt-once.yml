@@ -22,6 +22,8 @@ jobs:
       - name: Format all changed T7 Go files and commit exact output
         shell: pwsh
         run: |
+          git config core.autocrlf false
+          git reset --hard HEAD
           $files = @(
             '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_context_entry_170.go',
             '.code-harness/tools-runtime/cmd/codea-dcep-tools/review_knowledge_command_170.go',
