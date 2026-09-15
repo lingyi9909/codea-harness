@@ -31,15 +31,38 @@ jobs:
           go-version: '1.23.x'
           cache-dependency-path: .code-harness/tools-runtime/go.sum
 
+      - name: Bootstrap pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-152.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-152'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Review regression tests
         working-directory: .code-harness/tools-runtime
         shell: pwsh
-        run: go test -count=1 ./internal/reviewauthority ./internal/reviewselection
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/reviewauthority ./internal/reviewselection
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Go test
         working-directory: .code-harness/tools-runtime
         shell: pwsh
-        run: go test -count=1 ./...
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Go vet
         working-directory: .code-harness/tools-runtime
