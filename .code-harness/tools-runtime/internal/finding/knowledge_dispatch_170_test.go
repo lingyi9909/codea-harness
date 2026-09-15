@@ -34,13 +34,13 @@ func Test170KnowledgeDispatchAuthorityRebuildUsesBoundManifest(t *testing.T) {
 	}
 
 	units := reviewunit.Manifest{
-		RunID:               runID,
-		HarnessVersion:      "1.7.0",
-		Mode:                reviewunit.ModeFull,
-		ChangeSetSHA256:     strings.Repeat("a", 64),
+		RunID:                runID,
+		HarnessVersion:       "1.7.0",
+		Mode:                 reviewunit.ModeFull,
+		ChangeSetSHA256:      strings.Repeat("a", 64),
 		ChangeAnalysisSHA256: strings.Repeat("b", 64),
 		Units: []reviewunit.Unit{{
-			ID: "RU-A",
+			ID:    "RU-A",
 			Files: []reviewunit.FileRef{{Path: "src/main/java/A.java", Role: "Code", Changed: true, Workspace: "current"}},
 		}},
 	}

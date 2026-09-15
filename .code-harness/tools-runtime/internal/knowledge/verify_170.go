@@ -32,7 +32,9 @@ func CanonicalBytes170(manifest Manifest170) ([]byte, error) {
 
 func Digest170(manifest Manifest170) (string, error) {
 	encoded, err := CanonicalBytes170(manifest)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	sum := sha256.Sum256(encoded)
 	return fmt.Sprintf("%x", sum[:]), nil
 }
