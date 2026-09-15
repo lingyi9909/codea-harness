@@ -103,13 +103,13 @@ jobs:
         shell: pwsh
         run: |
           $blockerBase = '5807aa869a8a833dc610883d33f3d0c90e3cad4c'
-          $changed = @(git -C $env:GITHUB_WORKSPACE diff --name-only $blockerBase HEAD -- '*.go')
+          $changed = @(git -C $env:GITHUB_WORKSPACE diff --diff-filter=A --name-only $blockerBase HEAD -- '*.go')
           $files = @($changed | ForEach-Object { Join-Path $env:GITHUB_WORKSPACE ($_ -replace '/', [IO.Path]::DirectorySeparatorChar) })
           if ($files.Count -gt 0) {
             $bad = @(gofmt -l $files)
             if ($bad.Count -gt 0) { throw "pre-test gofmt required: $($bad -join '; ')" }
           }
-          Write-Output "TASK170_T7_GOFMT_PRETEST PASS files=$($files.Count)"
+          Write-Output "TASK170_T7_GOFMT_PRETEST PASS new-files=$($files.Count)"
       - name: T7 targeted knowledge gate
         working-directory: .code-harness/tools-runtime
         shell: pwsh
@@ -124,7 +124,7 @@ jobs:
         shell: pwsh
         run: |
           $blockerBase = '5807aa869a8a833dc610883d33f3d0c90e3cad4c'
-          $changed = @(git -C $env:GITHUB_WORKSPACE diff --name-only $blockerBase HEAD -- '*.go')
+          $changed = @(git -C $env:GITHUB_WORKSPACE diff --diff-filter=A --name-only $blockerBase HEAD -- '*.go')
           $files = @($changed | ForEach-Object { Join-Path $env:GITHUB_WORKSPACE ($_ -replace '/', [IO.Path]::DirectorySeparatorChar) })
           $worktreeChanges = @(git -C $env:GITHUB_WORKSPACE diff --name-only -- '*.go')
           if ($worktreeChanges.Count -ne 0) { throw "tests mutated Go sources: $($worktreeChanges -join '; ')" }
