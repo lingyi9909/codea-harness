@@ -109,6 +109,16 @@ jobs:
         shell: pwsh
         env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
         run: go test ./internal/finding ./internal/report ./internal/schema ./internal/reviewrules ./internal/reviewauthority ./cmd/codea-dcep-tools -count=1
+      - name: T7 targeted knowledge regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/knowledge ./cmd/codea-dcep-tools -run Test170Knowledge -count=1
+      - name: T7 subsystem regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env: { GOTOOLCHAIN: local, GOPROXY: off, GOSUMDB: off }
+        run: go test ./internal/knowledge ./internal/reviewrules ./internal/schema ./cmd/codea-dcep-tools -count=1
       - name: Verify zero dependency drift
         shell: pwsh
         run: |
