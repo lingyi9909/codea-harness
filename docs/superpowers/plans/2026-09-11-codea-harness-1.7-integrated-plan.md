@@ -1,5 +1,7 @@
 # Codea Harness 1.7 完整项目执行计划
 
+> **2026-09-15 状态更新：PAUSED。** 用户已要求暂停 1.7，重新设计为 1.8。保留已有分支和历史任务记录，不进入 T6 或后续任务，不自动合入 1.8。后文是暂停前的历史设计/计划，不再授权继续执行。新的工作范围以 [1.8 设计](../specs/2026-09-15-codea-harness-1.8-review-design.md) 与 [1.8 计划](../plans/2026-09-15-codea-harness-1.8-review-plan.md) 为准；目前仅交付设计，尚未实现。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 人工研发可直接按任务执行，不要求安装这些 Agent 技能。
 
 **Goal:** 在内网零新增依赖的默认约束下，交付自动调用上下文、业务知识辅助且证据可追溯的Code Review，并保持现有TeamAI/Git/安装升级边界。
