@@ -82,6 +82,11 @@ func Certify(ctx CertifyContext, proposals []Proposal) (CertifiedSet, Certificat
 	if strings.TrimSpace(ctx.HarnessVersion) == "" {
 		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_CONTEXT_INVALID", "harnessVersion is required")
 	}
+	prepared, err := prepareCertifyContext170(ctx)
+	if err != nil {
+		return CertifiedSet{}, Certificate{}, nil, err
+	}
+	ctx = prepared
 	if !validSHA160(ctx.ChangeSetSHA256) || !validSHA160(ctx.ChangeAnalysisSHA256) || !validSHA160(ctx.ReviewUnitsSHA256) || !validSHA160(ctx.RuleDispatchSHA256) || !validSHA160(ctx.FindingProposalsSHA256) {
 		return CertifiedSet{}, Certificate{}, nil, findingError160("FINDING_CERTIFY_CONTEXT_INVALID", "authority hashes must be lowercase sha256")
 	}

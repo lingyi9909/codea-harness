@@ -8,6 +8,10 @@ import (
 	"codea-harness-tools/internal/finding"
 )
 
+func FinalizeCertifiedRequest170(req ReviewRequest, set finding.CertifiedSet) (ReviewRequest, error) {
+	return finalizeCertifiedRequest170(req, set)
+}
+
 func finalizeCertifiedRequest170(req ReviewRequest, set finding.CertifiedSet) (ReviewRequest, error) {
 	req.Findings = mapCertifiedFindings160(set.Findings)
 	if set.ReviewContext == nil {
