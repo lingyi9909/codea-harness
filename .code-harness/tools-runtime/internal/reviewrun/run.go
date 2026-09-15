@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -279,60 +280,54 @@ func atomicWrite(path string, data []byte) error {
 	return nil
 }
 
+const defaultRunLockWait = 2 * time.Second
+
 func acquireRunLock(ctx context.Context, runDir string) (func(), error) {
-	lockPath := filepath.Join(runDir, ".review-180.lock")
-	token, err := newLockToken()
-	if err != nil {
-		return nil, err
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultRunLockWait)
+		defer cancel()
+	}
+
+	lockPath := filepath.Join(runDir, ".review-180.lock")
+	file, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("REVIEW_RUN_LOCK_FAILED: %w", err)
+	}
+
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if err == nil {
-			if _, writeErr := fmt.Fprintf(f, "%d %s\n", os.Getpid(), token); writeErr != nil {
-				_ = f.Close()
-				_ = os.Remove(lockPath)
-				return nil, fmt.Errorf("REVIEW_RUN_LOCK_WRITE_FAILED: %w", writeErr)
-			}
-			if syncErr := f.Sync(); syncErr != nil {
-				_ = f.Close()
-				_ = os.Remove(lockPath)
-				return nil, fmt.Errorf("REVIEW_RUN_LOCK_WRITE_FAILED: %w", syncErr)
-			}
-			if closeErr := f.Close(); closeErr != nil {
-				_ = os.Remove(lockPath)
-				return nil, fmt.Errorf("REVIEW_RUN_LOCK_WRITE_FAILED: %w", closeErr)
-			}
-			return func() { releaseRunLock(lockPath, token) }, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("REVIEW_RUN_LOCK_FAILED: %w", err)
-		}
 		select {
 		case <-ctx.Done():
+			_ = file.Close()
+			return nil, fmt.Errorf("REVIEW_RUN_BUSY: %w", ctx.Err())
+		default:
+		}
+
+		acquired, lockErr := tryRunFileLock(file)
+		if lockErr != nil {
+			_ = file.Close()
+			return nil, fmt.Errorf("REVIEW_RUN_LOCK_FAILED: %w", lockErr)
+		}
+		if acquired {
+			var once sync.Once
+			return func() {
+				once.Do(func() {
+					_ = unlockRunFile(file)
+					_ = file.Close()
+				})
+			}, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			_ = file.Close()
 			return nil, fmt.Errorf("REVIEW_RUN_BUSY: %w", ctx.Err())
 		case <-ticker.C:
 		}
 	}
-}
-
-func newLockToken() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("REVIEW_RUN_LOCK_TOKEN_FAILED: %w", err)
-	}
-	return hex.EncodeToString(b[:]), nil
-}
-
-func releaseRunLock(lockPath, token string) {
-	data, err := os.ReadFile(lockPath)
-	if err != nil {
-		return
-	}
-	fields := strings.Fields(string(data))
-	if len(fields) != 2 || fields[1] != token {
-		return
-	}
-	_ = os.Remove(lockPath)
 }
