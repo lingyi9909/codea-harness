@@ -217,6 +217,19 @@ func validateFinishReadsWithinScope180(reads, allowed []ReadRef) error {
 			return fmt.Errorf("REVIEW_FINISH_READ_OUTSIDE_SCOPE: %s", ref.Path)
 		}
 	}
+	for _, scopeRef := range allowed {
+		covered := false
+		for _, ref := range reads {
+			if filepath.ToSlash(filepath.Clean(ref.Path)) == filepath.ToSlash(filepath.Clean(scopeRef.Path)) &&
+				ref.SHA256 == scopeRef.SHA256 && ref.StartLine <= scopeRef.StartLine && ref.EndLine >= scopeRef.EndLine {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			return fmt.Errorf("REVIEW_FINISH_SCOPE_NOT_READ: %s", scopeRef.Path)
+		}
+	}
 	return nil
 }
 
