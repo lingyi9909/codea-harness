@@ -42,16 +42,15 @@ func Test180FinishWithoutScopeKeepsReport(t *testing.T) {
 }
 
 func Test180FinishPreparedStateWritesDurableReport(t *testing.T) {
-	root := t.TempDir()
-	started := mustPreparedRun(t, root)
-	source := filepath.Join(root, "OrderService.java")
-	content := []byte("class OrderService { void pay() {} }\n")
-	if err := os.WriteFile(source, content, 0o600); err != nil {
+	root, started := mustRealPreparedRun180(t)
+	sourceRel := "src/main/java/com/example/OrderServiceImpl.java"
+	source := filepath.Join(root, filepath.FromSlash(sourceRel))
+	content, err := os.ReadFile(source)
+	if err != nil {
 		t.Fatal(err)
 	}
-	ref := ReadRef{Path: "OrderService.java", SHA256: bytesSHA256(content), StartLine: 1, EndLine: 1}
-	introduced := true
-	req := FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}, Findings: []Finding{{ID: "F1", Severity: "HIGH", Problem: "缺少幂等保护", Impact: "重复请求可能重复执行", Recommendation: "增加幂等键", Verification: "增加重复请求测试", Evidence: []Evidence{{Ref: ref, Quote: "void pay()"}}, IntroducedByChange: &introduced}}}
+	ref := ReadRef{Path: sourceRel, SHA256: bytesSHA256(content), StartLine: 1, EndLine: len(bytes.Split(content, []byte("\n")))}
+	req := FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}, Findings: []Finding{{ID: "F1", Severity: "HIGH", Problem: "缺少幂等保护", Impact: "重复请求可能重复执行", Recommendation: "增加幂等键", Verification: "增加重复请求测试", Evidence: []Evidence{{Ref: ref, Quote: "public void create()"}}}}}
 
 	got, err := Finish(context.Background(), root, req)
 	if err != nil {
@@ -277,6 +276,34 @@ func Test180FinishRejectsStaleRead(t *testing.T) {
 	}
 }
 
+func mustRealPreparedRun180(t *testing.T) (string, Outcome) {
+	t.Helper()
+	root := copyControllerReviewFixture180(t)
+	useRealAstGrep180(t, root)
+	started, err := Start(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "OrderController.create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.DiscoveryComplete || opts.SelectionRequired || len(opts.Chains) != 1 {
+		t.Fatalf("real prepare did not produce one complete scope: %+v", opts)
+	}
+	_, state, err := loadRun(root, started.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.ScopeReady || state.Coverage != "COMPLETE" || len(state.SelectedIDs) != 1 {
+		t.Fatalf("real prepare did not persist complete scope: %+v", state)
+	}
+	return root, started
+}
+
+// mustPreparedRun intentionally bypasses navigation for isolated T1 persistence,
+// retry, concurrency and failure-injection tests. The normal durable-success path
+// above goes through the real T2 Prepare flow.
 func mustPreparedRun(t *testing.T, root string) Outcome {
 	t.Helper()
 	started, err := Start(root)
