@@ -85,7 +85,7 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 		}
 	}
 
-	userIndex, err := selectionUserIndex180(exported.Messages, req.MessageID)
+	userIndex, err := selectionUserIndex180(exported, req.MessageID)
 	if err != nil {
 		return err
 	}
@@ -172,9 +172,9 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 	return nil
 }
 
-func selectionUserIndex180(messages []sessionMessage, messageID string) (int, error) {
+func selectionUserIndex180(exported sessionExport, messageID string) (int, error) {
 	anchorIndex := -1
-	for i, m := range messages {
+	for i, m := range exported.Messages {
 		if stringValue(m.Info["id"]) != messageID {
 			continue
 		}
@@ -186,7 +186,7 @@ func selectionUserIndex180(messages []sessionMessage, messageID string) (int, er
 	if anchorIndex < 0 {
 		return -1, errors.New("HUMAN_SELECTION_REQUIRED: Host turn unavailable")
 	}
-	anchor := messages[anchorIndex]
+	anchor := exported.Messages[anchorIndex]
 	switch stringValue(anchor.Info["role"]) {
 	case "user":
 		return anchorIndex, nil
@@ -197,7 +197,7 @@ func selectionUserIndex180(messages []sessionMessage, messageID string) (int, er
 		}
 		userIndex := -1
 		for i := 0; i < anchorIndex; i++ {
-			m := messages[i]
+			m := exported.Messages[i]
 			if stringValue(m.Info["id"]) != parentID {
 				continue
 			}
@@ -210,7 +210,7 @@ func selectionUserIndex180(messages []sessionMessage, messageID string) (int, er
 			return -1, errors.New("HUMAN_SELECTION_REQUIRED: assistant Host context user parent unavailable")
 		}
 		for i := userIndex + 1; i < anchorIndex; i++ {
-			if stringValue(messages[i].Info["role"]) == "user" {
+			if stringValue(exported.Messages[i].Info["role"]) == "user" {
 				return -1, errors.New("HUMAN_SELECTION_REQUIRED: assistant Host context is not bound to the latest real user")
 			}
 		}
