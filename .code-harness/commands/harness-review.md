@@ -23,4 +23,6 @@ Use only the `codea-review` structured tool for the ordinary 1.8 review path:
 7. If coverage is `PARTIAL`, preserve the disclosed gaps and treat `reviewConclusion=UNDETERMINED` as intentional. Never convert partial coverage into `NO_ISSUES_FOUND`.
 8. After successful finish, tell the user the report path and concise conclusion. If any tool call fails, report the concrete error and leave the already-created report INCOMPLETE.
 
-Do not run the historical certification, ReviewUnit, rule-dispatch, reviewer-attestation, or legacy report pipeline for this ordinary 1.8 command. Do not call `review finish` directly from shell; finish is owned by the structured tool.
+## 历史隔离
+
+The historical certification, ReviewUnit, RuleDispatch/rule-dispatch, reviewer-attestation, `codea-reviewer-submit`, `analysis certify`, `REPORT SUCCEEDED`, and legacy report pipeline are not part of the ordinary 1.8 path above. Do not call `review finish` directly from shell; finish is owned by the structured tool.
