@@ -44,6 +44,9 @@ func runReviewPrepare180(args []string) error {
 }
 
 func runReviewSelect180(args []string) error {
+	if usesLegacyReviewSelectInput180(args) {
+		return runReviewSelect(args)
+	}
 	fs := flag.NewFlagSet("review select", flag.ContinueOnError)
 	runID := fs.String("run-id", "", "1.8 review run id")
 	optionsHash := fs.String("options-hash", "", "hash returned by review prepare")
@@ -65,6 +68,15 @@ func runReviewSelect180(args []string) error {
 		return err
 	}
 	return writeJSONAndStatus(out, true)
+}
+
+func usesLegacyReviewSelectInput180(args []string) bool {
+	for _, arg := range args {
+		if arg == "--input" || arg == "-input" || strings.HasPrefix(arg, "--input=") || strings.HasPrefix(arg, "-input=") {
+			return true
+		}
+	}
+	return false
 }
 
 func runReviewStatus180(args []string) error {

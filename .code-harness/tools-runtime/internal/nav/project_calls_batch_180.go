@@ -20,8 +20,8 @@ func (n Navigator) FindDirectMethodCallsBatch180(ctx context.Context, scope stri
     for _, r := range records {
         if r.RuleID == "codea-direct-calls-180-fields" { continue }
         if k, _ := typeKindAndName(r.Text); k != "" { types = append(types, r); continue }
+        if _, _, ok := directCallParts163(r.Text); ok { calls = append(calls, r); continue }
         if methodName(r.Text) != "" { methods = append(methods, r); continue }
-        if _, _, ok := directCallParts163(r.Text); ok { calls = append(calls, r) }
     }
     out := map[string][]DirectMethodCall{}
     for _, method := range methods {
