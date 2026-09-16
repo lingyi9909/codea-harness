@@ -30,6 +30,21 @@ func Test180FinishRejectsReadOutsideSelectedScope(t *testing.T) {
 	}
 }
 
+func Test180FinishCompleteScopeRequiresSelectedReads(t *testing.T) {
+	root, started, _ := setupT3Scope180(t, false)
+	got, err := Finish(context.Background(), root, FinishRequest{RunID: started.RunID, Reads: []ReadRef{}, Findings: []Finding{}})
+	if err == nil || !strings.Contains(err.Error(), "SCOPE_NOT_READ") {
+		t.Fatalf("finish accepted complete scope without reading it: got=%+v err=%v", got, err)
+	}
+	status, statusErr := Status(root, started.RunID)
+	if statusErr != nil {
+		t.Fatal(statusErr)
+	}
+	if status.Execution != "INCOMPLETE" {
+		t.Fatalf("missing selected reads must keep report incomplete: %+v", status)
+	}
+}
+
 func Test180FinishSelectedPartialScopeIsUndeterminedAndKeepsKnownGap(t *testing.T) {
 	root, started, ref := setupT3Scope180(t, true)
 	got, err := Finish(context.Background(), root, FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}, Findings: []Finding{}})
