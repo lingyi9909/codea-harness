@@ -1,0 +1,38 @@
+name: T3 Go Test Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/t3-go-test-split
+
+permissions:
+  contents: read
+
+jobs:
+  split:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: reviewrun package
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -v -count=1 ./internal/reviewrun
+      - name: codea-dcep-tools package
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -v -count=1 ./cmd/codea-dcep-tools
+      - name: remaining packages
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $packages = go list ./... | Where-Object { $_ -notmatch '/internal/reviewrun$' -and $_ -notmatch '/cmd/codea-dcep-tools$' -and $_ -notmatch '/internal/reviewauthority$' -and $_ -notmatch '/internal/reviewselection$' -and $_ -notmatch '/internal/chain$' }
+          foreach ($pkg in $packages) {
+            Write-Host "=== $pkg ==="
+            go test -v -count=1 $pkg
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
