@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +35,29 @@ func Test180ReviewStartCommandWritesIncompleteReport(t *testing.T) {
 	}
 	if err := run([]string{"review", "status", "--run-id", runID}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func Test180ReviewPrepareAndSelectRoutes(t *testing.T) {
+	withTempProject(t)
+	if err := run([]string{"review", "start"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(".code-harness", "runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID := entries[0].Name()
+	t.Setenv("CODEA_AST_GREP_TEST_PATH", "")
+	t.Setenv("PATH", t.TempDir())
+	if err := run([]string{"review", "prepare", "--run-id", runID, "--mode", "CURRENT_IMPLEMENTATION", "--target", "OrderController"}); err != nil {
+		t.Fatalf("prepare route failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(".code-harness", "runs", runID, "options.json")); err != nil {
+		t.Fatalf("prepare route did not persist options: %v", err)
+	}
+	if err := run([]string{"review", "select"}); err == nil || !strings.Contains(err.Error(), "--options-hash") {
+		t.Fatalf("select did not route to 1.8 command: %v", err)
 	}
 }
 
