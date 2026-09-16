@@ -16,11 +16,6 @@ func Test180SelectNeedsNextActualUser(t *testing.T) {
 		{"assistant selects", export180("m-menu", "assistant", "run-1 options=hash-1\nC1 create\nC2 cancel", "m-a", "assistant", "选择 C1"), "m-a", false},
 		{"user before menu", export180("m-user", "user", "选择 C1", "m-menu", "assistant", "run-1 options=hash-1\nC1 create\nC2 cancel"), "m-user", false},
 		{"continue is not choice", export180("m-menu", "assistant", "run-1 options=hash-1\nC1 create\nC2 cancel", "m-user", "user", "继续"), "m-user", false},
-		{"old menu user then new menu", exportMessages180([]exportMessage180{
-			{id: "old", role: "assistant", text: "run-1 options=hash-1\nC1 create\nC2 cancel"},
-			{id: "m-user", role: "user", text: "全部"},
-			{id: "new", role: "assistant", text: "run-1 options=hash-2\nC1 create\nC2 cancel"},
-		}), "m-user", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -32,6 +27,26 @@ func Test180SelectNeedsNextActualUser(t *testing.T) {
 				t.Fatal("expected rejection")
 			}
 		})
+	}
+}
+
+func Test180SelectRejectsStaleMenuAfterUser(t *testing.T) {
+	data := exportMessages180([]exportMessage180{
+		{id: "old", role: "assistant", text: "run-1 options=hash-1\nC1 create\nC2 cancel"},
+		{id: "m-user", role: "user", text: "全部"},
+		{id: "new", role: "assistant", text: "run-1 options=hash-2\nC1 create\nC2 cancel"},
+	})
+	err := VerifySelectionTurnBytes180([]byte(data), SelectionTurnRequest180{SessionID: "s", MessageID: "m-user", RunID: "run-1", OptionsHash: "hash-1", SelectionIDs: []string{"C1", "C2"}, AllIDs: []string{"C1", "C2"}, MenuMarker: "C1 create\nC2 cancel"})
+	if err == nil {
+		t.Fatal("reply to stale menu accepted after a newer menu was emitted")
+	}
+}
+
+func Test180SelectTurnRejectsOtherRun(t *testing.T) {
+	data := export180("m-menu", "assistant", "run-1 options=hash-1\nC1 create\nC2 cancel", "m-user", "user", "选择 C1")
+	err := VerifySelectionTurnBytes180([]byte(data), SelectionTurnRequest180{SessionID: "s", MessageID: "m-user", RunID: "run-2", OptionsHash: "hash-1", SelectionIDs: []string{"C1"}, AllIDs: []string{"C1", "C2"}, MenuMarker: "C1 create\nC2 cancel"})
+	if err == nil {
+		t.Fatal("selection user turn from another run accepted")
 	}
 }
 
