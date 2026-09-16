@@ -29,6 +29,10 @@ func runReview160(args []string) error {
 		switch args[0] {
 		case "start":
 			return runReviewStart180(args[1:])
+		case "prepare":
+			return runReviewPrepare180(args[1:])
+		case "select":
+			return runReviewSelect180(args[1:])
 		case "status":
 			return runReviewStatus180(args[1:])
 		case "cancel":
