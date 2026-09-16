@@ -28,9 +28,23 @@ ACTIVE = '''# Codea Harness 1.8 普通 Review 主路径
 
 '''
 
+
+def split_frontmatter(text: str):
+    if not text.startswith('---\n'):
+        return '', text
+    end = text.find('\n---\n', 4)
+    if end < 0:
+        raise RuntimeError('unterminated YAML frontmatter')
+    end += len('\n---\n')
+    return text[:end], text[end:]
+
+
 for path in FILES:
     text = path.read_text(encoding='utf-8')
-    if text.startswith('# Codea Harness 1.8 普通 Review 主路径'):
-        continue
-    path.write_text(ACTIVE + text, encoding='utf-8', newline='\n')
-    print(f'PATCHED {path}')
+    if text.startswith(ACTIVE):
+        text = text[len(ACTIVE):]
+    frontmatter, body = split_frontmatter(text)
+    normalized = frontmatter + ACTIVE + body
+    if normalized != path.read_text(encoding='utf-8'):
+        path.write_text(normalized, encoding='utf-8', newline='\n')
+        print(f'PATCHED {path}')
