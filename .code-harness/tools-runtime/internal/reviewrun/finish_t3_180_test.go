@@ -45,6 +45,30 @@ func Test180FinishCompleteScopeRequiresSelectedReads(t *testing.T) {
 	}
 }
 
+func Test180FinishRejectsFindingWithoutEvidence(t *testing.T) {
+	root, started, ref := setupT3Scope180(t, false)
+	finding := Finding{
+		ID:             "F1",
+		Severity:       "HIGH",
+		Problem:        "unproven problem",
+		Impact:         "unknown impact",
+		Recommendation: "do something",
+		Verification:   "verify later",
+		Evidence:       []Evidence{},
+	}
+	got, err := Finish(context.Background(), root, FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}, Findings: []Finding{finding}})
+	if err == nil || !strings.Contains(err.Error(), "EVIDENCE_REQUIRED") {
+		t.Fatalf("finish accepted a formal finding without source evidence: got=%+v err=%v", got, err)
+	}
+	status, statusErr := Status(root, started.RunID)
+	if statusErr != nil {
+		t.Fatal(statusErr)
+	}
+	if status.Execution != "INCOMPLETE" {
+		t.Fatalf("evidence-less finding must keep report incomplete: %+v", status)
+	}
+}
+
 func Test180FinishSelectedPartialScopeIsUndeterminedAndKeepsKnownGap(t *testing.T) {
 	root, started, ref := setupT3Scope180(t, true)
 	got, err := Finish(context.Background(), root, FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}, Findings: []Finding{}})
