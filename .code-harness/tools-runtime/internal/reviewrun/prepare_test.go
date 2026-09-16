@@ -101,6 +101,32 @@ func Test180UnknownImplementationPreventsAutoSingle(t *testing.T) {
 	}
 }
 
+func Test180PrepareNoEntrypointStaysIncomplete(t *testing.T) {
+	root := copyControllerReviewFixture180(t)
+	useRealAstGrep180(t, root)
+	started, err := Start(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "MissingController"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DiscoveryComplete || len(got.Chains) != 0 {
+		t.Fatalf("zero discovered entrypoints must not create complete scope: %+v", got)
+	}
+	if !strings.Contains(strings.Join(got.Gaps, "\n"), "ENTRYPOINT_NOT_FOUND") {
+		t.Fatalf("missing entrypoint gap: %+v", got)
+	}
+	_, state, err := loadRun(root, started.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ScopeReady || state.Coverage != "PARTIAL" {
+		t.Fatalf("zero entrypoints created ready scope: %+v", state)
+	}
+}
+
 func Test180PrepareMissingAstGrepFailsClosed(t *testing.T) {
 	root := copyControllerReviewFixture180(t)
 	t.Setenv("CODEA_AST_GREP_TEST_PATH", "")
