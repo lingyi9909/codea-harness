@@ -120,7 +120,7 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 				continue
 			}
 			text := stringValue(p["text"])
-			if !selectionMenuForRun180(text, req.RunID) {
+			if !selectionMenu180(text) {
 				continue
 			}
 			latestMenuIndex = i
@@ -142,7 +142,7 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 			continue
 		}
 		for _, p := range m.Parts {
-			if stringValue(p["type"]) == "text" && selectionMenuForRun180(stringValue(p["text"]), req.RunID) {
+			if stringValue(p["type"]) == "text" && selectionMenu180(stringValue(p["text"])) {
 				return errors.New("HUMAN_SELECTION_REQUIRED: selection reply belongs to a stale menu")
 			}
 		}
@@ -185,8 +185,28 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 	return nil
 }
 
+func selectionMenu180(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		i := strings.Index(line, " options=")
+		if i <= 0 {
+			continue
+		}
+		if strings.TrimSpace(line[:i]) != "" && strings.TrimSpace(line[i+len(" options="):]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func selectionMenuForRun180(text, runID string) bool {
-	return strings.Contains(text, runID+" options=")
+	prefix := strings.TrimSpace(runID) + " options="
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func currentSelectionMenu180(text string, req SelectionTurnRequest180) bool {
