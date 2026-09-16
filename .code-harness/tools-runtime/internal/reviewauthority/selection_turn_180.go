@@ -8,7 +8,6 @@ import (
     "fmt"
     "io"
     "os/exec"
-    "path/filepath"
     "runtime"
     "sort"
     "strings"
