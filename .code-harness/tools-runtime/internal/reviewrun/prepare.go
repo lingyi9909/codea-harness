@@ -106,13 +106,13 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		return Options{}, err
 	}
 	javaFiles := filterExt180(sources, ".java")
-	changedJava := []string{}
+	changedSources := []string{}
 	if intent.Mode == "CHANGES" {
-		changedJava, err = changedJavaFiles180(ctx, rootAbs)
+		changedSources, err = changedSourceFiles180(ctx, rootAbs)
 		if err != nil {
 			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CHANGESET_DISCOVERY_FAILED: " + err.Error()}, 0)
 		}
-		if intent.Target != "" && len(changedJava) == 0 {
+		if intent.Target != "" && len(changedSources) == 0 {
 			return Options{}, fmt.Errorf("REVIEW_TARGET_NO_RELEVANT_CHANGES")
 		}
 	}
@@ -183,7 +183,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	}
 
 	xmlIndex := indexMapperXML180(rootAbs, filterExt180(sources, ".xml"))
-	changedSet := pathSet180(changedJava)
+	changedSet := pathSet180(changedSources)
 	chains := make([]Chain, 0, len(endpoints))
 	affected := map[string]bool{}
 	for _, ep := range endpoints {
@@ -206,6 +206,13 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 				affected[ch.Name] = true
 			}
 			xs := impls[first.ReceiverType]
+			// Candidate implementations establish possible impact, not a
+			// unique execution path. Keep ambiguity in Unresolved below.
+			for _, candidate := range xs {
+				if changedSet[filepath.ToSlash(candidate.Path)] {
+					affected[ch.Name] = true
+				}
+			}
 			if len(xs) != 1 {
 				ch.Unresolved = append(ch.Unresolved, fmt.Sprintf("%s implementations=%d", first.ReceiverType, len(xs)))
 			} else {
@@ -234,6 +241,9 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 						if identityOK {
 							if xp, ok := xmlIndex[xmlKey]; ok {
 								ch.Nodes = append(ch.Nodes, Node{Path: xp, Symbol: ms, Role: "SQL", Workspace: "current"})
+								if changedSet[xp] {
+									affected[ch.Name] = true
+								}
 							} else {
 								ch.Unresolved = append(ch.Unresolved, ms+" XML statement unresolved")
 							}
@@ -250,6 +260,13 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	if intent.Mode == "CHANGES" {
 		filtered := make([]Chain, 0, len(chains))
 		for _, ch := range chains {
+			// An incomplete path cannot prove that downstream changed code
+			// is unrelated. Retain the entry and its gap rather than allow
+			// another, complete chain to manufacture AUTO_SINGLE.
+			if !affected[ch.Name] && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
+				ch.Unresolved = append(ch.Unresolved, "CHANGE_IMPACT_UNRESOLVED: "+ch.Name)
+				affected[ch.Name] = true
+			}
 			if affected[ch.Name] {
 				filtered = append(filtered, ch)
 			}
@@ -530,18 +547,18 @@ func nonNilStrings180(v []string) []string {
 	return v
 }
 
-func changedJavaFiles180(ctx context.Context, root string) ([]string, error) {
+func changedSourceFiles180(ctx context.Context, root string) ([]string, error) {
 	set := map[string]bool{}
-	for _, args := range [][]string{{"diff", "--name-only", "HEAD"}, {"diff", "--cached", "--name-only", "HEAD"}, {"ls-files", "--others", "--exclude-standard"}} {
+	for _, args := range [][]string{{"diff", "--name-only", "-z", "HEAD"}, {"diff", "--cached", "--name-only", "-z", "HEAD"}, {"ls-files", "--others", "--exclude-standard", "-z"}} {
 		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = root
 		b, e := cmd.Output()
 		if e != nil {
 			return nil, e
 		}
-		for _, line := range strings.Split(string(b), "\n") {
-			p := filepath.ToSlash(strings.TrimSpace(line))
-			if strings.EqualFold(filepath.Ext(p), ".java") {
+		for _, line := range strings.Split(string(b), "\x00") {
+			p := filepath.ToSlash(line)
+			if strings.EqualFold(filepath.Ext(p), ".java") || strings.EqualFold(filepath.Ext(p), ".xml") {
 				set[p] = true
 			}
 		}

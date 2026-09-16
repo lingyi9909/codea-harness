@@ -114,21 +114,18 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 		if stringValue(m.Info["role"]) != "assistant" {
 			continue
 		}
-		found := false
+		// Export arrays preserve message/part order. Bind only to the final
+		// menu occurrence, even when menus share a message or text part.
+		texts := []string{}
 		for _, p := range m.Parts {
-			if stringValue(p["type"]) != "text" {
-				continue
+			if stringValue(p["type"]) == "text" {
+				texts = append(texts, stringValue(p["text"]))
 			}
-			text := stringValue(p["text"])
-			if !selectionMenu180(text) {
-				continue
-			}
+		}
+		text := strings.Join(texts, "\n")
+		if selectionMenu180(text) {
 			latestMenuIndex = i
 			latestMenuMatches = currentSelectionMenu180(text, req)
-			found = true
-			break
-		}
-		if found {
 			break
 		}
 	}
@@ -186,29 +183,20 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 }
 
 func selectionMenu180(text string) bool {
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		i := strings.Index(line, " options=")
-		if i <= 0 {
-			continue
-		}
-		if strings.TrimSpace(line[:i]) != "" && strings.TrimSpace(line[i+len(" options="):]) != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func selectionMenuForRun180(text, runID string) bool {
-	prefix := strings.TrimSpace(runID) + " options="
-	for _, line := range strings.Split(text, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), prefix) {
-			return true
-		}
-	}
-	return false
+	// A malformed later header still invalidates an earlier menu.
+	return strings.Contains(text, "options=")
 }
 
 func currentSelectionMenu180(text string, req SelectionTurnRequest180) bool {
-	return selectionMenuForRun180(text, req.RunID) && strings.Contains(text, "options="+req.OptionsHash) && strings.Contains(text, req.MenuMarker)
+	i := strings.LastIndex(text, "options=")
+	if i < 0 {
+		return false
+	}
+	start := strings.LastIndex(text[:i], "\n") + 1
+	menu := text[start:]
+	header, body, ok := strings.Cut(menu, "\n")
+	// Match the exact run/hash pair in this occurrence. Never borrow a
+	// hash or marker from an older menu in the same message.
+	return ok && strings.TrimSpace(header) == req.RunID+" options="+req.OptionsHash &&
+		strings.Contains("\n"+body+"\n", "\n"+req.MenuMarker+"\n")
 }
