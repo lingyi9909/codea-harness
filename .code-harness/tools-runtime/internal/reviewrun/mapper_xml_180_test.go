@@ -21,10 +21,13 @@ func Test180MapperXMLIndexesNamespaceAndStatementIDAttributes(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := indexMapperXML180(root, []string{rel})
-	if got["OrderMapper.insertOrder"] != rel {
+	if got["com.example.OrderMapper.insertOrder"] != rel {
 		t.Fatalf("insert mapper index=%v", got)
 	}
-	if got["OrderMapper.cancelOrder"] != rel {
+	if got["com.example.OrderMapper.cancelOrder"] != rel {
 		t.Fatalf("update mapper index=%v", got)
+	}
+	if _, ok := got["OrderMapper.insertOrder"]; ok {
+		t.Fatalf("short mapper identity must not be indexed: %v", got)
 	}
 }
