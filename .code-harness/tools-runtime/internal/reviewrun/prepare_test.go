@@ -151,6 +151,45 @@ func Test180PrepareMissingAstGrepFailsClosed(t *testing.T) {
 	}
 }
 
+func Test180FixtureGitBaselineIsReproducible(t *testing.T) {
+	rootA := copyControllerReviewFixture180(t)
+	rootB := copyControllerReviewFixture180(t)
+	headA := initControllerReviewGitBaseline180(t, rootA)
+	headB := initControllerReviewGitBaseline180(t, rootB)
+	if headA != headB {
+		t.Fatalf("fixture Git baseline is not reproducible: %s vs %s", headA, headB)
+	}
+}
+
+func Test180PrepareChangesUsesReproducibleGitBaseline(t *testing.T) {
+	root := copyControllerReviewFixture180(t)
+	useRealAstGrep180(t, root)
+	baseline := initControllerReviewGitBaseline180(t, root)
+	controller := filepath.Join(root, "src", "main", "java", "com", "example", "OrderController.java")
+	f, err := os.OpenFile(controller, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("\n// changed for Task 2 CHANGES-mode fixture\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	started, err := Start(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CHANGES", Target: "OrderController.create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseline == "" || !got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 1 {
+		t.Fatalf("CHANGES prepare did not use reproducible baseline correctly: baseline=%s options=%+v", baseline, got)
+	}
+}
+
 func Test180NodesRejectLegacyParallelRefs(t *testing.T) {
 	root := copyControllerReviewFixture180(t)
 	useRealAstGrep180(t, root)
