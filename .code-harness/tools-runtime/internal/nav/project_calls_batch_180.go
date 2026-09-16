@@ -11,17 +11,20 @@ import (
 // with one ast-grep process, then projects direct calls for every method. It is
 // intentionally narrow for the 1.8 review prepare path.
 func (n Navigator) FindDirectMethodCallsBatch180(ctx context.Context, scope string) (map[string][]DirectMethodCall, error) {
-    patterns := append([]string{}, allTypePatterns()...)
-    patterns = append(patterns, allMethodPatterns()...)
-    patterns = append(patterns, fieldDeclarationKind167, "$OBJ.$M($$$ARGS)", "$M($$$ARGS)")
-    records, err := n.runRawBatch167(ctx, scope, "codea-direct-calls-180", patterns)
+    records, err := n.runDirectCallsBatch180(ctx, scope)
     if err != nil { return nil, err }
     var types, methods, calls []rawMatch
     for _, r := range records {
-        if r.RuleID == "codea-direct-calls-180-fields" { continue }
-        if k, _ := typeKindAndName(r.Text); k != "" { types = append(types, r); continue }
-        if _, _, ok := directCallParts163(r.Text); ok { calls = append(calls, r); continue }
-        if methodName(r.Text) != "" { methods = append(methods, r); continue }
+        switch r.RuleID {
+        case "codea-direct-calls-180-types":
+            types = append(types, r)
+        case "codea-direct-calls-180-methods":
+            methods = append(methods, r)
+        case "codea-direct-calls-180-calls":
+            calls = append(calls, r)
+        default:
+            return nil, fmt.Errorf("unexpected direct-call ruleId %q", r.RuleID)
+        }
     }
     out := map[string][]DirectMethodCall{}
     for _, method := range methods {
