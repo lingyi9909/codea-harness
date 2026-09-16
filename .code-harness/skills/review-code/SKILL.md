@@ -1,3 +1,12 @@
+---
+name: review-code
+description: 在 FULL 或 Runtime 已验证的 TARGETED Review Scope 完整后执行 Finding Proposal Review；Java/Mapper/YML 生产变更按证据评审，测试代码只执行 Test Validity Gate。
+version: 4
+agent: orchestrator
+tools:
+  - read_code
+output_schema: .code-harness/contracts/finding-proposals.schema.json
+---
 # Codea Harness 1.8 普通 Review 主路径
 
 普通 `/harness-review` 只执行 1.8 report-first 协议：固定入口先运行 `review start` 创建并回读 INCOMPLETE 报告，然后主 Agent 只通过 `codea-review` 完成 `prepare → (必要时等待真实下一用户选择后 select) → finish`。
@@ -16,15 +25,6 @@
 
 下面保留的版本化内容用于旧 run / 升级兼容和非 Review 能力。**其中 1.7 及更早的 ordinary Review begin / Reviewer / certify / ReviewUnit / RuleDispatch / report-review 步骤全部是历史说明，不得用于新的 1.8 `/harness-review`。** Test、Debug、Fix、API Doc、Chain、Upgrade 等非 ordinary Review 规则若未被 1.8 设计修改，继续有效。
 
----
-name: review-code
-description: 在 FULL 或 Runtime 已验证的 TARGETED Review Scope 完整后执行 Finding Proposal Review；Java/Mapper/YML 生产变更按证据评审，测试代码只执行 Test Validity Gate。
-version: 4
-agent: orchestrator
-tools:
-  - read_code
-output_schema: .code-harness/contracts/finding-proposals.schema.json
----
 
 # 评审变更代码
 
