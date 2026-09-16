@@ -133,6 +133,7 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 			if stringValue(p["type"]) == "text" && selectionMenu180(stringValue(p["text"])) {
 				return errors.New("HUMAN_SELECTION_REQUIRED: selection reply belongs to a stale menu")
 			}
+		}
 	}
 
 	texts := []string{}
