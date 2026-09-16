@@ -1,0 +1,62 @@
+name: T3 Apply Formal Fix
+
+on:
+  push:
+    branches:
+      - diagnostic/t3-go-test-split
+    paths:
+      - '.github/workflows/t3-apply-formal-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/1.8-task3-primary-report
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Assert formal T3 head
+        shell: pwsh
+        run: |
+          $head = git rev-parse HEAD
+          if ($head -ne '4e6e7d6d5a5d513b17b8fc517f5afd31431af708') { throw "formal T3 branch moved: $head" }
+      - name: Apply minimal finish validation repair
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          p = Path('.code-harness/tools-runtime/internal/reviewrun/finish.go')
+          s = p.read_text(encoding='utf-8')
+          old = '''\tif scope.Coverage == "PARTIAL" || len(req.Gaps) > 0 {\n\t\tcoverage = "PARTIAL"\n\t}\n\n\tif err := validateFinishRequest(root, req); err != nil {'''
+          new = '''\tif scope.Coverage == "PARTIAL" || len(req.Gaps) > 0 {\n\t\tcoverage = "PARTIAL"\n\t}\n\tif coverage == "PARTIAL" && len(state.SelectedIDs) == 0 {\n\t\terr := fmt.Errorf("REVIEW_FINISH_PARTIAL_SCOPE_NOT_ACCEPTED")\n\t\tstate.LastError = err.Error()\n\t\t_ = writeState(runDir, state)\n\t\treturn Outcome{}, err\n\t}\n\n\tif err := validateFinishRequest(root, req); err != nil {'''
+          if old not in s:
+              raise SystemExit('coverage patch anchor not found')
+          s = s.replace(old, new, 1)
+          old = '''\t\tif strings.TrimSpace(finding.Problem) == "" || strings.TrimSpace(finding.Impact) == "" || strings.TrimSpace(finding.Recommendation) == "" || strings.TrimSpace(finding.Verification) == "" {\n\t\t\treturn fmt.Errorf("REVIEW_FINISH_FINDING_FIELDS_REQUIRED: %s", finding.ID)\n\t\t}\n\t\tfor _, ev := range finding.Evidence {'''
+          new = '''\t\tif strings.TrimSpace(finding.Problem) == "" || strings.TrimSpace(finding.Impact) == "" || strings.TrimSpace(finding.Recommendation) == "" || strings.TrimSpace(finding.Verification) == "" {\n\t\t\treturn fmt.Errorf("REVIEW_FINISH_FINDING_FIELDS_REQUIRED: %s", finding.ID)\n\t\t}\n\t\tif len(finding.Evidence) == 0 {\n\t\t\treturn fmt.Errorf("REVIEW_FINISH_EVIDENCE_REQUIRED: %s", finding.ID)\n\t\t}\n\t\tfor _, ev := range finding.Evidence {'''
+          if old not in s:
+              raise SystemExit('evidence patch anchor not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          '@ | python -
+          gofmt -w .code-harness/tools-runtime/internal/reviewrun/finish.go
+      - name: Targeted RED regressions now green
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go test -v -count=1 ./internal/reviewrun -run '^(Test180FinishPartialCoverageRemainsIncomplete|Test180FinishRejectsFindingWithoutEvidence|Test180FinishSelectedPartialScopeIsUndeterminedAndKeepsKnownGap)$'
+      - name: Commit formal repair
+        shell: pwsh
+        run: |
+          git config user.name 'codea-t3-ci'
+          git config user.email 'codea-t3-ci@users.noreply.github.com'
+          git add .code-harness/tools-runtime/internal/reviewrun/finish.go
+          git diff --cached --check
+          git commit -m 'fix(review): enforce T3 finish scope and evidence'
+          git push origin HEAD:refs/heads/feature/1.8-task3-primary-report
