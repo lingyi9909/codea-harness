@@ -12,9 +12,9 @@ func (directCallBatch180Runner) Run(_ context.Context, _ string, args ...string)
 		return nil, nil
 	}
 	return []byte(
-		`{"file":"src/main/java/OrderController.java","text":"public class OrderController {\nprivate final OrderService orderService;\npublic void create() {\norderService.create();\n}\n}","ruleId":"codea-direct-calls-180","range":{"start":{"line":0,"column":0},"end":{"line":5,"column":1}}}` + "\n" +
-			`{"file":"src/main/java/OrderController.java","text":"public void create() {\norderService.create();\n}","ruleId":"codea-direct-calls-180","range":{"start":{"line":2,"column":0},"end":{"line":4,"column":1}}}` + "\n" +
-			`{"file":"src/main/java/OrderController.java","text":"orderService.create()","ruleId":"codea-direct-calls-180","range":{"start":{"line":3,"column":0},"end":{"line":3,"column":21}}}` + "\n",
+		`{"file":"src/main/java/OrderController.java","text":"public class OrderController {\nprivate final OrderService orderService;\npublic void create() {\norderService.create();\n}\n}","ruleId":"codea-direct-calls-180-types","range":{"start":{"line":0,"column":0},"end":{"line":5,"column":1}}}` + "\n" +
+			`{"file":"src/main/java/OrderController.java","text":"public void create() {\norderService.create();\n}","ruleId":"codea-direct-calls-180-methods","range":{"start":{"line":2,"column":0},"end":{"line":4,"column":1}}}` + "\n" +
+			`{"file":"src/main/java/OrderController.java","text":"orderService.create()","ruleId":"codea-direct-calls-180-calls","range":{"start":{"line":3,"column":0},"end":{"line":3,"column":21}}}` + "\n",
 	), nil
 }
 
