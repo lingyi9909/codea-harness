@@ -300,8 +300,6 @@ def run_scenario(binary, project, env, server, multi):
     require(report.is_file(), f"{scenario}: report was not created by start before Agent work")
 
     sessions = list((Path(env["XDG_DATA_HOME"]) / "opencode" / "storage" / "session").rglob("*.json"))
-    # Storage layout is not a stable contract. Prefer run output sessionID when present,
-    # then fall back to `opencode session list --format json` only for observation.
     session_match = re.search(r'"sessionID"\s*:\s*"([^"]+)"', first)
     if session_match:
         session = session_match.group(1)
@@ -318,7 +316,7 @@ def run_scenario(binary, project, env, server, multi):
         require("finish" in actions, f"single: model never autonomously called finish; actions={actions}\n{first[-3000:]}")
         require("select" not in actions, f"single: unexpected selection; actions={actions}")
         final = report.read_text(encoding="utf-8")
-        require("execution: COMPLETE" in final, f"single: durable report not COMPLETE:\n{final}")
+        require('"execution":"COMPLETE"' in final, f"single: durable report not COMPLETE:\n{final}")
         print(f"REVIEW180_HOST_SINGLE PASS runId={run_id} actions={actions}", flush=True)
         return
 
@@ -332,7 +330,7 @@ def run_scenario(binary, project, env, server, multi):
     scope = json.loads((run_dir / "scope.json").read_text(encoding="utf-8"))
     require(scope.get("selectedIds") == ["C1"], f"multi: selected scope mismatch: {scope}")
     final = report.read_text(encoding="utf-8")
-    require("execution: COMPLETE" in final, f"multi: report not COMPLETE after selection:\n{final}")
+    require('"execution":"COMPLETE"' in final, f"multi: report not COMPLETE after selection:\n{final}")
     print(f"REVIEW180_HOST_MULTI PASS runId={run_id} actions={actions} actualUserReply=true", flush=True)
 
 
