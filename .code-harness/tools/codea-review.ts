@@ -115,7 +115,7 @@ export default tool({
 
     if (!args.result) throw new Error("CODEA_REVIEW_FINISH_RESULT_REQUIRED")
     const requestsRoot = path.resolve(worktree, ".code-harness", "runs", args.runId, "requests")
-    const requestPath = path.resolve(requestsRoot, `finish-${context.messageID || Date.now()}.json`)
+    const requestPath = path.resolve(requestsRoot, "finish.json")
     const payload = {
       runId: args.runId,
       reads: args.result.reads,
