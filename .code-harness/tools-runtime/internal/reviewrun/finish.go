@@ -78,6 +78,12 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 	if scope.Coverage == "PARTIAL" || len(req.Gaps) > 0 {
 		coverage = "PARTIAL"
 	}
+	if coverage == "PARTIAL" && len(state.SelectedIDs) == 0 {
+		err := fmt.Errorf("REVIEW_FINISH_PARTIAL_SCOPE_NOT_ACCEPTED")
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
 
 	if err := validateFinishRequest(root, req); err != nil {
 		state.LastError = err.Error()
@@ -299,6 +305,9 @@ func validateFinishRequest(root string, req FinishRequest) error {
 		}
 		if strings.TrimSpace(finding.Problem) == "" || strings.TrimSpace(finding.Impact) == "" || strings.TrimSpace(finding.Recommendation) == "" || strings.TrimSpace(finding.Verification) == "" {
 			return fmt.Errorf("REVIEW_FINISH_FINDING_FIELDS_REQUIRED: %s", finding.ID)
+		}
+		if len(finding.Evidence) == 0 {
+			return fmt.Errorf("REVIEW_FINISH_EVIDENCE_REQUIRED: %s", finding.ID)
 		}
 		for _, ev := range finding.Evidence {
 			key := readKey(ev.Ref)
