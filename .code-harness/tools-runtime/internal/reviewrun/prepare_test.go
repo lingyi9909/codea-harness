@@ -53,8 +53,8 @@ func Test180PrepareTwoEndpointsRequiresSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.NavigationProcesses < 3 || stored.NavigationProcesses > 4 {
-		t.Fatalf("expected bounded batch navigation, got %d ast-grep processes", stored.NavigationProcesses)
+	if stored.NavigationProcesses != 5 {
+		t.Fatalf("expected bounded batch navigation at 5 ast-grep processes, got %d", stored.NavigationProcesses)
 	}
 }
 
