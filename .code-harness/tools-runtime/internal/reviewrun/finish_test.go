@@ -314,6 +314,13 @@ func mustPreparedRun(t *testing.T, root string) Outcome {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeScope180(runDir, started.RunID, "isolated-persistence-fixture", []string{}, []Chain{}, rootAbs); err != nil {
+		t.Fatal(err)
+	}
 	state.ScopeReady = true
 	state.Coverage = "COMPLETE"
 	if err := writeState(runDir, state); err != nil {
