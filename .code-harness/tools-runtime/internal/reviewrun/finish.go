@@ -52,12 +52,31 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 	if !state.ScopeReady {
 		return Outcome{}, fmt.Errorf("REVIEW_FINISH_SCOPE_NOT_READY")
 	}
-	coverage := stateCoverage(state)
-	if coverage != "COMPLETE" || len(req.Gaps) > 0 {
-		err := fmt.Errorf("REVIEW_FINISH_COVERAGE_INCOMPLETE")
+
+	scope, err := loadScope180(runDir, req.RunID)
+	if err != nil {
 		state.LastError = err.Error()
 		_ = writeState(runDir, state)
 		return Outcome{}, err
+	}
+	if err := validateFinishReadsWithinScope180(req.Reads, scope.Reads); err != nil {
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	for _, chain := range scope.Chains {
+		req.Gaps = append(req.Gaps, chain.Unresolved...)
+	}
+	req.Gaps = uniqueStrings180(req.Gaps)
+	coverage := stateCoverage(state)
+	if coverage != "COMPLETE" && coverage != "PARTIAL" {
+		err := fmt.Errorf("REVIEW_FINISH_COVERAGE_INVALID: %q", coverage)
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	if scope.Coverage == "PARTIAL" || len(req.Gaps) > 0 {
+		coverage = "PARTIAL"
 	}
 
 	if err := validateFinishRequest(root, req); err != nil {
@@ -154,11 +173,51 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 	}
 	reportSHA := bytesSHA256(readback)
 	state.ReportSHA256 = reportSHA
+	state.Coverage = coverage
 	state.LastError = ""
 	if err := writeState(runDir, state); err != nil {
 		return Outcome{}, fmt.Errorf("REVIEW_RUN_FINAL_STATE_WRITE_FAILED: %w", err)
 	}
 	return Outcome{RunID: req.RunID, Execution: "COMPLETE", ReviewConclusion: conclusion, Coverage: coverage, ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
+}
+
+func loadScope180(runDir, runID string) (scopeState180, error) {
+	data, err := os.ReadFile(filepath.Join(runDir, "scope.json"))
+	if err != nil {
+		return scopeState180{}, fmt.Errorf("REVIEW_FINISH_SCOPE_READ_FAILED: %w", err)
+	}
+	var scope scopeState180
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&scope); err != nil {
+		return scopeState180{}, fmt.Errorf("REVIEW_FINISH_SCOPE_INVALID: %w", err)
+	}
+	if scope.SchemaVersion != SchemaVersion || scope.RunID != runID || (scope.Coverage != "COMPLETE" && scope.Coverage != "PARTIAL") {
+		return scopeState180{}, fmt.Errorf("REVIEW_FINISH_SCOPE_INVALID")
+	}
+	return scope, nil
+}
+
+func validateFinishReadsWithinScope180(reads, allowed []ReadRef) error {
+	byPath := map[string][]ReadRef{}
+	for _, ref := range allowed {
+		key := filepath.ToSlash(filepath.Clean(ref.Path))
+		byPath[key] = append(byPath[key], ref)
+	}
+	for _, ref := range reads {
+		key := filepath.ToSlash(filepath.Clean(ref.Path))
+		ok := false
+		for _, scopeRef := range byPath[key] {
+			if ref.SHA256 == scopeRef.SHA256 && ref.StartLine >= scopeRef.StartLine && ref.EndLine <= scopeRef.EndLine {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("REVIEW_FINISH_READ_OUTSIDE_SCOPE: %s", ref.Path)
+		}
+	}
+	return nil
 }
 
 func loadExistingResult(runDir string) (resultEnvelope, []byte, error) {
