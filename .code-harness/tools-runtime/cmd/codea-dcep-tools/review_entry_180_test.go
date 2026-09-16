@@ -61,6 +61,21 @@ func Test180PrimaryReviewUsesSingleStructuredTool(t *testing.T) {
 	}
 }
 
+func Test180PrimaryReviewFinishPathDoesNotUseOpaqueHostID(t *testing.T) {
+	root := repoRoot180(t)
+	data, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Contains(text, "finish-${context.messageID") || strings.Contains(text, "finish-${context.sessionID") {
+		t.Fatal("opaque Host ids must never become Windows path components")
+	}
+	if !strings.Contains(text, `path.resolve(requestsRoot, "finish.json")`) {
+		t.Fatal("finish request must use a deterministic Windows-safe path")
+	}
+}
+
 func Test180PrimaryReviewInstructionsDoNotRequireLegacyReviewerAuthority(t *testing.T) {
 	root := repoRoot180(t)
 	files := []string{
