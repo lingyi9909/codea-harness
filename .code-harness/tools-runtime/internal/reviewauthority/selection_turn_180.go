@@ -49,9 +49,11 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
     if userIndex<0{return errors.New("HUMAN_SELECTION_REQUIRED: user turn unavailable")}
     previousUser:=-1
     for i:=userIndex-1;i>=0;i--{if stringValue(exported.Messages[i].Info["role"])=="user"{previousUser=i;break}}
-    menuIndex:=-1
-    for i:=userIndex-1;i>previousUser;i-- { m:=exported.Messages[i]; if stringValue(m.Info["role"])!="assistant"{continue}; for _,p:=range m.Parts { if stringValue(p["type"])!="text"{continue}; text:=stringValue(p["text"]); if strings.Contains(text,req.RunID)&&strings.Contains(text,req.OptionsHash)&&strings.Contains(text,req.MenuMarker){menuIndex=i;break} }; if menuIndex>=0{break} }
-    if menuIndex<0{return errors.New("HUMAN_SELECTION_REQUIRED: current menu must immediately precede the next real user interval")}
+    latestMenuIndex:=-1
+    latestMenuMatches:=false
+    for i:=userIndex-1;i>previousUser;i-- { m:=exported.Messages[i]; if stringValue(m.Info["role"])!="assistant"{continue}; found:=false; for _,p:=range m.Parts { if stringValue(p["type"])!="text"{continue}; text:=stringValue(p["text"]); if !selectionMenuForRun180(text,req.RunID){continue}; latestMenuIndex=i; latestMenuMatches=strings.Contains(text,req.OptionsHash)&&strings.Contains(text,req.MenuMarker); found=true; break }; if found{break} }
+    if latestMenuIndex<0||!latestMenuMatches{return errors.New("HUMAN_SELECTION_REQUIRED: current menu must immediately precede the next real user interval")}
+    for i:=userIndex+1;i<len(exported.Messages);i++ { m:=exported.Messages[i]; if stringValue(m.Info["role"])!="assistant"{continue}; for _,p:=range m.Parts { if stringValue(p["type"])=="text"&&selectionMenuForRun180(stringValue(p["text"]),req.RunID){return errors.New("HUMAN_SELECTION_REQUIRED: selection reply belongs to a stale menu")} } }
     texts:=[]string{}
     for _,p:=range exported.Messages[userIndex].Parts { if stringValue(p["type"])!="text"{continue}; if synthetic,_:=p["synthetic"].(bool); synthetic{return errors.New("HUMAN_SELECTION_REQUIRED: synthetic user input")}; if ignored,_:=p["ignored"].(bool);ignored{continue}; texts=append(texts,stringValue(p["text"])) }
     actual:=strings.TrimSpace(strings.Join(texts,"\n")); ids:=append([]string(nil),req.SelectionIDs...); all:=append([]string(nil),req.AllIDs...); sort.Strings(ids); sort.Strings(all)
@@ -60,3 +62,5 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
     if actual!=expected{return fmt.Errorf("HUMAN_SELECTION_REQUIRED: user reply must be %q",expected)}
     return nil
 }
+
+func selectionMenuForRun180(text,runID string)bool{return strings.Contains(text,runID)&&strings.Contains(text,"options=")}
