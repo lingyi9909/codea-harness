@@ -16,6 +16,14 @@
 
 历史 ordinary Review 说明已独立放在 `.code-harness/history/ordinary-review-pre-1.8.md`，仅用于理解旧 run，不是 active instruction。
 
+## Runtime Progress 展示
+
+1.8 ordinary Review 的阶段展示只读取同 run 的只读状态：
+
+`codea-dcep-tools.exe review progress --run-id <runId>`
+
+OpenCode 只展示 Runtime-derived `events[].display`，不得自行生成或宣告阶段 PASS/FAIL/RUNNING。该读取接口只用于展示 Runtime 已产生的状态，不允许 Agent 通过 progress 命令推进、完成或篡改阶段。
+
 ## 首次初始化
 
 当用户要求 `harness init`：
@@ -38,3 +46,7 @@
 - `harness upgrade`：保持现有离线升级、事务 apply/rollback、manifest 与未知用户文件保护规则。
 
 Test/Fix/API-doc/Chain/Upgrade 的详细行为继续由各自 active Agent/Skill 定义；1.8 Task 3 不改变这些能力。
+## 历史兼容说明（非 1.8 ordinary Review authority）
+
+pre-1.8 Host 提交曾使用 `codea-reviewer-submit`。当时的兼容约束要求：Host export 失败时不能假报成功或改写 Runtime artifact。该文字仅用于旧版本回归与历史 run 解释；1.8 ordinary Review 不调用该工具，也不得把旧 Host 流程重新作为当前执行步骤。
+
