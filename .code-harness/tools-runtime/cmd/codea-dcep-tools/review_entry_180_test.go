@@ -142,6 +142,23 @@ func Test180SmokeDriversUseNativeCommandPathAndDoNotScriptFinish(t *testing.T) {
 	}
 }
 
+func Test180HostSmokeExtractsRunIDOnlyFromStructuredRunIDField(t *testing.T) {
+	root := repoRoot180(t)
+	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-host-smoke.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Contains(text, `RUN_RE = re.compile(r"review-[A-Za-z0-9._-]+")`) {
+		t.Fatal("host smoke must not scan arbitrary review-* text because review-context.json can be mistaken for a run id")
+	}
+	for _, want := range []string{`"runId"`, `RUN_ID_FIELD_RE`, `match.group(1)`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("host smoke must extract run id from the structured runId field; missing %q", want)
+		}
+	}
+}
+
 func repoRoot180(t *testing.T) string {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
