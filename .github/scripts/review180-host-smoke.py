@@ -252,11 +252,15 @@ def write_fixture(project, multi):
 
 def bootstrap_project(temp, args, sdk_root, port, multi):
     project = temp / ("multi" if multi else "single")
+    agent_source = args.command_source.parent.parent / "agents" / "orchestrator.md"
+    require(agent_source.resolve().is_file(), f"orchestrator agent source missing: {agent_source}")
     (project / ".opencode" / "tools").mkdir(parents=True)
     (project / ".opencode" / "commands").mkdir(parents=True)
+    (project / ".opencode" / "agents").mkdir(parents=True)
     (project / ".code-harness" / "bin").mkdir(parents=True)
     shutil.copyfile(args.tool_source, project / ".opencode" / "tools" / "codea-review.ts")
     shutil.copyfile(args.command_source, project / ".opencode" / "commands" / "harness-review.md")
+    shutil.copyfile(agent_source, project / ".opencode" / "agents" / "orchestrator.md")
     shutil.copyfile(args.runtime, project / ".code-harness" / "bin" / ("codea-dcep-tools.exe" if os.name == "nt" else "codea-dcep-tools"))
     shutil.copyfile(args.ast_grep, project / ".code-harness" / "bin" / ("ast-grep.exe" if os.name == "nt" else "ast-grep"))
     write_fixture(project, multi)
