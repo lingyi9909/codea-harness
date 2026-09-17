@@ -101,6 +101,7 @@ func Test180PrimaryReviewInstructionsDoNotRequireLegacyReviewerAuthority(t *test
 			if strings.Contains(prefix, old) {
 				t.Fatalf("%s still requires legacy ordinary-review step %q before historical isolation", rel, old)
 			}
+		}
 	}
 }
 
