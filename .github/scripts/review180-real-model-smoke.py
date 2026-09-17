@@ -65,6 +65,8 @@ def main():
     host.require(token, "real-model smoke requires GITHUB_TOKEN")
     for value in (args.opencode, args.runtime, args.ast_grep, args.tool_source, args.command_source):
         host.require(value.resolve().is_file(), f"required file missing: {value}")
+    agent_source = args.command_source.parent.parent / "agents" / "orchestrator.md"
+    host.require(agent_source.resolve().is_file(), f"orchestrator agent source missing: {agent_source}")
     sdk_root = args.sdk_root.resolve()
 
     with tempfile.TemporaryDirectory(prefix="Codea 180 Real Model & ") as raw:
@@ -72,9 +74,11 @@ def main():
         project = temp / "single-issue"
         (project / ".opencode" / "tools").mkdir(parents=True)
         (project / ".opencode" / "commands").mkdir(parents=True)
+        (project / ".opencode" / "agents").mkdir(parents=True)
         (project / ".code-harness" / "bin").mkdir(parents=True)
         shutil.copyfile(args.tool_source, project / ".opencode" / "tools" / "codea-review.ts")
         shutil.copyfile(args.command_source, project / ".opencode" / "commands" / "harness-review.md")
+        shutil.copyfile(agent_source, project / ".opencode" / "agents" / "orchestrator.md")
         shutil.copyfile(args.runtime, project / ".code-harness" / "bin" / ("codea-dcep-tools.exe" if os.name == "nt" else "codea-dcep-tools"))
         shutil.copyfile(args.ast_grep, project / ".code-harness" / "bin" / ("ast-grep.exe" if os.name == "nt" else "ast-grep"))
         host.write_fixture(project, False)
