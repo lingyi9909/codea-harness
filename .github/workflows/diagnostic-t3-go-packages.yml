@@ -1,0 +1,70 @@
+name: Diagnostic T3 Go Packages
+
+on:
+  push:
+    branches:
+      - diagnostic/t3-go-packages
+    paths:
+      - '.github/workflows/diagnostic-t3-go-packages.yml'
+      - '.code-harness/tools-runtime/**'
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.packages.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - id: packages
+        name: Discover Go packages
+        working-directory: .code-harness/tools-runtime
+        shell: bash
+        run: |
+          packages=$(go list ./... | python -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+
+  package-test:
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.packages) }}
+    name: go-test ${{ matrix.package }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+      - name: Bootstrap pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-152.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-152'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+      - name: Test package
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -v -count=1 $env:PACKAGE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
