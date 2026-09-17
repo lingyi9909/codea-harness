@@ -15,7 +15,7 @@ output_schema: .code-harness/contracts/finding-proposals.schema.json
 - 用户 target 是普通文本/结构化 `intent.target`，不得拼入 shell。
 - 多链必须展示当前 `optionsHash` 与完整链菜单并结束当前 assistant turn；只有下一条真实用户选择可授权 `select`。HostTurn 只来自 OpenCode tool context，模型参数不得填写 session/message/userConfirmed。
 - 只有 prepare 自动得到完整单链，或 select 成功后的 `scope.reads`，才是允许读取/提交的范围。跨 scope、源码 hash/range 变化必须 fail closed。
-- 主 Agent 自己完成语义 Review；普通 1.8 Review 不要求旧 Reviewer 子 Agent、Certified ChangeAnalysis、ReviewUnit、RuleDispatch 或旧 finding certification。
+- 主 Agent 自己完成语义 Review；普通 1.8 Review 不依赖 1.7 及更早的评审编排、认证分析、分段评审、规则分发或旧 finding certification。
 - findings 为空也必须调用 `codea-review action=finish`。只有 finish 返回 `execution=COMPLETE` 才能称“评审完成”。`coverage=PARTIAL` 时结论必须是 `UNDETERMINED`，报告保留所有已知 gap。
 - 任一步失败或用户未选择时保留已经存在的 INCOMPLETE 报告，不自动重启整轮，不进入修复代码。
 
