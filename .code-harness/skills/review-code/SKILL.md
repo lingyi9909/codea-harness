@@ -80,7 +80,7 @@ Evidence 必须满足：
 - 租户/机构/用户隔离条件被移除或弱化；
 - 动态 SQL 使关键过滤失效；
 - statement id、参数、resultMap/resultType 与所选 Java Mapper method 明显不一致；
-- 明显无边界批量写风险。
+- 明显无边界批量更新/删除风险。
 
 不得因为 XML 格式、缩进、命名风格产生 Finding。
 
