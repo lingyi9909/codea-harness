@@ -51,9 +51,27 @@ pre-1.8 ordinary Review 仅在 `.code-harness/history/ordinary-review-pre-1.8.md
 - Fix Agent 只生成最小生产修复；真正修改生产代码前必须精确 `批准 <fixPlanId>`。
 - Fix 后仍由 Runtime Debugger 执行验证，不能把静态分析等同测试通过。
 
+## Runtime Apply Safety Gate
+
+Test/Fix 的写入安全边界继续有效，且与 1.8 ordinary Review 相互独立：
+
+- Agent 先按 `apply-request.schema.json` 形成受控请求，结果必须符合 `apply-result.schema.json`。
+- 审批前执行 `codea-dcep-tools.exe seal-apply --input <request>`，sealed request 固定保存在 `sealed-plans`，批准只绑定当前 exact plan identity。
+- Runtime 必须 fail closed 处理 `APPROVAL_IDENTITY_MISMATCH`、`BASE_CHANGED`、`PLAN_ALREADY_APPLIED`。
+- apply 失败时以 `rollbackPerformed` 等 Runtime evidence 为准，不能把 direct host write 当作正式成功证据。
+- 正式 apply 不允许写入 `.git/**` 或 Harness managed `.code-harness/**` 范围，除非对应专用 Runtime contract 明确授权。
+
 ## API Documentation
 
 API 文档流程保持只读。target selection 只决定读取范围，不是写审批；DTO/Enum/Validation/Direct Service evidence 按现有 API Doc Skill 处理，最终文档由受控 Runtime 生成。不得借 API-doc 修改业务代码或配置。
+
+## 非 Review 路由兼容
+
+| 用户意图 | 路由 |
+|---|---|
+| `harness chain discover [target]` | Reviewer → discover-chain |
+
+该行只描述独立 Chain discovery 的路由，不属于 1.8 ordinary Review 执行链。
 
 ## Chain Management
 
@@ -80,4 +98,45 @@ Chain list/show/discover/validate/refresh/edit 保持现有确定性事实边界
 - 请求/结果必须绑定当前 run；任何 stale/tampered/source-changed 条件都 fail closed。
 - 测试/生产/Chain 写入审批彼此独立，不能复用一次用户确认跨越另一类写边界。
 
+## 统一结果
+
+用户可见摘要保持中文，不直接暴露 Runtime machine enum。首屏至少给出评审结果、范围/目标、问题数量和下一步，并沿用下列可读状态：
+
+- ✅ 通过
+- ❌ 未通过
+- ⏳ 等待批准
+- ⚠️ 需要人工处理
+- 测试有效性问题
+
+调用链展示沿用：🌐 接口入口、⚙️ 业务服务、🧠 业务实现、🗄 数据访问、📄 Mapper XML、🔹 代码节点。
+定向范围必须明确提示：本结论只覆盖本次定向评审范围，不代表整个 Change Set 已完成评审。
+
 普通 Review 只执行本文第一节的 1.8 路径；其余能力保持各自 active Skill 的既有产品语义。
+## 历史兼容契约（非 1.8 ordinary Review authority）
+
+以下文字仅用于 pre-1.8 回归测试、旧 run 解释以及独立 Chain 能力兼容，不得作为当前普通 Review 的执行步骤。
+
+### 旧 Review selection/list 术语
+
+- harness review list → LIST；该动作只展示已确认调用链与候选/未解析，不调用 `review-code`。
+- 不得把 candidate/unresolved 包装成 confirmed。
+- 旧 Runtime ReviewOptions 曾区分 TARGETED CLASS、TARGETED METHOD、AUTO_FULL、AUTO_SINGLE、USER_SELECTION。
+- 旧菜单文案包含：全部评审、按业务链评审、仅查看调用链。
+- Controller CLASS/METHOD 只允许用户选中的 confirmed 子集；ALL 仍以 TARGETED 提交全部当前 selectionIds；不得默认 `ALL`。
+- Review Scope Selection 不等于 Test/Fix Approval。
+
+### Review Consumes Verified Chains（1.5 Task 4）
+
+旧版独立 Chain context 兼容术语包括：
+
+- `chain review-context --input`
+- `STALE_REQUIRES_DECISION`
+- 使用本次临时发现的 Chain 继续评审
+- 刷新项目 Chain
+- 停止本次评审
+- Chain = 业务上下文边界
+- 不得自动保存 DISCOVERED Chain
+- 是否沉淀到项目 `.code-harness/chains/`？
+
+这些术语不改变 1.8 的 `review start → codea-review prepare/select/finish` 唯一 ordinary Review 主路径。
+
