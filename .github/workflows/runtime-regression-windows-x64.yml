@@ -6,15 +6,24 @@ on:
     branches: [main]
     paths:
       - '.code-harness/tools-runtime/**'
+      - '.code-harness/tools/**'
+      - '.code-harness/commands/**'
+      - '.github/scripts/review180-host-smoke.py'
+      - '.github/scripts/review180-real-model-smoke.py'
       - '.github/workflows/runtime-regression-windows-x64.yml'
   pull_request:
     branches: [main, develop]
     paths:
       - '.code-harness/tools-runtime/**'
+      - '.code-harness/tools/**'
+      - '.code-harness/commands/**'
+      - '.github/scripts/review180-host-smoke.py'
+      - '.github/scripts/review180-real-model-smoke.py'
       - '.github/workflows/runtime-regression-windows-x64.yml'
 
 permissions:
   contents: read
+  models: read
 
 jobs:
   runtime:
@@ -92,3 +101,40 @@ jobs:
         working-directory: .code-harness/tools-runtime
         shell: pwsh
         run: go vet ./...
+
+      - name: Codea 1.8 native Host smoke
+        shell: pwsh
+        run: |
+          Push-Location '.code-harness/tools-runtime'
+          go build -o '../bin/codea-dcep-tools.exe' ./cmd/codea-dcep-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          $sdk = Join-Path $env:RUNNER_TEMP 'review180-plugin-sdk'
+          npm.cmd install --prefix $sdk @opencode-ai/plugin@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          python .github/scripts/review180-host-smoke.py `
+            --opencode $native `
+            --runtime '.code-harness/bin/codea-dcep-tools.exe' `
+            --ast-grep '.code-harness/bin/ast-grep.exe' `
+            --tool-source '.code-harness/tools/codea-review.ts' `
+            --command-source '.code-harness/commands/harness-review.md' `
+            --sdk-root $sdk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Codea 1.8 real-model autonomous single-chain smoke
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $sdk = Join-Path $env:RUNNER_TEMP 'review180-plugin-sdk'
+          $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          python .github/scripts/review180-real-model-smoke.py `
+            --opencode $native `
+            --runtime '.code-harness/bin/codea-dcep-tools.exe' `
+            --ast-grep '.code-harness/bin/ast-grep.exe' `
+            --tool-source '.code-harness/tools/codea-review.ts' `
+            --command-source '.code-harness/commands/harness-review.md' `
+            --sdk-root $sdk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
