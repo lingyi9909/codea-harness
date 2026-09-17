@@ -39,6 +39,19 @@
 
 用户要保存/更新 candidate 时，必须执行 `chain seal-persist`，展示当前 exact `planId`；只有用户随后明确确认该 planId，才允许 `chain persist` 写入 `.code-harness/chains/**`。candidate、analysis、sealed plan 或已有 Project State 任一变化都使旧 planId 失效。
 
+## Workspace Controlled Runtime allowlist
+
+1.8 Task 3 不改变 analyze-change 的 workspace dependency 导航边界。仅在既有 Skill 明确允许时，可调用以下固定命令：
+
+```text
+codea-dcep-tools.exe workspace verify --id <id>
+codea-dcep-tools.exe nav workspace-inherited --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-superclass-call --workspace <id> --from <symbol> --method <method>
+codea-dcep-tools.exe nav workspace-template-dispatch --workspace <id> --from <symbol> --hook <hook> [--concrete <class>]
+```
+
+workspace dependency 只提供显式、已验证的导航上下文；不得扩大 ordinary Review 的 finding scope、Change Set 或任何写权限。
+
 ## 初始化门禁
 
 `harness init`、`harness review`、`harness api-doc`、Chain 查询/维护和 `harness upgrade` 不要求 READY。Test、Debug、Fix、Verify 仍要求 `initialization.status=READY`。
