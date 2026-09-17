@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import ProxyHandler, build_opener
 
 TOOL_NAME = "codea-review"
-RUN_RE = re.compile(r"review-[A-Za-z0-9._-]+")
+RUN_ID_FIELD_RE = re.compile(r'"runId"\s*:\s*"(review-[A-Za-z0-9._-]+)"')
 
 
 def require(condition, message):
@@ -144,9 +144,9 @@ class Provider(BaseHTTPRequestHandler):
             require(tool_name is not None, f"{TOOL_NAME} not advertised: {names}")
 
             whole = flatten(messages)
-            match = RUN_RE.search(whole)
+            match = RUN_ID_FIELD_RE.search(whole)
             require(match is not None, "review start runId was not injected before first model request")
-            run_id = match.group(0)
+            run_id = match.group(1)
             payload = latest_tool_payload(messages)
             user = latest_user_text(messages)
 
