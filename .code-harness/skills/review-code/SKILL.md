@@ -76,17 +76,17 @@ Evidence 必须满足：
 
 仅对所选链对应 statement 的高价值风险形成 finding：
 
-- UPDATE/DELETE 缺少必要 WHERE 或条件明显过宽；
+- UPDATE / DELETE 缺少必要 WHERE 或条件明显过宽；
 - 租户/机构/用户隔离条件被移除或弱化；
 - 动态 SQL 使关键过滤失效；
 - statement id、参数、resultMap/resultType 与所选 Java Mapper method 明显不一致；
 - 明显无边界批量写风险。
 
-不因 XML 缩进、命名或排版形成 finding。
+不得因为 XML 格式、缩进、命名风格产生 Finding。
 
 ## 配置与资源
 
-只有当配置/资源由所选调用链明确关联且处于 Runtime scope 时才评审。关注 datasource、timeout、线程池、MQ/RPC、profile、feature switch、敏感信息及 Java 配置绑定不一致等高价值风险；未变化、未关联或范围外内容不顺手扩审。
+只有当配置/资源由所选调用链明确关联且处于 Runtime scope 时才评审。关注 datasource、timeout、线程池、Redis/MQ/RPC、日志级别、profile、feature switch、敏感信息及 Java `@Value` / `@ConfigurationProperties` 配置绑定不一致等高价值风险；不得对未变化的配置做泛化审查；未关联或范围外内容不顺手扩审。
 
 ## 测试代码
 
@@ -108,3 +108,25 @@ result 包含本次 `reads/findings/pendingRisks/gaps`。Runtime 在同一调用
 只有 finish 返回的 path/hash 与磁盘 `review.md` 一致且 `execution=COMPLETE`，才可宣布 ordinary Review 完成。任何失败都保留当前 INCOMPLETE run，不自动换 run，也不自动进入 Fix。
 
 pre-1.8 ordinary Review 的历史机制只在 `.code-harness/history/ordinary-review-pre-1.8.md`，不得作为本 Skill 的执行步骤。
+## 历史兼容契约（非 1.8 ordinary Review authority）
+
+以下内容只保留旧报告/回归契约的术语，不重新激活 pre-1.8 ordinary Review orchestration。历史 contract lineage：`version: 4`。
+
+### FULL / TARGETED 旧机器门禁术语
+
+- FULL：`reviewCoverage.status == COMPLETE`。
+- TARGETED：`Runtime verified ReviewScopeSelection` + `Scoped Coverage`，且 `Finding.file` 必须属于 `verified scopedFiles`。
+- TARGETED 不得仅凭 Agent 声明的 reviewCoverage.status == COMPLETE 放行。
+
+### 旧 Finding transport 兼容
+
+旧 renderer/schema 使用 `category` 区分 `PRODUCTION_CODE` / `TEST_VALIDITY`，并要求 `problem / evidence / impact / recommendation`。测试代码默认不得产生普通 Finding；不得因为以下内容产生 Finding：命名、格式、重复代码、普通测试代码风格。不得把 Test Validity Gate 扩展成普通测试代码质量 Review。
+
+### Review Chain Context（1.5 Task 4）
+
+- `chainContext 只提供业务上下文`。
+- `Finding.file 仍由原 FULL/TARGETED Scope Gate 决定`。
+- `临时 DISCOVERED Chain 不授权 Project State 写入`。
+
+这些兼容文字只服务历史数据和旧回归；1.8 当前执行仍以本文件顶部的 bounded scope + source evidence + `codea-review finish` 为准。
+
