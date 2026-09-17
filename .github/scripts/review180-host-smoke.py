@@ -7,6 +7,7 @@ not evidence of semantic model quality. The driver sends only normal user input
 never invokes review prepare/select/finish directly.
 """
 import argparse
+import concurrent.futures
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,6 @@ import re
 import shutil
 import signal
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -94,22 +94,22 @@ class Provider(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
-    def reply(self, body, *, content=None, tool_call=None):
+    def reply(self, body, *, content=None, tool_call=None, tool_calls=None):
         base = {"id": "chatcmpl-review180", "created": int(time.time()), "model": body.get("model", "review180")}
-        finish = "stop"
+        calls = tool_calls if tool_calls is not None else ([tool_call] if tool_call is not None else [])
+        finish = "tool_calls" if calls else "stop"
         message = {"role": "assistant", "content": content}
-        if tool_call is not None:
-            message = {"role": "assistant", "content": None, "tool_calls": [tool_call]}
-            finish = "tool_calls"
+        if calls:
+            message = {"role": "assistant", "content": None, "tool_calls": calls}
         self.send_response(200)
         if body.get("stream"):
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
             delta = {"role": "assistant"}
-            if tool_call is None:
+            if not calls:
                 delta["content"] = content or ""
             else:
-                delta["tool_calls"] = [{"index": 0, **tool_call}]
+                delta["tool_calls"] = [{"index": i, **item} for i, item in enumerate(calls)]
             for part, reason in [(delta, None), ({}, finish)]:
                 chunk = {**base, "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": part, "finish_reason": reason}]}
                 self.wfile.write(("data: " + json.dumps(chunk, ensure_ascii=False) + "\n\n").encode("utf-8"))
@@ -150,6 +150,10 @@ class Provider(BaseHTTPRequestHandler):
             payload = latest_tool_payload(messages)
             user = latest_user_text(messages)
 
+            if self.server.scenario == "concurrent" and ("REVIEW_FINISH_OVERWRITE_REJECTED" in whole or '"execution": "COMPLETE"' in whole):
+                self.reply(body, content="concurrent finish race observed")
+                return
+
             if payload is None:
                 self.reply(body, tool_call=call(tool_name, {
                     "action": "prepare",
@@ -176,6 +180,28 @@ class Provider(BaseHTTPRequestHandler):
                     return
 
             if isinstance(scope, dict) and scope.get("reads") is not None:
+                if self.server.scenario == "concurrent":
+                    controller_ref = next(ref for ref in scope.get("reads", []) if ref.get("path", "").endswith("OrderController.java"))
+                    common = {
+                        "reads": scope.get("reads", []),
+                        "pendingRisks": [],
+                        "gaps": [],
+                    }
+                    a = {**common, "findings": []}
+                    b = {**common, "findings": [{
+                        "id": "F-concurrent-B",
+                        "severity": "HIGH",
+                        "problem": "concurrent B result",
+                        "impact": "proves different finish payloads remain isolated",
+                        "recommendation": "keep one immutable request per invocation",
+                        "verification": "rerun concurrent Host regression",
+                        "evidence": [{"ref": controller_ref, "quote": "service.create();"}],
+                    }]}
+                    self.reply(body, tool_calls=[
+                        call(tool_name, {"action": "finish", "runId": run_id, "result": a}, "finish_a"),
+                        call(tool_name, {"action": "finish", "runId": run_id, "result": b}, "finish_b"),
+                    ])
+                    return
                 self.reply(body, tool_call=call(tool_name, {
                     "action": "finish",
                     "runId": run_id,
@@ -250,8 +276,8 @@ def write_fixture(project, multi):
     (project / "pom.xml").write_text("<project><modelVersion>4.0.0</modelVersion><groupId>com.example</groupId><artifactId>review180</artifactId><version>1</version></project>\n", encoding="utf-8")
 
 
-def bootstrap_project(temp, args, sdk_root, port, multi):
-    project = temp / ("multi" if multi else "single")
+def bootstrap_project(temp, args, sdk_root, port, multi, name=None):
+    project = temp / (name or ("multi" if multi else "single"))
     agent_source = args.command_source.parent.parent / "agents" / "orchestrator.md"
     require(agent_source.resolve().is_file(), f"orchestrator agent source missing: {agent_source}")
     (project / ".opencode" / "tools").mkdir(parents=True)
@@ -272,8 +298,8 @@ def bootstrap_project(temp, args, sdk_root, port, multi):
     (project / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
     for config_dir in (project / ".opencode", Path(os.environ["REVIEW180_XDG_CONFIG"]) / "opencode"):
         config_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("package.json", "package-lock.json"):
-            shutil.copyfile(sdk_root / name, config_dir / name)
+        for package_name in ("package.json", "package-lock.json"):
+            shutil.copyfile(sdk_root / package_name, config_dir / package_name)
         if not (config_dir / "node_modules").exists():
             shutil.copytree(sdk_root / "node_modules", config_dir / "node_modules")
     return project
@@ -291,6 +317,29 @@ def tool_actions(exported):
     return actions
 
 
+def tool_parts(exported, action):
+    out = []
+    for message in exported.get("messages", []):
+        for part in message.get("parts", []):
+            if part.get("type") != "tool" or normalized(part.get("tool", "")) != normalized(TOOL_NAME):
+                continue
+            state = part.get("state", {})
+            if state.get("input", {}).get("action") == action:
+                out.append(state)
+    return out
+
+
+def session_for_run(stdout, binary, project, env, scenario):
+    sessions = list((Path(env["XDG_DATA_HOME"]) / "opencode" / "storage" / "session").rglob("*.json"))
+    session_match = re.search(r'"sessionID"\s*:\s*"([^"]+)"', stdout)
+    if session_match:
+        return session_match.group(1)
+    listed = command([str(binary), "session", "list", "--format", "json"], project, env, timeout=30)
+    rows = json.loads(listed)
+    require(rows, f"{scenario}: no native OpenCode session found; storage={sessions}")
+    return rows[0]["id"]
+
+
 def run_scenario(binary, project, env, server, multi):
     scenario = "multi" if multi else "single"
     server.scenario = scenario
@@ -304,15 +353,7 @@ def run_scenario(binary, project, env, server, multi):
     report = run_dir / "review.md"
     require(report.is_file(), f"{scenario}: report was not created by start before Agent work")
 
-    sessions = list((Path(env["XDG_DATA_HOME"]) / "opencode" / "storage" / "session").rglob("*.json"))
-    session_match = re.search(r'"sessionID"\s*:\s*"([^"]+)"', first)
-    if session_match:
-        session = session_match.group(1)
-    else:
-        listed = command([str(binary), "session", "list", "--format", "json"], project, env, timeout=30)
-        rows = json.loads(listed)
-        require(rows, f"{scenario}: no native OpenCode session found; storage={sessions}")
-        session = rows[0]["id"]
+    session = session_for_run(first, binary, project, env, scenario)
     exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
     actions = tool_actions(exported)
     require("prepare" in actions, f"{scenario}: model never called prepare; actions={actions}")
@@ -337,6 +378,49 @@ def run_scenario(binary, project, env, server, multi):
     final = report.read_text(encoding="utf-8")
     require('"execution":"COMPLETE"' in final, f"multi: report not COMPLETE after selection:\n{final}")
     print(f"REVIEW180_HOST_MULTI PASS runId={run_id} actions={actions} actualUserReply=true", flush=True)
+
+
+def run_concurrent_finish_scenario(binary, project, env, server):
+    """Send sibling finish tool calls in one native Host turn.
+
+    OpenCode dispatches sibling tool calls independently; both cross the real
+    TypeScript codea-review tool and contend on the same Go Runtime run lock.
+    """
+    server.scenario = "concurrent"
+    server.errors.clear()
+    run = [str(binary), "run", "--print-logs", "--dir", str(project), "--model", "fixture/review180", "--format", "json"]
+    stdout = command(run + ["--command", "harness-review", "OrderController"], project, env)
+    require(not server.errors, f"concurrent: provider errors: {server.errors}")
+    runs = list((project / ".code-harness" / "runs").glob("review-*"))
+    require(len(runs) == 1, f"concurrent: expected one run, got {runs}")
+    run_dir = runs[0]
+    session = session_for_run(stdout, binary, project, env, "concurrent")
+    exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
+    finishes = tool_parts(exported, "finish")
+    require(len(finishes) == 2, f"concurrent: expected exactly two finish attempts, got {finishes}")
+    completed = [state for state in finishes if state.get("status") == "completed"]
+    failed = [state for state in finishes if state.get("status") in {"error", "failed"}]
+    require(len(completed) == 1 and len(failed) == 1, f"concurrent: different results must not both succeed: {finishes}")
+    require("REVIEW_FINISH_OVERWRITE_REJECTED" in flatten(failed[0]), f"concurrent: loser did not fail at Runtime overwrite gate: {failed[0]}")
+
+    request_paths = sorted((run_dir / "requests").glob("finish-*.json"))
+    require(len(request_paths) == 2, f"concurrent: expected two invocation-unique request files, got {request_paths}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        payloads = list(pool.map(lambda p: p.read_text(encoding="utf-8"), request_paths))
+    require(payloads[0] != payloads[1], "concurrent: A/B finish payloads were cross-written to identical request bytes")
+    result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
+    require(result.get("runId") == run_dir.name, f"concurrent: durable result belongs to another run: {result}")
+    final = (run_dir / "review.md").read_text(encoding="utf-8")
+    require('"execution":"COMPLETE"' in final, f"concurrent: winning result did not create COMPLETE report:\n{final}")
+    print(f"REVIEW180_HOST_CONCURRENT_FINISH PASS runId={run_dir.name} completed=1 rejected=1 uniqueRequests=2", flush=True)
+
+
+def init_fixture_repo(project, env):
+    command(["git", "init"], project, env, timeout=20)
+    command(["git", "add", "."], project, env, timeout=20)
+    command(["git", "-c", "user.name=Host Fixture", "-c", "user.email=host-fixture@example.test", "commit", "-m", "baseline"], project, env, timeout=20)
+    impl = project / "src" / "main" / "java" / "com" / "example" / "OrderServiceImpl.java"
+    impl.write_text(impl.read_text(encoding="utf-8") + "// changed for review180\n", encoding="utf-8")
 
 
 def main():
@@ -379,12 +463,11 @@ def main():
             require(version == "1.18.25", f"expected OpenCode 1.18.25, got {version}")
             for multi in (False, True):
                 project = bootstrap_project(temp, args, sdk_root, server.server_port, multi)
-                command(["git", "init"], project, env, timeout=20)
-                command(["git", "add", "."], project, env, timeout=20)
-                command(["git", "-c", "user.name=Host Fixture", "-c", "user.email=host-fixture@example.test", "commit", "-m", "baseline"], project, env, timeout=20)
-                impl = project / "src" / "main" / "java" / "com" / "example" / "OrderServiceImpl.java"
-                impl.write_text(impl.read_text(encoding="utf-8") + "// changed for review180\n", encoding="utf-8")
+                init_fixture_repo(project, env)
                 run_scenario(args.opencode.resolve(), project, env, server, multi)
+            concurrent_project = bootstrap_project(temp, args, sdk_root, server.server_port, False, name="concurrent")
+            init_fixture_repo(concurrent_project, env)
+            run_concurrent_finish_scenario(args.opencode.resolve(), concurrent_project, env, server)
             print("REVIEW180_NATIVE_HOST_SMOKE PASS opencode=1.18.25 deterministic=true", flush=True)
     finally:
         server.shutdown()
