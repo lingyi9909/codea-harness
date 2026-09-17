@@ -45,11 +45,11 @@ func Test180RealModelSmokeUsesConfiguredSecretModel(t *testing.T) {
 	}
 	workflow := string(workflowBytes)
 	for _, want := range []string{
-		"TASK15_OPENAI_BASE_URL: ${{ secrets.TASK15_OPENAI_BASE_URL }}",
-		"TASK15_OPENAI_API_KEY: ${{ secrets.TASK15_OPENAI_API_KEY }}",
+		"TASK15_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}",
+		"TASK15_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
 	} {
 		if !strings.Contains(workflow, want) {
-			t.Fatalf("runtime regression must inject configured secret model credentials; missing %q", want)
+			t.Fatalf("runtime regression must inject configured repository secret model credentials; missing %q", want)
 		}
 	}
 	for _, forbidden := range []string{"models: read", "GITHUB_TOKEN:"} {
