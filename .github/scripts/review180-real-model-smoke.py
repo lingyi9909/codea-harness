@@ -2,9 +2,10 @@
 """Codea Harness 1.8 real-model autonomous single-chain acceptance smoke.
 
 This imports transport helpers from review180-host-smoke.py but does not use its
-fixture provider. Native OpenCode talks to GitHub Models with the workflow's
-GITHUB_TOKEN. The driver sends only the normal /harness-review user request and
-observes model/tool behavior; it never invokes review prepare/select/finish.
+fixture provider. Native OpenCode talks to the repository-configured
+OpenAI-compatible secret model. The driver sends only the normal /harness-review
+user request and observes model/tool behavior; it never invokes review
+prepare/select/finish.
 """
 import argparse
 import importlib.util
@@ -61,8 +62,10 @@ def main():
     parser.add_argument("--sdk-root", required=True, type=Path)
     args = parser.parse_args()
 
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
-    host.require(token, "real-model smoke requires GITHUB_TOKEN")
+    base_url = os.environ.get("TASK15_OPENAI_BASE_URL", "").strip()
+    api_key = os.environ.get("TASK15_OPENAI_API_KEY", "").strip()
+    host.require(base_url, "real-model smoke requires TASK15_OPENAI_BASE_URL")
+    host.require(api_key, "real-model smoke requires TASK15_OPENAI_API_KEY")
     for value in (args.opencode, args.runtime, args.ast_grep, args.tool_source, args.command_source):
         host.require(value.resolve().is_file(), f"required file missing: {value}")
     agent_source = args.command_source.parent.parent / "agents" / "orchestrator.md"
@@ -97,16 +100,16 @@ def main():
 
         config = {
             "provider": {
-                "githubmodels": {
+                "task15secret": {
                     "npm": "@ai-sdk/openai-compatible",
-                    "name": "GitHub Models real acceptance",
+                    "name": "Configured secret real acceptance",
                     "options": {
-                        "baseURL": "https://models.github.ai/inference",
-                        "apiKey": "{env:GITHUB_TOKEN}",
+                        "baseURL": "{env:TASK15_OPENAI_BASE_URL}",
+                        "apiKey": "{env:TASK15_OPENAI_API_KEY}",
                     },
                     "models": {
-                        "openai/gpt-4.1": {
-                            "name": "GPT-4.1",
+                        "deepseek-v4-pro": {
+                            "name": "DeepSeek V4 Pro",
                             "limit": {"context": 128000, "output": 8192},
                         }
                     },
@@ -138,7 +141,8 @@ def main():
         binary = args.opencode.resolve()
         version = host.command([str(binary), "--version"], temp, env, timeout=30).strip()
         host.require(version == "1.18.25", f"expected OpenCode 1.18.25, got {version}")
-        run = [str(binary), "run", "--print-logs", "--dir", str(project), "--model", "githubmodels/openai/gpt-4.1", "--format", "json"]
+        model = "task15secret/deepseek-v4-pro"
+        run = [str(binary), "run", "--print-logs", "--dir", str(project), "--model", model, "--format", "json"]
         stdout = host.command(run + ["--command", "harness-review", "OrderController"], project, env, timeout=240)
         sid = session_id(stdout, binary, project, env)
         exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
@@ -161,7 +165,7 @@ def main():
         host.require(result.get("reviewConclusion") in {"BLOCKING", "ACTION_REQUIRED"}, f"issue run has weak conclusion: {result}")
         print(
             "REVIEW180_REAL_MODEL PASS "
-            f"model=openai/gpt-4.1 runId={run_dir.name} actions={actions} findings={len(findings)} "
+            f"model={model} runId={run_dir.name} actions={actions} findings={len(findings)} "
             f"conclusion={result.get('reviewConclusion')}",
             flush=True,
         )
