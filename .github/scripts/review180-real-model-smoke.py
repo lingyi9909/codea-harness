@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Codea Harness 1.8 real-model autonomous single-chain acceptance smoke.
 
-This imports transport helpers from review180-host-smoke.py but does not use its
-fixture provider. Native OpenCode talks to the repository-configured
-OpenAI-compatible secret model. The driver sends only the normal /harness-review
-user request and observes model/tool behavior; it never invokes review
-prepare/select/finish.
+The driver sends only the normal /harness-review user request and observes the
+real model/tool behavior. It never invokes review prepare/select/finish itself.
+Acceptance evidence is retained in a caller-provided directory with secrets
+redacted and every durable artifact hashed.
 """
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -20,6 +20,8 @@ HERE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("review180_host", HERE / "review180-host-smoke.py")
 host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
+
+SEED_TEXT = 'throw new IllegalStateException("always fails after successful create")'
 
 
 def copy_sdk(sdk_root: Path, dest: Path):
@@ -52,6 +54,38 @@ def session_id(stdout: str, binary: Path, project: Path, env: dict) -> str:
     return rows[0]["id"]
 
 
+def parse_tool_output(state):
+    raw = state.get("output")
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        return json.loads(raw)
+    raise RuntimeError(f"real-model smoke: completed finish has no JSON output: {state}")
+
+
+def redact_sensitive(value):
+    if isinstance(value, list):
+        return [redact_sensitive(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, item in value.items():
+        lowered = key.lower()
+        if any(token in lowered for token in ("apikey", "api_key", "token", "authorization", "password", "secret")):
+            out[key] = "<redacted>"
+        else:
+            out[key] = redact_sensitive(item)
+    return out
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_json(path: Path, value):
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--opencode", required=True, type=Path)
@@ -60,6 +94,7 @@ def main():
     parser.add_argument("--tool-source", required=True, type=Path)
     parser.add_argument("--command-source", required=True, type=Path)
     parser.add_argument("--sdk-root", required=True, type=Path)
+    parser.add_argument("--evidence-dir", required=True, type=Path)
     args = parser.parse_args()
 
     base_url = os.environ.get("TASK15_OPENAI_BASE_URL", "").strip()
@@ -71,6 +106,8 @@ def main():
     agent_source = args.command_source.parent.parent / "agents" / "orchestrator.md"
     host.require(agent_source.resolve().is_file(), f"orchestrator agent source missing: {agent_source}")
     sdk_root = args.sdk_root.resolve()
+    evidence_dir = args.evidence_dir.resolve()
+    evidence_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="Codea 180 Real Model & ") as raw:
         temp = Path(raw)
@@ -133,7 +170,7 @@ def main():
         source = controller.read_text(encoding="utf-8")
         source = source.replace(
             "public void create() { service.create(); }",
-            'public void create() { service.create(); throw new IllegalStateException("always fails after successful create"); }',
+            f"public void create() {{ service.create(); {SEED_TEXT}; }}",
         )
         host.require("always fails after successful create" in source, "failed to inject explicit issue fixture")
         controller.write_text(source, encoding="utf-8")
@@ -153,20 +190,77 @@ def main():
         names = [host.normalized(name) for name in completed_tools(exported)]
         host.require("read" in names, f"real model did not use native source read tool: {names}")
 
+        finish_states = [state for state in host.tool_parts(exported, "finish") if state.get("status") == "completed"]
+        host.require(len(finish_states) == 1, f"expected exactly one completed finish call: {finish_states}")
+        finish_payload = parse_tool_output(finish_states[0])
+        finish_runtime = finish_payload.get("runtime", {})
+        host.require(finish_runtime.get("execution") == "COMPLETE", f"finish runtime did not complete: {finish_runtime}")
+
         runs = list((project / ".code-harness" / "runs").glob("review-*"))
         host.require(len(runs) == 1, f"expected one durable run, got {runs}")
         run_dir = runs[0]
-        result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
+        result_path = run_dir / "result.json"
+        scope_path = run_dir / "scope.json"
+        report_path = run_dir / "review.md"
+        for artifact in (result_path, scope_path, report_path):
+            host.require(artifact.is_file(), f"required durable artifact missing: {artifact}")
+
+        result = json.loads(result_path.read_text(encoding="utf-8"))
         findings = result.get("findings", [])
         host.require(findings, f"real model missed explicit always-fail issue: {result}")
         host.require(all(item.get("evidence") for item in findings), f"real model produced finding without evidence: {findings}")
-        report = (run_dir / "review.md").read_text(encoding="utf-8")
+        seeded_issue_evidence = []
+        for item in findings:
+            for evidence in item.get("evidence", []):
+                quote = evidence.get("quote", "")
+                if "always fails after successful create" in quote or "IllegalStateException" in quote:
+                    seeded_issue_evidence.append({"findingId": item.get("id"), "quote": quote, "ref": evidence.get("ref")})
+        host.require(seeded_issue_evidence, f"findings did not identify the seeded throw: {findings}")
+
+        report = report_path.read_text(encoding="utf-8")
         host.require("execution\":\"COMPLETE" in report or "评审完成" in report, f"durable report not complete:\n{report}")
         host.require(result.get("reviewConclusion") in {"BLOCKING", "ACTION_REQUIRED"}, f"issue run has weak conclusion: {result}")
+        report_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        expected_report_path = f".code-harness/runs/{run_dir.name}/review.md"
+        actual_runtime_path = str(finish_runtime.get("reportPath", "")).replace("\\", "/")
+        host.require(actual_runtime_path == expected_report_path, f"finish reportPath mismatch: {finish_runtime}")
+        host.require(finish_runtime.get("reportSha256") == report_sha, f"finish reportSha256 mismatch: runtime={finish_runtime.get('reportSha256')} disk={report_sha}")
+        host.require(result.get("runId") == run_dir.name, f"result runId mismatch: {result.get('runId')} != {run_dir.name}")
+
+        trajectory_path = evidence_dir / "trajectory.json"
+        write_json(trajectory_path, redact_sensitive(exported))
+        shutil.copyfile(report_path, evidence_dir / "review.md")
+        shutil.copyfile(result_path, evidence_dir / "result.json")
+        shutil.copyfile(scope_path, evidence_dir / "scope.json")
+        run_evidence = {
+            "schemaVersion": "codea.review180.acceptance.v1",
+            "model": model,
+            "runId": run_dir.name,
+            "sessionId": sid,
+            "actions": actions,
+            "completedTools": names,
+            "finish_runtime": finish_runtime,
+            "seeded_issue_evidence": seeded_issue_evidence,
+            "reviewConclusion": result.get("reviewConclusion"),
+            "findingCount": len(findings),
+            "reportPath": expected_report_path,
+            "reportSha256": report_sha,
+        }
+        write_json(evidence_dir / "run.json", run_evidence)
+
+        manifest_files = ["trajectory.json", "review.md", "result.json", "scope.json", "run.json"]
+        manifest = {
+            "schemaVersion": "codea.review180.acceptance-manifest.v1",
+            "runId": run_dir.name,
+            "model": model,
+            "files": {name: {"sha256": sha256_file(evidence_dir / name), "bytes": (evidence_dir / name).stat().st_size} for name in manifest_files},
+        }
+        write_json(evidence_dir / "manifest.json", manifest)
+
         print(
             "REVIEW180_REAL_MODEL PASS "
             f"model={model} runId={run_dir.name} actions={actions} findings={len(findings)} "
-            f"conclusion={result.get('reviewConclusion')}",
+            f"seededIssue=true conclusion={result.get('reviewConclusion')} reportSha256={report_sha}",
             flush=True,
         )
 
