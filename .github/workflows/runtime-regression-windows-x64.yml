@@ -157,11 +157,23 @@ jobs:
         run: |
           $sdk = Join-Path $env:RUNNER_TEMP 'review180-plugin-sdk'
           $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          $evidence = Join-Path $env:RUNNER_TEMP 'review180-real-model-evidence'
+          New-Item -ItemType Directory -Force $evidence | Out-Null
           python .github/scripts/review180-real-model-smoke.py `
             --opencode $native `
             --runtime '.code-harness/bin/codea-dcep-tools.exe' `
             --ast-grep '.code-harness/bin/ast-grep.exe' `
             --tool-source '.code-harness/tools/codea-review.ts' `
             --command-source '.code-harness/commands/harness-review.md' `
-            --sdk-root $sdk
+            --sdk-root $sdk `
+            --evidence-dir $evidence
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Codea 1.8 real-model acceptance evidence
+        if: ${{ always() && github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: review180-real-model-acceptance
+          path: ${{ runner.temp }}/review180-real-model-evidence
+          if-no-files-found: warn
+          retention-days: 14
