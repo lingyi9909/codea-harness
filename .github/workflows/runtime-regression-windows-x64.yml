@@ -23,7 +23,6 @@ on:
 
 permissions:
   contents: read
-  models: read
 
 jobs:
   runtime:
@@ -138,7 +137,8 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TASK15_OPENAI_BASE_URL: ${{ secrets.TASK15_OPENAI_BASE_URL }}
+          TASK15_OPENAI_API_KEY: ${{ secrets.TASK15_OPENAI_API_KEY }}
         run: |
           $sdk = Join-Path $env:RUNNER_TEMP 'review180-plugin-sdk'
           $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
