@@ -90,6 +90,16 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		_ = writeState(runDir, state)
 		return Outcome{}, err
 	}
+	if err := validateFindingsWithinSelectedScope180(root, req.Findings, scope.FindingReads); err != nil {
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	if err := validateChangeAttribution180(ctx, root, runDir, req); err != nil {
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
 
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
