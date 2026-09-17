@@ -260,6 +260,7 @@ def bootstrap_project(temp, args, sdk_root, port, multi):
     shutil.copyfile(args.runtime, project / ".code-harness" / "bin" / ("codea-dcep-tools.exe" if os.name == "nt" else "codea-dcep-tools"))
     shutil.copyfile(args.ast_grep, project / ".code-harness" / "bin" / ("ast-grep.exe" if os.name == "nt" else "ast-grep"))
     write_fixture(project, multi)
+    (project / ".gitignore").write_text(".opencode/node_modules/\n", encoding="utf-8")
     config = {
         "provider": {"fixture": {"npm": "@ai-sdk/openai-compatible", "name": "Review180 deterministic fixture", "options": {"baseURL": f"http://127.0.0.1:{port}/v1", "apiKey": "local-fixture"}, "models": {"review180": {"name": "Review180 Host fixture", "limit": {"context": 32000, "output": 4096}}}}},
         "permission": {"*": "deny", TOOL_NAME: "allow", "bash": "allow"},
