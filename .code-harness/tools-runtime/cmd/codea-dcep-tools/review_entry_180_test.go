@@ -71,8 +71,18 @@ func Test180PrimaryReviewFinishPathDoesNotUseOpaqueHostID(t *testing.T) {
 	if strings.Contains(text, "finish-${context.messageID") || strings.Contains(text, "finish-${context.sessionID") {
 		t.Fatal("opaque Host ids must never become Windows path components")
 	}
-	if !strings.Contains(text, `path.resolve(requestsRoot, "finish.json")`) {
-		t.Fatal("finish request must use a deterministic Windows-safe path")
+	for _, want := range []string{
+		"randomUUID",
+		`finish-${randomUUID()}.json`,
+		"exclusiveWrite(requestPath",
+		`flag: "wx"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("finish request must use an invocation-unique Windows-safe path with exclusive create semantics; missing %q", want)
+		}
+	}
+	if strings.Contains(text, `path.resolve(requestsRoot, "finish.json")`) {
+		t.Fatal("shared finish.json would allow concurrent sibling finish calls to overwrite one another")
 	}
 }
 
