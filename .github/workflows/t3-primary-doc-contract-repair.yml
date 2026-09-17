@@ -1,0 +1,65 @@
+name: T3 Primary Doc Contract Repair
+
+on:
+  push:
+    branches:
+      - tmp/t3-primary-doc-contract-repair
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout formal T3 branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/1.8-task3-primary-report
+          fetch-depth: 0
+
+      - name: Replace legacy ordinary-review wording before historical isolation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path('.code-harness/AGENTS.md'),
+              Path('.code-harness/agents/orchestrator.md'),
+              Path('.code-harness/skills/review-code/SKILL.md'),
+          ]
+          old = '- 主 Agent 自己完成语义 Review；普通 1.8 Review 不要求旧 Reviewer 子 Agent、Certified ChangeAnalysis、ReviewUnit、RuleDispatch 或旧 finding certification。'
+          new = '- 主 Agent 自己完成语义 Review；普通 1.8 Review 不依赖 1.7 及更早的评审编排、认证分析、分段评审、规则分发或旧 finding certification。'
+
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one primary-path wording match, found {count}')
+              marker = text.find('## 历史')
+              occurrence = text.find(old)
+              if marker < 0 or occurrence < 0 or occurrence >= marker:
+                  raise SystemExit(f'{path}: legacy wording is not uniquely before historical isolation')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          forbidden = ['codea-reviewer-submit', 'analysis certify', 'ReviewUnit', 'RuleDispatch', 'REPORT SUCCEEDED']
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              marker = text.find('## 历史')
+              prefix = text[:marker] if marker >= 0 else text
+              found = [token for token in forbidden if token in prefix]
+              if found:
+                  raise SystemExit(f'{path}: forbidden legacy terms remain before historical isolation: {found}')
+          PY
+
+      - name: Commit repair to formal T3 branch
+        shell: bash
+        run: |
+          git config user.name "codea-harness-bot"
+          git config user.email "codea-harness-bot@users.noreply.github.com"
+          git add .code-harness/AGENTS.md .code-harness/agents/orchestrator.md .code-harness/skills/review-code/SKILL.md
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m "fix(t3): isolate legacy review terms from primary path"
+          git push origin HEAD:feature/1.8-task3-primary-report
