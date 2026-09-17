@@ -134,7 +134,7 @@ def main():
         version = host.command([str(binary), "--version"], temp, env, timeout=30).strip()
         host.require(version == "1.18.25", f"expected OpenCode 1.18.25, got {version}")
         run = [str(binary), "run", "--print-logs", "--dir", str(project), "--model", "githubmodels/openai/gpt-4.1", "--format", "json"]
-        stdout = host.command(run + ["/harness-review", "OrderController"], project, env, timeout=240)
+        stdout = host.command(run + ["--command", "harness-review", "OrderController"], project, env, timeout=240)
         sid = session_id(stdout, binary, project, env)
         exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
         actions = host.tool_actions(exported)
