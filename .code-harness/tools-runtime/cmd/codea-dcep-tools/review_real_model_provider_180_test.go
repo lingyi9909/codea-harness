@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func Test180RealModelSmokeUsesUnauthenticatedOpenCodeFreeModel(t *testing.T) {
+func Test180RealModelSmokeUsesConfiguredSecretModel(t *testing.T) {
 	root := repoRoot180(t)
 
 	scriptPath := filepath.Join(root, ".github", "scripts", "review180-real-model-smoke.py")
@@ -16,23 +16,25 @@ func Test180RealModelSmokeUsesUnauthenticatedOpenCodeFreeModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := string(scriptBytes)
-
 	for _, want := range []string{
-		"https://opencode.ai/inference/openai/v1",
-		"mimo-v2.5-free",
-		"opencode-free/mimo-v2.5-free",
+		"TASK15_OPENAI_BASE_URL",
+		"TASK15_OPENAI_API_KEY",
+		"deepseek-v4-pro",
+		"task15secret/deepseek-v4-pro",
 	} {
 		if !strings.Contains(script, want) {
-			t.Fatalf("real-model smoke must use the unauthenticated OpenCode free-model endpoint; missing %q", want)
+			t.Fatalf("real-model smoke must use the configured secret model; missing %q", want)
 		}
 	}
 	for _, forbidden := range []string{
 		"models.github.ai",
 		"githubmodels/openai/gpt-4.1",
 		"GITHUB_TOKEN",
+		"opencode.ai/inference/openai/v1",
+		"mimo-v2.5-free",
 	} {
 		if strings.Contains(script, forbidden) {
-			t.Fatalf("real-model smoke must not depend on retired GitHub Models; found %q", forbidden)
+			t.Fatalf("real-model smoke must not depend on retired or anonymous providers; found %q", forbidden)
 		}
 	}
 
@@ -42,6 +44,14 @@ func Test180RealModelSmokeUsesUnauthenticatedOpenCodeFreeModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflow := string(workflowBytes)
+	for _, want := range []string{
+		"TASK15_OPENAI_BASE_URL: ${{ secrets.TASK15_OPENAI_BASE_URL }}",
+		"TASK15_OPENAI_API_KEY: ${{ secrets.TASK15_OPENAI_API_KEY }}",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("runtime regression must inject configured secret model credentials; missing %q", want)
+		}
+	}
 	for _, forbidden := range []string{"models: read", "GITHUB_TOKEN:"} {
 		if strings.Contains(workflow, forbidden) {
 			t.Fatalf("runtime regression must not request retired GitHub Models auth; found %q", forbidden)
