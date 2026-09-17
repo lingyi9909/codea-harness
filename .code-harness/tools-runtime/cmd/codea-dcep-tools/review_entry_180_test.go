@@ -159,6 +159,24 @@ func Test180HostSmokeExtractsRunIDOnlyFromStructuredRunIDField(t *testing.T) {
 	}
 }
 
+func Test180RealModelSmokeExcludesOpenCodeDependenciesFromFixtureGit(t *testing.T) {
+	root := repoRoot180(t)
+	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-real-model-smoke.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	ignore := `(project / ".gitignore").write_text(".opencode/node_modules/\n", encoding="utf-8")`
+	ignoreAt := strings.Index(text, ignore)
+	gitInitAt := strings.Index(text, `host.command(["git", "init"]`)
+	if ignoreAt < 0 {
+		t.Fatal("real-model smoke must exclude .opencode/node_modules from the fixture repository before git add")
+	}
+	if gitInitAt < 0 || ignoreAt > gitInitAt {
+		t.Fatal("real-model smoke must install the fixture .gitignore before repository initialization")
+	}
+}
+
 func repoRoot180(t *testing.T) string {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
