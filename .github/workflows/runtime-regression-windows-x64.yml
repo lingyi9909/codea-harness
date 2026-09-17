@@ -113,14 +113,26 @@ jobs:
           npm.cmd install --prefix $sdk @opencode-ai/plugin@1.18.25
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          $hostLog = Join-Path $env:RUNNER_TEMP 'review180-host-smoke.log'
           python .github/scripts/review180-host-smoke.py `
             --opencode $native `
             --runtime '.code-harness/bin/codea-dcep-tools.exe' `
             --ast-grep '.code-harness/bin/ast-grep.exe' `
             --tool-source '.code-harness/tools/codea-review.ts' `
             --command-source '.code-harness/commands/harness-review.md' `
-            --sdk-root $sdk
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            --sdk-root $sdk *> $hostLog
+          $hostExit = $LASTEXITCODE
+          Get-Content $hostLog
+          if ($hostExit -ne 0) { exit $hostExit }
+
+      - name: Upload Codea 1.8 native Host smoke diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: review180-host-smoke-diagnostics
+          path: ${{ runner.temp }}/review180-host-smoke.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Codea 1.8 real-model autonomous single-chain smoke
         if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
