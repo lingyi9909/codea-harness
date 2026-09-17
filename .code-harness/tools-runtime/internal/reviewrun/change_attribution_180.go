@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -82,7 +83,7 @@ func changedLineRangesForPath180(ctx context.Context, root, rel string) ([]ReadR
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
 		if filepath.ToSlash(strings.TrimSpace(line)) == clean {
-			data, err := osReadFile180(filepath.Join(root, filepath.FromSlash(clean)))
+			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(clean)))
 			if err != nil {
 				return nil, err
 			}
@@ -120,12 +121,6 @@ func changedLineRangesForPath180(ctx context.Context, root, rel string) ([]ReadR
 		refs = append(refs, ReadRef{Path: clean, StartLine: start, EndLine: start + count - 1})
 	}
 	return refs, nil
-}
-
-// Small indirection keeps the Git parser deterministic and easy to exercise
-// without introducing a second source-reading implementation elsewhere.
-var osReadFile180 = func(path string) ([]byte, error) {
-	return os.ReadFile(path)
 }
 
 func overlapsChangedRange180(ref ReadRef, changed []ReadRef) bool {
