@@ -291,7 +291,7 @@ def run_scenario(binary, project, env, server, multi):
     scenario = "multi" if multi else "single"
     server.scenario = scenario
     run = [str(binary), "run", "--print-logs", "--dir", str(project), "--model", "fixture/review180", "--format", "json"]
-    first = command(run + ["/harness-review", "OrderController"], project, env)
+    first = command(run + ["--command", "harness-review", "OrderController"], project, env)
     require(not server.errors, f"{scenario}: provider errors: {server.errors}")
     runs = list((project / ".code-harness" / "runs").glob("review-*"))
     require(len(runs) == 1, f"{scenario}: expected exactly one run, got {runs}")
