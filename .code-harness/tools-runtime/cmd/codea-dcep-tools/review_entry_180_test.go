@@ -101,7 +101,6 @@ func Test180PrimaryReviewInstructionsDoNotRequireLegacyReviewerAuthority(t *test
 			if strings.Contains(prefix, old) {
 				t.Fatalf("%s still requires legacy ordinary-review step %q before historical isolation", rel, old)
 			}
-		}
 	}
 }
 
@@ -117,7 +116,16 @@ func Test180SmokeDriversUseNativeCommandPathAndDoNotScriptFinish(t *testing.T) {
 			t.Fatalf("T3 smoke driver missing %s: %v", rel, err)
 		}
 		text := string(data)
-		for _, want := range []string{"harness-review", "OrderController", "finish", "export", `"--command", "harness-review", "OrderController"`} {
+		for _, want := range []string{
+			"harness-review",
+			"OrderController",
+			"finish",
+			"export",
+			`"--command", "harness-review", "OrderController"`,
+			`args.command_source.parent.parent / "agents" / "orchestrator.md"`,
+			`project / ".opencode" / "agents"`,
+			`project / ".opencode" / "agents" / "orchestrator.md"`,
+		} {
 			if !strings.Contains(text, want) {
 				t.Fatalf("%s missing %q", rel, want)
 			}
