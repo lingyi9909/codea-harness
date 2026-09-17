@@ -105,21 +105,30 @@ func Test180PrimaryReviewInstructionsDoNotRequireLegacyReviewerAuthority(t *test
 	}
 }
 
-func Test180HostSmokeDriverExistsAndDoesNotScriptFinish(t *testing.T) {
+func Test180SmokeDriversUseNativeCommandPathAndDoNotScriptFinish(t *testing.T) {
 	root := repoRoot180(t)
-	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-host-smoke.py"))
-	if err != nil {
-		t.Fatalf("T3 native Host smoke driver missing: %v", err)
+	files := []string{
+		filepath.Join(".github", "scripts", "review180-host-smoke.py"),
+		filepath.Join(".github", "scripts", "review180-real-model-smoke.py"),
 	}
-	text := string(data)
-	for _, want := range []string{"/harness-review", "OrderController", "codea-review", "finish", "export"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("host smoke driver missing %q", want)
+	for _, rel := range files {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("T3 smoke driver missing %s: %v", rel, err)
 		}
-	}
-	for _, forbidden := range []string{"analysis certify", "report review", "review finish --", "rt(certify", "rt(report"} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("host smoke driver must observe model behavior, not execute Runtime business step %q", forbidden)
+		text := string(data)
+		for _, want := range []string{"harness-review", "OrderController", "finish", "export", `"--command", "harness-review", "OrderController"`} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q", rel, want)
+			}
+		}
+		if strings.Contains(text, `run + ["/harness-review", "OrderController"]`) {
+			t.Fatalf("%s sends /harness-review as ordinary prompt instead of native OpenCode command", rel)
+		}
+		for _, forbidden := range []string{"analysis certify", "report review", "review finish --", "rt(certify", "rt(report"} {
+			if strings.Contains(text, forbidden) {
+				t.Fatalf("%s must observe model behavior, not execute Runtime business step %q", rel, forbidden)
+			}
 		}
 	}
 }
