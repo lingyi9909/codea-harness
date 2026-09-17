@@ -82,6 +82,7 @@ def main():
         shutil.copyfile(args.runtime, project / ".code-harness" / "bin" / ("codea-dcep-tools.exe" if os.name == "nt" else "codea-dcep-tools"))
         shutil.copyfile(args.ast_grep, project / ".code-harness" / "bin" / ("ast-grep.exe" if os.name == "nt" else "ast-grep"))
         host.write_fixture(project, False)
+        (project / ".gitignore").write_text(".opencode/node_modules/\n", encoding="utf-8")
 
         env = dict(os.environ)
         for key, suffix in (("XDG_CONFIG_HOME", "xdg-config"), ("XDG_DATA_HOME", "xdg-data"), ("XDG_CACHE_HOME", "xdg-cache"), ("XDG_STATE_HOME", "xdg-state")):
