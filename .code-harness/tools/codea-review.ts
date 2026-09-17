@@ -1,6 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import { execFile } from "node:child_process"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
 
@@ -28,11 +29,9 @@ const finding = tool.schema.object({
   introducedByChange: tool.schema.boolean().optional(),
 })
 
-async function atomicWrite(target: string, data: string) {
+async function exclusiveWrite(target: string, data: string) {
   await mkdir(path.dirname(target), { recursive: true })
-  const tmp = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  await writeFile(tmp, data, { encoding: "utf8", mode: 0o644 })
-  await rename(tmp, target)
+  await writeFile(target, data, { encoding: "utf8", mode: 0o644, flag: "wx" })
 }
 
 function runtimePath(worktree: string) {
@@ -115,7 +114,7 @@ export default tool({
 
     if (!args.result) throw new Error("CODEA_REVIEW_FINISH_RESULT_REQUIRED")
     const requestsRoot = path.resolve(worktree, ".code-harness", "runs", args.runId, "requests")
-    const requestPath = path.resolve(requestsRoot, "finish.json")
+    const requestPath = path.resolve(requestsRoot, `finish-${randomUUID()}.json`)
     const payload = {
       runId: args.runId,
       reads: args.result.reads,
@@ -123,7 +122,7 @@ export default tool({
       pendingRisks: args.result.pendingRisks,
       gaps: args.result.gaps,
     }
-    await atomicWrite(requestPath, `${JSON.stringify(payload, null, 2)}\n`)
+    await exclusiveWrite(requestPath, `${JSON.stringify(payload, null, 2)}\n`)
     const relative = path.relative(worktree, requestPath).split(path.sep).join("/")
     const runtime = await invoke(worktree, ["review", "finish", "--input", relative])
     return JSON.stringify({ runtime }, null, 2)
