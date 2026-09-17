@@ -33,6 +33,12 @@
 - `harness chain list/show/discover/refresh/edit/validate`：保持 Chain 管理现有确定性事实、candidate、seal/persist 与 exact planId 双阶段确认边界。Chain 不扩大 Review/Test/Debug/Fix 的写范围。
 - `harness upgrade`：保持现有离线升级、manifest、事务 apply/rollback 与用户文件保护规则。
 
+### Chain edit 有效契约
+
+`harness chain edit <id|Controller|Controller.method>` 固定路由到 `edit-chain`。Agent 只提交同 run 的结构化 request，受控 Runtime 通过 `codea-dcep-tools.exe chain edit --input <request>` 生成 `analysis/chain-edit-candidates/<id>.yaml` candidate；该 candidate 不等于 Project State。
+
+用户要保存/更新 candidate 时，必须执行 `chain seal-persist`，展示当前 exact `planId`；只有用户随后明确确认该 planId，才允许 `chain persist` 写入 `.code-harness/chains/**`。candidate、analysis、sealed plan 或已有 Project State 任一变化都使旧 planId 失效。
+
 ## 初始化门禁
 
 `harness init`、`harness review`、`harness api-doc`、Chain 查询/维护和 `harness upgrade` 不要求 READY。Test、Debug、Fix、Verify 仍要求 `initialization.status=READY`。
