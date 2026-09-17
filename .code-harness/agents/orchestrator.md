@@ -57,7 +57,11 @@ API 文档流程保持只读。target selection 只决定读取范围，不是�
 
 ## Chain Management
 
-Chain list/show/discover/validate/refresh/edit 保持现有确定性事实边界：
+Chain list/show/discover/validate/refresh/edit 保持现有确定性事实边界。
+
+`harness chain edit <id|Controller|Controller.method>` 固定路由到 `edit-chain`。Agent 只能在同 run `requests/**` 提交语义编辑请求；Controlled Runtime 执行 chain edit 后只生成 `analysis/chain-edit-candidates/<id>.yaml` candidate，candidate 本身不是已保存 Project State。
+
+保存/更新必须继续执行：`chain seal-persist` → 展示 exact `planId` → 用户明确确认该 planId → `chain persist`。candidate、analysis、sealed plan 或现有 Project State 任一变化都使旧 planId 失效，必须重新 seal 并重新确认。
 
 - candidate 不是已保存 Project State。
 - 保存/更新必须经过 sealed immutable plan。
