@@ -1,12 +1,12 @@
 # Codea Harness 升级入口
 
-## 1.6.7 补丁升级
+## 1.8.0 升级
 
-当前升级包：`codea-harness-1.6.7-windows-x64-upgrade.zip`。本次登记的补丁升级起点为 1.6.4、1.6.5 或 1.6.6；1.6.3 请先升级到 1.6.4。升级到 1.6.7 不新增配置迁移，保留项目配置、业务 chains 与历史 runs。
+当前升级包：`codea-harness-1.8.0-windows-x64-upgrade.zip`。本次正式登记的升级起点为 1.6.7。升级到 1.8.0 不新增 harness.yaml 配置 migration，继续保留项目配置、业务 chains、历史 runs 和未知用户文件。
 
-新版 Runtime 同时更新 `.opencode/agents/reviewer.md`、`.opencode/commands/harness-review-reviewer.md`、`.opencode/tools/codea-reviewer-submit.ts`，并新增 `.opencode/commands/harness-review.md`。目标包 Host 哈希必须匹配 manifest；已有文件内容不同且不匹配已安装 manifest 的归属哈希时，停止为 `MANUAL_ACTION_REQUIRED`，不得让 Agent 手动覆盖。
+1.8.0 在既有 Host ownership transaction 中更新 `.opencode/commands/harness-review.md`，并新增受管 `.opencode/agents/orchestrator.md` 与 `.opencode/tools/codea-review.ts`。历史 Reviewer Host 文件继续按旧 ownership hash 受控管理，但 ordinary Review 不依赖其 authority。任何目标 Host 文件内容既不匹配已安装 ownership、也不匹配 1.8.0 candidate 时，必须在 framework 写入前返回 `MANUAL_ACTION_REQUIRED`。
 
-升级成功后重启 OpenCode 并开启新的主会话，重新加载主 Agent 提交工具与 1.6.7 指令，再执行 `/harness-review OrderController`（替换为目标类或方法）。不要在仍缓存旧 Reviewer 委派指令的会话中继续评审。
+升级成功后重启 OpenCode 并开启新的主会话，重新加载 1.8.0 orchestrator / codea-review 工具，再执行 `/harness-review OrderController`（替换为目标类或方法）。不要在缓存旧 1.6.7 指令的会话中继续评审。
 
 ## 必须使用正式 Windows Release
 
@@ -37,7 +37,7 @@ codea-harness-<version>-windows-x64-upgrade.zip
 > - `bin/codea-dcep-tools.exe`
 > - `bin/ast-grep.exe`
 >
-> 安装和升级必须使用 `Release 1.6.7 - Windows x64` 生成的正式离线包。
+> 安装和升级必须使用 `Release 1.8.0 - Windows x64` 生成的正式离线包。
 
 ## 固定升级 Bootstrap
 
@@ -77,6 +77,8 @@ codea-harness-<version>-windows-x64-upgrade.zip
 .code-harness-upgrade/host/.opencode/commands/harness-review-reviewer.md
 .code-harness-upgrade/host/.opencode/tools/codea-reviewer-submit.ts
 .code-harness-upgrade/host/.opencode/commands/harness-review.md
+.code-harness-upgrade/host/.opencode/agents/orchestrator.md
+.code-harness-upgrade/host/.opencode/tools/codea-review.ts
 .code-harness-upgrade/commands/harness-review.md
 ```
 
