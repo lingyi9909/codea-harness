@@ -372,8 +372,8 @@ func verifyEvidenceQuote(rootAbs string, ev Evidence) error {
 		return err
 	}
 	lines := bytes.Split(data, []byte("\n"))
-	segment := bytes.Join(lines[ev.Ref.StartLine-1:ev.Ref.EndLine], []byte("\n"))
-	if !bytes.Contains(segment, []byte(ev.Quote)) {
+	segment := evidenceVisibleSegment180(lines, ev.Ref.StartLine, ev.Ref.EndLine)
+	if !bytes.Contains(segment, normalizeEvidenceQuote180(ev.Quote)) {
 		return fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH: %s", ev.Ref.Path)
 	}
 	return nil
