@@ -1,0 +1,323 @@
+name: Release 1.8.0 - Windows x64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/1.8-task5-release]
+    paths:
+      - '.code-harness/**'
+      - '.github/scripts/release180-*.ps1'
+      - '.github/scripts/review180-real-model-e2e.py'
+      - '.github/scripts/review180-host-smoke.py'
+      - '.github/workflows/release-1.8.0-windows-x64.yml'
+      - 'README.md'
+      - 'CHANGELOG.md'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Validate 1.8.0 exact-head release input
+        shell: pwsh
+        run: |
+          $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
+          if ($version -ne '1.8.0') { throw "repository VERSION mismatch: $version" }
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw "checkout HEAD mismatch: expected=${{ github.sha }} actual=$head" }
+          Write-Output "RELEASE180_INPUT PASS version=$version head=$head"
+
+      - name: Build 1.8.0 official candidate package
+        shell: pwsh
+        run: ./.github/scripts/release180-package.ps1
+
+      - name: Verify 1.8.0 package bytes and Host inventory
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $runtime = '.code-harness/bin/codea-dcep-tools.exe'
+          $ast = '.code-harness/bin/ast-grep.exe'
+          if (-not (Test-Path $runtime -PathType Leaf)) { throw 'missing built Runtime' }
+          if (-not (Test-Path $ast -PathType Leaf)) { throw 'missing pinned ast-grep' }
+          $runtimeHash = (Get-FileHash $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+          $astHash = (Get-FileHash $ast -Algorithm SHA256).Hash.ToLowerInvariant()
+          $astVersion = (& $ast --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $astVersion -notmatch '0\.42\.1') { throw "ast-grep version mismatch: $astVersion" }
+          $artifactRecord = [ordered]@{}
+          foreach ($kind in @('install','upgrade')) {
+            $zip = "codea-harness-1.8.0-windows-x64-$kind.zip"
+            if (-not (Test-Path $zip -PathType Leaf)) { throw "missing official $kind ZIP" }
+            $dest = Join-Path $env:RUNNER_TEMP ("release180-package-$kind-" + [guid]::NewGuid().ToString('N'))
+            try {
+              Expand-Archive $zip $dest -Force
+              $top = if ($kind -eq 'install') { '.code-harness' } else { '.code-harness-upgrade' }
+              $root = Join-Path $dest $top
+              $manifestPath = Join-Path $root 'RELEASE-MANIFEST.json'
+              if (-not (Test-Path $manifestPath -PathType Leaf)) { throw "$kind manifest missing" }
+              $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+              if ([string]$manifest.version -ne '1.8.0') { throw "$kind manifest version mismatch" }
+              if ([string]$manifest.buildCommit -ne $head) { throw "$kind manifest exact HEAD mismatch" }
+              if ([string]$manifest.runtimeSha256 -ne $runtimeHash) { throw "$kind Runtime SHA mismatch" }
+              if ([string]$manifest.astGrepSha256 -ne $astHash) { throw "$kind ast-grep SHA mismatch" }
+              if ([string]$manifest.astGrepVersion -ne '0.42.1') { throw "$kind ast-grep version mismatch" }
+              if ((Get-Content (Join-Path $root 'VERSION') -Raw).Trim() -ne '1.8.0') { throw "$kind VERSION mismatch" }
+
+              $allFiles = @(Get-ChildItem $root -Recurse -Force -File | Where-Object { $_.FullName -ne $manifestPath })
+              $managed = @(
+                foreach ($file in $allFiles) {
+                  $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
+                  if ($kind -eq 'upgrade' -and $rel.StartsWith('host/', [StringComparison]::Ordinal)) { continue }
+                  $file
+                }
+              )
+              $properties = @($manifest.managedFiles.PSObject.Properties)
+              if ($properties.Count -ne $managed.Count) { throw "$kind managed inventory count mismatch" }
+              foreach ($property in $properties) {
+                if ([string]$property.Name -like 'host/*') { throw "$kind host payload leaked into managedFiles: $($property.Name)" }
+              }
+              foreach ($file in $managed) {
+                $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
+                $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ([string]$manifest.managedFiles.$rel -ne $hash) { throw "$kind managed inventory mismatch: $rel" }
+              }
+
+              $h = $manifest.hostAgents.reviewer
+              if ($null -eq $h) { throw "$kind Host ownership metadata missing" }
+              $pairs = @(
+                @([string]$h.path,[string]$h.upgradeSource,[string]$h.sha256),
+                @([string]$h.command,[string]$h.commandUpgradeSource,[string]$h.commandSha256),
+                @([string]$h.submissionTool,[string]$h.submissionToolUpgradeSource,[string]$h.submissionToolSha256),
+                @([string]$h.primaryCommand,[string]$h.primaryCommandUpgradeSource,[string]$h.primaryCommandSha256),
+                @([string]$h.primaryAgent,[string]$h.primaryAgentUpgradeSource,[string]$h.primaryAgentSha256),
+                @([string]$h.primaryTool,[string]$h.primaryToolUpgradeSource,[string]$h.primaryToolSha256)
+              )
+              if ($pairs.Count -ne 6) { throw "$kind Host inventory count mismatch" }
+              foreach ($pair in $pairs) {
+                $path = if ($kind -eq 'install') { Join-Path $dest $pair[0] } else { Join-Path $root $pair[1] }
+                if (-not (Test-Path $path -PathType Leaf)) { throw "$kind Host file missing: $path" }
+                $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($hash -cne $pair[2]) { throw "$kind Host SHA mismatch: $($pair[0])" }
+              }
+              if ($kind -eq 'install') {
+                $installer = Get-Content (Join-Path $dest 'install.ps1') -Raw
+                foreach ($required in @('.opencode/commands/harness-review.md','.opencode/agents/orchestrator.md','.opencode/tools/codea-review.ts')) {
+                  if (-not $installer.Contains($required)) { throw "installer Host preflight/copy list missing $required" }
+                }
+              }
+
+              $artifactRecord[$kind] = [ordered]@{
+                file = $zip
+                sha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+                size = (Get-Item $zip).Length
+              }
+            } finally {
+              Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          $goVersion = (go env GOVERSION).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'cannot determine Go version' }
+          $whitelist = 'codea-dcep-tools-whitelist.txt'
+          $lines = @(
+            'Product:','Codea Harness','Version:','1.8.0','Binary:','codea-dcep-tools.exe',
+            'Runtime SHA256:',$runtimeHash,'File Size:',[string](Get-Item $runtime).Length,
+            'Build Commit:',$head,'GOOS:','windows','GOARCH:','amd64','Go Version:',$goVersion
+          )
+          [IO.File]::WriteAllLines($whitelist,$lines,[Text.UTF8Encoding]::new($false))
+          $packageRecord = [ordered]@{
+            exactHeadSha = $head
+            workflowRunId = $env:GITHUB_RUN_ID
+            artifacts = $artifactRecord
+            runtime = [ordered]@{ sha256=$runtimeHash; size=(Get-Item $runtime).Length }
+            astGrep = [ordered]@{ version='0.42.1'; sha256=$astHash; output=$astVersion }
+          }
+          [IO.File]::WriteAllText('release180-package-record.json',($packageRecord | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+          Write-Output "RELEASE180_PACKAGE_VERIFY PASS head=$head runtimeSha256=$runtimeHash astGrepSha256=$astHash"
+
+      - name: Download exact published 1.6.7 baseline
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 34950443217
+          artifact-ids: '10389138981,10389298093'
+          merge-multiple: true
+          path: baseline167
+
+      - name: Real packaged 1.6.7 to 1.8.0 upgrade
+        shell: pwsh
+        run: ./.github/scripts/release180-upgrade-regression.ps1
+
+      - name: Install pinned native OpenCode and plugin SDK
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'opencode 180 native & npm'
+          npm.cmd install --global --prefix $prefix opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $native = Join-Path $prefix 'node_modules/opencode-ai/bin/opencode.exe'
+          $version = (& $native --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -ne '1.18.25') { throw "OpenCode version mismatch: $version" }
+          $sdk = Join-Path $env:RUNNER_TEMP 'review180 plugin sdk & npm'
+          npm.cmd install --prefix $sdk --ignore-scripts --no-audit --no-fund --save-exact @opencode-ai/plugin@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "CODEA_180_OPENCODE=$native" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CODEA_180_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Full Runtime regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Packaged Native Host smoke
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP 'release180 packaged host 空格 & # %'
+          Expand-Archive 'codea-harness-1.8.0-windows-x64-install.zip' $package -Force
+          $args = @(
+            '.github/scripts/review180-host-smoke.py',
+            '--opencode', $env:CODEA_180_OPENCODE,
+            '--runtime', (Join-Path $package '.code-harness/bin/codea-dcep-tools.exe'),
+            '--ast-grep', (Join-Path $package '.code-harness/bin/ast-grep.exe'),
+            '--tool-source', (Join-Path $package '.opencode/tools/codea-review.ts'),
+            '--command-source', (Join-Path $package '.opencode/commands/harness-review.md'),
+            '--sdk-root', $env:CODEA_180_SDK
+          )
+          python @args
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Real-model configuration preflight
+        shell: pwsh
+        env:
+          TASK15_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          TASK15_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TASK15_OPENAI_BASE_URL) -or [string]::IsNullOrWhiteSpace($env:TASK15_OPENAI_API_KEY)) {
+            Write-Output 'REAL_MODEL_NOT_VERIFIED'
+            throw 'approved real-model configuration unavailable; formal release gate blocked'
+          }
+          Write-Output 'RELEASE180_REAL_MODEL_CONFIG PRESENT'
+
+      - name: Packaged real-model autonomous acceptance matrix
+        shell: pwsh
+        env:
+          TASK15_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          TASK15_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          $evidence = Join-Path $env:RUNNER_TEMP 'release180-real-model-evidence'
+          $head = (git rev-parse HEAD).Trim()
+          $args = @(
+            '.github/scripts/review180-real-model-e2e.py',
+            '--opencode', $env:CODEA_180_OPENCODE,
+            '--sdk-root', $env:CODEA_180_SDK,
+            '--install-zip', (Resolve-Path 'codea-harness-1.8.0-windows-x64-install.zip').Path,
+            '--evidence-dir', $evidence,
+            '--head', $head
+          )
+          python @args
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build release candidate checklist
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $package = Get-Content 'release180-package-record.json' -Raw | ConvertFrom-Json
+          $upgrade = Get-Content 'codea-harness-1.8.0-upgrade-evidence.json' -Raw | ConvertFrom-Json
+          $realSummary = Join-Path $env:RUNNER_TEMP 'release180-real-model-evidence/summary.json'
+          if (-not (Test-Path $realSummary -PathType Leaf)) { throw 'REAL_MODEL_NOT_VERIFIED: summary missing' }
+          $real = Get-Content $realSummary -Raw | ConvertFrom-Json
+          if ([string]$real.status -ne 'PASS' -or [string]$real.head -ne $head) { throw 'real-model matrix did not PASS exact HEAD' }
+          $checklist = [ordered]@{
+            schemaVersion = 1
+            version = '1.8.0'
+            releaseStatus = 'CANDIDATE_AWAITING_PRIVATE_MODEL_ACCEPTANCE'
+            exactHeadSha = $head
+            workflowRunId = $env:GITHUB_RUN_ID
+            package = $package
+            baseline167 = [ordered]@{
+              head='970573a6d2147733b773c0de0c124d9324914ae8'
+              releaseRunId='34950443217'
+              installArtifactId='10389138981'
+              checklistArtifactId='10389298093'
+              installArchiveDigest='sha256:73d801e2e20fa00dfd86f5c6dc72975177b84b8c705e75882031b3d41c3b4018'
+              checklistArchiveDigest='sha256:4222d6047b1eef3e8bfe90f1bc355389d05a40ba20df723e6aa60398aa2a95d6'
+            }
+            upgradeEvidence = [ordered]@{
+              sha256=(Get-FileHash 'codea-harness-1.8.0-upgrade-evidence.json' -Algorithm SHA256).Hash.ToLowerInvariant()
+              status=[string]$upgrade.status
+            }
+            realModelEvidence = [ordered]@{
+              sha256=(Get-FileHash $realSummary -Algorithm SHA256).Hash.ToLowerInvariant()
+              status=[string]$real.status
+              model=[string]$real.model
+              hostVersion=[string]$real.hostVersion
+            }
+            privateIntranetAcceptance = 'NOT_VERIFIED_IN_GITHUB_CI'
+          }
+          [IO.File]::WriteAllText('codea-harness-1.8.0-release-checklist.json',($checklist | ConvertTo-Json -Depth 14),[Text.UTF8Encoding]::new($false))
+          Write-Output "RELEASE180_CANDIDATE_CHECKLIST PASS head=$head"
+
+      - name: Upload 1.8.0 install candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.8.0-windows-x64-install
+          path: codea-harness-1.8.0-windows-x64-install.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload 1.8.0 upgrade candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.8.0-windows-x64-upgrade
+          path: codea-harness-1.8.0-windows-x64-upgrade.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload 1.8.0 release checklist
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.8.0-release-checklist
+          path: codea-harness-1.8.0-release-checklist.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload 1.8.0 Runtime whitelist
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-dcep-tools-whitelist-1.8.0
+          path: codea-dcep-tools-whitelist.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload 1.8.0 upgrade evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.8.0-upgrade-evidence
+          path: codea-harness-1.8.0-upgrade-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload 1.8.0 real-model evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.8.0-real-model-evidence
+          path: ${{ runner.temp }}/release180-real-model-evidence
+          if-no-files-found: error
+          retention-days: 30
