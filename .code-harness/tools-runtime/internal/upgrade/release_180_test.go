@@ -68,6 +68,11 @@ func make167To180Pair(t *testing.T) (string, string) {
 	if err := copyTree(target, source, nil); err != nil {
 		t.Fatal(err)
 	}
+	// tools/user.txt is intentionally unowned project-local content in the
+	// installed 1.6.7 fixture. A real release candidate must not carry it.
+	if err := os.Remove(filepath.Join(source, "tools", "user.txt")); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
 	write(t, source, "VERSION", "1.8.0\n")
 	write(t, source, "AGENTS.md", "1.8 framework\n")
 	write(t, source, "history/ordinary-review-pre-1.8.md", "historical compatibility only\n")
