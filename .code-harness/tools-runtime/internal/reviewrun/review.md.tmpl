@@ -37,7 +37,7 @@
 
 | 顺序 | 角色 | 代码位置 |
 |---:|---|---|
-{{range $index, $node := .Nodes}}| {{printf "%d" (len (slice $.Chains 0 0))}} | {{cell (roleLabel $node.Role)}} | {{code $node.Path}} · {{code $node.Symbol}} |
+{{range $index, $node := .Nodes}}| {{add1 $index}} | {{cell (roleLabel $node.Role)}} | {{code $node.Path}} · {{code $node.Symbol}} |
 {{end}}
 {{if .Unresolved}}
 **未解析项：**
