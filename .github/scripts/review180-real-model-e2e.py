@@ -126,7 +126,12 @@ def write_fixture(project: Path, multi: bool):
     if multi:
         controller_extra = '''
     @PostMapping("/orders/cancel")
-    public void cancel(String tenantId, long id) { service.cancel(tenantId, id); }
+    public void cancel(@AuthenticationPrincipal TenantPrincipal principal, long id) {
+        if (principal == null || principal.tenantId() == null || principal.tenantId().isBlank()) {
+            throw new SecurityException("authenticated tenant required");
+        }
+        service.cancel(principal.tenantId(), id);
+    }
 '''
         service_extra = "    void cancel(String tenantId, long id);\n"
         impl_extra = "    public void cancel(String tenantId, long id) { mapper.cancel(tenantId, id); }\n"
@@ -135,15 +140,27 @@ def write_fixture(project: Path, multi: bool):
 
     (java / "OrderController.java").write_text(
         """package com.example;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+record TenantPrincipal(String tenantId) {}
+
 @RestController
 public class OrderController {
     private final OrderService service;
     public OrderController(OrderService service) { this.service = service; }
 
     @PostMapping("/orders/status")
-    public void updateStatus(String tenantId, long id, String status) { service.updateStatus(tenantId, id, status); }
+    public void updateStatus(@AuthenticationPrincipal TenantPrincipal principal, long id, String status) {
+        if (principal == null || principal.tenantId() == null || principal.tenantId().isBlank()) {
+            throw new SecurityException("authenticated tenant required");
+        }
+        if (!status.equals("PAID") && !status.equals("CANCELLED")) {
+            throw new IllegalArgumentException("invalid status");
+        }
+        service.updateStatus(principal.tenantId(), id, status);
+    }
 """ + controller_extra + "}\n",
         encoding="utf-8",
     )
@@ -258,11 +275,30 @@ def mutate_for_scenario(project: Path, scenario: str):
         text = xml.read_text(encoding="utf-8")
         host.require(SAFE_SQL in text, "safe SQL seed missing")
         xml.write_text(text.replace(SAFE_SQL, RISKY_SQL, 1), encoding="utf-8")
+        source = controller.read_text(encoding="utf-8")
+        safe_method = """    @PostMapping("/orders/status")
+    public void updateStatus(@AuthenticationPrincipal TenantPrincipal principal, long id, String status) {
+        if (principal == null || principal.tenantId() == null || principal.tenantId().isBlank()) {
+            throw new SecurityException("authenticated tenant required");
+        }
+        if (!status.equals("PAID") && !status.equals("CANCELLED")) {
+            throw new IllegalArgumentException("invalid status");
+        }
+        service.updateStatus(principal.tenantId(), id, status);
+    }
+"""
+        vulnerable_method = """    @PostMapping("/orders/status")
+    public void updateStatus(String tenantId, long id, String status) {
+        service.updateStatus(tenantId, id, status);
+    }
+"""
+        host.require(safe_method in source, "safe Controller seed missing")
+        controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
         text = controller.read_text(encoding="utf-8")
         controller.write_text(text.replace(
-            "public void updateStatus(String tenantId, long id, String status) {",
-            "// safe review-only comment\n    public void updateStatus(String tenantId, long id, String status) {",
+            '    @PostMapping("/orders/status")',
+            '    // reviewed safe path: authenticated tenant + status allowlist + tenant-scoped SQL\n    @PostMapping("/orders/status")',
             1,
         ), encoding="utf-8")
     elif scenario == "no-relevant-changes":
