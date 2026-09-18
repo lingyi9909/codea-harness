@@ -20,6 +20,7 @@ func Test180ReportGoldens(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			want = bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))
 			if !bytes.Equal(got, want) {
 				t.Fatalf("report golden mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", name, got, want)
 			}
