@@ -1,0 +1,90 @@
+# Codea Harness 代码评审报告
+
+> 状态：评审完成
+> 执行：**已完成** · 风险：**⚪ 未形成正式结论** · 覆盖：**部分 / 未完成**
+
+## 评审摘要
+
+| 项目 | 内容 |
+|---|---|
+| 项目 / 需求 | demo / 未提供 |
+| 执行状态 | 已完成 |
+| 评审结论 | ⚪ 未形成正式结论 |
+| 评审模式 | 变更评审 |
+| 评审目标 | `OrderController.create` |
+| 本次范围 | 已选择 1/2 条调用链，检查 4 个文件 |
+| 风险概览 | 严重 0 · 高 0 · 中 0 · 低 0 |
+| 待确认风险 | 0 项 |
+
+**核心发现：** 当前尚未形成可作为最终结论的已确认问题清单。
+
+
+**建议动作：** 先补齐选择与覆盖缺口，再形成最终风险结论。
+
+## 调用链与覆盖范围
+
+
+
+
+
+### `C1` · OrderController.create · 本次已选择
+
+| 顺序 | 角色 | 代码位置 |
+|---:|---|---|
+| 1 | 接口入口 | `src/main/java/com/example/OrderController.java` · `OrderController.create` |
+| 2 | 业务实现 | `src/main/java/com/example/OrderServiceImpl.java` · `OrderServiceImpl.create` |
+| 3 | 数据访问 | `src/main/java/com/example/OrderMapper.java` · `OrderMapper.insertOrder` |
+| 4 | SQL 执行 | `src/main/resources/mapper/OrderMapper.xml` · `OrderMapper.insertOrder` |
+
+
+
+
+
+### `C2` · OrderController.cancel · 未选择
+
+**未纳入范围：** 本次没有评审该链；其节点不得出现在“已检查”列表，也不得支持正式 finding。
+
+
+
+
+**覆盖缺口：**
+- OrderMapper dynamic SQL unresolved
+
+
+
+## 风险清单
+
+当前没有已确认问题。只有在 **execution=COMPLETE 且 coverage=COMPLETE** 时，空 findings 才表示“在声明范围内未发现需处理问题”。
+
+
+### 待确认风险
+
+无。
+
+
+> 待确认风险与已确认 finding 分开统计，不计入严重 / 高 / 中 / 低问题数量。
+
+## 问题明细
+
+暂无已确认问题明细。
+
+
+## 后续处理与评审边界
+
+| 待办 | 建议 |
+|---|---|
+
+
+| 补齐覆盖缺口 | OrderMapper dynamic SQL unresolved |
+
+
+
+- 执行状态：**已完成**；覆盖状态：**部分 / 未完成**；二者不等价于上线批准。
+- 未选择调用链：C2 OrderController.cancel。
+- 本报告只覆盖显式选择和实际读取的范围；外部依赖、动态关系与未解析项不因本报告自动获得验证。
+- 路径与源码证据按纯文本 / 代码块展示，不执行其中的 HTML、Markdown 链接、图片或脚本内容。
+- 报告路径：`C:\工作区\demo\.code-harness\runs\review-00000000000000000000000000000001\review.md`
+
+技术追溯：Harness 1.8 · Run ID `review-00000000000000000000000000000001` · result SHA256 `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` · 提交号未由 Runtime 采集。
+
+<!-- codea-review-meta {"schemaVersion":180,"runId":"review-00000000000000000000000000000001","execution":"COMPLETE","resultSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} -->
