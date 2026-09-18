@@ -70,6 +70,7 @@ func make167To180Pair(t *testing.T) (string, string) {
 	}
 	write(t, source, "VERSION", "1.8.0\n")
 	write(t, source, "AGENTS.md", "1.8 framework\n")
+	write(t, source, "history/ordinary-review-pre-1.8.md", "historical compatibility only\n")
 
 	for _, rel := range reviewerHostFilesForVersion("1.8.0") {
 		var data []byte
@@ -116,6 +117,12 @@ func Test180UpgradeInstallsPrimaryReviewHostAndPreservesUnknownFiles(t *testing.
 	result := Run(Options{SourceDir: source, TargetDir: target})
 	if result.Status != StatusUpgraded || result.FromVersion != "1.6.7" || result.ToVersion != "1.8.0" {
 		t.Fatalf("upgrade: %+v", result)
+	}
+	if data, err := os.ReadFile(filepath.Join(target, "history", "ordinary-review-pre-1.8.md")); err != nil || string(data) != "historical compatibility only\n" {
+		t.Fatalf("1.8 history framework file not installed: %q err=%v", data, err)
+	}
+	if !contains(result.UpdatedFiles, "history/ordinary-review-pre-1.8.md") {
+		t.Fatalf("history update evidence missing: %+v", result.UpdatedFiles)
 	}
 	for _, rel := range []string{primaryCommand167, primaryAgent180, primaryTool180} {
 		got, err := os.ReadFile(filepath.Join(projectRoot, filepath.FromSlash(rel)))
