@@ -10,6 +10,7 @@ on:
       - '.code-harness/commands/**'
       - '.github/scripts/review180-host-smoke.py'
       - '.github/scripts/review180-real-model-smoke.py'
+      - '.github/scripts/review180-real-model-smoke-regression.py'
       - '.github/workflows/runtime-regression-windows-x64.yml'
   pull_request:
     branches: [main, develop]
@@ -19,6 +20,7 @@ on:
       - '.code-harness/commands/**'
       - '.github/scripts/review180-host-smoke.py'
       - '.github/scripts/review180-real-model-smoke.py'
+      - '.github/scripts/review180-real-model-smoke-regression.py'
       - '.github/workflows/runtime-regression-windows-x64.yml'
 
 permissions:
@@ -33,6 +35,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
+      - name: Codea 1.8 report identity regression
+        shell: pwsh
+        run: |
+          python .github/scripts/review180-real-model-smoke-regression.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Codea 1.8 real-model secret preflight
         if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
