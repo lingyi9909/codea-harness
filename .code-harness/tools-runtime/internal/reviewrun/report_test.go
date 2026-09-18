@@ -187,7 +187,7 @@ func Test180ReportZeroOptionsAndCurrentImplementationMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(got, []byte("变更评审")) || !bytes.Contains(got, []byte("NO\_RELEVANT\_CHANGES")) {
+	if !bytes.Contains(got, []byte("变更评审")) || !bytes.Contains(got, []byte("NO\\_RELEVANT\\_CHANGES")) {
 		t.Fatalf("zero-option changes report lost mode/gap:\n%s", got)
 	}
 	if bytes.Contains(got, []byte("NO_ISSUES_FOUND")) {
