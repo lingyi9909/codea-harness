@@ -86,6 +86,60 @@ def write_json(path: Path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def canonical_report_path(project: Path, value) -> str:
+    raw = str(value or "").strip()
+    host.require(raw, "finish reportPath missing")
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = project / candidate
+    return os.path.normcase(os.path.realpath(os.path.abspath(str(candidate))))
+
+
+def validate_report_identity(project: Path, report_path: Path, finish_runtime: dict) -> str:
+    expected = canonical_report_path(project, report_path)
+    actual = canonical_report_path(project, finish_runtime.get("reportPath"))
+    host.require(
+        actual == expected,
+        f"finish reportPath mismatch: returned={finish_runtime.get('reportPath')} expected={report_path}",
+    )
+    report_sha = sha256_file(report_path)
+    host.require(
+        finish_runtime.get("reportSha256") == report_sha,
+        f"finish reportSha256 mismatch: runtime={finish_runtime.get('reportSha256')} disk={report_sha}",
+    )
+    return report_sha
+
+
+def persist_evidence(
+    evidence_dir: Path,
+    exported,
+    report_path: Path,
+    result_path: Path,
+    scope_path: Path,
+    run_evidence: dict,
+):
+    write_json(evidence_dir / "trajectory.json", redact_sensitive(exported))
+    shutil.copyfile(report_path, evidence_dir / "review.md")
+    shutil.copyfile(result_path, evidence_dir / "result.json")
+    shutil.copyfile(scope_path, evidence_dir / "scope.json")
+    write_json(evidence_dir / "run.json", redact_sensitive(run_evidence))
+
+    manifest_files = ["trajectory.json", "review.md", "result.json", "scope.json", "run.json"]
+    manifest = {
+        "schemaVersion": "codea.review180.acceptance-manifest.v1",
+        "runId": run_evidence.get("runId"),
+        "model": run_evidence.get("model"),
+        "files": {
+            name: {
+                "sha256": sha256_file(evidence_dir / name),
+                "bytes": (evidence_dir / name).stat().st_size,
+            }
+            for name in manifest_files
+        },
+    }
+    write_json(evidence_dir / "manifest.json", manifest)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--opencode", required=True, type=Path)
@@ -207,31 +261,16 @@ def main():
 
         result = json.loads(result_path.read_text(encoding="utf-8"))
         findings = result.get("findings", [])
-        host.require(findings, f"real model missed explicit always-fail issue: {result}")
-        host.require(all(item.get("evidence") for item in findings), f"real model produced finding without evidence: {findings}")
         seeded_issue_evidence = []
         for item in findings:
             for evidence in item.get("evidence", []):
                 quote = evidence.get("quote", "")
                 if "always fails after successful create" in quote or "IllegalStateException" in quote:
                     seeded_issue_evidence.append({"findingId": item.get("id"), "quote": quote, "ref": evidence.get("ref")})
-        host.require(seeded_issue_evidence, f"findings did not identify the seeded throw: {findings}")
 
         report = report_path.read_text(encoding="utf-8")
-        host.require("execution\":\"COMPLETE" in report or "评审完成" in report, f"durable report not complete:\n{report}")
-        host.require(result.get("reviewConclusion") in {"BLOCKING", "ACTION_REQUIRED"}, f"issue run has weak conclusion: {result}")
-        report_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        report_sha = sha256_file(report_path)
         expected_report_path = f".code-harness/runs/{run_dir.name}/review.md"
-        actual_runtime_path = str(finish_runtime.get("reportPath", "")).replace("\\", "/")
-        host.require(actual_runtime_path == expected_report_path, f"finish reportPath mismatch: {finish_runtime}")
-        host.require(finish_runtime.get("reportSha256") == report_sha, f"finish reportSha256 mismatch: runtime={finish_runtime.get('reportSha256')} disk={report_sha}")
-        host.require(result.get("runId") == run_dir.name, f"result runId mismatch: {result.get('runId')} != {run_dir.name}")
-
-        trajectory_path = evidence_dir / "trajectory.json"
-        write_json(trajectory_path, redact_sensitive(exported))
-        shutil.copyfile(report_path, evidence_dir / "review.md")
-        shutil.copyfile(result_path, evidence_dir / "result.json")
-        shutil.copyfile(scope_path, evidence_dir / "scope.json")
         run_evidence = {
             "schemaVersion": "codea.review180.acceptance.v1",
             "model": model,
@@ -244,18 +283,26 @@ def main():
             "reviewConclusion": result.get("reviewConclusion"),
             "findingCount": len(findings),
             "reportPath": expected_report_path,
+            "returnedReportPath": finish_runtime.get("reportPath"),
             "reportSha256": report_sha,
+            "acceptance": "PENDING_ASSERTIONS",
         }
-        write_json(evidence_dir / "run.json", run_evidence)
 
-        manifest_files = ["trajectory.json", "review.md", "result.json", "scope.json", "run.json"]
-        manifest = {
-            "schemaVersion": "codea.review180.acceptance-manifest.v1",
-            "runId": run_dir.name,
-            "model": model,
-            "files": {name: {"sha256": sha256_file(evidence_dir / name), "bytes": (evidence_dir / name).stat().st_size} for name in manifest_files},
-        }
-        write_json(evidence_dir / "manifest.json", manifest)
+        # Preserve redacted diagnostics before final acceptance assertions so a
+        # later seeded-issue/path/hash failure still leaves a reviewable artifact.
+        persist_evidence(evidence_dir, exported, report_path, result_path, scope_path, run_evidence)
+
+        host.require(findings, f"real model missed explicit always-fail issue: {result}")
+        host.require(all(item.get("evidence") for item in findings), f"real model produced finding without evidence: {findings}")
+        host.require(seeded_issue_evidence, f"findings did not identify the seeded throw: {findings}")
+        host.require("execution\\\":\\\"COMPLETE" in report or "评审完成" in report, f"durable report not complete:\\n{report}")
+        host.require(result.get("reviewConclusion") in {"BLOCKING", "ACTION_REQUIRED"}, f"issue run has weak conclusion: {result}")
+        report_sha = validate_report_identity(project, report_path, finish_runtime)
+        host.require(result.get("runId") == run_dir.name, f"result runId mismatch: {result.get('runId')} != {run_dir.name}")
+
+        run_evidence["reportSha256"] = report_sha
+        run_evidence["acceptance"] = "PASS"
+        persist_evidence(evidence_dir, exported, report_path, result_path, scope_path, run_evidence)
 
         print(
             "REVIEW180_REAL_MODEL PASS "
