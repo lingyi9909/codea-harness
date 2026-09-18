@@ -142,6 +142,9 @@ func runReviewFinish180(args []string) error {
 		}
 		return fmt.Errorf("REVIEW_FINISH_REQUEST_INVALID: %w", err)
 	}
+	if req.Reads == nil || req.Findings == nil || req.PendingRisks == nil || req.Gaps == nil {
+		return errors.New("REVIEW_FINISH_REQUEST_INVALID: reads, findings, pendingRisks and gaps are required arrays")
+	}
 	if req.RunID != pathRunID {
 		return fmt.Errorf("REVIEW_FINISH_RUN_ID_MISMATCH: body runId %q path runId %q", req.RunID, pathRunID)
 	}

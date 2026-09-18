@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -43,14 +44,22 @@ func Test180FinishWithoutScopeKeepsReport(t *testing.T) {
 
 func Test180FinishPreparedStateWritesDurableReport(t *testing.T) {
 	root, started := mustRealPreparedRun180(t)
-	sourceRel := "src/main/java/com/example/OrderServiceImpl.java"
-	source := filepath.Join(root, filepath.FromSlash(sourceRel))
-	content, err := os.ReadFile(source)
+	runDir := filepath.Dir(started.ReportPath)
+	scope, err := loadScope180(runDir, started.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref := ReadRef{Path: sourceRel, SHA256: bytesSHA256(content), StartLine: 1, EndLine: len(bytes.Split(content, []byte("\n")))}
-	req := FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}, Findings: []Finding{{ID: "F1", Severity: "HIGH", Problem: "缺少幂等保护", Impact: "重复请求可能重复执行", Recommendation: "增加幂等键", Verification: "增加重复请求测试", Evidence: []Evidence{{Ref: ref, Quote: "public void create()"}}}}}
+	var ref ReadRef
+	for _, candidate := range scope.Reads {
+		if candidate.Path == "src/main/java/com/example/OrderServiceImpl.java" {
+			ref = candidate
+			break
+		}
+	}
+	if ref.Path == "" {
+		t.Fatalf("real prepared scope missing OrderServiceImpl read: %+v", scope.Reads)
+	}
+	req := FinishRequest{RunID: started.RunID, Reads: scope.Reads, Findings: []Finding{{ID: "F1", Severity: "HIGH", Problem: "缺少幂等保护", Impact: "重复请求可能重复执行", Recommendation: "增加幂等键", Verification: "增加重复请求测试", Evidence: []Evidence{{Ref: ref, Quote: "public void create()"}}}}}
 
 	got, err := Finish(context.Background(), root, req)
 	if err != nil {
@@ -59,7 +68,6 @@ func Test180FinishPreparedStateWritesDurableReport(t *testing.T) {
 	if got.Execution != "COMPLETE" || got.ReviewConclusion != "BLOCKING" || got.Coverage != "COMPLETE" {
 		t.Fatalf("unexpected outcome: %+v", got)
 	}
-	runDir := filepath.Dir(started.ReportPath)
 	if _, err := os.Stat(filepath.Join(runDir, "result.json")); err != nil {
 		t.Fatal(err)
 	}
@@ -253,19 +261,14 @@ func Test180CancelRejectsFinish(t *testing.T) {
 }
 
 func Test180FinishRejectsStaleRead(t *testing.T) {
-	root := t.TempDir()
-	started := mustPreparedRun(t, root)
-	path := filepath.Join(root, "A.java")
-	first := []byte("class A {}\n")
-	if err := os.WriteFile(path, first, 0o600); err != nil {
+	root, started, ref := setupT3Scope180(t, false)
+	path := filepath.Join(root, filepath.FromSlash(ref.Path))
+	if err := os.WriteFile(path, []byte("class A { int x; void entry() {} }\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ref := ReadRef{Path: "A.java", SHA256: bytesSHA256(first), StartLine: 1, EndLine: 1}
-	if err := os.WriteFile(path, []byte("class A { int x; }\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Finish(context.Background(), root, FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}}); err == nil {
-		t.Fatal("expected stale read rejection")
+	_, err := Finish(context.Background(), root, FinishRequest{RunID: started.RunID, Reads: []ReadRef{ref}})
+	if err == nil || !strings.Contains(err.Error(), "READ_STALE") {
+		t.Fatalf("expected stale source rejection, got %v", err)
 	}
 	status, err := Status(root, started.RunID)
 	if err != nil {
@@ -312,6 +315,13 @@ func mustPreparedRun(t *testing.T, root string) Outcome {
 	}
 	runDir, state, err := loadRun(root, started.RunID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeScope180(runDir, started.RunID, "isolated-persistence-fixture", []string{}, []Chain{}, rootAbs); err != nil {
 		t.Fatal(err)
 	}
 	state.ScopeReady = true

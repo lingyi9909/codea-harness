@@ -52,15 +52,50 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 	if !state.ScopeReady {
 		return Outcome{}, fmt.Errorf("REVIEW_FINISH_SCOPE_NOT_READY")
 	}
+
+	scope, err := loadScope180(runDir, req.RunID)
+	if err != nil {
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	if err := validateFinishReadsWithinScope180(req.Reads, scope.Reads); err != nil {
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	for _, chain := range scope.Chains {
+		req.Gaps = append(req.Gaps, chain.Unresolved...)
+	}
+	req.Gaps = uniqueStrings180(req.Gaps)
 	coverage := stateCoverage(state)
-	if coverage != "COMPLETE" || len(req.Gaps) > 0 {
-		err := fmt.Errorf("REVIEW_FINISH_COVERAGE_INCOMPLETE")
+	if coverage != "COMPLETE" && coverage != "PARTIAL" {
+		err := fmt.Errorf("REVIEW_FINISH_COVERAGE_INVALID: %q", coverage)
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	if scope.Coverage == "PARTIAL" || len(req.Gaps) > 0 {
+		coverage = "PARTIAL"
+	}
+	if coverage == "PARTIAL" && len(state.SelectedIDs) == 0 {
+		err := fmt.Errorf("REVIEW_FINISH_PARTIAL_SCOPE_NOT_ACCEPTED")
 		state.LastError = err.Error()
 		_ = writeState(runDir, state)
 		return Outcome{}, err
 	}
 
 	if err := validateFinishRequest(root, req); err != nil {
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	if err := validateFindingsWithinSelectedScope180(root, req.Findings, scope.Chains); err != nil {
+		state.LastError = err.Error()
+		_ = writeState(runDir, state)
+		return Outcome{}, err
+	}
+	if err := validateChangeAttribution180(ctx, root, runDir, req); err != nil {
 		state.LastError = err.Error()
 		_ = writeState(runDir, state)
 		return Outcome{}, err
@@ -154,11 +189,64 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 	}
 	reportSHA := bytesSHA256(readback)
 	state.ReportSHA256 = reportSHA
+	state.Coverage = coverage
 	state.LastError = ""
 	if err := writeState(runDir, state); err != nil {
 		return Outcome{}, fmt.Errorf("REVIEW_RUN_FINAL_STATE_WRITE_FAILED: %w", err)
 	}
 	return Outcome{RunID: req.RunID, Execution: "COMPLETE", ReviewConclusion: conclusion, Coverage: coverage, ReportPath: state.ReportPath, ReportSHA256: reportSHA}, nil
+}
+
+func loadScope180(runDir, runID string) (scopeState180, error) {
+	data, err := os.ReadFile(filepath.Join(runDir, "scope.json"))
+	if err != nil {
+		return scopeState180{}, fmt.Errorf("REVIEW_FINISH_SCOPE_READ_FAILED: %w", err)
+	}
+	var scope scopeState180
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&scope); err != nil {
+		return scopeState180{}, fmt.Errorf("REVIEW_FINISH_SCOPE_INVALID: %w", err)
+	}
+	if scope.SchemaVersion != SchemaVersion || scope.RunID != runID || (scope.Coverage != "COMPLETE" && scope.Coverage != "PARTIAL") {
+		return scopeState180{}, fmt.Errorf("REVIEW_FINISH_SCOPE_INVALID")
+	}
+	return scope, nil
+}
+
+func validateFinishReadsWithinScope180(reads, allowed []ReadRef) error {
+	byPath := map[string][]ReadRef{}
+	for _, ref := range allowed {
+		key := filepath.ToSlash(filepath.Clean(ref.Path))
+		byPath[key] = append(byPath[key], ref)
+	}
+	for _, ref := range reads {
+		key := filepath.ToSlash(filepath.Clean(ref.Path))
+		ok := false
+		for _, scopeRef := range byPath[key] {
+			if ref.SHA256 == scopeRef.SHA256 && ref.StartLine >= scopeRef.StartLine && ref.EndLine <= scopeRef.EndLine {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("REVIEW_FINISH_READ_OUTSIDE_SCOPE: %s", ref.Path)
+		}
+	}
+	for _, scopeRef := range allowed {
+		covered := false
+		for _, ref := range reads {
+			if filepath.ToSlash(filepath.Clean(ref.Path)) == filepath.ToSlash(filepath.Clean(scopeRef.Path)) &&
+				ref.SHA256 == scopeRef.SHA256 && ref.StartLine <= scopeRef.StartLine && ref.EndLine >= scopeRef.EndLine {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			return fmt.Errorf("REVIEW_FINISH_SCOPE_NOT_READ: %s", scopeRef.Path)
+		}
+	}
+	return nil
 }
 
 func loadExistingResult(runDir string) (resultEnvelope, []byte, error) {
@@ -228,6 +316,9 @@ func validateFinishRequest(root string, req FinishRequest) error {
 		if strings.TrimSpace(finding.Problem) == "" || strings.TrimSpace(finding.Impact) == "" || strings.TrimSpace(finding.Recommendation) == "" || strings.TrimSpace(finding.Verification) == "" {
 			return fmt.Errorf("REVIEW_FINISH_FINDING_FIELDS_REQUIRED: %s", finding.ID)
 		}
+		if len(finding.Evidence) == 0 {
+			return fmt.Errorf("REVIEW_FINISH_EVIDENCE_REQUIRED: %s", finding.ID)
+		}
 		for _, ev := range finding.Evidence {
 			key := readKey(ev.Ref)
 			ref, ok := reads[key]
@@ -281,8 +372,8 @@ func verifyEvidenceQuote(rootAbs string, ev Evidence) error {
 		return err
 	}
 	lines := bytes.Split(data, []byte("\n"))
-	segment := bytes.Join(lines[ev.Ref.StartLine-1:ev.Ref.EndLine], []byte("\n"))
-	if !bytes.Contains(segment, []byte(ev.Quote)) {
+	segment := evidenceVisibleSegment180(lines, ev.Ref.StartLine, ev.Ref.EndLine)
+	if !bytes.Contains(segment, normalizeEvidenceQuote180(ev.Quote)) {
 		return fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH: %s", ev.Ref.Path)
 	}
 	return nil

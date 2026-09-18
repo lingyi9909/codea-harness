@@ -85,18 +85,9 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 		}
 	}
 
-	userIndex := -1
-	for i, m := range exported.Messages {
-		if stringValue(m.Info["id"]) == req.MessageID {
-			if stringValue(m.Info["role"]) != "user" {
-				return errors.New("HUMAN_SELECTION_REQUIRED: selection turn is not user")
-			}
-			userIndex = i
-			break
-		}
-	}
-	if userIndex < 0 {
-		return errors.New("HUMAN_SELECTION_REQUIRED: user turn unavailable")
+	userIndex, err := selectionUserIndex180(exported, req.MessageID)
+	if err != nil {
+		return err
 	}
 
 	previousUser := -1
@@ -180,6 +171,54 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 		return fmt.Errorf("HUMAN_SELECTION_REQUIRED: user reply must be %q", expected)
 	}
 	return nil
+}
+
+func selectionUserIndex180(exported sessionExport, messageID string) (int, error) {
+	anchorIndex := -1
+	for i, m := range exported.Messages {
+		if stringValue(m.Info["id"]) != messageID {
+			continue
+		}
+		if anchorIndex >= 0 {
+			return -1, errors.New("HUMAN_SELECTION_REQUIRED: Host message id is ambiguous")
+		}
+		anchorIndex = i
+	}
+	if anchorIndex < 0 {
+		return -1, errors.New("HUMAN_SELECTION_REQUIRED: Host turn unavailable")
+	}
+	anchor := exported.Messages[anchorIndex]
+	switch stringValue(anchor.Info["role"]) {
+	case "user":
+		return anchorIndex, nil
+	case "assistant":
+		parentID := strings.TrimSpace(stringValue(anchor.Info["parentID"]))
+		if parentID == "" {
+			return -1, errors.New("HUMAN_SELECTION_REQUIRED: assistant Host context has no real user parent")
+		}
+		userIndex := -1
+		for i := 0; i < anchorIndex; i++ {
+			m := exported.Messages[i]
+			if stringValue(m.Info["id"]) != parentID {
+				continue
+			}
+			if userIndex >= 0 || stringValue(m.Info["role"]) != "user" {
+				return -1, errors.New("HUMAN_SELECTION_REQUIRED: assistant Host context user parent is ambiguous")
+			}
+			userIndex = i
+		}
+		if userIndex < 0 {
+			return -1, errors.New("HUMAN_SELECTION_REQUIRED: assistant Host context user parent unavailable")
+		}
+		for i := userIndex + 1; i < anchorIndex; i++ {
+			if stringValue(exported.Messages[i].Info["role"]) == "user" {
+				return -1, errors.New("HUMAN_SELECTION_REQUIRED: assistant Host context is not bound to the latest real user")
+			}
+		}
+		return userIndex, nil
+	default:
+		return -1, errors.New("HUMAN_SELECTION_REQUIRED: Host context is neither a real user turn nor its assistant tool response")
+	}
 }
 
 func selectionMenu180(text string) bool {
