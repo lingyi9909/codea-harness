@@ -321,6 +321,11 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         command_args = ["--command", "harness-review"]
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
+        elif multi:
+            # Class target is required to expose both endpoint chains and force
+            # the real next-user selection boundary. A method target would
+            # collapse this acceptance case to one chain.
+            command_args.append("OrderController")
         else:
             command_args.append("OrderController.updateStatus")
 
