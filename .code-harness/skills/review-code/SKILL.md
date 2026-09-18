@@ -1,235 +1,134 @@
 ---
 name: review-code
-description: 在 FULL 或 Runtime 已验证的 TARGETED Review Scope 完整后执行 Finding Proposal Review；Java/Mapper/YML 生产变更按证据评审，测试代码只执行 Test Validity Gate。
-version: 4
+description: Codea Harness 1.8 ordinary Review 的主 Agent 语义评审规则；仅在 Runtime 已建立所选调用链 scope 后，对真实源码证据形成 findings，并通过 codea-review finish 提交。
+version: 5
 agent: orchestrator
 tools:
   - read_code
-output_schema: .code-harness/contracts/finding-proposals.schema.json
 ---
 
-# 评审变更代码
+# Codea Harness 1.8 Review Code
 
-## 1.6.6 执行身份
+本 Skill 只服务当前 1.8 ordinary Review。执行入口、选择和最终写盘均由 `codea-review` + 受控 Runtime 决定；本 Skill 不拥有 run、scope、Git diff、Host identity 或最终报告 authority。
 
-本 Skill 由当前主 Agent 在主会话内直接执行，不派生 Reviewer 子 Agent。语义结果通过 `codea-reviewer-submit` 提交（保留历史工具名）；认证和报告继续由 Runtime 执行。多调用链必须遵守 AGENTS.md 的真实下一条用户消息选择门禁。
+## 前置条件
 
-单类 Review 只在 Runtime 认证的定向范围内读取实际依赖；复用本轮导航结果。提交前校对 proposal 结构，预检失败在同 run 修正。语义分析或空 Findings 都不是完成标志：必须由 Runtime 认证 Findings 并生成正式 `review.md`，再讨论代码修复。
+- 本次 `/harness-review` 已由固定入口创建 INCOMPLETE `review.md`。
+- 已有本 run 的 `runId`。
+- `codea-review prepare` 已成功；单链已自动形成 scope，或多链已通过下一条真实用户消息完成 `select`。
+- 主 Agent 只读取 `scope.reads` 允许的 source hash/range。若源码变化、scope 不完整或 Runtime 返回错误，停止并保留 INCOMPLETE 报告。
 
-## 前置硬门禁
+## Context 与 Finding 是两层范围
 
-本 Skill 不得自行决定 Review 是否完整，必须消费 Controlled Runtime 已验证的门禁结果。
+`scope.reads` 允许为了理解调用链读取完整 Controller / Service / Mapper / SQL 上下文，但“可读”不等于“可报问题”。Runtime 会保存独立的 formal finding range：
 
-### FULL
+- Controller：只允许所选 endpoint/method。
+- Service/ServiceImpl：只允许所选链实际调用的方法。
+- Mapper Java：只允许所选 mapper method。
+- Mapper XML：只允许与所选 mapper method 对应的 statement。
 
-```text
-mode == FULL
-change-analysis.schema.json == VALID
-reviewCoverage.status == COMPLETE
-Runtime FULL Coverage == COMPLETE
-```
+因此，同 Controller 的 sibling endpoint、共享 Service 的另一个 method、共享 Mapper XML 的另一个 statement 即使处在同一个可读文件中，也不得形成本次 finding。发现 scope 外潜在风险时，只说明需要新的 Review 范围，不把它塞入当前结果。
 
-FULL 任一条件不满足，本 Skill **不得执行**，由 Orchestrator 输出 `MANUAL_ACTION_REQUIRED`。changed Mapper.xml/YML 与 Java/test 一样属于 FULL required set，漏读任何一个都不能执行 Finding Review。
+## Evidence 规则
 
-### TARGETED
-
-```text
-mode == TARGETED
-review-scope.schema.json == VALID
-Runtime verified ReviewScopeSelection == VERIFIED
-Scoped Coverage == COMPLETE
-verified selectedCallChains != empty
-verified scopedFiles != empty
-```
-
-TARGETED 不得仅凭 Agent 声明的 reviewCoverage.status == COMPLETE 放行。Full Change Set 的 `reviewCoverage.status` 可以因为 scope 外文件未读取而为 PARTIAL；TARGETED 是否可进入 Finding Review，只看 Runtime 对 ReviewScopeSelection 重新计算后的 Scoped Coverage。
-
-Runtime verified ReviewScopeSelection 是本 Skill 唯一允许使用的定向边界；Agent 原始 target/scopedFiles/selectedCallChains 不得覆盖机器验证结果。Mapper.xml/YML 只有经 `resourceRelations` + Runtime 验证后才能进入 Targeted Finding Scope。
-
-## Review Finding Scope
-
-### TARGETED 硬边界
-
-TARGETED 时：
-
-1. 只读取并评审 Runtime verified `selectedCallChains` 与 `scopedFiles`。
-2. `Finding.file` 必须属于 Runtime verified scopedFiles。
-3. scope 外 changed file 可以出现在完整 Change Set 中，但不得产生本次 Targeted Finding。
-4. 与 selected chain 无 evidence relation 的 Mapper.xml/YML 不得顺手纳入。
-5. 发现 scope 外潜在问题时不得顺手输出 Finding；用户需要 FULL Review 或新的 Targeted Review 才能正式评审。
-6. selectedCallChains/scopedFiles 的任何 Runtime verification 失败 → STOP / `MANUAL_ACTION_REQUIRED`。
-
-### Java 生产代码
-
-FULL 时对 `src/main/**` Java 生产代码正常执行 Code Review；TARGETED 时仅对 verified scopedFiles 中的生产代码执行。Finding **不要求位于 Controller**；问题真实发生在哪一层，就落在哪一层，例如 Controller、Service/ServiceImpl、Repository/Mapper/DAO、Validator、DTO/VO/Entity、Config/ExceptionHandler/Utility。
-
-生产代码 Finding 固定：
-
-```text
-category = PRODUCTION_CODE
-```
-
-可检查参数校验、业务规则、状态流转、事务边界、权限/租户、幂等性、异常处理、数据一致性、空指针、边界条件、调用链和兼容性问题。
-
-### Mapper.xml
-
-进入 FULL required set 或 TARGETED verified scopedFiles 的 `*Mapper.xml` 使用：
-
-```text
-category = PRODUCTION_CODE
-```
-
-只允许对本次变更有明确证据的高价值风险产生 Finding：
-
-1. `UPDATE / DELETE` 缺失 `WHERE`，或本次变更使 WHERE 条件明显过宽。
-2. 本次变更移除/弱化已有租户、机构、用户等数据隔离条件。
-3. `动态 SQL` 条件变化导致关键过滤条件可能失效。
-4. XML `statement id` 与 Java Mapper method 的新增/修改不一致。
-5. `参数` 名/参数结构与 Mapper method 本次变更不一致。
-6. `resultMap/resultType` 与 Java Mapper/DTO/Entity 的本次变更不一致。
-7. 明显`无边界批量更新/删除`风险。
-
-**不得因为 XML 格式、缩进、命名风格产生 Finding。**
-
-动态 SQL 无法确定最终 SQL 语义时，只能把可见 XML + Java Mapper 证据作为分析依据；证据不足时不报确定性 Finding。不得把候选风险伪造成已确认问题。
-
-### YML
-
-进入 FULL required set 或 TARGETED verified scopedFiles 的 `src/main/resources/**/*.yml` 使用：
-
-```text
-category = PRODUCTION_CODE
-```
-
-只检查本次 changed key 对以下高价值行为的影响：
-
-1. `datasource` / 数据库连接池关键参数。
-2. `timeout`、线程池、队列容量与超时。
-3. `Redis/MQ/RPC` endpoint / timeout / retry。
-4. `日志级别`异常提升或关闭关键日志。
-5. Spring profile / `feature switch` 行为变化。
-6. hard-coded secret / `敏感信息`直接写入配置。
-7. 配置 key 删除/改名与 Java `@Value` / `@ConfigurationProperties` 使用不一致。
-
-**不得对未变化的配置做泛化审查。** 不得因为 YAML 排版、key 顺序、空行、注释风格产生 Finding。
-
-### 测试代码
-
-`src/test/**` 等测试代码只要进入 FULL required set 或 TARGETED verified scopedFiles 就必须读取，并参与 Review Coverage、Existing Test Coverage Analysis 以及后续 `harness test`。
-
-但是：**测试代码默认不得产生普通 Finding。**
-
-不得因为以下内容产生 Finding：
-
-```text
-命名不好
-重复代码
-测试结构不好
-测试代码不够优雅
-可维护性一般
-代码风格
-Mock 写法不漂亮
-```
-
-测试代码只执行 **Test Validity Gate**。只有存在明确代码证据表明测试失真、产生 false-positive 或真实覆盖被破坏时，才允许：
-
-```text
-category = TEST_VALIDITY
-```
-
-允许范围固定为：
-
-1. 删除有效测试。
-2. 使用 `@Disabled` / Ignore 等方式禁用有效测试。
-3. 删除或明显弱化关键断言。
-4. catch / 吞异常导致测试无条件通过。
-5. Mock 内部业务 Bean，导致真实业务调用链被绕过。
-6. 修改测试范围，使本次生产变更实际没有被验证。
-7. 其他具有明确代码证据的 false-positive 行为。
-
-不得把 Test Validity Gate 扩展成普通测试代码质量 Review。
-
-## Review Chain Context（1.5 Task 4）
-
-`review-code` 可以消费已由 Controlled Runtime 解析完成的 `chainContext`，但 **chainContext 只提供业务上下文**，不改变本 Skill 的任何前置 Gate。
-
-- `ACCEPTED + VALID` 可以作为当前 Review 的已验证长期业务上下文。
-- `DISCOVERED + TEMPORARY` 只能作为本次 run 临时上下文；**临时 DISCOVERED Chain 不授权 Project State 写入**。
-- STALE/INVALID/PARTIAL Chain context 不允许进入 Finding Review。
-- **Finding.file 仍由原 FULL/TARGETED Scope Gate 决定**；不能因为某文件存在于 Chain 就绕过 verified scopedFiles/完整 Change Set 规则。
-- Chain 的 `notes` 不得覆盖实际代码证据；Finding 的 problem/evidence/impact/recommendation 仍必须来自本次变更与已读取源码。
-- 使用临时 Chain 不等于接受/保存该 Chain；沉淀必须回到 Orchestrator 的用户明确确认 + Task 3 Runtime persist 流程。
-
-Report transport 的 `chainContext` 只能复制 Runtime 已验证的 `id/name/source/status`，Renderer 只负责展示 provenance，不参与 Chain 判断。
-
-## Finding 规则
-
-每条 Finding 必须引用实际证据，并完整记录：
+每条 finding 必须填写：
 
 - `id`
-- `category`：`PRODUCTION_CODE | TEST_VALIDITY`
-- `severity`
-- `file`, `line` —— 真实问题位置，不得为了“接口入口”硬挂 Controller
+- `severity`: `CRITICAL | HIGH | MEDIUM | LOW`
 - `problem`
-- `evidence`
 - `impact`
 - `recommendation`
-- `needsTest`
-- `introducedByChange`
-- `confidence`
+- `verification`
+- `evidence[]`: 每项包含 source `ref` 与精确 `quote`
+- `introducedByChange`：仅在有确定性依据时填写
 
-TARGETED 在输出前必须再次检查 `Finding.file ∈ verified scopedFiles`；Controlled Runtime Renderer 还会执行同一范围校验，形成双层 Gate。
+Evidence 必须满足：
 
-`problem / evidence / impact / recommendation` 默认使用中文；Java 类名、方法名、文件路径、SQL、YAML/XML 原文、异常名、RPC 名和技术名词保持源码原文。
+1. source path/hash/range 来自本 run 已读取源码；
+2. quote 真实存在于 ref 范围；
+3. quote 实际位置属于所选链 formal finding range；
+4. 不用类名、猜测、规则命中或模型 confidence 代替源码证据。
+5. 每个 `evidence.ref` 的完整 `path/sha256/startLine/endLine` tuple 必须同时作为一条精确项存在于 `result.reads`；仅有包含该范围的宽 read 不足以声明 evidence read。
+6. `quote` 按 read 工具显示的源码原文复制；Windows CRLF 与可见 LF 由 Runtime 规范化匹配，但除此之外不得改写字符或缩进。
 
-没有证据不得报问题；不做无关重构或风格建议。
+没有足够证据就不报 finding。findings 可以为空，但仍必须调用 `codea-review action=finish`。
 
-## 输出
+## 变更归因
 
-必须通过 `.code-harness/contracts/finding-proposals.schema.json`。本 Skill 输出的是 Finding Proposal，不是正式 Finding；Proposal 不得直接进入最终 Review Report。Resource Proposal 不新增 category，Mapper.xml/YML 继续使用 `PRODUCTION_CODE`。TARGETED Proposal 的 path/anchor/evidence 仍必须位于 Runtime verified scope，并由 Runtime 独立校验。
+`introducedByChange` 不是模型自报事实：
 
-## 1.6 Finding Proposal Authority
+- `CURRENT_IMPLEMENTATION`：不得设置为 `true`。
+- `CHANGES`：只有 finding 的真实 evidence 命中当前 Git diff 的 changed line，才允许设置为 `true`。
+- 仅仅“文件有变化”不足以证明某个问题由本次变化引入；问题证据位于未变化 sibling method 时不得标记。
+- Runtime 在 finish 时会重新计算并校验，模型填写不能绕过。
 
-本节优先于本文中沿用的“Finding”术语：
+## Java 生产代码
 
-```text
-Reviewer 只提出 Finding Proposal。
-Proposal 不等于正式 Finding。
-只有后续 Runtime certification 产生的 Certified Finding 才能进入最终 Review Report。
-```
+只报告有明确证据、会影响正确性/安全性/数据一致性/兼容性的实际问题，例如：
 
-Reviewer 输出固定写入 `.code-harness/runs/<runId>/requests/finding-proposals.json`，并必须通过 `.code-harness/contracts/finding-proposals.schema.json`。每条 Proposal 必须绑定当前 Runtime `reviewUnitId` 与该 Unit 已分发的 `ruleId`，anchor/evidence 只能引用当前 ReviewUnit 允许的事实；不得创造 scope 外 path/symbol/line，也不得把 confidence 或 Proposal 本身表述成已经由 Runtime 证明成立的正式 Finding。
+- 参数与状态校验缺失导致错误业务路径；
+- 事务、幂等、并发、权限/租户边界错误；
+- 异常吞噬、错误返回、空指针、资源泄漏；
+- Controller → Service → Mapper 调用语义不一致；
+- 状态流转、数据写入或读取条件明显错误。
 
-Controlled Runtime 必须对同 run 的 ReviewUnit、RuleDispatch、Certified ChangeAnalysis、源码与 changed hunk 独立验证 rule/scope/path/symbol/line/range/evidence/introducedByChange；任一验证失败都必须拒绝 Proposal。
+不输出纯风格、命名、格式化、无证据重构建议。
 
-本文既有 Java、Mapper.xml、YML 与 Test Validity Gate 的评审边界保持不变；这些边界现在约束“允许提出什么 Proposal”，而不是赋予 Agent 正式 Finding 权威。
-## 1.6 Spring Rule Pack v1 深度评审约束
+## Mapper XML
 
-Runtime `RuleDispatch` 决定当前 ReviewUnit 要检查的规则；Reviewer 只消费当前 `reviewUnitId / ruleId` 对应的已分发规则，不得自行扩展规则集或把 matcher 结果升级成事实。
+仅对所选链对应 statement 的高价值风险形成 finding：
 
-对每个 dispatched rule，Reviewer 可以输出 **0..N** 个 Finding Proposal。`0` 表示当前证据不足以支持问题，不是漏审；不得为了覆盖已分发规则而强行提出 Proposal。不得把 rule passed 输出为 Finding，也不得输出“规则通过”之类的伪 Finding。matcher hit 不等于 bug。
+- UPDATE / DELETE 缺少必要 WHERE 或条件明显过宽；
+- 租户/机构/用户隔离条件被移除或弱化；
+- 动态 SQL 使关键过滤失效；
+- statement id、参数、resultMap/resultType 与所选 Java Mapper method 明显不一致；
+- 明显无边界批量更新/删除风险。
 
-每个 Proposal 必须由本次 current-change evidence 支撑，并遵守该规则的 requiredEvidence；证据不足时不提出 Finding Proposal。Reviewer 不得仅凭注解名、类名/方法名、配置文件中未变化 key、`${}` matcher、普通 DTO 缺少注解或模型 confidence 得出确定性结论。
+不得因为 XML 格式、缩进、命名风格产生 Finding。
 
-Task 5 明确禁止以下低价值 Finding：
+## 配置与资源
 
-```text
-命名
-格式
-缩进
-重复代码
-建议重构
-普通测试代码风格
-未变化配置
-scope 外潜在问题
-workspace dependency finding
-```
+只有当配置/资源由所选调用链明确关联且处于 Runtime scope 时才评审。关注 datasource、timeout、线程池、Redis/MQ/RPC、日志级别、profile、feature switch、敏感信息及 Java `@Value` / `@ConfigurationProperties` 配置绑定不一致等高价值风险；不得对未变化的配置做泛化审查；未关联或范围外内容不顺手扩审。
 
-既有 FULL/TARGETED scope、workspace dependency 隔离和 `TEST_VALIDITY` 边界保持不变；Task 5 只深化已分发 Spring/MyBatis 规则的证据要求，不新增 Finding 权威。
+## 测试代码
 
+测试代码不是 ordinary production finding 的默认来源。只有真实证据证明测试会 false-positive、绕过真实业务链或失去关键验证时，才作为有效性风险说明，例如禁用有效测试、吞异常、删除关键断言、错误 Mock 内部业务 Bean。普通测试代码风格不报问题。
 
-## 1.6.3 USER_SELECTION 前置门禁
+## 完成语义
 
-`TASK163_USER_SELECTION_TURN_HARD_STOP`
+主 Agent完成读取和判断后，一次调用：
 
-如果当前 same-run `review-options.json` 的 decision 仍为 `USER_SELECTION`，且尚未在**下一条用户消息**之后通过 Runtime `review select` 生成 verified FULL/TARGETED scope，则**不得执行本 Skill**，不得读取 ReviewUnit 做 Finding Review，也不得生成 `finding-proposals.json`。Agent 自行推断 FULL/TARGETED/LIST 或默认 ALL 不能解除本门禁。
+`codea-review action=finish`
+
+result 包含本次 `reads/findings/pendingRisks/gaps`。Runtime 在同一调用内完成范围、evidence、变更归因、幂等/并发、结果保存、报告渲染和回读验证。
+
+- COMPLETE + high/critical finding → `BLOCKING`
+- COMPLETE + 其他 finding/pending risk → `ACTION_REQUIRED`
+- COMPLETE + 无问题/风险 → `NO_ISSUES_FOUND`
+- PARTIAL → `UNDETERMINED`
+
+只有 finish 返回的 path/hash 与磁盘 `review.md` 一致且 `execution=COMPLETE`，才可宣布 ordinary Review 完成。任何失败都保留当前 INCOMPLETE run，不自动换 run，也不自动进入 Fix。
+
+pre-1.8 ordinary Review 的历史机制只在 `.code-harness/history/ordinary-review-pre-1.8.md`，不得作为本 Skill 的执行步骤。
+## 历史兼容契约（非 1.8 ordinary Review authority）
+
+以下内容只保留旧报告/回归契约的术语，不重新激活 pre-1.8 ordinary Review orchestration。历史 contract lineage：`version: 4`。
+
+### FULL / TARGETED 旧机器门禁术语
+
+- FULL：`reviewCoverage.status == COMPLETE`。
+- TARGETED：`Runtime verified ReviewScopeSelection` + `Scoped Coverage`，且 `Finding.file` 必须属于 `verified scopedFiles`。
+- TARGETED 不得仅凭 Agent 声明的 reviewCoverage.status == COMPLETE 放行。
+
+### 旧 Finding transport 兼容
+
+旧 renderer/schema 使用 `category` 区分 `PRODUCTION_CODE` / `TEST_VALIDITY`，并要求 `problem / evidence / impact / recommendation`。测试代码默认不得产生普通 Finding；不得因为以下内容产生 Finding：命名、格式、重复代码、普通测试代码风格。不得把 Test Validity Gate 扩展成普通测试代码质量 Review。
+
+### Review Chain Context（1.5 Task 4）
+
+- `chainContext 只提供业务上下文`。
+- `Finding.file 仍由原 FULL/TARGETED Scope Gate 决定`。
+- `临时 DISCOVERED Chain 不授权 Project State 写入`。
+
+这些兼容文字只服务历史数据和旧回归；1.8 当前执行仍以本文件顶部的 bounded scope + source evidence + `codea-review finish` 为准。
+
