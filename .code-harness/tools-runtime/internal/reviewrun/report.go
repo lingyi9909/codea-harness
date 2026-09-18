@@ -20,7 +20,7 @@ var reviewTemplateText string
 var reviewTemplate = template.Must(template.New("review.md").Funcs(template.FuncMap{
 	"cell":              markdownText180,
 	"code":              markdownCodeSpan180,
-	"block":             markdownCodeBlock180,
+	"codeblock":         markdownCodeBlock180,
 	"severityLabel":     severityLabel180,
 	"executionLabel":    executionLabel180,
 	"conclusionLabel":   conclusionLabel180,
