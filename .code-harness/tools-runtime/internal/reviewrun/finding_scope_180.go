@@ -285,8 +285,8 @@ func evidenceQuoteRanges180(rootAbs string, ev Evidence) ([]ReadRef, error) {
 	if ev.Ref.StartLine < 1 || ev.Ref.EndLine < ev.Ref.StartLine || ev.Ref.EndLine > len(lines) {
 		return nil, fmt.Errorf("REVIEW_FINISH_READ_RANGE_INVALID: %s", ev.Ref.Path)
 	}
-	segment := bytes.Join(lines[ev.Ref.StartLine-1:ev.Ref.EndLine], []byte("\n"))
-	quote := []byte(ev.Quote)
+	segment := evidenceVisibleSegment180(lines, ev.Ref.StartLine, ev.Ref.EndLine)
+	quote := normalizeEvidenceQuote180(ev.Quote)
 	out := []ReadRef{}
 	for from := 0; from <= len(segment); {
 		i := bytes.Index(segment[from:], quote)
@@ -307,6 +307,18 @@ func evidenceQuoteRanges180(rootAbs string, ev Evidence) ([]ReadRef, error) {
 		return nil, fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH: %s", ev.Ref.Path)
 	}
 	return out, nil
+}
+
+func normalizeEvidenceQuote180(quote string) []byte {
+	return []byte(strings.ReplaceAll(quote, "\r\n", "\n"))
+}
+
+func evidenceVisibleSegment180(lines [][]byte, startLine, endLine int) []byte {
+	visible := make([][]byte, 0, endLine-startLine+1)
+	for _, line := range lines[startLine-1 : endLine] {
+		visible = append(visible, bytes.TrimSuffix(line, []byte("\r")))
+	}
+	return bytes.Join(visible, []byte("\n"))
 }
 
 func rangeAllowed180(ref ReadRef, allowed []ReadRef) bool {
