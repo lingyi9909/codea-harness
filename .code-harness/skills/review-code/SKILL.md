@@ -48,6 +48,8 @@ Evidence 必须满足：
 2. quote 真实存在于 ref 范围；
 3. quote 实际位置属于所选链 formal finding range；
 4. 不用类名、猜测、规则命中或模型 confidence 代替源码证据。
+5. 每个 `evidence.ref` 的完整 `path/sha256/startLine/endLine` tuple 必须同时作为一条精确项存在于 `result.reads`；仅有包含该范围的宽 read 不足以声明 evidence read。
+6. `quote` 按 read 工具显示的源码原文复制；Windows CRLF 与可见 LF 由 Runtime 规范化匹配，但除此之外不得改写字符或缩进。
 
 没有足够证据就不报 finding。findings 可以为空，但仍必须调用 `codea-review action=finish`。
 
