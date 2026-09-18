@@ -498,9 +498,12 @@ func evidenceQuoteSpans180(rootAbs string, ev Evidence) ([]findingSpan180, error
 			break
 		}
 		at := from + i
+		start := base + at
+		end := start + len(quote)
+		start, end = trimEvidenceBoundaryWhitespace180(data, start, end)
 		out = append(out, findingSpan180{
 			Path: filepath.ToSlash(filepath.Clean(ev.Ref.Path)), SHA256: ev.Ref.SHA256,
-			Start: base + at, End: base + at + len(quote),
+			Start: start, End: end,
 		})
 		step := len(quote)
 		if step == 0 {
@@ -512,6 +515,27 @@ func evidenceQuoteSpans180(rootAbs string, ev Evidence) ([]findingSpan180, error
 		return nil, fmt.Errorf("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH: %s", ev.Ref.Path)
 	}
 	return out, nil
+}
+
+func trimEvidenceBoundaryWhitespace180(data []byte, start, end int) (int, int) {
+	for start < end {
+		switch data[start] {
+		case ' ', '\t', '\n', '\r':
+			start++
+		default:
+			goto trimEnd
+		}
+	}
+trimEnd:
+	for end > start {
+		switch data[end-1] {
+		case ' ', '\t', '\n', '\r':
+			end--
+		default:
+			return start, end
+		}
+	}
+	return start, end
 }
 
 func findingSpanAllowed180(ref findingSpan180, allowed []findingSpan180) bool {
