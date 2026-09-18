@@ -104,7 +104,10 @@ func renderReport(view reportView) ([]byte, error) {
 	if err := reviewTemplate.Execute(&buf, view); err != nil {
 		return nil, fmt.Errorf("REVIEW_REPORT_RENDER_FAILED: %w", err)
 	}
-	out := buf.Bytes()
+	// Canonicalize report bytes across Windows/Linux. The embedded template
+	// follows the checkout's working-tree line endings, while dynamic helper
+	// content may contain LF. Persist one deterministic UTF-8/LF representation.
+	out := bytes.ReplaceAll(buf.Bytes(), []byte("\r\n"), []byte("\n"))
 	if bytes.HasPrefix(out, []byte{0xef, 0xbb, 0xbf}) {
 		return nil, fmt.Errorf("REVIEW_REPORT_BOM_FORBIDDEN")
 	}
