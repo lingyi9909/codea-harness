@@ -90,7 +90,7 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		_ = writeState(runDir, state)
 		return Outcome{}, err
 	}
-	if err := validateFindingsWithinSelectedScope180(root, req.Findings, scope.FindingReads); err != nil {
+	if err := validateFindingsWithinSelectedScope180(root, req.Findings, scope.Chains); err != nil {
 		state.LastError = err.Error()
 		_ = writeState(runDir, state)
 		return Outcome{}, err
