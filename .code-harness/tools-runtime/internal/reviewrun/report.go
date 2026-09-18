@@ -37,6 +37,7 @@ var reviewTemplate = template.Must(template.New("review.md").Funcs(template.Func
 	"firstAction":       firstAction180,
 	"lineRange":         lineRange180,
 	"unselectedSummary": unselectedSummary180,
+	"add1":              addOne180,
 }).Parse(reviewTemplateText))
 
 type reportView struct {
@@ -419,6 +420,10 @@ func countReadFiles180(reads []ReadRef) int {
 		}
 	}
 	return len(seen)
+}
+
+func addOne180(value int) int {
+	return value + 1
 }
 
 func bytesSHA256(data []byte) string {
