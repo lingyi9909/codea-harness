@@ -3,7 +3,7 @@ name: Runtime Regression - Windows x64
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/1.8-task3-primary-report]
     paths:
       - '.code-harness/tools-runtime/**'
       - '.code-harness/tools/**'
@@ -43,7 +43,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Codea 1.8 real-model secret preflight
-        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
+        if: ${{ (github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report') || (github.event_name == 'push' && github.ref_name == 'feature/1.8-task3-primary-report') }}
         shell: pwsh
         env:
           TASK15_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
@@ -157,7 +157,7 @@ jobs:
           retention-days: 3
 
       - name: Codea 1.8 real-model autonomous single-chain smoke
-        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
+        if: ${{ (github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report') || (github.event_name == 'push' && github.ref_name == 'feature/1.8-task3-primary-report') }}
         shell: pwsh
         env:
           TASK15_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
@@ -178,7 +178,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Codea 1.8 real-model acceptance evidence
-        if: ${{ always() && github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report' }}
+        if: ${{ always() && ((github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report') || (github.event_name == 'push' && github.ref_name == 'feature/1.8-task3-primary-report')) }}
         uses: actions/upload-artifact@v4
         with:
           name: review180-real-model-acceptance
