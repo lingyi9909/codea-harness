@@ -314,8 +314,9 @@ func mutateReviewFixture180(t *testing.T, root, rel, old, replacement string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated := strings.Replace(string(data), old, replacement, 1)
-	if updated == string(data) {
+	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+	updated := strings.Replace(normalized, old, replacement, 1)
+	if updated == normalized {
 		t.Fatalf("fixture mutation %q not applied to %s", old, rel)
 	}
 	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
