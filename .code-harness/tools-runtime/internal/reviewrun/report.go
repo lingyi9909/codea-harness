@@ -164,6 +164,10 @@ func markdownCodeSpan180(value string) string {
 	value = strings.ReplaceAll(value, "\r\n", "\n")
 	value = strings.ReplaceAll(value, "\r", "\n")
 	value = strings.ReplaceAll(value, "\n", " ")
+	// A pipe remains a Markdown table delimiter even inside many inline-code
+	// renderers. Escape it before fencing so source paths/symbols cannot add
+	// columns while their visible text remains literal.
+	value = strings.ReplaceAll(value, "|", "\\|")
 	maxRun := maxBacktickRun180(value)
 	fence := strings.Repeat("`", maxRun+1)
 	if maxRun == 0 {
