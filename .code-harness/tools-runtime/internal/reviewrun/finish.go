@@ -153,6 +153,13 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 	}
 	resultSHA := bytesSHA256(resultBytes)
 
+	reportIntent := Intent{}
+	reportChains := append([]Chain{}, scope.Chains...)
+	if prepared, preparedErr := loadPreparedOptions180(runDir); preparedErr == nil {
+		reportIntent = prepared.Intent
+		reportChains = append([]Chain{}, prepared.Options.Chains...)
+	}
+
 	report, err := renderReport(reportView{
 		StatusText:       "评审完成",
 		RunID:            req.RunID,
@@ -167,6 +174,10 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		Findings:         req.Findings,
 		PendingRisks:     req.PendingRisks,
 		Gaps:             req.Gaps,
+		Intent:           reportIntent,
+		Chains:           reportChains,
+		SelectedIDs:      append([]string{}, scope.SelectedIDs...),
+		ReadFileCount:    countReadFiles180(scope.Reads),
 	})
 	if err != nil {
 		return Outcome{}, err
