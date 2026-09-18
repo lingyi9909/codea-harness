@@ -109,8 +109,11 @@ func Test180ReportEscapesDisplayContentAndKeepsEvidenceLiteral(t *testing.T) {
 
 	path := "C:\\工作区\\模块|A\\Order`Mapper.xml"
 	span := markdownCodeSpan180(path)
-	if !strings.Contains(span, path) || !strings.HasPrefix(span, "``") {
+	if !strings.Contains(span, "C:\\工作区\\模块\\|A\\Order`Mapper.xml") || !strings.HasPrefix(span, "``") {
 		t.Fatalf("Windows/Chinese/backtick path was not represented as a safe code span: %q", span)
+	}
+	if strings.Contains(span, "模块|A") {
+		t.Fatalf("table delimiter remained active inside code span: %q", span)
 	}
 }
 
