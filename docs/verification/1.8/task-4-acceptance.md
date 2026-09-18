@@ -8,7 +8,7 @@ Base / T3 Accepted Exact HEAD：`2346bde3d5fe8dda7a372d9c7a08ee0caf3a7557`
 ## 1. 产品版本与证据提交
 
 - testedProductHead = `52ae4dc2a02d7f124d25a3ee3c02196cae85c82a`
-- evidenceCommit = `PENDING_DOC_COMMIT_SHA`
+- evidenceCommit = `2f8e7d1d1292d4c1c0bae3d06b9cc9f99dd99124`
 - Formal PR：#57（Draft，未合并）
 - CI-only PR：#58（仅用于触发 exact-head Windows Runtime Regression，不得合并）
 - 本记录是在产品代码、模板与测试已经完成 fresh exact-head 验证后补充的 docs-only 验收证据。
