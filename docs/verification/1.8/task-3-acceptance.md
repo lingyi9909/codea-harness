@@ -8,7 +8,7 @@ Base / T2 Accepted Baseline：`db2f03cebafa6f72c733286a083ad97e14f41cf5`
 ## 1. 产品版本与证据提交
 
 - testedProductHead = `05b1bf27ee21bbe94198c0a7d2c1f29af09f9943`
-- evidenceCommit = `PENDING_DOC_COMMIT_SHA`
+- evidenceCommit = `572fbe8bec314ba09cab9ef93454f7d41f362796`
 - 本记录是在已经完成产品代码与测试验证的 testedProductHead 之后补充的 docs-only 验收证据。
 - evidenceCommit 只用于固化验收证据，不改变 testedProductHead，也不把证据提交冒充新的产品测试 HEAD。
 - 本轮不得进入 Task 4，不得合并 PR #56。
