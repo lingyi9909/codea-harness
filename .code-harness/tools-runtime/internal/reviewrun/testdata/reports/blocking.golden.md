@@ -127,4 +127,3 @@ WHERE id = #{orderId}
 技术追溯：Harness 1.8 · Run ID `review-00000000000000000000000000000001` · result SHA256 `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` · 提交号未由 Runtime 采集。
 
 <!-- codea-review-meta {"schemaVersion":180,"runId":"review-00000000000000000000000000000001","execution":"COMPLETE","resultSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} -->
-
