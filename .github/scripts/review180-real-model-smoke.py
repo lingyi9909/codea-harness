@@ -269,7 +269,20 @@ def main():
         host.require(version == "1.18.25", f"expected OpenCode 1.18.25, got {version}")
         model = "task15secret/deepseek-v4-pro"
         run = [str(binary), "run", "--print-logs", "--dir", str(project), "--model", model, "--format", "json"]
-        stdout = host.command(run + ["--command", "harness-review", "OrderController"], project, env, timeout=240)
+        stdout = ""
+        try:
+            stdout = host.command(run + ["--command", "harness-review", "OrderController"], project, env, timeout=360)
+        except RuntimeError as error:
+            if "command timeout:" not in str(error):
+                raise
+            # Preserve the native trajectory from the timed-out session before
+            # propagating failure. A timeout must never be mistaken for PASS.
+            sid = session_id("", binary, project, env)
+            exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
+            actions = host.tool_actions(exported)
+            names = [host.normalized(name) for name in completed_tools(exported)]
+            persist_partial_evidence(evidence_dir, project, exported, model, sid, actions, names)
+            raise
         sid = session_id(stdout, binary, project, env)
         exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
         actions = host.tool_actions(exported)
