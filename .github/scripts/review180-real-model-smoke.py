@@ -110,6 +110,55 @@ def validate_report_identity(project: Path, report_path: Path, finish_runtime: d
     return report_sha
 
 
+def write_manifest(evidence_dir: Path, run_id, model):
+    manifest_files = ["trajectory.json", "review.md", "result.json", "scope.json", "run.json"]
+    files = {}
+    for name in manifest_files:
+        path = evidence_dir / name
+        if path.is_file():
+            files[name] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
+    manifest = {
+        "schemaVersion": "codea.review180.acceptance-manifest.v1",
+        "runId": run_id,
+        "model": model,
+        "files": files,
+    }
+    write_json(evidence_dir / "manifest.json", manifest)
+
+
+def persist_partial_evidence(
+    evidence_dir: Path,
+    project: Path,
+    exported,
+    model: str,
+    sid: str,
+    actions,
+    names,
+):
+    write_json(evidence_dir / "trajectory.json", redact_sensitive(exported))
+    runs = list((project / ".code-harness" / "runs").glob("review-*"))
+    run_id = runs[0].name if len(runs) == 1 else None
+    copied = []
+    if len(runs) == 1:
+        for name in ("review.md", "result.json", "scope.json"):
+            source = runs[0] / name
+            if source.is_file():
+                shutil.copyfile(source, evidence_dir / name)
+                copied.append(name)
+    run_evidence = {
+        "schemaVersion": "codea.review180.acceptance.v1",
+        "model": model,
+        "runId": run_id,
+        "sessionId": sid,
+        "actions": actions,
+        "completedTools": names,
+        "availableArtifacts": copied,
+        "acceptance": "PENDING_FINISH",
+    }
+    write_json(evidence_dir / "run.json", redact_sensitive(run_evidence))
+    write_manifest(evidence_dir, run_id, model)
+
+
 def persist_evidence(
     evidence_dir: Path,
     exported,
@@ -123,21 +172,7 @@ def persist_evidence(
     shutil.copyfile(result_path, evidence_dir / "result.json")
     shutil.copyfile(scope_path, evidence_dir / "scope.json")
     write_json(evidence_dir / "run.json", redact_sensitive(run_evidence))
-
-    manifest_files = ["trajectory.json", "review.md", "result.json", "scope.json", "run.json"]
-    manifest = {
-        "schemaVersion": "codea.review180.acceptance-manifest.v1",
-        "runId": run_evidence.get("runId"),
-        "model": run_evidence.get("model"),
-        "files": {
-            name: {
-                "sha256": sha256_file(evidence_dir / name),
-                "bytes": (evidence_dir / name).stat().st_size,
-            }
-            for name in manifest_files
-        },
-    }
-    write_json(evidence_dir / "manifest.json", manifest)
+    write_manifest(evidence_dir, run_evidence.get("runId"), run_evidence.get("model"))
 
 
 def main():
@@ -201,7 +236,7 @@ def main():
                     "models": {
                         "deepseek-v4-pro": {
                             "name": "DeepSeek V4 Pro",
-                            "limit": {"context": 128000, "output": 8192},
+                            "limit": {"context": 128000, "output": 16384},
                         }
                     },
                 }
@@ -238,10 +273,11 @@ def main():
         sid = session_id(stdout, binary, project, env)
         exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
         actions = host.tool_actions(exported)
+        names = [host.normalized(name) for name in completed_tools(exported)]
+        persist_partial_evidence(evidence_dir, project, exported, model, sid, actions, names)
         host.require("prepare" in actions, f"real model never called prepare: {actions}\n{stdout[-5000:]}")
         host.require("finish" in actions, f"real model never autonomously called finish: {actions}\n{stdout[-5000:]}")
         host.require("select" not in actions, f"single-chain real-model smoke unexpectedly selected: {actions}")
-        names = [host.normalized(name) for name in completed_tools(exported)]
         host.require("read" in names, f"real model did not use native source read tool: {names}")
 
         finish_states = [state for state in host.tool_parts(exported, "finish") if state.get("status") == "completed"]
