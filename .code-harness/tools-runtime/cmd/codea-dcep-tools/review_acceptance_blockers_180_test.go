@@ -44,6 +44,44 @@ func Test180PrimaryToolMakesEmptyFindingFinishContinuationExplicit(t *testing.T)
 	}
 }
 
+func Test180ScopeReadyReviewIsNonTerminalAcrossActiveInstructions(t *testing.T) {
+	root := repoRoot180(t)
+	files := []string{
+		filepath.Join(".code-harness", "commands", "harness-review.md"),
+		filepath.Join(".code-harness", "agents", "orchestrator.md"),
+	}
+	for _, rel := range files {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, want := range []string{
+			"READ_SCOPE_AND_FINISH_THIS_TURN",
+			"non-terminal",
+			"finish",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s must keep a scope-ready review in the same assistant turn; missing %q", rel, want)
+			}
+		}
+	}
+	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolText := string(toolData)
+	for _, want := range []string{
+		"assistantTurnTerminal: false",
+		"mustContinueToolExecution: true",
+		"finishRequiredEvenWhenFindingsEmpty: true",
+	} {
+		if !strings.Contains(toolText, want) {
+			t.Fatalf("scope-ready structured tool state must be non-terminal; missing %q", want)
+		}
+	}
+}
+
 func Test180HostSmokeRunsRealConcurrentFinishRegression(t *testing.T) {
 	root := repoRoot180(t)
 	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-host-smoke.py"))
