@@ -90,14 +90,13 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`@PreAuthorize("hasAuthority('ORDER_WRITE')")`,
-		`@NotBlank @AuthenticationPrincipal(expression = "tenantId") String tenantId`,
-		`if (id <= 0)`,
-		`if (!"PAID".equals(status) && !"CANCELLED".equals(status))`,
-		`public void updateStatus(String tenantId, long id, String status) {`,
+		`@PreAuthorize("hasAuthority('ORDER_WRITE') and principal != null and principal.tenantId != null and principal.tenantId != ''")`,
+		`@AuthenticationPrincipal(expression = "tenantId") String tenantId`,
+		`@RequestParam("id") long id`,
+		`@RequestParam("status") String status`,
+		`throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid order id")`,
+		`switch (status)`,
 		`int updated = mapper.updateStatus(tenantId, id, status);`,
-		`public interface OrderMapper`,
-		`int updateStatus(String tenantId, long id, String status);`,
 		`public void voidOrder`,
 		`command_args.append("OrderController")`,
 		`host.require(scope.get("selectedIds") == ["C1"]`,
@@ -106,11 +105,17 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 			t.Fatalf("final real-model fixture lost navigation/selection contract %q", want)
 		}
 	}
+	for _, forbidden := range []string{
+		"tenantId.isBlank()",
+		"@NotBlank",
+		`if (!"PAID".equals(status) && !"CANCELLED".equals(status))`,
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("final matrix fixture reintroduced ambiguous validation/navigation construct %q", forbidden)
+		}
+	}
 	if strings.Contains(text, "service.cancel(") {
 		t.Fatal("multi-chain fixture must keep updateStatus lexically first so seeded issue remains C1")
-	}
-	if strings.Contains(text, "tenantId.isBlank()") {
-		t.Fatal("final matrix controller must not add a second method invocation that breaks single-chain navigation")
 	}
 }
 
