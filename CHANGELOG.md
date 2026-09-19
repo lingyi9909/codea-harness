@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0
+
+- 普通 Review 固定为 report-first 主 Agent 路径：`review start → prepare → 必要时真实人工 select → finish`，不再依赖旧 Reviewer authority 才能生成正式报告。
+- 调用链发现、选择、finding evidence 和 report identity 由 Runtime 约束；同一物理行的未选 Java method / Mapper statement 也不能越界进入报告。
+- 正式 `review.md` 使用五段汇报版式，execution / risk / coverage 分离，六类 golden、长链、特殊 Markdown/Windows 路径和 H01–H17 永久回归已覆盖。
+- Windows x64 install / upgrade package 新增受管 `.opencode/agents/orchestrator.md` 与 `.opencode/tools/codea-review.ts`，并保留 Host ownership 冲突保护、事务回滚、未知用户文件和 Project State 保护。
+- 最终 Release Gate 使用 1.6.7 exact published artifact 做真实 1.6.7 → 1.8.0 升级，并执行 fresh Go/vet、Native Host 与 packaged real-model acceptance matrix。
+
 ## 1.6.7
 
 - 批量注解/符号导航，每个文件复用一次 AST 扫描；异常输出、越界结果、文件变化继续拒绝。

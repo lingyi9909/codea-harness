@@ -24,6 +24,109 @@ func Test180FinishToolUsesInvocationUniqueExclusiveRequestFiles(t *testing.T) {
 	}
 }
 
+func Test180PrimaryToolMakesEmptyFindingFinishContinuationExplicit(t *testing.T) {
+	root := repoRoot180(t)
+	data, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"READ_SCOPE_AND_FINISH_THIS_TURN",
+		"finishRequiredEvenWhenFindingsEmpty",
+		"WAIT_FOR_REAL_USER_SELECTION",
+		"KEEP_REPORT_INCOMPLETE",
+		"nextAction: nextAction(runtime, scope)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("primary review tool must expose mandatory continuation contract; missing %q", want)
+		}
+	}
+}
+
+func Test180ScopeReadyReviewIsNonTerminalAcrossActiveInstructions(t *testing.T) {
+	root := repoRoot180(t)
+	files := []string{
+		filepath.Join(".code-harness", "commands", "harness-review.md"),
+		filepath.Join(".code-harness", "agents", "orchestrator.md"),
+	}
+	for _, rel := range files {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, want := range []string{
+			"READ_SCOPE_AND_FINISH_THIS_TURN",
+			"non-terminal",
+			"finish",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s must keep a scope-ready review in the same assistant turn; missing %q", rel, want)
+			}
+		}
+	}
+	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolText := string(toolData)
+	for _, want := range []string{
+		"assistantTurnTerminal: false",
+		"mustContinueToolExecution: true",
+		"finishRequiredEvenWhenFindingsEmpty: true",
+	} {
+		if !strings.Contains(toolText, want) {
+			t.Fatalf("scope-ready structured tool state must be non-terminal; missing %q", want)
+		}
+	}
+}
+
+func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.T) {
+	root := repoRoot180(t)
+	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-real-model-e2e.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		`@PreAuthorize("hasAuthority('ORDER_WRITE') and principal != null and principal.tenantId != null and principal.tenantId != ''")`,
+		`@AuthenticationPrincipal(expression = "tenantId") String tenantId`,
+		`@RequestParam("id") long id`,
+		`@RequestParam("status") String status`,
+		`throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid order id")`,
+		`boolean updated = service.updateStatus(tenantId, id, status);`,
+		`throw new ResponseStatusException(HttpStatus.CONFLICT, "order is not writable in current tenant/state");`,
+		`safe_method = """    @PreAuthorize`,
+		`HttpStatus.CONFLICT`,
+		`case \"PAID\" -> expectedStatus = \"PENDING\";`,
+		`case \"CANCELLED\" -> expectedStatus = \"PAID\";`,
+		`mapper.updateStatus(tenantId, id, status, expectedStatus)`,
+		`@Param(\"expectedStatus\") String expectedStatus`,
+		`AND status = #{expectedStatus}`,
+		`public void voidOrder`,
+		`command_args.append("OrderController")`,
+		`host.require(scope.get("selectedIds") == ["C1"]`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("final real-model fixture lost navigation/selection contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"tenantId.isBlank()",
+		"@NotBlank",
+		`if (!"PAID".equals(status) && !"CANCELLED".equals(status))`,
+		`throw new IllegalStateException("order not found or not writable")`,
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("final matrix fixture reintroduced ambiguous validation/navigation construct %q", forbidden)
+		}
+	}
+	if strings.Contains(text, "service.cancel(") {
+		t.Fatal("multi-chain fixture must keep updateStatus lexically first so seeded issue remains C1")
+	}
+}
+
 func Test180HostSmokeRunsRealConcurrentFinishRegression(t *testing.T) {
 	root := repoRoot180(t)
 	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-host-smoke.py"))
