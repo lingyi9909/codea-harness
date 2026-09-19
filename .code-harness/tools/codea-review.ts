@@ -69,6 +69,7 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
     return {
       type: "WAIT_FOR_REAL_USER_SELECTION",
       mandatory: true,
+      assistantTurnTerminal: true,
       instruction: "Present the current optionsHash and complete chain menu, end this assistant turn, and wait for the next real user message. Do not call select or finish yet.",
     }
   }
@@ -76,6 +77,8 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
     return {
       type: "READ_SCOPE_AND_FINISH_THIS_TURN",
       mandatory: true,
+      assistantTurnTerminal: false,
+      mustContinueToolExecution: true,
       finishRequiredEvenWhenFindingsEmpty: true,
       instruction: "Read only the authorized scope.reads needed for evidence, review the selected scope, then call codea-review finish in this same assistant turn. Do not end the turn after prepare/select. findings=[] still requires finish.",
     }
