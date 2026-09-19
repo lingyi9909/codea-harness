@@ -272,15 +272,13 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(SAFE_SQL in text, "safe SQL seed missing")
         xml.write_text(text.replace(SAFE_SQL, RISKY_SQL, 1), encoding="utf-8")
         source = controller.read_text(encoding="utf-8")
-        safe_method = """    @PostMapping("/orders/status")
-    public void updateStatus(@AuthenticationPrincipal TenantPrincipal principal, long id, String status) {
-        if (principal == null || principal.tenantId() == null || principal.tenantId().isBlank()) {
-            throw new SecurityException("authenticated tenant required");
-        }
-        if (!status.equals("PAID") && !status.equals("CANCELLED")) {
-            throw new IllegalArgumentException("invalid status");
-        }
-        service.updateStatus(principal.tenantId(), id, status);
+        safe_method = """    @PreAuthorize("isAuthenticated()")
+    @PostMapping("/orders/status")
+    public void updateStatus(
+            @AuthenticationPrincipal(expression = "tenantId") String tenantId,
+            long id,
+            @Pattern(regexp = "^(PAID|CANCELLED)$") String status) {
+        service.updateStatus(tenantId, id, status);
     }
 """
         vulnerable_method = """    @PostMapping("/orders/status")
@@ -292,9 +290,9 @@ def mutate_for_scenario(project: Path, scenario: str):
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
         text = controller.read_text(encoding="utf-8")
-        before = '        if (!status.equals("PAID") && !status.equals("CANCELLED")) {'
-        after = '        if (!"PAID".equals(status) && !"CANCELLED".equals(status)) {'
-        host.require(before in text, "safe status allowlist seed missing")
+        before = '@Pattern(regexp = "^(PAID|CANCELLED)$") String status'
+        after = '@Pattern(regexp = "^(?:PAID|CANCELLED)$", message = "unsupported status") String status'
+        host.require(before in text, "safe status validation seed missing")
         controller.write_text(text.replace(before, after, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
