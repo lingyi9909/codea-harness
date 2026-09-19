@@ -25,7 +25,7 @@ version: 10
 - 调用 `finish` 时，`result.reads` 不仅要覆盖全部 `scope.reads`，每个 `evidence.ref` 的完整 `path/sha256/startLine/endLine` tuple 也必须作为一条精确 read 同时列入 `result.reads`；不能只提交包含它的更宽 read range。
 - `evidence.quote` 直接复制 read 工具显示的源码字符，不自行补/删缩进。Runtime 将 Windows CRLF 与可见 LF 视为同一换行；遇到 evidence 校验错误只重读对应 scope source，不通过读取 `.git/**` 猜测证据或 diff authority。
 - 已完成足够的 selected-scope 源码读取并形成 source-grounded findings 后，应立即 `finish`；不得为了理解 Harness、Git diff authority 或内部 prompt 再开启额外探索轮次。
-- 无 finding 也要 `finish`。只有 `finish.runtime.execution == COMPLETE` 且返回 path/hash 与磁盘报告一致，才向用户宣布完成。
+- 无 finding 也要 `finish`。只要 prepare/select 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，当前 assistant turn 就是 non-terminal：禁止在 prepare/select 后直接输出自然语言或结束生成，必须继续 source read → semantic review → finish；空 findings 不构成停点。只有 `finish.runtime.execution == COMPLETE` 且返回 path/hash 与磁盘报告一致，才向用户宣布完成。
 - PARTIAL coverage 的结论只能是 `UNDETERMINED`。
 - 任一步失败时保留本 run 的 INCOMPLETE 报告并展示具体错误；不得自动换 run、不得用脚本补 finish、不得在 ordinary Review 内自动修改代码。
 
