@@ -125,7 +125,7 @@ def write_fixture(project: Path, multi: bool):
     sql_extra = ""
     if multi:
         controller_extra = '''
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('ORDER_WRITE')")
     @PostMapping("/orders/void")
     public void voidOrder(@AuthenticationPrincipal(expression = "tenantId") String tenantId, long id) {
         service.voidOrder(tenantId, id);
@@ -138,7 +138,6 @@ def write_fixture(project: Path, multi: bool):
 
     (java / "OrderController.java").write_text(
         """package com.example;
-import jakarta.validation.constraints.Pattern;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -149,12 +148,21 @@ public class OrderController {
     private final OrderService service;
     public OrderController(OrderService service) { this.service = service; }
 
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('ORDER_WRITE')")
     @PostMapping("/orders/status")
     public void updateStatus(
             @AuthenticationPrincipal(expression = "tenantId") String tenantId,
             long id,
-            @Pattern(regexp = "^(PAID|CANCELLED)$") String status) {
+            String status) {
+        if (tenantId == null || tenantId.isBlank()) {
+            throw new SecurityException("authenticated tenant required");
+        }
+        if (id <= 0) {
+            throw new IllegalArgumentException("invalid order id");
+        }
+        if (!"PAID".equals(status) && !"CANCELLED".equals(status)) {
+            throw new IllegalArgumentException("unsupported status");
+        }
         service.updateStatus(tenantId, id, status);
     }
 """ + controller_extra + "}\n",
@@ -162,7 +170,7 @@ public class OrderController {
     )
     (java / "OrderService.java").write_text(
         "package com.example;\npublic interface OrderService {\n"
-        "    void updateStatus(String tenantId, long id, String status);\n"
+        "    int updateStatus(String tenantId, long id, String status);\n"
         + service_extra + "}\n",
         encoding="utf-8",
     )
@@ -170,7 +178,10 @@ public class OrderController {
         "package com.example;\npublic class OrderServiceImpl implements OrderService {\n"
         "    private final OrderMapper mapper;\n"
         "    public OrderServiceImpl(OrderMapper mapper) { this.mapper = mapper; }\n"
-        "    public void updateStatus(String tenantId, long id, String status) { mapper.updateStatus(tenantId, id, status); }\n"
+        "    public void updateStatus(String tenantId, long id, String status) {\n"
+        "        int updated = mapper.updateStatus(tenantId, id, status);\n"
+        "        if (updated != 1) { throw new IllegalStateException(\"order not found or not writable\"); }\n"
+        "    }\n"
         + impl_extra + "}\n",
         encoding="utf-8",
     )
@@ -272,12 +283,21 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(SAFE_SQL in text, "safe SQL seed missing")
         xml.write_text(text.replace(SAFE_SQL, RISKY_SQL, 1), encoding="utf-8")
         source = controller.read_text(encoding="utf-8")
-        safe_method = """    @PreAuthorize("isAuthenticated()")
+        safe_method = """    @PreAuthorize("hasAuthority('ORDER_WRITE')")
     @PostMapping("/orders/status")
     public void updateStatus(
             @AuthenticationPrincipal(expression = "tenantId") String tenantId,
             long id,
-            @Pattern(regexp = "^(PAID|CANCELLED)$") String status) {
+            String status) {
+        if (tenantId == null || tenantId.isBlank()) {
+            throw new SecurityException("authenticated tenant required");
+        }
+        if (id <= 0) {
+            throw new IllegalArgumentException("invalid order id");
+        }
+        if (!"PAID".equals(status) && !"CANCELLED".equals(status)) {
+            throw new IllegalArgumentException("unsupported status");
+        }
         service.updateStatus(tenantId, id, status);
     }
 """
@@ -290,9 +310,9 @@ def mutate_for_scenario(project: Path, scenario: str):
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
         text = controller.read_text(encoding="utf-8")
-        before = '@Pattern(regexp = "^(PAID|CANCELLED)$") String status'
-        after = '@Pattern(regexp = "^(?:PAID|CANCELLED)$", message = "unsupported status") String status'
-        host.require(before in text, "safe status validation seed missing")
+        before = '        if (!"PAID".equals(status) && !"CANCELLED".equals(status)) {'
+        after = '        if (!("PAID".equals(status) || "CANCELLED".equals(status))) {'
+        host.require(before in text, "safe explicit status validation seed missing")
         controller.write_text(text.replace(before, after, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
