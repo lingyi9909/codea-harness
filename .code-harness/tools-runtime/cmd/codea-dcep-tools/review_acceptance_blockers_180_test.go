@@ -95,8 +95,13 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`@RequestParam("id") long id`,
 		`@RequestParam("status") String status`,
 		`throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid order id")`,
-		`switch (status)`,
-		`int updated = mapper.updateStatus(tenantId, id, status);`,
+		`boolean updated = service.updateStatus(tenantId, id, status);`,
+		`HttpStatus.CONFLICT`,
+		`case "PAID" -> expectedStatus = "PENDING";`,
+		`case "CANCELLED" -> expectedStatus = "PAID";`,
+		`mapper.updateStatus(tenantId, id, status, expectedStatus)`,
+		`@Param("expectedStatus") String expectedStatus`,
+		`AND status = #{expectedStatus}`,
 		`public void voidOrder`,
 		`command_args.append("OrderController")`,
 		`host.require(scope.get("selectedIds") == ["C1"]`,
@@ -109,6 +114,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		"tenantId.isBlank()",
 		"@NotBlank",
 		`if (!"PAID".equals(status) && !"CANCELLED".equals(status))`,
+		`throw new IllegalStateException("order not found or not writable")`,
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("final matrix fixture reintroduced ambiguous validation/navigation construct %q", forbidden)
