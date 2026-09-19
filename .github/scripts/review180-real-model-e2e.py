@@ -313,7 +313,10 @@ def mutate_for_scenario(project: Path, scenario: str):
             case "PAID", "CANCELLED" -> { }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported status");
         }
-        service.updateStatus(tenantId, id, status);
+        boolean updated = service.updateStatus(tenantId, id, status);
+        if (!updated) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "order is not writable in current tenant/state");
+        }
     }
 """
         vulnerable_method = """    @PostMapping("/orders/status")
