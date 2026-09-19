@@ -385,14 +385,26 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
 
         actions = host.tool_actions(exported)
         names = [host.normalized(name) for name in completed_tools(exported)]
+        prepare_states = [state for state in host.tool_parts(exported, "prepare") if state.get("status") == "completed"]
+        prepare_output = parse_tool_output(prepare_states[-1]) if prepare_states else {}
+        prepare_next_action = prepare_output.get("nextAction")
         write_json(run_evidence / "precheck-trajectory.json", redact(exported))
         write_json(run_evidence / "precheck.json", {
             "scenario": scenario,
             "iteration": iteration,
             "actions": actions,
             "completedTools": names,
+            "prepareNextAction": prepare_next_action,
         })
-        host.require("prepare" in actions and "finish" in actions, f"{scenario}: autonomous path incomplete actions={actions}")
+        print(
+            f"RELEASE180_PRECHECK scenario={scenario} iteration={iteration} "
+            f"actions={actions} completedTools={names} nextAction={prepare_next_action}",
+            flush=True,
+        )
+        host.require(
+            "prepare" in actions and "finish" in actions,
+            f"{scenario}: autonomous path incomplete actions={actions} completedTools={names} nextAction={prepare_next_action}",
+        )
         if multi:
             host.require(actions.count("select") == 1, f"{scenario}: expected one real-user select: {actions}")
         else:
