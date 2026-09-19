@@ -125,18 +125,16 @@ def write_fixture(project: Path, multi: bool):
     sql_extra = ""
     if multi:
         controller_extra = '''
-    @PostMapping("/orders/cancel")
-    public void cancel(@AuthenticationPrincipal TenantPrincipal principal, long id) {
-        if (principal == null || principal.tenantId() == null || principal.tenantId().isBlank()) {
-            throw new SecurityException("authenticated tenant required");
-        }
-        service.cancel(principal.tenantId(), id);
+    @PreAuthorize("isAuthenticated()")
+    @PostMapping("/orders/void")
+    public void voidOrder(@AuthenticationPrincipal(expression = "tenantId") String tenantId, long id) {
+        service.voidOrder(tenantId, id);
     }
 '''
-        service_extra = "    void cancel(String tenantId, long id);\n"
-        impl_extra = "    public void cancel(String tenantId, long id) { mapper.cancel(tenantId, id); }\n"
-        mapper_extra = "    void cancel(String tenantId, long id);\n"
-        sql_extra = '  <update id="cancel">UPDATE orders SET status = \'CANCELLED\' WHERE id = #{id} AND tenant_id = #{tenantId}</update>\n'
+        service_extra = "    void voidOrder(String tenantId, long id);\n"
+        impl_extra = "    public void voidOrder(String tenantId, long id) { mapper.voidOrder(tenantId, id); }\n"
+        mapper_extra = "    void voidOrder(String tenantId, long id);\n"
+        sql_extra = '  <update id="voidOrder">UPDATE orders SET status = \'CANCELLED\' WHERE id = #{id} AND tenant_id = #{tenantId}</update>\n'
 
     (java / "OrderController.java").write_text(
         """package com.example;
