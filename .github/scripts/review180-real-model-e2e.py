@@ -140,26 +140,24 @@ def write_fixture(project: Path, multi: bool):
 
     (java / "OrderController.java").write_text(
         """package com.example;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-record TenantPrincipal(String tenantId) {}
 
 @RestController
 public class OrderController {
     private final OrderService service;
     public OrderController(OrderService service) { this.service = service; }
 
+    @PreAuthorize("isAuthenticated()")
     @PostMapping("/orders/status")
-    public void updateStatus(@AuthenticationPrincipal TenantPrincipal principal, long id, String status) {
-        if (principal == null || principal.tenantId() == null || principal.tenantId().isBlank()) {
-            throw new SecurityException("authenticated tenant required");
-        }
-        if (!status.equals("PAID") && !status.equals("CANCELLED")) {
-            throw new IllegalArgumentException("invalid status");
-        }
-        service.updateStatus(principal.tenantId(), id, status);
+    public void updateStatus(
+            @AuthenticationPrincipal(expression = "tenantId") String tenantId,
+            long id,
+            @Pattern(regexp = "^(PAID|CANCELLED)$") String status) {
+        service.updateStatus(tenantId, id, status);
     }
 """ + controller_extra + "}\n",
         encoding="utf-8",
