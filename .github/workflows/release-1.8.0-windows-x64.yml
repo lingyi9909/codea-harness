@@ -234,6 +234,15 @@ jobs:
           python @args
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Upload failed real-model diagnostic evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.8.0-real-model-failure-evidence
+          path: ${{ runner.temp }}/release180-real-model-evidence
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Build release candidate checklist
         shell: pwsh
         run: |
