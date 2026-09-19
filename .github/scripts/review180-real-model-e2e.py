@@ -138,6 +138,7 @@ def write_fixture(project: Path, multi: bool):
 
     (java / "OrderController.java").write_text(
         """package com.example;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -151,12 +152,9 @@ public class OrderController {
     @PreAuthorize("hasAuthority('ORDER_WRITE')")
     @PostMapping("/orders/status")
     public void updateStatus(
-            @AuthenticationPrincipal(expression = "tenantId") String tenantId,
+            @NotBlank @AuthenticationPrincipal(expression = "tenantId") String tenantId,
             long id,
             String status) {
-        if (tenantId == null || tenantId.isBlank()) {
-            throw new SecurityException("authenticated tenant required");
-        }
         if (id <= 0) {
             throw new IllegalArgumentException("invalid order id");
         }
@@ -286,12 +284,9 @@ def mutate_for_scenario(project: Path, scenario: str):
         safe_method = """    @PreAuthorize("hasAuthority('ORDER_WRITE')")
     @PostMapping("/orders/status")
     public void updateStatus(
-            @AuthenticationPrincipal(expression = "tenantId") String tenantId,
+            @NotBlank @AuthenticationPrincipal(expression = "tenantId") String tenantId,
             long id,
             String status) {
-        if (tenantId == null || tenantId.isBlank()) {
-            throw new SecurityException("authenticated tenant required");
-        }
         if (id <= 0) {
             throw new IllegalArgumentException("invalid order id");
         }
