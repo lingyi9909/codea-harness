@@ -90,9 +90,12 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
+		`@PreAuthorize("hasAuthority('ORDER_WRITE')")`,
 		`@AuthenticationPrincipal(expression = "tenantId") String tenantId`,
-		`@Pattern(regexp = "^(PAID|CANCELLED)$") String status`,
-		`service.updateStatus(tenantId, id, status);`,
+		`if (tenantId == null || tenantId.isBlank())`,
+		`if (id <= 0)`,
+		`if (!"PAID".equals(status) && !"CANCELLED".equals(status))`,
+		`int updated = mapper.updateStatus(tenantId, id, status);`,
 		`public void voidOrder`,
 		`command_args.append("OrderController")`,
 		`host.require(scope.get("selectedIds") == ["C1"]`,
