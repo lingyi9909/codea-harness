@@ -91,8 +91,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	text := string(data)
 	for _, want := range []string{
 		`@PreAuthorize("hasAuthority('ORDER_WRITE')")`,
-		`@AuthenticationPrincipal(expression = "tenantId") String tenantId`,
-		`if (tenantId == null || tenantId.isBlank())`,
+		`@NotBlank @AuthenticationPrincipal(expression = "tenantId") String tenantId`,
 		`if (id <= 0)`,
 		`if (!"PAID".equals(status) && !"CANCELLED".equals(status))`,
 		`int updated = mapper.updateStatus(tenantId, id, status);`,
@@ -106,6 +105,9 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	if strings.Contains(text, "service.cancel(") {
 		t.Fatal("multi-chain fixture must keep updateStatus lexically first so seeded issue remains C1")
+	}
+	if strings.Contains(text, "tenantId.isBlank()") {
+		t.Fatal("final matrix controller must not add a second method invocation that breaks single-chain navigation")
 	}
 }
 
