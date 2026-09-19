@@ -64,8 +64,31 @@ async function readScope(worktree: string, runId: string) {
   }
 }
 
+function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unknown>) {
+  if (runtime.selectionRequired === true) {
+    return {
+      type: "WAIT_FOR_REAL_USER_SELECTION",
+      mandatory: true,
+      instruction: "Present the current optionsHash and complete chain menu, end this assistant turn, and wait for the next real user message. Do not call select or finish yet.",
+    }
+  }
+  if (scope) {
+    return {
+      type: "READ_SCOPE_AND_FINISH_THIS_TURN",
+      mandatory: true,
+      finishRequiredEvenWhenFindingsEmpty: true,
+      instruction: "Read only the authorized scope.reads needed for evidence, review the selected scope, then call codea-review finish in this same assistant turn. Do not end the turn after prepare/select. findings=[] still requires finish.",
+    }
+  }
+  return {
+    type: "KEEP_REPORT_INCOMPLETE",
+    mandatory: true,
+    instruction: "No review scope is ready. Report the concrete prepare/select state and keep the durable report INCOMPLETE; do not manufacture findings or call finish without an authorized scope.",
+  }
+}
+
 export default tool({
-  description: "Codea Harness 1.8 primary review tool. Prepare bounded chains, verify a real user selection from Host context, or finish the durable report.",
+  description: "Codea Harness 1.8 primary review tool. Prepare bounded chains, verify a real user selection from Host context, or finish the durable report. Always obey the returned nextAction: when a scope is ready, do not end the assistant turn before finish, even when findings are empty.",
   args: {
     action: tool.schema.enum(["prepare", "select", "finish"]),
     runId: tool.schema.string(),
@@ -94,7 +117,7 @@ export default tool({
       if (args.intent.target?.trim()) argv.push("--target", args.intent.target.trim())
       const runtime = await invoke(worktree, argv)
       const scope = await readScope(worktree, args.runId)
-      return JSON.stringify({ runtime, scope }, null, 2)
+      return JSON.stringify({ runtime, scope, nextAction: nextAction(runtime, scope) }, null, 2)
     }
 
     if (args.action === "select") {
@@ -109,7 +132,7 @@ export default tool({
         "--message-id", context.messageID,
       ])
       const scope = await readScope(worktree, args.runId)
-      return JSON.stringify({ runtime, scope }, null, 2)
+      return JSON.stringify({ runtime, scope, nextAction: nextAction(runtime, scope) }, null, 2)
     }
 
     if (!args.result) throw new Error("CODEA_REVIEW_FINISH_RESULT_REQUIRED")
