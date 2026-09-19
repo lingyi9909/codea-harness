@@ -14,6 +14,15 @@ The command output above is the authoritative `review start` result. It has alre
 
 Use only the `codea-review` structured tool for the ordinary 1.8 review path:
 
+## Assistant-turn execution control
+
+A completed `prepare` or `select` tool call is **not** itself a completed assistant turn.
+
+- If the returned `nextAction.type` is `READ_SCOPE_AND_FINISH_THIS_TURN`, this assistant turn is non-terminal. Do **not** emit a user-facing answer and do **not** stop generation after prepare/select. Continue immediately with authorized source reads, perform the semantic review, and call `codea-review finish` in the same assistant turn. This rule is identical when the correct finding list is empty.
+- The only normal pre-finish terminal state is `WAIT_FOR_REAL_USER_SELECTION`; in that state show the menu and end the turn exactly because a real next user message is required.
+- `KEEP_REPORT_INCOMPLETE` or an actual tool/runtime error may end the turn with the concrete failure state.
+- Therefore a single-chain, scope-ready review has only one valid normal terminal tool path: `prepare → source reads → finish`. An assistant message produced after only `prepare` is a protocol violation, even if no issue appears obvious.
+
 1. Call `codea-review` with `action=prepare`, this exact `runId`, and intent `CHANGES` by default. Pass the user target as `intent.target` only when it is non-empty. If the user explicitly asks to inspect the current implementation rather than current changes, use `CURRENT_IMPLEMENTATION`.
 2. If prepare reports multiple chains and `selectionRequired=true`, present the complete current menu exactly as `optionsHash` plus one line per chain in the form `<id> <name>`. Explain any gaps without claiming they are absent chains. **End this assistant turn. Do not call select or finish.**
 3. On the next real user message, call `codea-review` with `action=select`, the same `runId`, the current `optionsHash`, and only the chain IDs the user explicitly selected. The tool obtains Host session/message identity from OpenCode context; never ask the user or model to provide those IDs.
