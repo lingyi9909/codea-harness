@@ -96,6 +96,8 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`@RequestParam("status") String status`,
 		`throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid order id")`,
 		`boolean updated = service.updateStatus(tenantId, id, status);`,
+		`throw new ResponseStatusException(HttpStatus.CONFLICT, "order is not writable in current tenant/state");`,
+		`safe_method = """    @PreAuthorize`,
 		`HttpStatus.CONFLICT`,
 		`case \"PAID\" -> expectedStatus = \"PENDING\";`,
 		`case \"CANCELLED\" -> expectedStatus = \"PAID\";`,
