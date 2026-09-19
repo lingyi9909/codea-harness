@@ -296,11 +296,10 @@ def mutate_for_scenario(project: Path, scenario: str):
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
         text = controller.read_text(encoding="utf-8")
-        controller.write_text(text.replace(
-            '    @PostMapping("/orders/status")',
-            '    // reviewed safe path: authenticated tenant + status allowlist + tenant-scoped SQL\n    @PostMapping("/orders/status")',
-            1,
-        ), encoding="utf-8")
+        before = '        if (!status.equals("PAID") && !status.equals("CANCELLED")) {'
+        after = '        if (!"PAID".equals(status) && !"CANCELLED".equals(status)) {'
+        host.require(before in text, "safe status allowlist seed missing")
+        controller.write_text(text.replace(before, after, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
 
@@ -386,6 +385,13 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
 
         actions = host.tool_actions(exported)
         names = [host.normalized(name) for name in completed_tools(exported)]
+        write_json(run_evidence / "precheck-trajectory.json", redact(exported))
+        write_json(run_evidence / "precheck.json", {
+            "scenario": scenario,
+            "iteration": iteration,
+            "actions": actions,
+            "completedTools": names,
+        })
         host.require("prepare" in actions and "finish" in actions, f"{scenario}: autonomous path incomplete actions={actions}")
         if multi:
             host.require(actions.count("select") == 1, f"{scenario}: expected one real-user select: {actions}")
