@@ -24,6 +24,26 @@ func Test180FinishToolUsesInvocationUniqueExclusiveRequestFiles(t *testing.T) {
 	}
 }
 
+func Test180PrimaryToolMakesEmptyFindingFinishContinuationExplicit(t *testing.T) {
+	root := repoRoot180(t)
+	data, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"READ_SCOPE_AND_FINISH_THIS_TURN",
+		"finishRequiredEvenWhenFindingsEmpty",
+		"WAIT_FOR_REAL_USER_SELECTION",
+		"KEEP_REPORT_INCOMPLETE",
+		"nextAction: nextAction(runtime, scope)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("primary review tool must expose mandatory continuation contract; missing %q", want)
+		}
+	}
+}
+
 func Test180HostSmokeRunsRealConcurrentFinishRegression(t *testing.T) {
 	root := repoRoot180(t)
 	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-host-smoke.py"))
