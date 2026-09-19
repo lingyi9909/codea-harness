@@ -23,7 +23,7 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId}"
+SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
 def copy_sdk(sdk_root: Path, dest: Path):
@@ -167,14 +167,17 @@ public class OrderController {
             case "PAID", "CANCELLED" -> { }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported status");
         }
-        service.updateStatus(tenantId, id, status);
+        boolean updated = service.updateStatus(tenantId, id, status);
+        if (!updated) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "order is not writable in current tenant/state");
+        }
     }
 """ + controller_extra + "}\n",
         encoding="utf-8",
     )
     (java / "OrderService.java").write_text(
         "package com.example;\npublic interface OrderService {\n"
-        "    void updateStatus(String tenantId, long id, String status);\n"
+        "    boolean updateStatus(String tenantId, long id, String status);\n"
         + service_extra + "}\n",
         encoding="utf-8",
     )
@@ -182,16 +185,23 @@ public class OrderController {
         "package com.example;\npublic class OrderServiceImpl implements OrderService {\n"
         "    private final OrderMapper mapper;\n"
         "    public OrderServiceImpl(OrderMapper mapper) { this.mapper = mapper; }\n"
-        "    public void updateStatus(String tenantId, long id, String status) {\n"
-        "        int updated = mapper.updateStatus(tenantId, id, status);\n"
-        "        if (updated != 1) { throw new IllegalStateException(\"order not found or not writable\"); }\n"
+        "    public boolean updateStatus(String tenantId, long id, String status) {\n"
+        "        if (status == null) { return false; }\n"
+        "        String expectedStatus;\n"
+        "        switch (status) {\n"
+        "            case \"PAID\" -> expectedStatus = \"PENDING\";\n"
+        "            case \"CANCELLED\" -> expectedStatus = \"PAID\";\n"
+        "            default -> { return false; }\n"
+        "        }\n"
+        "        int updated = mapper.updateStatus(tenantId, id, status, expectedStatus);\n"
+        "        return updated == 1;\n"
         "    }\n"
         + impl_extra + "}\n",
         encoding="utf-8",
     )
     (java / "OrderMapper.java").write_text(
-        "package com.example;\npublic interface OrderMapper {\n"
-        "    int updateStatus(String tenantId, long id, String status);\n"
+        "package com.example;\nimport org.apache.ibatis.annotations.Param;\npublic interface OrderMapper {\n"
+        "    int updateStatus(@Param(\"tenantId\") String tenantId, @Param(\"id\") long id, @Param(\"status\") String status, @Param(\"expectedStatus\") String expectedStatus);\n"
         + mapper_extra + "}\n",
         encoding="utf-8",
     )
