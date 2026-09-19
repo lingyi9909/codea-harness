@@ -168,7 +168,7 @@ public class OrderController {
     )
     (java / "OrderService.java").write_text(
         "package com.example;\npublic interface OrderService {\n"
-        "    int updateStatus(String tenantId, long id, String status);\n"
+        "    void updateStatus(String tenantId, long id, String status);\n"
         + service_extra + "}\n",
         encoding="utf-8",
     )
@@ -185,7 +185,7 @@ public class OrderController {
     )
     (java / "OrderMapper.java").write_text(
         "package com.example;\npublic interface OrderMapper {\n"
-        "    void updateStatus(String tenantId, long id, String status);\n"
+        "    int updateStatus(String tenantId, long id, String status);\n"
         + mapper_extra + "}\n",
         encoding="utf-8",
     )
