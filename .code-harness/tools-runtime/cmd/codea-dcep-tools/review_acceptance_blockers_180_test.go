@@ -82,6 +82,30 @@ func Test180ScopeReadyReviewIsNonTerminalAcrossActiveInstructions(t *testing.T) 
 	}
 }
 
+func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.T) {
+	root := repoRoot180(t)
+	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-real-model-e2e.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		`@AuthenticationPrincipal(expression = "tenantId") String tenantId`,
+		`@Pattern(regexp = "^(PAID|CANCELLED)$") String status`,
+		`service.updateStatus(tenantId, id, status);`,
+		`public void voidOrder`,
+		`command_args.append("OrderController")`,
+		`host.require(scope.get("selectedIds") == ["C1"]`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("final real-model fixture lost navigation/selection contract %q", want)
+		}
+	}
+	if strings.Contains(text, "service.cancel(") {
+		t.Fatal("multi-chain fixture must keep updateStatus lexically first so seeded issue remains C1")
+	}
+}
+
 func Test180HostSmokeRunsRealConcurrentFinishRegression(t *testing.T) {
 	root := repoRoot180(t)
 	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-host-smoke.py"))
