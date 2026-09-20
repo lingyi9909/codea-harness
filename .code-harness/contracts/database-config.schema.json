@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DatabaseConfig",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "enabled", "environment", "dialect", "connection", "safety"],
+  "properties": {
+    "version": { "const": 1 },
+    "enabled": { "type": "boolean" },
+    "environment": { "enum": ["TEST", "LOCAL"] },
+    "dialect": { "const": "mysql" },
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port", "database", "username", "password", "charset"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "database": { "type": "string", "minLength": 1 },
+        "username": { "type": "string", "minLength": 1 },
+        "password": { "type": "string" },
+        "charset": { "type": "string", "minLength": 1 }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedSchemas", "maxRows", "timeoutSeconds", "maxQueriesPerDiagnosis", "allowSchemaDiscovery", "allowReadonlySql"],
+      "properties": {
+        "allowedSchemas": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "maxRows": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "maxQueriesPerDiagnosis": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "allowSchemaDiscovery": { "type": "boolean" },
+        "allowReadonlySql": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestTargetSelection",
+  "description": "harness test 选择本次要进入测试设计与执行的 Controller 范围。Selection 只定义测试范围，不代表测试计划或生产修复审批。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "selectionId",
+    "status",
+    "mode",
+    "selectedControllerIds",
+    "availableControllerIds"
+  ],
+  "properties": {
+    "selectionId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["SELECTED", "CANCELLED"] },
+    "mode": {
+      "enum": [
+        "AUTO_SINGLE",
+        "USER_MULTI",
+        "USER_ALL",
+        "USER_DIRECT_ONLY",
+        "FALLBACK_NUMBERED"
+      ]
+    },
+    "selectedControllerIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "availableControllerIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "SELECTED" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "selectedControllerIds": { "minItems": 1 }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChangeAnalysisSemanticProposal",
+  "description": "Agent-owned semantic proposal. Deterministic Git facts are forbidden and are assembled only from the Runtime-owned canonical ChangeSet snapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "changedFileRoles",
+    "affectedControllers",
+    "callChains",
+    "symbolLocations",
+    "resourceRelations",
+    "externalDependencies",
+    "riskAreas",
+    "reviewCoverage"
+  ],
+  "properties": {
+    "changedFileRoles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "role": { "$ref": "#/$defs/fileRole" }
+        }
+      }
+    },
+    "affectedControllers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["controller", "endpoints", "impactType", "sourceSymbols"],
+        "properties": {
+          "controller": { "type": "string", "minLength": 1 },
+          "endpoints": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "impactType": { "enum": ["DIRECT_CHANGE", "AFFECTED_BY_CALL_CHAIN"] },
+          "sourceSymbols": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "callChains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entryPoint", "chain"],
+        "properties": {
+          "entryPoint": { "type": "string", "minLength": 1 },
+          "chain": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "entryPointRef": { "$ref": "#/$defs/symbolRef" },
+          "chainRefs": { "type": "array", "items": { "$ref": "#/$defs/symbolRef" } }
+        }
+      }
+    },
+    "symbolLocations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["symbol", "path", "role", "source"],
+        "properties": {
+          "workspace": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+          "symbol": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "role": { "$ref": "#/$defs/navigationRole" },
+          "source": { "enum": ["FIND_SYMBOL", "FIND_REFERENCES", "FIND_IMPLEMENTATIONS", "WORKSPACE_INHERITANCE"] },
+          "from": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "resourceRelations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role", "resource", "fromSymbol", "fromKind", "source", "evidence"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "role": { "enum": ["MapperXml", "YamlConfig"] },
+          "resource": { "type": "string", "minLength": 1 },
+          "fromSymbol": { "type": "string", "minLength": 1 },
+          "fromKind": { "enum": ["CLASS", "METHOD"] },
+          "source": { "enum": ["MAPPER_STATEMENT", "CONFIG_REFERENCE"] },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "externalDependencies": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "riskAreas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["method", "risk"],
+        "properties": {
+          "method": { "type": "string", "minLength": 1 },
+          "risk": { "type": "array", "items": { "enum": ["stateTransition", "transactional", "authorization", "tenancy", "idempotency", "exceptionHandling", "databaseWrite"] } }
+        }
+      }
+    },
+    "reviewCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reviewedFiles", "unresolvedSymbols"],
+      "properties": {
+        "status": { "enum": ["COMPLETE", "PARTIAL"] },
+        "reviewedFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "role", "reason"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "role": { "$ref": "#/$defs/fileRole" },
+              "reason": { "enum": ["CHANGED", "CALL_CHAIN"] }
+            }
+          }
+        },
+        "unresolvedSymbols": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["symbol", "from", "reason"],
+            "properties": {
+              "symbol": { "type": "string", "minLength": 1 },
+              "from": { "type": "string", "minLength": 1 },
+              "reason": { "enum": ["SYMBOL_NOT_FOUND", "IMPLEMENTATION_NOT_FOUND", "REFERENCE_NOT_FOUND", "AMBIGUOUS_IMPLEMENTATION"] }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "symbolRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "symbol"],
+      "properties": {
+        "workspace": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "path": { "type": "string", "minLength": 1 },
+        "symbol": { "type": "string", "minLength": 1 }
+      }
+    },
+    "navigationRole": { "enum": ["Controller", "Service", "Repository", "Mapper", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"] },
+    "fileRole": { "enum": ["Controller", "Service", "Repository", "Mapper", "MapperXml", "YamlConfig", "Test", "Entity", "DTO", "VO", "Validator", "ExceptionHandler", "Config", "Utility", "Other"] }
+  }
+}

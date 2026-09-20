@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: order-service
+feature:
+  order:
+    enabled: true

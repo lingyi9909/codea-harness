@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CertifiedFindings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "harnessVersion", "changeSetSha256", "changeAnalysisSha256", "reviewUnitsSha256", "ruleDispatchSha256", "findingProposalsSha256", "findings", "sha256"],
+  "properties": {
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "harnessVersion": {"type": "string", "minLength": 1},
+    "changeSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "changeAnalysisSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "reviewUnitsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "ruleDispatchSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "findingProposalsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["LINE", "SYMBOL", "FILE", "CHANGESET"]},
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": "integer", "minimum": 1},
+        "symbol": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"const": "LINE"}}}, "then": {"required": ["path", "line"]}},
+        {"if": {"properties": {"kind": {"const": "SYMBOL"}}}, "then": {"required": ["path", "symbol"]}},
+        {"if": {"properties": {"kind": {"const": "FILE"}}}, "then": {"required": ["path"]}}
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["SYMBOL", "SOURCE_RANGE", "CHANGED_RANGE", "RESOURCE_RELATION", "CHAIN"]},
+        "value": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "startLine": {"type": "integer", "minimum": 1},
+        "endLine": {"type": "integer", "minimum": 1}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ruleId", "reviewUnitId", "category", "severity", "anchor", "evidenceRefs", "problem", "impact", "recommendation", "needsTest", "introducedByChange", "confidence"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^CF-[0-9a-f]{16}$"},
+        "ruleId": {"type": "string", "minLength": 1},
+        "reviewUnitId": {"type": "string", "minLength": 1},
+        "category": {"enum": ["PRODUCTION_CODE", "TEST_VALIDITY"]},
+        "severity": {"enum": ["critical", "high", "medium", "low"]},
+        "anchor": {"$ref": "#/$defs/anchor"},
+        "evidenceRefs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
+        "problem": {"type": "string", "minLength": 1},
+        "impact": {"type": "string", "minLength": 1},
+        "recommendation": {"type": "string", "minLength": 1},
+        "needsTest": {"type": "boolean"},
+        "introducedByChange": {"type": "boolean"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}

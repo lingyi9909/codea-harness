@@ -1,0 +1,285 @@
+name: Release 1.6.7 - Windows x64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.code-harness/VERSION'
+      - '.github/scripts/release167-*.ps1'
+      - '.github/scripts/release167-*.py'
+      - '.github/workflows/release-1.6.7-windows-x64.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.code-harness/VERSION'
+      - '.github/scripts/release167-*.ps1'
+      - '.github/scripts/release167-*.py'
+      - '.github/workflows/release-1.6.7-windows-x64.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Validate 1.6.7 release input
+        shell: pwsh
+        run: |
+          $version = (Get-Content '.code-harness/VERSION' -Raw).Trim()
+          if ($version -ne '1.6.7') { throw "repository VERSION mismatch: $version" }
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.event.pull_request.head.sha || github.sha }}') { throw "checkout HEAD mismatch: expected=${{ github.event.pull_request.head.sha || github.sha }} actual=$head" }
+          Write-Output "PACKAGE_WINDOWS_X64_167_INPUT PASS version=$version head=$head"
+
+      - name: Build 1.6.7 official package
+        shell: pwsh
+        run: ./.github/scripts/release167-package.ps1
+
+      - name: Verify 1.6.7 exact-head package
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $runtime = '.code-harness/bin/codea-dcep-tools.exe'
+          $ast = '.code-harness/bin/ast-grep.exe'
+          if (-not (Test-Path $runtime -PathType Leaf)) { throw 'missing built Runtime' }
+          if (-not (Test-Path $ast -PathType Leaf)) { throw 'missing pinned ast-grep' }
+          $runtimeHash = (Get-FileHash $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+          $astHash = (Get-FileHash $ast -Algorithm SHA256).Hash.ToLowerInvariant()
+          $artifactRecord = [ordered]@{}
+
+          foreach ($kind in @('install','upgrade')) {
+            $zip = "codea-harness-1.6.7-windows-x64-$kind.zip"
+            if (-not (Test-Path $zip -PathType Leaf)) { throw "missing official $kind ZIP" }
+            $dest = Join-Path $env:RUNNER_TEMP ("release167-package-$kind-" + [guid]::NewGuid().ToString('N'))
+            try {
+              Expand-Archive $zip $dest -Force
+              $top = if ($kind -eq 'install') { '.code-harness' } else { '.code-harness-upgrade' }
+              $root = Join-Path $dest $top
+              $manifestPath = Join-Path $root 'RELEASE-MANIFEST.json'
+              if (-not (Test-Path $manifestPath -PathType Leaf)) { throw "$kind RELEASE-MANIFEST.json missing" }
+              $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+              if ([string]$manifest.version -ne '1.6.7') { throw "$kind manifest version mismatch" }
+              if ([string]$manifest.buildCommit -ne $head) { throw "$kind manifest exact HEAD mismatch" }
+              if ([string]$manifest.runtimeSha256 -ne $runtimeHash) { throw "$kind Runtime SHA mismatch" }
+              if ([string]$manifest.astGrepSha256 -ne $astHash) { throw "$kind ast-grep SHA mismatch" }
+              if ([string]$manifest.astGrepVersion -ne '0.42.1') { throw "$kind ast-grep version mismatch" }
+              if ((Get-Content (Join-Path $root 'VERSION') -Raw).Trim() -ne '1.6.7') { throw "$kind VERSION mismatch" }
+
+              $allReleaseFiles = @(Get-ChildItem $root -Recurse -Force -File | Where-Object { $_.FullName -ne $manifestPath })
+              $managedReleaseFiles = @(
+                foreach ($file in $allReleaseFiles) {
+                  $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
+                  if ($kind -eq 'upgrade' -and $rel.StartsWith('host/', [StringComparison]::Ordinal)) { continue }
+                  $file
+                }
+              )
+              $managedProperties = @($manifest.managedFiles.PSObject.Properties)
+              if ($managedProperties.Count -ne $managedReleaseFiles.Count) { throw "$kind managed framework inventory count mismatch" }
+              foreach ($property in $managedProperties) {
+                if ([string]$property.Name -like 'host/*') { throw "$kind host payload leaked into managedFiles: $($property.Name)" }
+              }
+              foreach ($file in $managedReleaseFiles) {
+                $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
+                $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ([string]$manifest.managedFiles.$rel -ne $hash) { throw "$kind managed inventory mismatch: $rel" }
+              }
+
+              $reviewerHost = $manifest.hostAgents.reviewer
+              if ($null -eq $reviewerHost) { throw "$kind Reviewer Host metadata missing" }
+              if ([string]$reviewerHost.path -cne '.opencode/agents/reviewer.md' -or
+                  [string]$reviewerHost.upgradeSource -cne 'host/.opencode/agents/reviewer.md' -or
+                  [string]$reviewerHost.command -cne '.opencode/commands/harness-review-reviewer.md' -or
+                  [string]$reviewerHost.commandUpgradeSource -cne 'host/.opencode/commands/harness-review-reviewer.md' -or
+                  [string]$reviewerHost.submissionTool -cne '.opencode/tools/codea-reviewer-submit.ts' -or
+                  [string]$reviewerHost.submissionToolUpgradeSource -cne 'host/.opencode/tools/codea-reviewer-submit.ts') {
+                throw "$kind Reviewer Host path metadata mismatch"
+              }
+
+              if ($kind -eq 'install') {
+                $hostRoot = $dest
+                $hostPaths = @([string]$reviewerHost.path,[string]$reviewerHost.command,[string]$reviewerHost.submissionTool,[string]$reviewerHost.primaryCommand)
+                $actualHostFiles = @(Get-ChildItem (Join-Path $dest '.opencode') -Recurse -Force -File)
+                $actualHostRel = @($actualHostFiles | ForEach-Object { [IO.Path]::GetRelativePath($dest,$_.FullName).Replace('\','/') } | Sort-Object)
+              } else {
+                $hostRoot = $root
+                $hostPaths = @([string]$reviewerHost.upgradeSource,[string]$reviewerHost.commandUpgradeSource,[string]$reviewerHost.submissionToolUpgradeSource,[string]$reviewerHost.primaryCommandUpgradeSource)
+                $actualHostFiles = @(
+                  foreach ($file in $allReleaseFiles) {
+                    $rel = [IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/')
+                    if ($rel.StartsWith('host/', [StringComparison]::Ordinal)) { $file }
+                  }
+                )
+                $actualHostRel = @($actualHostFiles | ForEach-Object { [IO.Path]::GetRelativePath($root,$_.FullName).Replace('\','/') } | Sort-Object)
+              }
+              $expectedHostRel = @($hostPaths | Sort-Object)
+              if ($actualHostFiles.Count -ne 4 -or ($actualHostRel -join '|') -cne ($expectedHostRel -join '|')) {
+                throw "$kind Reviewer Host inventory mismatch actual=$($actualHostRel -join ',')"
+              }
+              $hostChecks = @(
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[0]); Hash=[string]$reviewerHost.sha256; Name='reviewer' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[1]); Hash=[string]$reviewerHost.commandSha256; Name='command' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[2]); Hash=[string]$reviewerHost.submissionToolSha256; Name='submission-tool' },
+                [pscustomobject]@{ Path=(Join-Path $hostRoot $hostPaths[3]); Hash=[string]$reviewerHost.primaryCommandSha256; Name='primary-command' }
+              )
+              foreach ($check in $hostChecks) {
+                if (-not (Test-Path $check.Path -PathType Leaf)) { throw "$kind Reviewer Host $($check.Name) missing" }
+                $actualHash = (Get-FileHash $check.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actualHash -cne $check.Hash) { throw "$kind Reviewer Host $($check.Name) SHA mismatch" }
+              }
+              if ((Get-FileHash (Join-Path $root 'bin/codea-dcep-tools.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $runtimeHash) { throw "$kind packaged Runtime mismatch" }
+
+              $artifactRecord[$kind] = [ordered]@{
+                file = $zip
+                sha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+                size = (Get-Item $zip).Length
+                reviewerHost = [ordered]@{
+                  agentSha256 = [string]$reviewerHost.sha256
+                  commandSha256 = [string]$reviewerHost.commandSha256
+                  submissionToolSha256 = [string]$reviewerHost.submissionToolSha256
+                }
+              }
+            } finally {
+              Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          $goVersion = (go env GOVERSION).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'cannot determine Go version' }
+          $whitelist = 'codea-dcep-tools-whitelist.txt'
+          $lines = @(
+            'Product:','Codea Harness','Version:','1.6.7','Binary:','codea-dcep-tools.exe',
+            'Runtime SHA256:',$runtimeHash,'File Size:',[string](Get-Item $runtime).Length,
+            'Build Commit:',$head,'GOOS:','windows','GOARCH:','amd64','Go Version:',$goVersion
+          )
+          [IO.File]::WriteAllLines($whitelist,$lines,[Text.UTF8Encoding]::new($false))
+
+          $checklist = [ordered]@{
+            version = '1.6.7'
+            status = 'PASS'
+            exactHeadSha = $head
+            acceptedReviewFixBaseline = 'b2e5e820c5d157405d708fed1be9f1ccaf8f8270'
+            workflowRunId = $env:GITHUB_RUN_ID
+            artifacts = $artifactRecord
+            runtime = [ordered]@{ sha256 = $runtimeHash; size = (Get-Item $runtime).Length }
+            astGrep = [ordered]@{ version = '0.42.1'; sha256 = $astHash; size = (Get-Item $ast).Length }
+            whitelist = [ordered]@{ file = $whitelist; sha256 = (Get-FileHash $whitelist -Algorithm SHA256).Hash.ToLowerInvariant() }
+          }
+          [IO.File]::WriteAllText('codea-harness-1.6.7-release-checklist.json',($checklist | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+          Write-Output "PACKAGE_WINDOWS_X64_167_VERIFY PASS head=$head runtimeSha256=$runtimeHash"
+
+      - name: Download exact published 1.6.6 baseline
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 34928481795
+          artifact-ids: '10380623448,10380389520'
+          merge-multiple: true
+          path: baseline166
+
+      - name: Real packaged 1.6.6 to 1.6.7 upgrade
+        shell: pwsh
+        run: ./.github/scripts/release167-upgrade-regression.ps1
+
+      - name: Pinned OpenCode native export smoke test
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'opencode native & npm'
+          npm.cmd install --global --prefix $prefix opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $native = Join-Path $prefix 'node_modules/opencode-ai/bin/opencode.exe'
+          $version = & $native --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($version.Trim() -ne '1.18.25') { throw "OpenCode version mismatch: $version" }
+          $env:CODEA_OPENCODE_INTEGRATION_PREFIX = $prefix
+          "CODEA_OPENCODE_INTEGRATION_PREFIX=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          go test -v -count=1 ./internal/reviewauthority -run '^TestWindowsPinnedOpenCodeExportSmoke$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Real primary Host submission and next-user selection
+        shell: pwsh
+        run: |
+          $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          $sdk = Join-Path $env:RUNNER_TEMP 'primary Host SDK & npm'
+          npm.cmd install --prefix $sdk --ignore-scripts --no-audit --no-fund --save-exact @opencode-ai/plugin@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python .github/scripts/release166-primary-host-regression.py --opencode $native --tool-source .code-harness/tools/codea-reviewer-submit.ts --sdk-root $sdk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Packaged primary entry to report and mandatory human selection
+        shell: pwsh
+        run: |
+          $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          $sdk = Join-Path $env:RUNNER_TEMP 'primary Host SDK & npm'
+          $package = Join-Path $env:RUNNER_TEMP 'review167 packaged input'
+          Expand-Archive 'codea-harness-1.6.7-windows-x64-install.zip' $package -Force
+          $evidence = Join-Path $env:RUNNER_TEMP 'review167 actual evidence'
+          python .github/scripts/release167-review-e2e.py --opencode $native --sdk-root $sdk --harness-root (Join-Path $package '.code-harness') --work-root $evidence
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item (Join-Path $evidence 'review-evidence.json') 'codea-harness-1.6.7-review-evidence.json'
+
+      - name: Full Runtime regression
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload 1.6.7 install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.7-windows-x64-install
+          path: codea-harness-1.6.7-windows-x64-install.zip
+          if-no-files-found: error
+
+      - name: Upload 1.6.7 upgrade package
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.7-windows-x64-upgrade
+          path: codea-harness-1.6.7-windows-x64-upgrade.zip
+          if-no-files-found: error
+
+      - name: Upload 1.6.7 release checklist
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.7-release-checklist
+          path: codea-harness-1.6.7-release-checklist.json
+          if-no-files-found: error
+
+      - name: Upload 1.6.7 Runtime whitelist
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-dcep-tools-whitelist-1.6.7
+          path: codea-dcep-tools-whitelist.txt
+          if-no-files-found: error
+
+      - name: Upload 1.6.7 upgrade evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.7-upgrade-evidence
+          path: codea-harness-1.6.7-upgrade-evidence.json
+          if-no-files-found: error
+
+      - name: Upload 1.6.7 actual review evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-harness-1.6.7-review-evidence
+          path: codea-harness-1.6.7-review-evidence.json
+          if-no-files-found: error

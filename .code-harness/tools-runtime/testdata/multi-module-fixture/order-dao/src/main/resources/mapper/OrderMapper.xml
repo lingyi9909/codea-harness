@@ -1,0 +1,3 @@
+<mapper namespace="com.acme.order.OrderMapper">
+  <insert id="insertOrder">insert into orders(id) values (1)</insert>
+</mapper>

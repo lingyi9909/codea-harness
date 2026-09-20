@@ -1,0 +1,77 @@
+version: 2
+
+project:
+  type: maven
+  root: .
+  module: ""
+
+# 1.5.2 可选 READ_ONLY Workspace Dependency Navigation allowlist。
+# 不得自动扫描 sibling / ../**；只有显式配置的 direct sibling Maven source 才允许后续验证。
+# workspaceDependencies:
+#   - id: company-framework
+#     root: ../company-framework
+#     maven:
+#       groupId: com.company
+#       artifactId: company-framework
+#     mode: READ_ONLY
+
+review:
+  baseRef: ""
+  includeWorkingTree: true
+
+integrationTest:
+  executable: ./mvnw
+  args:
+    - -Dspring.profiles.active=test
+    - -Dtest=${testClass}
+    - test
+  reportDir: target/surefire-reports
+  timeoutSeconds: 600
+
+service:
+  executable: ./mvnw
+  args:
+    - spring-boot:run
+    - -Dspring-boot.run.profiles=local
+  startupTimeoutSeconds: 120
+  readiness:
+    type: log
+    pattern: Started
+  logFile: null
+
+stopService:
+  mode: processTree
+
+# 本文件为模板，不能直接作为配置执行。
+# 只有 Project Adapter 在 harness init 时生成的 harness.yaml 才是有效配置。
+initialization:
+  status: NEEDS_CONFIRMATION
+  unresolved:
+    - projectNotInitialized
+
+scope:
+  sourceIncludes:
+    - src/main/java/**/*.java
+  testIncludes:
+    - src/test/java/**/*.java
+  mapperIncludes:
+    - src/main/resources/**/*Mapper.xml
+  configIncludes:
+    - src/main/resources/**/*.yml
+
+write:
+  allowedTestPaths:
+    - src/test/java/**
+  allowedProductionPaths:
+    - src/main/java/**
+  deniedPaths:
+    - .git/**
+    - .github/**
+    - target/**
+    - .code-harness/agents/**
+    - .code-harness/skills/**
+    - .code-harness/contracts/**
+    - .code-harness/tools/**
+
+runs:
+  directory: .code-harness/runs

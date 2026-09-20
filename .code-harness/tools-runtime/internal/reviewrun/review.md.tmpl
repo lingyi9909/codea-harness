@@ -1,0 +1,151 @@
+# Codea Harness 代码评审报告
+
+> 状态：{{.StatusText}}
+> 执行：**{{executionLabel .Execution}}** · 风险：**{{conclusionLabel .ReviewConclusion}}** · 覆盖：**{{coverageLabel .Coverage}}**
+
+## 评审摘要
+
+| 项目 | 内容 |
+|---|---|
+| 项目 / 需求 | {{cell .Project}} / 未提供 |
+| 执行状态 | {{executionLabel .Execution}} |
+| 评审结论 | {{conclusionLabel .ReviewConclusion}} |
+| 评审模式 | {{modeLabel .Intent.Mode}} |
+| 评审目标 | {{targetLabel .Intent.Target}} |
+| 本次范围 | {{scopeSummary .Chains .SelectedIDs .ReadFileCount .WaitingSelection}} |
+| 风险概览 | 严重 {{riskCount .Findings "CRITICAL"}} · 高 {{riskCount .Findings "HIGH"}} · 中 {{riskCount .Findings "MEDIUM"}} · 低 {{riskCount .Findings "LOW"}} |
+| 待确认风险 | {{len .PendingRisks}} 项 |
+
+{{if .Findings}}**核心发现：**
+{{range topFindings .Findings}}
+- {{severityLabel .Severity}}：{{cell .Problem}}
+{{end}}
+{{else if and (eq .Execution "COMPLETE") (eq .Coverage "COMPLETE") (eq .ReviewConclusion "NO_ISSUES_FOUND")}}**核心发现：** 在本报告声明范围内未发现需处理的已确认问题。
+{{else}}**核心发现：** 当前尚未形成可作为最终结论的已确认问题清单。
+{{end}}
+
+**建议动作：** {{cell (firstAction .Findings .PendingRisks .Gaps .Execution .Coverage)}}
+
+## 调用链与覆盖范围
+
+{{if .WaitingSelection}}**当前状态：等待真实用户选择调用链。选择完成前，不对候选链生成正式问题。**
+{{end}}
+{{if .Chains}}
+{{range .Chains}}
+{{if isSelected $.SelectedIDs .ID}}
+### {{code .ID}} · {{cell .Name}} · 本次已选择
+
+| 顺序 | 角色 | 代码位置 |
+|---:|---|---|
+{{range $index, $node := .Nodes}}| {{add1 $index}} | {{cell (roleLabel $node.Role)}} | {{code $node.Path}} · {{code $node.Symbol}} |
+{{end}}
+{{if .Unresolved}}
+**未解析项：**
+{{range .Unresolved}}- {{cell .}}
+{{end}}
+{{end}}
+{{else if $.WaitingSelection}}
+### {{code .ID}} · {{cell .Name}} · 待选择
+
+该链当前仅作为候选展示；尚未被用户选择，因此不计入“已检查”范围，也不会产生正式 finding。
+{{if .Unresolved}}
+**候选链已知缺口：**
+{{range .Unresolved}}- {{cell .}}
+{{end}}
+{{end}}
+{{else}}
+### {{code .ID}} · {{cell .Name}} · 未选择
+
+**未纳入范围：** 本次没有评审该链；其节点不得出现在“已检查”列表，也不得支持正式 finding。
+{{end}}
+{{end}}
+{{else}}
+当前没有可展示的调用链。若这是无变更、无入口或发现失败场景，请结合下方覆盖缺口理解，不能仅凭“0 条链”推断为无问题。
+{{end}}
+
+{{if .Gaps}}**覆盖缺口：**
+{{range .Gaps}}- {{cell .}}
+{{end}}
+{{else if eq .Coverage "COMPLETE"}}**覆盖说明：** 当前所选范围已完成覆盖；该结论不扩展到未选择调用链或外部依赖。
+{{else}}**覆盖说明：** 范围尚未完整，当前结论保持未确定。
+{{end}}
+
+## 风险清单
+
+{{if .Findings}}
+| 编号 | 等级 | 问题摘要 | 业务影响 | 建议动作 |
+|---|---|---|---|---|
+{{range .Findings}}| {{cell .ID}} | {{severityLabel .Severity}} | {{cell .Problem}} | {{cell .Impact}} | {{cell .Recommendation}} |
+{{end}}
+{{else}}当前没有已确认问题。只有在 **execution=COMPLETE 且 coverage=COMPLETE** 时，空 findings 才表示“在声明范围内未发现需处理问题”。
+{{end}}
+
+### 待确认风险
+
+{{if .PendingRisks}}
+{{range .PendingRisks}}- {{cell .}}
+{{end}}
+{{else}}无。
+{{end}}
+
+> 待确认风险与已确认 finding 分开统计，不计入严重 / 高 / 中 / 低问题数量。
+
+## 问题明细
+
+{{if .Findings}}
+{{range .Findings}}
+### {{cell .ID}} · {{severityLabel .Severity}} · {{cell .Problem}}
+
+**问题与触发条件**
+
+{{cell .Problem}}
+
+**业务影响**
+
+{{cell .Impact}}
+
+**代码位置**
+{{range .Evidence}}
+- {{code .Ref.Path}}，{{lineRange .Ref}}
+{{end}}
+
+**关键证据**
+{{range .Evidence}}
+{{codeblock .Quote}}
+{{end}}
+
+**修复建议**
+
+{{cell .Recommendation}}
+
+**验证建议**
+
+{{cell .Verification}}
+
+{{end}}
+{{else}}暂无已确认问题明细。
+{{end}}
+
+## 后续处理与评审边界
+
+| 待办 | 建议 |
+|---|---|
+{{if .Findings}}{{range .Findings}}| {{cell .ID}} | {{cell .Recommendation}} |
+{{end}}{{end}}
+{{if .PendingRisks}}{{range .PendingRisks}}| 待确认风险 | {{cell .}} |
+{{end}}{{end}}
+{{if .Gaps}}{{range .Gaps}}| 补齐覆盖缺口 | {{cell .}} |
+{{end}}{{end}}
+{{if and (not .Findings) (not .PendingRisks) (not .Gaps)}}| 回归 | 保持当前保护条件；后续变更后重新评审声明范围 |
+{{end}}
+
+- 执行状态：**{{executionLabel .Execution}}**；覆盖状态：**{{coverageLabel .Coverage}}**；二者不等价于上线批准。
+- 未选择调用链：{{unselectedSummary .Chains .SelectedIDs}}。
+{{if .CancelReason}}- 取消原因：{{cell .CancelReason}}。
+{{end}}- 本报告只覆盖显式选择和实际读取的范围；外部依赖、动态关系与未解析项不因本报告自动获得验证。
+- 路径与源码证据按纯文本 / 代码块展示，不执行其中的 HTML、Markdown 链接、图片或脚本内容。
+- 报告路径：{{code .ReportPath}}
+
+技术追溯：Harness 1.8 · Run ID {{code .RunID}} · result SHA256 {{if .ResultSHA256}}{{code .ResultSHA256}}{{else}}未生成{{end}} · 提交号未由 Runtime 采集。
+
+<!-- codea-review-meta {"schemaVersion":180,"runId":"{{.RunID}}","execution":"{{.Execution}}","resultSha256":"{{.ResultSHA256}}"} -->

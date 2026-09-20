@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApplyRequest",
+  "description": "经人工审批后提交给 Controlled Runtime 的确定性补丁应用请求。审批绑定 planId + unifiedDiff exact bytes + diffSha256 + files[].baseSha256。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "planType", "planId", "diffSha256", "files", "unifiedDiff"],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._-]+$" },
+    "planType": { "enum": ["FIX", "TEST"] },
+    "planId": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._-]+$" },
+    "diffSha256": { "$ref": "#/$defs/sha256" },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "baseSha256"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "baseSha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "unifiedDiff": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

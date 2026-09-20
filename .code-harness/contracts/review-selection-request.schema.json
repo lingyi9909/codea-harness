@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewSelectionRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "mode", "optionsHash"],
+  "properties": {
+    "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "mode": {"enum": ["FULL", "TARGETED", "LIST"]},
+    "selectionIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^C[1-9][0-9]*$"}
+    },
+    "optionsHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"mode": {"const": "TARGETED"}}, "required": ["mode"]},
+      "then": {"required": ["selectionIds"], "properties": {"selectionIds": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"mode": {"enum": ["FULL", "LIST"]}}, "required": ["mode"]},
+      "then": {"properties": {"selectionIds": {"maxItems": 0}}}
+    }
+  ]
+}

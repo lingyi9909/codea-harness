@@ -1,0 +1,187 @@
+name: Runtime Regression - Windows x64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, feature/1.8-task3-primary-report]
+    paths:
+      - '.code-harness/tools-runtime/**'
+      - '.code-harness/tools/**'
+      - '.code-harness/commands/**'
+      - '.github/scripts/review180-host-smoke.py'
+      - '.github/scripts/review180-real-model-smoke.py'
+      - '.github/scripts/review180-real-model-smoke-regression.py'
+      - '.github/workflows/runtime-regression-windows-x64.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.code-harness/tools-runtime/**'
+      - '.code-harness/tools/**'
+      - '.code-harness/commands/**'
+      - '.github/scripts/review180-host-smoke.py'
+      - '.github/scripts/review180-real-model-smoke.py'
+      - '.github/scripts/review180-real-model-smoke-regression.py'
+      - '.github/workflows/runtime-regression-windows-x64.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Codea 1.8 report identity regression
+        shell: pwsh
+        run: |
+          python .github/scripts/review180-real-model-smoke-regression.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Codea 1.8 real-model secret preflight
+        if: ${{ (github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report') || (github.event_name == 'push' && github.ref_name == 'feature/1.8-task3-primary-report') }}
+        shell: pwsh
+        env:
+          TASK15_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          TASK15_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TASK15_OPENAI_BASE_URL)) {
+            throw 'TASK15_OPENAI_BASE_URL is unavailable to this workflow run'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TASK15_OPENAI_API_KEY)) {
+            throw 'TASK15_OPENAI_API_KEY is unavailable to this workflow run'
+          }
+          Write-Host 'REVIEW180_REAL_MODEL_SECRETS PRESENT'
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: .code-harness/tools-runtime/go.sum
+
+      - name: Bootstrap pinned ast-grep Windows x64
+        shell: pwsh
+        run: |
+          $version = '0.42.1'
+          $expected = 'fe34f631bb24c08ad146f92ca2a92971a53d179461b509fd8d32dc863bff9f83'
+          $zip = Join-Path $env:RUNNER_TEMP 'ast-grep-152.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ast-grep-152'
+          $url = "https://github.com/ast-grep/ast-grep/releases/download/$version/app-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "ast-grep checksum mismatch: $actual" }
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          New-Item -ItemType Directory -Force '.code-harness/bin' | Out-Null
+          Copy-Item (Join-Path $dir 'ast-grep.exe') '.code-harness/bin/ast-grep.exe' -Force
+          & '.code-harness/bin/ast-grep.exe' --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Pinned OpenCode native export smoke test
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'opencode native & npm'
+          npm.cmd install --global --prefix $prefix opencode-ai@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $native = Join-Path $prefix 'node_modules/opencode-ai/bin/opencode.exe'
+          $version = & $native --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($version.Trim() -ne '1.18.25') { throw "OpenCode version mismatch: $version" }
+          $env:CODEA_OPENCODE_INTEGRATION_PREFIX = $prefix
+          "CODEA_OPENCODE_INTEGRATION_PREFIX=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          go test -v -count=1 ./internal/reviewauthority -run '^TestWindowsPinnedOpenCodeExportSmoke$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Review regression tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/reviewauthority ./internal/reviewselection
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Chain regression tests
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./internal/chain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Go test
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: |
+          $env:CODEA_AST_GREP_TEST_PATH = (Resolve-Path '../bin/ast-grep.exe').Path
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Go vet
+        working-directory: .code-harness/tools-runtime
+        shell: pwsh
+        run: go vet ./...
+
+      - name: Codea 1.8 native Host smoke
+        shell: pwsh
+        run: |
+          Push-Location '.code-harness/tools-runtime'
+          go build -o '../bin/codea-dcep-tools.exe' ./cmd/codea-dcep-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          $sdk = Join-Path $env:RUNNER_TEMP 'review180-plugin-sdk'
+          npm.cmd install --prefix $sdk @opencode-ai/plugin@1.18.25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          $hostLog = Join-Path $env:RUNNER_TEMP 'review180-host-smoke.log'
+          python .github/scripts/review180-host-smoke.py `
+            --opencode $native `
+            --runtime '.code-harness/bin/codea-dcep-tools.exe' `
+            --ast-grep '.code-harness/bin/ast-grep.exe' `
+            --tool-source '.code-harness/tools/codea-review.ts' `
+            --command-source '.code-harness/commands/harness-review.md' `
+            --sdk-root $sdk *> $hostLog
+          $hostExit = $LASTEXITCODE
+          Get-Content $hostLog
+          if ($hostExit -ne 0) { exit $hostExit }
+
+      - name: Upload Codea 1.8 native Host smoke diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: review180-host-smoke-diagnostics
+          path: ${{ runner.temp }}/review180-host-smoke.log
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Codea 1.8 real-model autonomous single-chain smoke
+        if: ${{ (github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report') || (github.event_name == 'push' && github.ref_name == 'feature/1.8-task3-primary-report') }}
+        shell: pwsh
+        env:
+          TASK15_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          TASK15_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          $sdk = Join-Path $env:RUNNER_TEMP 'review180-plugin-sdk'
+          $native = Join-Path $env:CODEA_OPENCODE_INTEGRATION_PREFIX 'node_modules/opencode-ai/bin/opencode.exe'
+          $evidence = Join-Path $env:RUNNER_TEMP 'review180-real-model-evidence'
+          New-Item -ItemType Directory -Force $evidence | Out-Null
+          python .github/scripts/review180-real-model-smoke.py `
+            --opencode $native `
+            --runtime '.code-harness/bin/codea-dcep-tools.exe' `
+            --ast-grep '.code-harness/bin/ast-grep.exe' `
+            --tool-source '.code-harness/tools/codea-review.ts' `
+            --command-source '.code-harness/commands/harness-review.md' `
+            --sdk-root $sdk `
+            --evidence-dir $evidence
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Codea 1.8 real-model acceptance evidence
+        if: ${{ always() && ((github.event_name == 'pull_request' && github.head_ref == 'feature/1.8-task3-primary-report') || (github.event_name == 'push' && github.ref_name == 'feature/1.8-task3-primary-report')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: review180-real-model-acceptance
+          path: ${{ runner.temp }}/review180-real-model-evidence
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HarnessConfig",
+  "description": "harness.yaml 配置校验，由 Project Adapter 在生成和更新配置时使用",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "project", "review", "integrationTest", "service", "stopService", "initialization", "scope", "write", "runs"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "配置版本号。1.4 模板使用 version=2；version=1 保持旧配置兼容。1.5.2 新增可选 workspaceDependencies，不升级 config version。"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "root", "module"],
+      "properties": {
+        "type": { "enum": ["maven"], "description": "项目构建类型" },
+        "root": { "type": "string", "description": "项目根目录，通常为 ." },
+        "module": { "type": "string", "description": "目标模块名，单模块项目为空字符串" }
+      }
+    },
+    "workspaceDependencies": {
+      "type": "array",
+      "description": "1.5.2 可选的显式本地 Maven sibling source allowlist。仅作为 READ_ONLY Navigation Scope；文件系统 sibling/symlink 语义由 Controlled Runtime 再校验。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "root", "maven", "mode"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "稳定、唯一的 workspace identity"
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1,
+            "description": "显式 dependency source root；1.5.2 Runtime 只接受当前项目的直接 sibling directory"
+          },
+          "maven": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["groupId", "artifactId"],
+            "properties": {
+              "groupId": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.-]+$" },
+              "artifactId": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.-]+$" }
+            }
+          },
+          "mode": { "const": "READ_ONLY" }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseRef", "includeWorkingTree"],
+      "properties": {
+        "baseRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "默认 Code Review 基线，例如 origin/master、origin/main"
+        },
+        "includeWorkingTree": {
+          "type": "boolean",
+          "description": "是否同时包含 staged、unstaged 和 untracked 本地变化"
+        }
+      }
+    },
+    "integrationTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "args", "reportDir", "timeoutSeconds"],
+      "properties": {
+        "executable": { "type": "string", "minLength": 1, "description": "Maven 可执行文件路径" },
+        "args": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Maven 测试参数，${testClass} 会被替换为实际测试类"
+        },
+        "reportDir": { "type": "string", "minLength": 1, "description": "Surefire 报告目录" },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "测试超时秒数" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "args", "startupTimeoutSeconds", "readiness", "logFile"],
+      "properties": {
+        "executable": { "type": "string", "minLength": 1 },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "startupTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "pattern"],
+          "properties": {
+            "type": { "enum": ["log"], "description": "就绪检测方式" },
+            "pattern": { "type": "string", "minLength": 1, "description": "就绪日志匹配模式" }
+          }
+        },
+        "logFile": {
+          "type": ["string", "null"],
+          "description": "应用日志文件路径，null 表示只采集 stdout/stderr"
+        }
+      }
+    },
+    "stopService": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["processTree"], "description": "服务停止方式" }
+      }
+    },
+    "initialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "unresolved"],
+      "properties": {
+        "status": {
+          "enum": ["READY", "NEEDS_CONFIRMATION"],
+          "description": "初始化状态。READY 表示所有配置已确认可执行；NEEDS_CONFIRMATION 表示存在未确定项，harness test/debug-service/fix/verify 不得执行"
+        },
+        "unresolved": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "未确定的配置项列表。READY 时必须为空数组；NEEDS_CONFIRMATION 时至少 1 项"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "READY" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": { "unresolved": { "maxItems": 0 } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "NEEDS_CONFIRMATION" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": { "unresolved": { "minItems": 1 } }
+          }
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceIncludes", "testIncludes"],
+      "properties": {
+        "sourceIncludes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "testIncludes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "mapperIncludes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "1.4 MyBatis Mapper XML Review scope"
+        },
+        "configIncludes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "1.4 YAML config Review scope"
+        }
+      }
+    },
+    "write": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedTestPaths", "allowedProductionPaths", "deniedPaths"],
+      "properties": {
+        "allowedTestPaths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "allowedProductionPaths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "deniedPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "runs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory"],
+      "properties": {
+        "directory": { "type": "string", "minLength": 1, "description": "运行产物目录" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "version": { "minimum": 2 } },
+        "required": ["version"]
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "required": ["sourceIncludes", "testIncludes", "mapperIncludes", "configIncludes"]
+          }
+        }
+      }
+    }
+  ]
+}

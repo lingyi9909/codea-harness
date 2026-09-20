@@ -1,0 +1,340 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "report-review-request.schema.json",
+  "title": "Formal Review Report Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "runId",
+    "harnessVersion",
+    "baseRef",
+    "head",
+    "result",
+    "reviewScope",
+    "reviewCoverage",
+    "findings"
+  ],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "harnessVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "head": {
+      "type": "string",
+      "minLength": 1
+    },
+    "result": {
+      "enum": [
+        "PASSED",
+        "FAILED",
+        "MANUAL_ACTION_REQUIRED"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "FULL",
+        "TARGETED"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "symbol",
+        "kind"
+      ],
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "CLASS",
+            "METHOD"
+          ]
+        }
+      }
+    },
+    "chainContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "source",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "enum": [
+            "ACCEPTED",
+            "DISCOVERED"
+          ]
+        },
+        "status": {
+          "enum": [
+            "VALID",
+            "TEMPORARY"
+          ]
+        }
+      }
+    },
+    "reviewScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changedFiles"
+      ],
+      "properties": {
+        "changedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scopedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reviewCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewedFiles",
+        "callChains",
+        "externalDependencies",
+        "unresolved",
+        "missingReviewedFiles",
+        "runtimeErrors",
+        "status"
+      ],
+      "properties": {
+        "reviewedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "callChains": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "entryPoint",
+              "chain"
+            ],
+            "properties": {
+              "entryPoint": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chain": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "symbolRoleEvidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "symbol",
+              "role",
+              "source"
+            ],
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "enum": [
+                  "Controller",
+                  "Service",
+                  "Repository",
+                  "Mapper",
+                  "Entity",
+                  "DTO",
+                  "VO",
+                  "Validator",
+                  "ExceptionHandler",
+                  "Config",
+                  "Utility",
+                  "Other"
+                ]
+              },
+              "source": {
+                "enum": [
+                  "FIND_SYMBOL",
+                  "FIND_REFERENCES",
+                  "FIND_IMPLEMENTATIONS"
+                ]
+              }
+            }
+          }
+        },
+        "resourceRoleEvidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "resource",
+              "role",
+              "source"
+            ],
+            "properties": {
+              "resource": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "enum": [
+                  "MapperXml",
+                  "YamlConfig"
+                ]
+              },
+              "source": {
+                "enum": [
+                  "MAPPER_STATEMENT",
+                  "CONFIG_REFERENCE"
+                ]
+              }
+            }
+          }
+        },
+        "externalDependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missingReviewedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runtimeErrors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "enum": [
+            "COMPLETE",
+            "PARTIAL"
+          ]
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 0,
+      "description": "Agent-facing formal report requests must not carry raw findings; Runtime loads same-run Certified Findings."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "TARGETED"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "reviewScope": {
+            "required": [
+              "scopedFiles"
+            ],
+            "properties": {
+              "scopedFiles": {
+                "minItems": 1
+              }
+            }
+          },
+          "reviewCoverage": {
+            "properties": {
+              "callChains": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "mode": {
+                "const": "FULL"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          {
+            "not": {
+              "required": [
+                "mode"
+              ]
+            }
+          }
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "target"
+          ]
+        }
+      }
+    }
+  ]
+}

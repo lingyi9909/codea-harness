@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnalysisCertifyRequest",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "snapshotPath", "snapshotSha256", "proposalPath", "intent"],
+      "properties": {
+        "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "snapshotPath": {"type": "string", "minLength": 1},
+        "snapshotSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "proposalPath": {"type": "string", "minLength": 1},
+        "intent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {"type": "string", "minLength": 1, "maxLength": 64},
+            "target": {"type": "string", "maxLength": 512}
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "draftPath", "baseRef", "intent"],
+      "properties": {
+        "runId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "draftPath": {"type": "string", "minLength": 1},
+        "baseRef": {"type": "string", "minLength": 1, "maxLength": 512},
+        "includeWorkingTree": {"type": "boolean"},
+        "intent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {"type": "string", "minLength": 1, "maxLength": 64},
+            "target": {"type": "string", "maxLength": 512}
+          }
+        }
+      }
+    }
+  ]
+}
