@@ -97,7 +97,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`public long countOrders(@AuthenticationPrincipal(expression = "tenantId") String tenantId)`,
 		`return service.countOrders(tenantId);`,
 		`public long countOrders(String tenantId) { return mapper.countOrders(tenantId); }`,
-		`long countOrders(@Param("tenantId") String tenantId);`,
+		`long countOrders(@Param(\"tenantId\") String tenantId);`,
 		`<select id="countOrders" resultType="long">`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
 		`command_args.append("OrderController.countOrders")`,
