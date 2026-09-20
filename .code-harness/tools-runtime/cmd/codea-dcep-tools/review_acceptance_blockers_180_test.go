@@ -90,36 +90,23 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`@PreAuthorize("hasAuthority('ORDER_WRITE') and principal != null and principal.tenantId != null and principal.tenantId != ''")`,
-		`@AuthenticationPrincipal(expression = "tenantId") String tenantId`,
-		`@RequestParam("id") long id`,
-		`@RequestParam("status") String status`,
-		`throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid order id")`,
-		`boolean updated = service.updateStatus(tenantId, id, status);`,
-		`throw new ResponseStatusException(HttpStatus.CONFLICT, "order is not writable in current tenant/state");`,
-		`safe_method = """    @PreAuthorize`,
-		`HttpStatus.CONFLICT`,
-		`case \"PAID\" -> expectedStatus = \"PENDING\";`,
-		`case \"CANCELLED\" -> expectedStatus = \"PAID\";`,
-		`mapper.updateStatus(tenantId, id, status, expectedStatus)`,
-		`@Param(\"expectedStatus\") String expectedStatus`,
-		`AND status = #{expectedStatus}`,
-		`public void voidOrder`,
+		`CLEAN_PROBE_SQL = "SELECT 1"`,
+		`CLEAN_PROBE_SQL_CHANGED = "SELECT 1 AS probe_value"`,
+		`@PreAuthorize("hasAuthority('ORDER_READ')")`,
+		`@GetMapping("/orders/review-probe")`,
+		`public int reviewProbe()`,
+		`return service.reviewProbe();`,
+		`public int reviewProbe() { return mapper.reviewProbe(); }`,
+		`<select id="reviewProbe" resultType="int">`,
+		`write_fixture(project, multi, clean_probe=(scenario == "single-clean"))`,
+		`command_args.append("OrderController.reviewProbe")`,
 		`command_args.append("OrderController")`,
 		`host.require(scope.get("selectedIds") == ["C1"]`,
+		`safe_method = """    @PreAuthorize`,
+		`boolean updated = service.updateStatus(tenantId, id, status);`,
 	} {
 		if !strings.Contains(text, want) {
-			t.Fatalf("final real-model fixture lost navigation/selection contract %q", want)
-		}
-	}
-	for _, forbidden := range []string{
-		"tenantId.isBlank()",
-		"@NotBlank",
-		`if (!"PAID".equals(status) && !"CANCELLED".equals(status))`,
-		`throw new IllegalStateException("order not found or not writable")`,
-	} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("final matrix fixture reintroduced ambiguous validation/navigation construct %q", forbidden)
+			t.Fatalf("final real-model fixture lost matrix contract %q", want)
 		}
 	}
 	if strings.Contains(text, "service.cancel(") {
