@@ -23,8 +23,16 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_CATALOG_SQL = "SELECT COUNT(*) FROM order_status_catalog WHERE active = TRUE"
-CLEAN_CATALOG_SQL_CHANGED = "SELECT COUNT(*) AS active_status_count FROM order_status_catalog WHERE active = TRUE"
+CLEAN_ENUM_METHOD = """    public int countStatuses() {
+        int count = OrderStatus.values().length;
+        return count;
+    }
+"""
+CLEAN_ENUM_METHOD_CHANGED = """    public int countStatuses() {
+        int statusCount = OrderStatus.values().length;
+        return statusCount;
+    }
+"""
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -216,6 +224,16 @@ public class OrderController {
         encoding="utf-8",
     )
     if clean_read:
+        (java / "OrderStatus.java").write_text(
+            """package com.example;
+public enum OrderStatus {
+    PENDING,
+    PAID,
+    CANCELLED
+}
+""",
+            encoding="utf-8",
+        )
         (java / "OrderStatusCatalogController.java").write_text(
             """package com.example;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -227,11 +245,10 @@ public class OrderStatusCatalogController {
     private final OrderStatusCatalogService service;
     public OrderStatusCatalogController(OrderStatusCatalogService service) { this.service = service; }
 
-    // Global reference catalog shared across tenants; contains no tenant-owned order data.
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
     @GetMapping("/reference/order-statuses/count")
-    public long countActiveStatuses() {
-        return service.countActiveStatuses();
+    public int countStatuses() {
+        return service.countStatuses();
     }
 }
 """,
@@ -239,29 +256,14 @@ public class OrderStatusCatalogController {
         )
         (java / "OrderStatusCatalogService.java").write_text(
             "package com.example;\npublic interface OrderStatusCatalogService {\n"
-            "    long countActiveStatuses();\n"
+            "    int countStatuses();\n"
             "}\n",
             encoding="utf-8",
         )
         (java / "OrderStatusCatalogServiceImpl.java").write_text(
             "package com.example;\npublic class OrderStatusCatalogServiceImpl implements OrderStatusCatalogService {\n"
-            "    private final OrderStatusCatalogMapper mapper;\n"
-            "    public OrderStatusCatalogServiceImpl(OrderStatusCatalogMapper mapper) { this.mapper = mapper; }\n"
-            "    public long countActiveStatuses() { return mapper.countActiveStatuses(); }\n"
+            + CLEAN_ENUM_METHOD +
             "}\n",
-            encoding="utf-8",
-        )
-        (java / "OrderStatusCatalogMapper.java").write_text(
-            "package com.example;\npublic interface OrderStatusCatalogMapper {\n"
-            "    long countActiveStatuses();\n"
-            "}\n",
-            encoding="utf-8",
-        )
-        (xml / "OrderStatusCatalogMapper.xml").write_text(
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<mapper namespace="com.example.OrderStatusCatalogMapper">\n'
-            f'  <select id="countActiveStatuses" resultType="long">{CLEAN_CATALOG_SQL}</select>\n'
-            "</mapper>\n",
             encoding="utf-8",
         )
     (project / "pom.xml").write_text(
@@ -379,10 +381,10 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(safe_method in source, "safe Controller seed missing")
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
-        catalog_xml = project / "src" / "main" / "resources" / "mapper" / "OrderStatusCatalogMapper.xml"
-        text = catalog_xml.read_text(encoding="utf-8")
-        host.require(CLEAN_CATALOG_SQL in text, "clean catalog SQL seed missing")
-        catalog_xml.write_text(text.replace(CLEAN_CATALOG_SQL, CLEAN_CATALOG_SQL_CHANGED, 1), encoding="utf-8")
+        catalog_impl = project / "src" / "main" / "java" / "com" / "example" / "OrderStatusCatalogServiceImpl.java"
+        text = catalog_impl.read_text(encoding="utf-8")
+        host.require(CLEAN_ENUM_METHOD in text, "clean enum method seed missing")
+        catalog_impl.write_text(text.replace(CLEAN_ENUM_METHOD, CLEAN_ENUM_METHOD_CHANGED, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
 
@@ -440,7 +442,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("OrderStatusCatalogController.countActiveStatuses")
+            command_args.append("OrderStatusCatalogController.countStatuses")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would
