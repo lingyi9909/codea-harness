@@ -114,6 +114,41 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 }
 
+func Test180HumanSelectionMenuIsMachineVerifiable(t *testing.T) {
+	root := repoRoot180(t)
+	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolText := string(toolData)
+	for _, want := range []string{
+		"function selectionMenuText",
+		"requiredMenuText",
+		" options=",
+		"copy requiredMenuText verbatim",
+		"Do not convert it to a Markdown table",
+	} {
+		if !strings.Contains(toolText, want) {
+			t.Fatalf("primary review tool lost exact human-selection menu contract; missing %q", want)
+		}
+	}
+
+	commandData, err := os.ReadFile(filepath.Join(root, ".code-harness", "commands", "harness-review.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandText := string(commandData)
+	for _, want := range []string{
+		"nextAction.requiredMenuText",
+		"<runId> options=<optionsHash>",
+		"Do not turn this block into a Markdown table",
+	} {
+		if !strings.Contains(commandText, want) {
+			t.Fatalf("ordinary review command lost exact menu rendering contract; missing %q", want)
+		}
+	}
+}
+
 func Test180HostSmokeRunsRealConcurrentFinishRegression(t *testing.T) {
 	root := repoRoot180(t)
 	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-host-smoke.py"))
