@@ -259,8 +259,7 @@ import org.springframework.stereotype.Service;
 public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceService {
     private final IsoCountryReferenceMapper mapper;
     public IsoCountryReferenceServiceImpl(IsoCountryReferenceMapper mapper) { this.mapper = mapper; }
-""" + CLEAN_REFERENCE_METHOD + "}
-",
+""" + CLEAN_REFERENCE_METHOD + "}\\n",
             encoding="utf-8",
         )
         (java / "IsoCountryReferenceMapper.java").write_text(
