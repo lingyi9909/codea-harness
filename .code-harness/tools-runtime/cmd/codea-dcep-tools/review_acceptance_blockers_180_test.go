@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"codea-harness-tools/internal/reviewrun"
 )
 
 func Test180FinishToolUsesInvocationUniqueExclusiveRequestFiles(t *testing.T) {
@@ -142,6 +145,94 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("final real-model fixture must not regress to debug-like or invalid clean setup %q", forbidden)
 		}
+	}
+}
+
+
+func Test180FinalMatrixCleanFixtureNavigatesCompleteSingleChain(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("CODEA_AST_GREP_TEST_PATH")) == "" {
+		t.Skip("formal Windows release regression provides CODEA_AST_GREP_TEST_PATH")
+	}
+	root := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("src/main/java/com/example/IsoCountryReferenceController.java", `package com.example;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class IsoCountryReferenceController {
+    private final IsoCountryReferenceService service;
+    public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
+
+    @PreAuthorize("hasAuthority('REFERENCE_READ')")
+    @GetMapping("/reference/iso-countries/count")
+    public long countActiveCountries() {
+        return service.countActiveCountries();
+    }
+}
+`)
+	write("src/main/java/com/example/IsoCountryReferenceService.java", `package com.example;
+public interface IsoCountryReferenceService {
+    long countActiveCountries();
+}
+`)
+	write("src/main/java/com/example/IsoCountryReferenceServiceImpl.java", `package com.example;
+import org.springframework.stereotype.Service;
+
+@Service
+public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceService {
+    private final IsoCountryReferenceMapper mapper;
+    public IsoCountryReferenceServiceImpl(IsoCountryReferenceMapper mapper) { this.mapper = mapper; }
+
+    public long countActiveCountries() {
+        long count = mapper.countActiveCountries();
+        return count;
+    }
+}
+`)
+	write("src/main/java/com/example/IsoCountryReferenceMapper.java", `package com.example;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface IsoCountryReferenceMapper {
+    long countActiveCountries();
+}
+`)
+	write("src/main/resources/mapper/IsoCountryReferenceMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.IsoCountryReferenceMapper">
+  <select id="countActiveCountries" resultType="long">SELECT COUNT(*) FROM reference.iso_country_codes WHERE active = TRUE</select>
+</mapper>
+`)
+
+	started, err := reviewrun.Start(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := reviewrun.Prepare(
+		context.Background(),
+		root,
+		started.RunID,
+		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "IsoCountryReferenceController.countActiveCountries"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 1 || len(got.Gaps) != 0 {
+		t.Fatalf("clean matrix fixture must produce one complete auto-selected chain: %+v", got)
+	}
+	if len(got.Chains[0].Nodes) < 4 {
+		t.Fatalf("clean matrix fixture must preserve Controller -> ServiceImpl -> Mapper -> Mapper XML nodes: %+v", got.Chains[0])
 	}
 }
 
