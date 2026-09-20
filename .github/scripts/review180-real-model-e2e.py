@@ -23,17 +23,17 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_REFERENCE_METHOD = """    public long countActiveCountries() {
-        long count = mapper.countActiveCountries();
-        return count;
+CLEAN_REFERENCE_METHOD = """    public String findCountryName(String code) {
+        String name = mapper.findCountryName(code);
+        return name;
     }
 """
-CLEAN_REFERENCE_METHOD_CHANGED = """    public long countActiveCountries() {
-        long countryCount = mapper.countActiveCountries();
-        return countryCount;
+CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(String code) {
+        String countryName = mapper.findCountryName(code);
+        return countryName;
     }
 """
-CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM reference.iso_country_codes WHERE active = TRUE"
+CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE alpha2_code = #{code}"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -237,9 +237,18 @@ public class IsoCountryReferenceController {
     public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/iso-countries/count")
-    public long countActiveCountries() {
-        return service.countActiveCountries();
+    @GetMapping("/reference/iso-countries/{code}")
+    public String countryName(@org.springframework.web.bind.annotation.PathVariable("code") String code) {
+        if (code == null || !code.matches("[A-Z]{2}")) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO country code");
+        }
+        String countryName = service.findCountryName(code);
+        if (countryName == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND, "country code not found");
+        }
+        return countryName;
     }
 }
 """,
@@ -247,7 +256,7 @@ public class IsoCountryReferenceController {
         )
         (java / "IsoCountryReferenceService.java").write_text(
             "package com.example;\npublic interface IsoCountryReferenceService {\n"
-            "    long countActiveCountries();\n"
+            "    String findCountryName(String code);\n"
             "}\n",
             encoding="utf-8",
         )
@@ -268,7 +277,7 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface IsoCountryReferenceMapper {
-    long countActiveCountries();
+    String findCountryName(@org.apache.ibatis.annotations.Param("code") String code);
 }
 """,
             encoding="utf-8",
@@ -276,7 +285,7 @@ public interface IsoCountryReferenceMapper {
         (xml / "IsoCountryReferenceMapper.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<mapper namespace="com.example.IsoCountryReferenceMapper">\n'
-            f'  <select id="countActiveCountries" resultType="long">{CLEAN_REFERENCE_SQL}</select>\n'
+            f'  <select id="findCountryName" resultType="string">{CLEAN_REFERENCE_SQL}</select>\n'
             "</mapper>\n",
             encoding="utf-8",
         )
@@ -456,7 +465,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("IsoCountryReferenceController.countActiveCountries")
+            command_args.append("IsoCountryReferenceController.countryName")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would

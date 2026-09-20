@@ -94,11 +94,11 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_REFERENCE_METHOD = """    public long countActiveCountries()`,
-		`long count = mapper.countActiveCountries();`,
-		`CLEAN_REFERENCE_METHOD_CHANGED = """    public long countActiveCountries()`,
-		`long countryCount = mapper.countActiveCountries();`,
-		`CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM reference.iso_country_codes WHERE active = TRUE"`,
+		`CLEAN_REFERENCE_METHOD = """    public String findCountryName(String code)`,
+		`String name = mapper.findCountryName(code);`,
+		`CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(String code)`,
+		`String countryName = mapper.findCountryName(code);`,
+		`CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE alpha2_code = #{code}"`,
 		`IsoCountryReferenceController.java`,
 		`IsoCountryReferenceService.java`,
 		`IsoCountryReferenceServiceImpl.java`,
@@ -108,11 +108,15 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`private final IsoCountryReferenceMapper mapper;`,
 		`@Mapper`,
 		`<mapper namespace="com.example.IsoCountryReferenceMapper">`,
-		`<select id="countActiveCountries" resultType="long">`,
+		`<select id="findCountryName" resultType="string">`,
 		`@PreAuthorize("hasAuthority('REFERENCE_READ')")`,
-		`@GetMapping("/reference/iso-countries/count")`,
+		`if (code == null || !code.matches("[A-Z]{2}"))`,
+		`String countryName = service.findCountryName(code);`,
+		`HttpStatus.NOT_FOUND`,
+		`String findCountryName(@org.apache.ibatis.annotations.Param("code") String code);`,
+		`@GetMapping("/reference/iso-countries/{code}")`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
-		`command_args.append("IsoCountryReferenceController.countActiveCountries")`,
+		`command_args.append("IsoCountryReferenceController.countryName")`,
 		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "IsoCountryReferenceServiceImpl.java"`,
 		`if scenario in {"early-stop", "timeout"}:`,
 		`mutate_for_scenario(project, "single-issue")`,
@@ -134,6 +138,9 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`CLEAN_PROBE_SQL`,
 		`CLEAN_COUNT_SQL`,
 		`CLEAN_CATALOG_SQL`,
+		`active = TRUE`,
+		`reference.iso_country_codes`,
+		`countActiveCountries`,
 		`CLEAN_ENUM_METHOD`,
 		`OrderStatusCatalogController`,
 		`OrderStatusCatalogServiceImpl`,
@@ -176,15 +183,24 @@ public class IsoCountryReferenceController {
     public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/iso-countries/count")
-    public long countActiveCountries() {
-        return service.countActiveCountries();
+    @GetMapping("/reference/iso-countries/{code}")
+    public String countryName(@org.springframework.web.bind.annotation.PathVariable("code") String code) {
+        if (code == null || !code.matches("[A-Z]{2}")) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO country code");
+        }
+        String countryName = service.findCountryName(code);
+        if (countryName == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND, "country code not found");
+        }
+        return countryName;
     }
 }
 `)
 	write("src/main/java/com/example/IsoCountryReferenceService.java", `package com.example;
 public interface IsoCountryReferenceService {
-    long countActiveCountries();
+    String findCountryName(String code);
 }
 `)
 	write("src/main/java/com/example/IsoCountryReferenceServiceImpl.java", `package com.example;
@@ -195,9 +211,9 @@ public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceServic
     private final IsoCountryReferenceMapper mapper;
     public IsoCountryReferenceServiceImpl(IsoCountryReferenceMapper mapper) { this.mapper = mapper; }
 
-    public long countActiveCountries() {
-        long count = mapper.countActiveCountries();
-        return count;
+    public String findCountryName(String code) {
+        String countryName = mapper.findCountryName(code);
+        return countryName;
     }
 }
 `)
@@ -206,12 +222,12 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface IsoCountryReferenceMapper {
-    long countActiveCountries();
+    String findCountryName(@org.apache.ibatis.annotations.Param("code") String code);
 }
 `)
 	write("src/main/resources/mapper/IsoCountryReferenceMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <mapper namespace="com.example.IsoCountryReferenceMapper">
-  <select id="countActiveCountries" resultType="long">SELECT COUNT(*) FROM reference.iso_country_codes WHERE active = TRUE</select>
+  <select id="findCountryName" resultType="string">SELECT country_name FROM iso_country_codes WHERE alpha2_code = #{code}</select>
 </mapper>
 `)
 
@@ -223,7 +239,7 @@ public interface IsoCountryReferenceMapper {
 		context.Background(),
 		root,
 		started.RunID,
-		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "IsoCountryReferenceController.countActiveCountries"},
+		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "IsoCountryReferenceController.countryName"},
 	)
 	if err != nil {
 		t.Fatal(err)
