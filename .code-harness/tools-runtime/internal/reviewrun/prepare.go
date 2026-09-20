@@ -379,8 +379,8 @@ func loadPreparedOptions180(runDir string) (preparedOptions180, error) {
 }
 
 var (
-	exactControllerTarget180 = regexp.MustCompile("^[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\\\.[A-Za-z_$][A-Za-z0-9_$]*)?$")
-	controllerTargetInText180 = regexp.MustCompile("[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\\\.[A-Za-z_$][A-Za-z0-9_$]*)?")
+	exactControllerTarget180 = regexp.MustCompile("^[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)?$")
+	controllerTargetInText180 = regexp.MustCompile("[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)?")
 )
 
 func normalizeIntent180(v Intent) (Intent, error) {
@@ -399,7 +399,7 @@ func normalizeReviewTarget180(raw string) string {
 	}
 	// Paths are already supported by filterEndpoints180 and must never be
 	// rewritten just because their basename contains a Controller symbol.
-	if strings.ContainsAny(target, "/\\\\") {
+	if strings.ContainsAny(target, "/\\") {
 		return target
 	}
 	matches := controllerTargetInText180.FindAllString(target, -1)
