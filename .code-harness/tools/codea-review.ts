@@ -64,13 +64,27 @@ async function readScope(worktree: string, runId: string) {
   }
 }
 
+function selectionMenuText(runtime: Record<string, unknown>) {
+  const runId = String(runtime.runId ?? "").trim()
+  const optionsHash = String(runtime.optionsHash ?? "").trim()
+  const chains = Array.isArray(runtime.chains) ? runtime.chains : []
+  const lines = chains.map((item) => {
+    const chain = item as Record<string, unknown>
+    return `${String(chain.id ?? "").trim()} ${String(chain.name ?? "").trim()}`.trim()
+  }).filter(Boolean)
+  if (!runId || !optionsHash || lines.length === 0) return ""
+  return [`${runId} options=${optionsHash}`, ...lines].join("\n")
+}
+
 function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unknown>) {
   if (runtime.selectionRequired === true) {
+    const requiredMenuText = selectionMenuText(runtime)
     return {
       type: "WAIT_FOR_REAL_USER_SELECTION",
       mandatory: true,
       assistantTurnTerminal: true,
-      instruction: "Present the current optionsHash and complete chain menu, end this assistant turn, and wait for the next real user message. Do not call select or finish yet.",
+      requiredMenuText,
+      instruction: "Render requiredMenuText verbatim as one plain-text/code block, with the exact '<runId> options=<optionsHash>' header and exact 'C<n> <name>' lines. Do not convert it to a Markdown table, relabel the hash, reorder chains, or omit the header. Then end this assistant turn and wait for the next real user message. Do not call select or finish yet.",
     }
   }
   if (scope) {
@@ -91,7 +105,7 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
 }
 
 export default tool({
-  description: "Codea Harness 1.8 primary review tool. Prepare bounded chains, verify a real user selection from Host context, or finish the durable report. Always obey the returned nextAction: when a scope is ready, do not end the assistant turn before finish, even when findings are empty.",
+  description: "Codea Harness 1.8 primary review tool. Prepare bounded chains, verify a real user selection from Host context, or finish the durable report. Always obey the returned nextAction. For WAIT_FOR_REAL_USER_SELECTION, copy requiredMenuText verbatim; for a ready scope, do not end the assistant turn before finish, even when findings are empty.",
   args: {
     action: tool.schema.enum(["prepare", "select", "finish"]),
     runId: tool.schema.string(),
