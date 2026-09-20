@@ -23,8 +23,8 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_COUNT_SQL = "SELECT COUNT(*) FROM orders WHERE tenant_id = #{tenantId}"
-CLEAN_COUNT_SQL_CHANGED = "SELECT COUNT(*) AS order_count FROM orders WHERE tenant_id = #{tenantId}"
+CLEAN_COUNT_SQL = "SELECT COUNT(*) FROM orders WHERE status = #{status}"
+CLEAN_COUNT_SQL_CHANGED = "SELECT COUNT(*) AS order_count FROM orders WHERE status = #{status}"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -127,15 +127,22 @@ def write_fixture(project: Path, multi: bool, clean_read: bool = False):
     sql_extra = ""
     if clean_read:
         controller_extra += '''
-    @PreAuthorize("hasAuthority('ORDER_READ') and principal != null and principal.tenantId != null and principal.tenantId != ''")
-    @GetMapping("/orders/count")
-    public long countOrders(@AuthenticationPrincipal(expression = "tenantId") String tenantId) {
-        return service.countOrders(tenantId);
+    @PreAuthorize("hasAuthority('ORDER_ADMIN_READ')")
+    @GetMapping("/admin/orders/count")
+    public long countOrders(@RequestParam("status") String status) {
+        if (status == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status is required");
+        }
+        switch (status) {
+            case "PENDING", "PAID", "CANCELLED" -> { }
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported status");
+        }
+        return service.countOrders(status);
     }
 '''
-        service_extra += "    long countOrders(String tenantId);\n"
-        impl_extra += "    public long countOrders(String tenantId) { return mapper.countOrders(tenantId); }\n"
-        mapper_extra += "    long countOrders(@Param(\"tenantId\") String tenantId);\n"
+        service_extra += "    long countOrders(String status);\n"
+        impl_extra += "    public long countOrders(String status) { return mapper.countOrders(status); }\n"
+        mapper_extra += "    long countOrders(@Param(\"status\") String status);\n"
         sql_extra += f'  <select id="countOrders" resultType="long">{CLEAN_COUNT_SQL}</select>\n'
     if multi:
         controller_extra = '''

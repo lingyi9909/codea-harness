@@ -90,14 +90,15 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_COUNT_SQL = "SELECT COUNT(*) FROM orders WHERE tenant_id = #{tenantId}"`,
-		`CLEAN_COUNT_SQL_CHANGED = "SELECT COUNT(*) AS order_count FROM orders WHERE tenant_id = #{tenantId}"`,
-		`@PreAuthorize("hasAuthority('ORDER_READ') and principal != null and principal.tenantId != null and principal.tenantId != ''")`,
-		`@GetMapping("/orders/count")`,
-		`public long countOrders(@AuthenticationPrincipal(expression = "tenantId") String tenantId)`,
-		`return service.countOrders(tenantId);`,
-		`public long countOrders(String tenantId) { return mapper.countOrders(tenantId); }`,
-		`long countOrders(@Param(\"tenantId\") String tenantId);`,
+		`CLEAN_COUNT_SQL = "SELECT COUNT(*) FROM orders WHERE status = #{status}"`,
+		`CLEAN_COUNT_SQL_CHANGED = "SELECT COUNT(*) AS order_count FROM orders WHERE status = #{status}"`,
+		`@PreAuthorize("hasAuthority('ORDER_ADMIN_READ')")`,
+		`@GetMapping("/admin/orders/count")`,
+		`public long countOrders(@RequestParam("status") String status)`,
+		`case "PENDING", "PAID", "CANCELLED" -> { }`,
+		`return service.countOrders(status);`,
+		`public long countOrders(String status) { return mapper.countOrders(status); }`,
+		`long countOrders(@Param(\"status\") String status);`,
 		`<select id="countOrders" resultType="long">`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
 		`command_args.append("OrderController.countOrders")`,
@@ -119,6 +120,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`/orders/review-probe`,
 		`reviewProbe`,
 		`CLEAN_PROBE_SQL`,
+		`public long countOrders(@AuthenticationPrincipal(expression = "tenantId") String tenantId)`,
 		`else "single-clean"`,
 	} {
 		if strings.Contains(text, forbidden) {

@@ -1,4 +1,0 @@
-runs/*
-!runs/.gitkeep
-!runs/README.md
-database.yaml
