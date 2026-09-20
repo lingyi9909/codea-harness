@@ -225,19 +225,17 @@ public class OrderController {
         encoding="utf-8",
     )
     if clean_read:
-        (java / "ProductCategoryReferenceController.java").write_text(
+        (java / "PublicProductCategoryReferenceController.java").write_text(
             """package com.example;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class ProductCategoryReferenceController {
+public class PublicProductCategoryReferenceController {
     private final ProductCategoryReferenceService service;
-    public ProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
+    public PublicProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
 
-    @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/categories/{parentCategoryId}/child-count")
+    @GetMapping("/public/reference/categories/{parentCategoryId}/child-count")
     public long childCategoryCount(
             @org.springframework.web.bind.annotation.PathVariable("parentCategoryId") long parentCategoryId) {
         if (parentCategoryId <= 0) {
@@ -462,7 +460,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("ProductCategoryReferenceController.childCategoryCount")
+            command_args.append("PublicProductCategoryReferenceController.childCategoryCount")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would

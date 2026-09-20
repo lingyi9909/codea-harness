@@ -99,7 +99,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`CLEAN_REFERENCE_METHOD_CHANGED = """    public long countChildCategories(long parentCategoryId)`,
 		`long childCount = mapper.countChildCategories(parentCategoryId);`,
 		`CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM product_category WHERE parent_id = #{parentCategoryId}"`,
-		`ProductCategoryReferenceController.java`,
+		`PublicProductCategoryReferenceController.java`,
 		`ProductCategoryReferenceService.java`,
 		`ProductCategoryReferenceServiceImpl.java`,
 		`ProductCategoryReferenceMapper.java`,
@@ -109,14 +109,13 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`@Mapper`,
 		`<mapper namespace="com.example.ProductCategoryReferenceMapper">`,
 		`<select id="countChildCategories" resultType="long">`,
-		`@PreAuthorize("hasAuthority('REFERENCE_READ')")`,
 		`if (parentCategoryId <= 0)`,
 		`return service.countChildCategories(parentCategoryId);`,
 		`long countChildCategories(`,
 		`@org.apache.ibatis.annotations.Param("parentCategoryId") long parentCategoryId`,
-		`@GetMapping("/reference/categories/{parentCategoryId}/child-count")`,
+		`@GetMapping("/public/reference/categories/{parentCategoryId}/child-count")`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
-		`command_args.append("ProductCategoryReferenceController.childCategoryCount")`,
+		`command_args.append("PublicProductCategoryReferenceController.childCategoryCount")`,
 		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "ProductCategoryReferenceServiceImpl.java"`,
 		`if scenario in {"early-stop", "timeout"}:`,
 		`mutate_for_scenario(project, "single-issue")`,
@@ -148,6 +147,8 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`categoryNames`,
 		`WHERE id = #{categoryId}`,
 		`java.util.List<String>`,
+		`REFERENCE_READ`,
+		`/reference/categories/{parentCategoryId}/child-count`,
 		`CLEAN_ENUM_METHOD`,
 		`OrderStatusCatalogController`,
 		`OrderStatusCatalogServiceImpl`,
@@ -179,18 +180,16 @@ func Test180FinalMatrixCleanFixtureNavigatesCompleteSingleChain(t *testing.T) {
 		}
 	}
 
-	write("src/main/java/com/example/ProductCategoryReferenceController.java", `package com.example;
-import org.springframework.security.access.prepost.PreAuthorize;
+	write("src/main/java/com/example/PublicProductCategoryReferenceController.java", `package com.example;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class ProductCategoryReferenceController {
+public class PublicProductCategoryReferenceController {
     private final ProductCategoryReferenceService service;
-    public ProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
+    public PublicProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
 
-    @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/categories/{parentCategoryId}/child-count")
+    @GetMapping("/public/reference/categories/{parentCategoryId}/child-count")
     public long childCategoryCount(
             @org.springframework.web.bind.annotation.PathVariable("parentCategoryId") long parentCategoryId) {
         if (parentCategoryId <= 0) {
@@ -243,7 +242,7 @@ public interface ProductCategoryReferenceMapper {
 		context.Background(),
 		root,
 		started.RunID,
-		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "ProductCategoryReferenceController.childCategoryCount"},
+		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "PublicProductCategoryReferenceController.childCategoryCount"},
 	)
 	if err != nil {
 		t.Fatal(err)
