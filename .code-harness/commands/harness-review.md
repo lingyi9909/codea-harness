@@ -19,7 +19,7 @@ Use only the `codea-review` structured tool for the ordinary 1.8 review path:
 A completed `prepare` or `select` tool call is **not** itself a completed assistant turn.
 
 - If the returned `nextAction.type` is `READ_SCOPE_AND_FINISH_THIS_TURN`, this assistant turn is non-terminal. Do **not** emit a user-facing answer and do **not** stop generation after prepare/select. Continue immediately with authorized source reads, perform the semantic review, and call `codea-review finish` in the same assistant turn. This rule is identical when the correct finding list is empty.
-- The only normal pre-finish terminal state is `WAIT_FOR_REAL_USER_SELECTION`; in that state show the menu and end the turn exactly because a real next user message is required.
+- The only normal pre-finish terminal state is `WAIT_FOR_REAL_USER_SELECTION`. In that state copy `nextAction.requiredMenuText` **verbatim** as one plain-text/code block. The first line must remain exactly `<runId> options=<optionsHash>`, followed by the exact `C<n> <name>` lines in returned order. Do not turn this block into a Markdown table or rewrite the header. Then end the turn exactly because a real next user message is required.
 - `KEEP_REPORT_INCOMPLETE` or an actual tool/runtime error may end the turn with the concrete failure state.
 - Therefore a single-chain, scope-ready review has only one valid normal terminal tool path: `prepare → source reads → finish`. An assistant message produced after only `prepare` is a protocol violation, even if no issue appears obvious.
 
