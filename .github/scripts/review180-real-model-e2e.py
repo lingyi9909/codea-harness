@@ -23,17 +23,17 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_REFERENCE_METHOD = """    public long countChildCategories(long parentCategoryId) {
-        long count = mapper.countChildCategories(parentCategoryId);
-        return count;
+CLEAN_READINESS_METHOD = """    public boolean databaseReady() {
+        int probe = mapper.ping();
+        return probe == 1;
     }
 """
-CLEAN_REFERENCE_METHOD_CHANGED = """    public long countChildCategories(long parentCategoryId) {
-        long childCount = mapper.countChildCategories(parentCategoryId);
-        return childCount;
+CLEAN_READINESS_METHOD_CHANGED = """    public boolean databaseReady() {
+        int result = mapper.ping();
+        return result == 1;
     }
 """
-CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM product_category WHERE parent_id = #{parentCategoryId}"
+CLEAN_READINESS_SQL = "SELECT 1"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -225,62 +225,61 @@ public class OrderController {
         encoding="utf-8",
     )
     if clean_read:
-        (java / "PublicProductCategoryReferenceController.java").write_text(
+        (java / "PublicDatabaseReadinessController.java").write_text(
             """package com.example;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class PublicProductCategoryReferenceController {
-    private final ProductCategoryReferenceService service;
-    public PublicProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
+public class PublicDatabaseReadinessController {
+    private final DatabaseReadinessService service;
+    public PublicDatabaseReadinessController(DatabaseReadinessService service) { this.service = service; }
 
-    @GetMapping("/public/reference/categories/{parentCategoryId}/child-count")
-    public long childCategoryCount(
-            @org.springframework.web.bind.annotation.PathVariable("parentCategoryId") long parentCategoryId) {
-        if (parentCategoryId <= 0) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid parent category id");
-        }
-        return service.countChildCategories(parentCategoryId);
+    @GetMapping("/public/readiness/database")
+    public boolean databaseReady() {
+        return service.databaseReady();
     }
 }
 """,
             encoding="utf-8",
         )
-        (java / "ProductCategoryReferenceService.java").write_text(
-            "package com.example;\npublic interface ProductCategoryReferenceService {\n"
-            "    long countChildCategories(long parentCategoryId);\n"
+        (java / "DatabaseReadinessService.java").write_text(
+            "package com.example;\npublic interface DatabaseReadinessService {\n"
+            "    boolean databaseReady();\n"
             "}\n",
             encoding="utf-8",
         )
-        (java / "ProductCategoryReferenceServiceImpl.java").write_text(
+        (java / "DatabaseReadinessServiceImpl.java").write_text(
             """package com.example;
 import org.springframework.stereotype.Service;
 
 @Service
-public class ProductCategoryReferenceServiceImpl implements ProductCategoryReferenceService {
-    private final ProductCategoryReferenceMapper mapper;
-    public ProductCategoryReferenceServiceImpl(ProductCategoryReferenceMapper mapper) { this.mapper = mapper; }
-""" + CLEAN_REFERENCE_METHOD + "}\n",
+public class DatabaseReadinessServiceImpl implements DatabaseReadinessService {
+    private final DatabaseReadinessMapper mapper;
+    public DatabaseReadinessServiceImpl(DatabaseReadinessMapper mapper) { this.mapper = mapper; }
+""" + CLEAN_READINESS_METHOD + "}\n",
             encoding="utf-8",
         )
-        (java / "ProductCategoryReferenceMapper.java").write_text(
+        (java / "DatabaseReadinessMapper.java").write_text(
             """package com.example;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface ProductCategoryReferenceMapper {
-    long countChildCategories(
-        @org.apache.ibatis.annotations.Param("parentCategoryId") long parentCategoryId);
+public interface DatabaseReadinessMapper {
+    int ping();
 }
 """,
             encoding="utf-8",
         )
-        (xml / "ProductCategoryReferenceMapper.xml").write_text(
+        # MyBatis loads a mapper XML co-located at the mapper interface classpath
+        # name when that @Mapper is registered. Keeping this resource under
+        # com/example removes any dependency on an external mapper-locations rule.
+        clean_xml = project / "src" / "main" / "resources" / "com" / "example"
+        clean_xml.mkdir(parents=True, exist_ok=True)
+        (clean_xml / "DatabaseReadinessMapper.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<mapper namespace="com.example.ProductCategoryReferenceMapper">\n'
-            f'  <select id="countChildCategories" resultType="long">{CLEAN_REFERENCE_SQL}</select>\n'
+            '<mapper namespace="com.example.DatabaseReadinessMapper">\n'
+            f'  <select id="ping" resultType="int">{CLEAN_READINESS_SQL}</select>\n'
             "</mapper>\n",
             encoding="utf-8",
         )
@@ -399,10 +398,10 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(safe_method in source, "safe Controller seed missing")
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
-        reference_impl = project / "src" / "main" / "java" / "com" / "example" / "ProductCategoryReferenceServiceImpl.java"
-        text = reference_impl.read_text(encoding="utf-8")
-        host.require(CLEAN_REFERENCE_METHOD in text, "clean reference method seed missing")
-        reference_impl.write_text(text.replace(CLEAN_REFERENCE_METHOD, CLEAN_REFERENCE_METHOD_CHANGED, 1), encoding="utf-8")
+        readiness_impl = project / "src" / "main" / "java" / "com" / "example" / "DatabaseReadinessServiceImpl.java"
+        text = readiness_impl.read_text(encoding="utf-8")
+        host.require(CLEAN_READINESS_METHOD in text, "clean readiness method seed missing")
+        readiness_impl.write_text(text.replace(CLEAN_READINESS_METHOD, CLEAN_READINESS_METHOD_CHANGED, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
 
@@ -460,7 +459,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("PublicProductCategoryReferenceController.childCategoryCount")
+            command_args.append("PublicDatabaseReadinessController.databaseReady")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would
@@ -535,7 +534,13 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             expected = risky_found(findings)
             host.require(expected, f"{scenario}: expected high-risk seeded SQL/tenant finding missing: {findings}")
         elif scenario == "single-clean":
-            expected = not findings and result.get("reviewConclusion") == "NO_ISSUES_FOUND"
+            expected = (
+                not findings
+                and not result.get("pendingRisks", [])
+                and not result.get("gaps", [])
+                and result.get("coverage") == "COMPLETE"
+                and result.get("reviewConclusion") == "NO_ISSUES_FOUND"
+            )
             host.require(expected, f"{scenario}: clean control produced issues: {result}")
 
         if multi:

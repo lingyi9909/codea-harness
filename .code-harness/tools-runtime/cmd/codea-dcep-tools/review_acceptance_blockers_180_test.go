@@ -94,29 +94,31 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_REFERENCE_METHOD = """    public long countChildCategories(long parentCategoryId)`,
-		`long count = mapper.countChildCategories(parentCategoryId);`,
-		`CLEAN_REFERENCE_METHOD_CHANGED = """    public long countChildCategories(long parentCategoryId)`,
-		`long childCount = mapper.countChildCategories(parentCategoryId);`,
-		`CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM product_category WHERE parent_id = #{parentCategoryId}"`,
-		`PublicProductCategoryReferenceController.java`,
-		`ProductCategoryReferenceService.java`,
-		`ProductCategoryReferenceServiceImpl.java`,
-		`ProductCategoryReferenceMapper.java`,
-		`ProductCategoryReferenceMapper.xml`,
-		`public class ProductCategoryReferenceServiceImpl implements ProductCategoryReferenceService`,
-		`private final ProductCategoryReferenceMapper mapper;`,
+		`CLEAN_READINESS_METHOD = """    public boolean databaseReady()`,
+		`int probe = mapper.ping();`,
+		`CLEAN_READINESS_METHOD_CHANGED = """    public boolean databaseReady()`,
+		`int result = mapper.ping();`,
+		`CLEAN_READINESS_SQL = "SELECT 1"`,
+		`PublicDatabaseReadinessController.java`,
+		`DatabaseReadinessService.java`,
+		`DatabaseReadinessServiceImpl.java`,
+		`DatabaseReadinessMapper.java`,
+		`DatabaseReadinessMapper.xml`,
+		`public class DatabaseReadinessServiceImpl implements DatabaseReadinessService`,
+		`private final DatabaseReadinessMapper mapper;`,
 		`@Mapper`,
-		`<mapper namespace="com.example.ProductCategoryReferenceMapper">`,
-		`<select id="countChildCategories" resultType="long">`,
-		`if (parentCategoryId <= 0)`,
-		`return service.countChildCategories(parentCategoryId);`,
-		`long countChildCategories(`,
-		`@org.apache.ibatis.annotations.Param("parentCategoryId") long parentCategoryId`,
-		`@GetMapping("/public/reference/categories/{parentCategoryId}/child-count")`,
+		`src" / "main" / "resources" / "com" / "example"`,
+		`<mapper namespace="com.example.DatabaseReadinessMapper">`,
+		`<select id="ping" resultType="int">`,
+		`@GetMapping("/public/readiness/database")`,
+		`return service.databaseReady();`,
+		`int ping();`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
-		`command_args.append("PublicProductCategoryReferenceController.childCategoryCount")`,
-		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "ProductCategoryReferenceServiceImpl.java"`,
+		`command_args.append("PublicDatabaseReadinessController.databaseReady")`,
+		`readiness_impl = project / "src" / "main" / "java" / "com" / "example" / "DatabaseReadinessServiceImpl.java"`,
+		`not result.get("pendingRisks", [])`,
+		`not result.get("gaps", [])`,
+		`result.get("coverage") == "COMPLETE"`,
 		`if scenario in {"early-stop", "timeout"}:`,
 		`mutate_for_scenario(project, "single-issue")`,
 		`command_args.append("OrderController")`,
@@ -149,6 +151,11 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`java.util.List<String>`,
 		`REFERENCE_READ`,
 		`@GetMapping("/reference/categories/{parentCategoryId}/child-count")`,
+		`ProductCategoryReferenceController`,
+		`ProductCategoryReferenceService`,
+		`ProductCategoryReferenceMapper`,
+		`product_category`,
+		`/public/reference/categories/`,
 		`CLEAN_ENUM_METHOD`,
 		`OrderStatusCatalogController`,
 		`OrderStatusCatalogServiceImpl`,
@@ -180,57 +187,51 @@ func Test180FinalMatrixCleanFixtureNavigatesCompleteSingleChain(t *testing.T) {
 		}
 	}
 
-	write("src/main/java/com/example/PublicProductCategoryReferenceController.java", `package com.example;
+	write("src/main/java/com/example/PublicDatabaseReadinessController.java", `package com.example;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class PublicProductCategoryReferenceController {
-    private final ProductCategoryReferenceService service;
-    public PublicProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
+public class PublicDatabaseReadinessController {
+    private final DatabaseReadinessService service;
+    public PublicDatabaseReadinessController(DatabaseReadinessService service) { this.service = service; }
 
-    @GetMapping("/public/reference/categories/{parentCategoryId}/child-count")
-    public long childCategoryCount(
-            @org.springframework.web.bind.annotation.PathVariable("parentCategoryId") long parentCategoryId) {
-        if (parentCategoryId <= 0) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid parent category id");
-        }
-        return service.countChildCategories(parentCategoryId);
+    @GetMapping("/public/readiness/database")
+    public boolean databaseReady() {
+        return service.databaseReady();
     }
 }
 `)
-	write("src/main/java/com/example/ProductCategoryReferenceService.java", `package com.example;
-public interface ProductCategoryReferenceService {
-    long countChildCategories(long parentCategoryId);
+	write("src/main/java/com/example/DatabaseReadinessService.java", `package com.example;
+public interface DatabaseReadinessService {
+    boolean databaseReady();
 }
 `)
-	write("src/main/java/com/example/ProductCategoryReferenceServiceImpl.java", `package com.example;
+	write("src/main/java/com/example/DatabaseReadinessServiceImpl.java", `package com.example;
 import org.springframework.stereotype.Service;
 
 @Service
-public class ProductCategoryReferenceServiceImpl implements ProductCategoryReferenceService {
-    private final ProductCategoryReferenceMapper mapper;
-    public ProductCategoryReferenceServiceImpl(ProductCategoryReferenceMapper mapper) { this.mapper = mapper; }
+public class DatabaseReadinessServiceImpl implements DatabaseReadinessService {
+    private final DatabaseReadinessMapper mapper;
+    public DatabaseReadinessServiceImpl(DatabaseReadinessMapper mapper) { this.mapper = mapper; }
 
-    public long countChildCategories(long parentCategoryId) {
-        long childCount = mapper.countChildCategories(parentCategoryId);
-        return childCount;
+    public boolean databaseReady() {
+        int result = mapper.ping();
+        return result == 1;
     }
 }
 `)
-	write("src/main/java/com/example/ProductCategoryReferenceMapper.java", `package com.example;
+	write("src/main/java/com/example/DatabaseReadinessMapper.java", `package com.example;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface ProductCategoryReferenceMapper {
-    long countChildCategories(
-        @org.apache.ibatis.annotations.Param("parentCategoryId") long parentCategoryId);
+public interface DatabaseReadinessMapper {
+    int ping();
 }
 `)
-	write("src/main/resources/mapper/ProductCategoryReferenceMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
-<mapper namespace="com.example.ProductCategoryReferenceMapper">
-  <select id="countChildCategories" resultType="long">SELECT COUNT(*) FROM product_category WHERE parent_id = #{parentCategoryId}</select>
+	write("src/main/resources/com/example/DatabaseReadinessMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.DatabaseReadinessMapper">
+  <select id="ping" resultType="int">SELECT 1</select>
 </mapper>
 `)
 
@@ -242,7 +243,7 @@ public interface ProductCategoryReferenceMapper {
 		context.Background(),
 		root,
 		started.RunID,
-		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "PublicProductCategoryReferenceController.childCategoryCount"},
+		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "PublicDatabaseReadinessController.databaseReady"},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -252,6 +253,16 @@ public interface ProductCategoryReferenceMapper {
 	}
 	if len(got.Chains[0].Nodes) < 4 {
 		t.Fatalf("clean matrix fixture must preserve Controller -> ServiceImpl -> Mapper -> Mapper XML nodes: %+v", got.Chains[0])
+	}
+	wantSQL := "src/main/resources/com/example/DatabaseReadinessMapper.xml"
+	foundSQL := false
+	for _, node := range got.Chains[0].Nodes {
+		if node.Role == "SQL" && node.Path == wantSQL && node.Symbol == "DatabaseReadinessMapper.ping" {
+			foundSQL = true
+		}
+	}
+	if !foundSQL {
+		t.Fatalf("clean matrix fixture must use co-located mapper XML without external mapper-locations config: %+v", got.Chains[0])
 	}
 }
 
