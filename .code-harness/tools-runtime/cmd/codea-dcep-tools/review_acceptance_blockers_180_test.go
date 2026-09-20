@@ -148,7 +148,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`WHERE id = #{categoryId}`,
 		`java.util.List<String>`,
 		`REFERENCE_READ`,
-		`/reference/categories/{parentCategoryId}/child-count`,
+		`@GetMapping("/reference/categories/{parentCategoryId}/child-count")`,
 		`CLEAN_ENUM_METHOD`,
 		`OrderStatusCatalogController`,
 		`OrderStatusCatalogServiceImpl`,
