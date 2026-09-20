@@ -23,17 +23,17 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_REFERENCE_METHOD = """    public String findCountryName(int numericCode) {
-        String name = mapper.findCountryName(numericCode);
-        return name;
+CLEAN_REFERENCE_METHOD = """    public java.util.List<String> findCategoryNames(long categoryId) {
+        java.util.List<String> names = mapper.findCategoryNames(categoryId);
+        return names;
     }
 """
-CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(int numericCode) {
-        String countryName = mapper.findCountryName(numericCode);
-        return countryName;
+CLEAN_REFERENCE_METHOD_CHANGED = """    public java.util.List<String> findCategoryNames(long categoryId) {
+        java.util.List<String> categoryNames = mapper.findCategoryNames(categoryId);
+        return categoryNames;
     }
 """
-CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE numeric_code = #{numericCode}"
+CLEAN_REFERENCE_SQL = "SELECT name FROM product_category WHERE id = #{categoryId}"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -225,67 +225,64 @@ public class OrderController {
         encoding="utf-8",
     )
     if clean_read:
-        (java / "IsoCountryReferenceController.java").write_text(
+        (java / "ProductCategoryReferenceController.java").write_text(
             """package com.example;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class IsoCountryReferenceController {
-    private final IsoCountryReferenceService service;
-    public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
+public class ProductCategoryReferenceController {
+    private final ProductCategoryReferenceService service;
+    public ProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/iso-countries/{numericCode}")
-    public String countryName(@org.springframework.web.bind.annotation.PathVariable("numericCode") int numericCode) {
-        if (numericCode < 1 || numericCode > 999) {
+    @GetMapping("/reference/categories/{categoryId}")
+    public java.util.List<String> categoryNames(
+            @org.springframework.web.bind.annotation.PathVariable("categoryId") long categoryId) {
+        if (categoryId <= 0) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO numeric country code");
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid category id");
         }
-        String countryName = service.findCountryName(numericCode);
-        if (countryName == null) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND, "country code not found");
-        }
-        return countryName;
+        return service.findCategoryNames(categoryId);
     }
 }
 """,
             encoding="utf-8",
         )
-        (java / "IsoCountryReferenceService.java").write_text(
-            "package com.example;\npublic interface IsoCountryReferenceService {\n"
-            "    String findCountryName(int numericCode);\n"
+        (java / "ProductCategoryReferenceService.java").write_text(
+            "package com.example;\npublic interface ProductCategoryReferenceService {\n"
+            "    java.util.List<String> findCategoryNames(long categoryId);\n"
             "}\n",
             encoding="utf-8",
         )
-        (java / "IsoCountryReferenceServiceImpl.java").write_text(
+        (java / "ProductCategoryReferenceServiceImpl.java").write_text(
             """package com.example;
 import org.springframework.stereotype.Service;
 
 @Service
-public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceService {
-    private final IsoCountryReferenceMapper mapper;
-    public IsoCountryReferenceServiceImpl(IsoCountryReferenceMapper mapper) { this.mapper = mapper; }
+public class ProductCategoryReferenceServiceImpl implements ProductCategoryReferenceService {
+    private final ProductCategoryReferenceMapper mapper;
+    public ProductCategoryReferenceServiceImpl(ProductCategoryReferenceMapper mapper) { this.mapper = mapper; }
 """ + CLEAN_REFERENCE_METHOD + "}\n",
             encoding="utf-8",
         )
-        (java / "IsoCountryReferenceMapper.java").write_text(
+        (java / "ProductCategoryReferenceMapper.java").write_text(
             """package com.example;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface IsoCountryReferenceMapper {
-    String findCountryName(@org.apache.ibatis.annotations.Param("numericCode") int numericCode);
+public interface ProductCategoryReferenceMapper {
+    java.util.List<String> findCategoryNames(
+        @org.apache.ibatis.annotations.Param("categoryId") long categoryId);
 }
 """,
             encoding="utf-8",
         )
-        (xml / "IsoCountryReferenceMapper.xml").write_text(
+        (xml / "ProductCategoryReferenceMapper.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<mapper namespace="com.example.IsoCountryReferenceMapper">\n'
-            f'  <select id="findCountryName" resultType="string">{CLEAN_REFERENCE_SQL}</select>\n'
+            '<mapper namespace="com.example.ProductCategoryReferenceMapper">\n'
+            f'  <select id="findCategoryNames" resultType="string">{CLEAN_REFERENCE_SQL}</select>\n'
             "</mapper>\n",
             encoding="utf-8",
         )
@@ -404,7 +401,7 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(safe_method in source, "safe Controller seed missing")
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
-        reference_impl = project / "src" / "main" / "java" / "com" / "example" / "IsoCountryReferenceServiceImpl.java"
+        reference_impl = project / "src" / "main" / "java" / "com" / "example" / "ProductCategoryReferenceServiceImpl.java"
         text = reference_impl.read_text(encoding="utf-8")
         host.require(CLEAN_REFERENCE_METHOD in text, "clean reference method seed missing")
         reference_impl.write_text(text.replace(CLEAN_REFERENCE_METHOD, CLEAN_REFERENCE_METHOD_CHANGED, 1), encoding="utf-8")
@@ -465,7 +462,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("IsoCountryReferenceController.countryName")
+            command_args.append("ProductCategoryReferenceController.categoryNames")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would

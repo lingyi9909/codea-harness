@@ -94,30 +94,30 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_REFERENCE_METHOD = """    public String findCountryName(int numericCode)`,
-		`String name = mapper.findCountryName(numericCode);`,
-		`CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(int numericCode)`,
-		`String countryName = mapper.findCountryName(numericCode);`,
-		`CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE numeric_code = #{numericCode}"`,
-		`IsoCountryReferenceController.java`,
-		`IsoCountryReferenceService.java`,
-		`IsoCountryReferenceServiceImpl.java`,
-		`IsoCountryReferenceMapper.java`,
-		`IsoCountryReferenceMapper.xml`,
-		`public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceService`,
-		`private final IsoCountryReferenceMapper mapper;`,
+		`CLEAN_REFERENCE_METHOD = """    public java.util.List<String> findCategoryNames(long categoryId)`,
+		`java.util.List<String> names = mapper.findCategoryNames(categoryId);`,
+		`CLEAN_REFERENCE_METHOD_CHANGED = """    public java.util.List<String> findCategoryNames(long categoryId)`,
+		`java.util.List<String> categoryNames = mapper.findCategoryNames(categoryId);`,
+		`CLEAN_REFERENCE_SQL = "SELECT name FROM product_category WHERE id = #{categoryId}"`,
+		`ProductCategoryReferenceController.java`,
+		`ProductCategoryReferenceService.java`,
+		`ProductCategoryReferenceServiceImpl.java`,
+		`ProductCategoryReferenceMapper.java`,
+		`ProductCategoryReferenceMapper.xml`,
+		`public class ProductCategoryReferenceServiceImpl implements ProductCategoryReferenceService`,
+		`private final ProductCategoryReferenceMapper mapper;`,
 		`@Mapper`,
-		`<mapper namespace="com.example.IsoCountryReferenceMapper">`,
-		`<select id="findCountryName" resultType="string">`,
+		`<mapper namespace="com.example.ProductCategoryReferenceMapper">`,
+		`<select id="findCategoryNames" resultType="string">`,
 		`@PreAuthorize("hasAuthority('REFERENCE_READ')")`,
-		`if (numericCode < 1 || numericCode > 999)`,
-		`String countryName = service.findCountryName(numericCode);`,
-		`HttpStatus.NOT_FOUND`,
-		`String findCountryName(@org.apache.ibatis.annotations.Param("numericCode") int numericCode);`,
-		`@GetMapping("/reference/iso-countries/{numericCode}")`,
+		`if (categoryId <= 0)`,
+		`return service.findCategoryNames(categoryId);`,
+		`java.util.List<String> findCategoryNames(`,
+		`@org.apache.ibatis.annotations.Param("categoryId") long categoryId`,
+		`@GetMapping("/reference/categories/{categoryId}")`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
-		`command_args.append("IsoCountryReferenceController.countryName")`,
-		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "IsoCountryReferenceServiceImpl.java"`,
+		`command_args.append("ProductCategoryReferenceController.categoryNames")`,
+		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "ProductCategoryReferenceServiceImpl.java"`,
 		`if scenario in {"early-stop", "timeout"}:`,
 		`mutate_for_scenario(project, "single-issue")`,
 		`command_args.append("OrderController")`,
@@ -140,6 +140,8 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`CLEAN_CATALOG_SQL`,
 		`active = TRUE`,
 		`reference.iso_country_codes`,
+		`iso_country_codes`,
+		`numericCode`,
 		`countActiveCountries`,
 		`.matches(`,
 		`CLEAN_ENUM_METHOD`,
@@ -173,62 +175,59 @@ func Test180FinalMatrixCleanFixtureNavigatesCompleteSingleChain(t *testing.T) {
 		}
 	}
 
-	write("src/main/java/com/example/IsoCountryReferenceController.java", `package com.example;
+	write("src/main/java/com/example/ProductCategoryReferenceController.java", `package com.example;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class IsoCountryReferenceController {
-    private final IsoCountryReferenceService service;
-    public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
+public class ProductCategoryReferenceController {
+    private final ProductCategoryReferenceService service;
+    public ProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/iso-countries/{numericCode}")
-    public String countryName(@org.springframework.web.bind.annotation.PathVariable("numericCode") int numericCode) {
-        if (numericCode < 1 || numericCode > 999) {
+    @GetMapping("/reference/categories/{categoryId}")
+    public java.util.List<String> categoryNames(
+            @org.springframework.web.bind.annotation.PathVariable("categoryId") long categoryId) {
+        if (categoryId <= 0) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO numeric country code");
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid category id");
         }
-        String countryName = service.findCountryName(numericCode);
-        if (countryName == null) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND, "country code not found");
-        }
-        return countryName;
+        return service.findCategoryNames(categoryId);
     }
 }
 `)
-	write("src/main/java/com/example/IsoCountryReferenceService.java", `package com.example;
-public interface IsoCountryReferenceService {
-    String findCountryName(int numericCode);
+	write("src/main/java/com/example/ProductCategoryReferenceService.java", `package com.example;
+public interface ProductCategoryReferenceService {
+    java.util.List<String> findCategoryNames(long categoryId);
 }
 `)
-	write("src/main/java/com/example/IsoCountryReferenceServiceImpl.java", `package com.example;
+	write("src/main/java/com/example/ProductCategoryReferenceServiceImpl.java", `package com.example;
 import org.springframework.stereotype.Service;
 
 @Service
-public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceService {
-    private final IsoCountryReferenceMapper mapper;
-    public IsoCountryReferenceServiceImpl(IsoCountryReferenceMapper mapper) { this.mapper = mapper; }
+public class ProductCategoryReferenceServiceImpl implements ProductCategoryReferenceService {
+    private final ProductCategoryReferenceMapper mapper;
+    public ProductCategoryReferenceServiceImpl(ProductCategoryReferenceMapper mapper) { this.mapper = mapper; }
 
-    public String findCountryName(int numericCode) {
-        String countryName = mapper.findCountryName(numericCode);
-        return countryName;
+    public java.util.List<String> findCategoryNames(long categoryId) {
+        java.util.List<String> categoryNames = mapper.findCategoryNames(categoryId);
+        return categoryNames;
     }
 }
 `)
-	write("src/main/java/com/example/IsoCountryReferenceMapper.java", `package com.example;
+	write("src/main/java/com/example/ProductCategoryReferenceMapper.java", `package com.example;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface IsoCountryReferenceMapper {
-    String findCountryName(@org.apache.ibatis.annotations.Param("numericCode") int numericCode);
+public interface ProductCategoryReferenceMapper {
+    java.util.List<String> findCategoryNames(
+        @org.apache.ibatis.annotations.Param("categoryId") long categoryId);
 }
 `)
-	write("src/main/resources/mapper/IsoCountryReferenceMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
-<mapper namespace="com.example.IsoCountryReferenceMapper">
-  <select id="findCountryName" resultType="string">SELECT country_name FROM iso_country_codes WHERE numeric_code = #{numericCode}</select>
+	write("src/main/resources/mapper/ProductCategoryReferenceMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.ProductCategoryReferenceMapper">
+  <select id="findCategoryNames" resultType="string">SELECT name FROM product_category WHERE id = #{categoryId}</select>
 </mapper>
 `)
 
@@ -240,7 +239,7 @@ public interface IsoCountryReferenceMapper {
 		context.Background(),
 		root,
 		started.RunID,
-		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "IsoCountryReferenceController.countryName"},
+		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "ProductCategoryReferenceController.categoryNames"},
 	)
 	if err != nil {
 		t.Fatal(err)
