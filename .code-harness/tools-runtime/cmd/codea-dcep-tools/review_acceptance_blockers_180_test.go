@@ -90,16 +90,19 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_PROBE_SQL = "SELECT 1"`,
-		`CLEAN_PROBE_SQL_CHANGED = "SELECT 1 AS probe_value"`,
-		`@PreAuthorize("hasAuthority('ORDER_READ')")`,
-		`@GetMapping("/orders/review-probe")`,
-		`public int reviewProbe()`,
-		`return service.reviewProbe();`,
-		`public int reviewProbe() { return mapper.reviewProbe(); }`,
-		`<select id="reviewProbe" resultType="int">`,
-		`write_fixture(project, multi, clean_probe=(scenario == "single-clean"))`,
-		`command_args.append("OrderController.reviewProbe")`,
+		`CLEAN_COUNT_SQL = "SELECT COUNT(*) FROM orders WHERE tenant_id = #{tenantId}"`,
+		`CLEAN_COUNT_SQL_CHANGED = "SELECT COUNT(*) AS order_count FROM orders WHERE tenant_id = #{tenantId}"`,
+		`@PreAuthorize("hasAuthority('ORDER_READ') and principal != null and principal.tenantId != null and principal.tenantId != ''")`,
+		`@GetMapping("/orders/count")`,
+		`public long countOrders(@AuthenticationPrincipal(expression = "tenantId") String tenantId)`,
+		`return service.countOrders(tenantId);`,
+		`public long countOrders(String tenantId) { return mapper.countOrders(tenantId); }`,
+		`long countOrders(@Param("tenantId") String tenantId);`,
+		`<select id="countOrders" resultType="long">`,
+		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
+		`command_args.append("OrderController.countOrders")`,
+		`if scenario in {"early-stop", "timeout"}:`,
+		`mutate_for_scenario(project, "single-issue")`,
 		`command_args.append("OrderController")`,
 		`host.require(scope.get("selectedIds") == ["C1"]`,
 		`safe_method = """    @PreAuthorize`,
@@ -111,6 +114,16 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	if strings.Contains(text, "service.cancel(") {
 		t.Fatal("multi-chain fixture must keep updateStatus lexically first so seeded issue remains C1")
+	}
+	for _, forbidden := range []string{
+		`/orders/review-probe`,
+		`reviewProbe`,
+		`CLEAN_PROBE_SQL`,
+		`else "single-clean"`,
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("final real-model fixture must not regress to debug-like or invalid clean setup %q", forbidden)
+		}
 	}
 }
 

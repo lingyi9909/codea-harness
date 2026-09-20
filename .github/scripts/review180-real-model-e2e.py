@@ -23,8 +23,8 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_PROBE_SQL = "SELECT 1"
-CLEAN_PROBE_SQL_CHANGED = "SELECT 1 AS probe_value"
+CLEAN_COUNT_SQL = "SELECT COUNT(*) FROM orders WHERE tenant_id = #{tenantId}"
+CLEAN_COUNT_SQL_CHANGED = "SELECT COUNT(*) AS order_count FROM orders WHERE tenant_id = #{tenantId}"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -114,7 +114,7 @@ def validate_report(project: Path, report: Path, runtime: dict):
     return digest
 
 
-def write_fixture(project: Path, multi: bool, clean_probe: bool = False):
+def write_fixture(project: Path, multi: bool, clean_read: bool = False):
     java = project / "src" / "main" / "java" / "com" / "example"
     xml = project / "src" / "main" / "resources" / "mapper"
     java.mkdir(parents=True, exist_ok=True)
@@ -125,18 +125,18 @@ def write_fixture(project: Path, multi: bool, clean_probe: bool = False):
     impl_extra = ""
     mapper_extra = ""
     sql_extra = ""
-    if clean_probe:
+    if clean_read:
         controller_extra += '''
-    @PreAuthorize("hasAuthority('ORDER_READ')")
-    @GetMapping("/orders/review-probe")
-    public int reviewProbe() {
-        return service.reviewProbe();
+    @PreAuthorize("hasAuthority('ORDER_READ') and principal != null and principal.tenantId != null and principal.tenantId != ''")
+    @GetMapping("/orders/count")
+    public long countOrders(@AuthenticationPrincipal(expression = "tenantId") String tenantId) {
+        return service.countOrders(tenantId);
     }
 '''
-        service_extra += "    int reviewProbe();\n"
-        impl_extra += "    public int reviewProbe() { return mapper.reviewProbe(); }\n"
-        mapper_extra += "    int reviewProbe();\n"
-        sql_extra += f'  <select id="reviewProbe" resultType="int">{CLEAN_PROBE_SQL}</select>\n'
+        service_extra += "    long countOrders(String tenantId);\n"
+        impl_extra += "    public long countOrders(String tenantId) { return mapper.countOrders(tenantId); }\n"
+        mapper_extra += "    long countOrders(@Param(\"tenantId\") String tenantId);\n"
+        sql_extra += f'  <select id="countOrders" resultType="long">{CLEAN_COUNT_SQL}</select>\n'
     if multi:
         controller_extra = '''
     @PreAuthorize("hasAuthority('ORDER_WRITE') and principal != null and principal.tenantId != null and principal.tenantId != ''")
@@ -343,8 +343,8 @@ def mutate_for_scenario(project: Path, scenario: str):
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
         text = xml.read_text(encoding="utf-8")
-        host.require(CLEAN_PROBE_SQL in text, "clean probe SQL seed missing")
-        xml.write_text(text.replace(CLEAN_PROBE_SQL, CLEAN_PROBE_SQL_CHANGED, 1), encoding="utf-8")
+        host.require(CLEAN_COUNT_SQL in text, "clean count SQL seed missing")
+        xml.write_text(text.replace(CLEAN_COUNT_SQL, CLEAN_COUNT_SQL_CHANGED, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
 
@@ -388,7 +388,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         temp = Path(raw)
         project = temp / "project"
         extract_install(args.install_zip, project)
-        write_fixture(project, multi, clean_probe=(scenario == "single-clean"))
+        write_fixture(project, multi, clean_read=(scenario == "single-clean"))
         env = make_env(temp, project, args.sdk_root, 16384)
         env["PATH"] = str(args.opencode.parent) + os.pathsep + env.get("PATH", "")
         init_git(project, env)
@@ -402,7 +402,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("OrderController.reviewProbe")
+            command_args.append("OrderController.countOrders")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would
@@ -534,7 +534,8 @@ def negative_run(args, scenario: str, output_limit: int = 16384, timeout: int = 
         env = make_env(temp, project, args.sdk_root, output_limit)
         env["PATH"] = str(args.opencode.parent) + os.pathsep + env.get("PATH", "")
         init_git(project, env)
-        mutate_for_scenario(project, "single-issue" if scenario in {"early-stop", "timeout"} else "single-clean")
+        if scenario in {"early-stop", "timeout"}:
+            mutate_for_scenario(project, "single-issue")
         if remove_ast:
             (project / ".code-harness" / "bin" / "ast-grep.exe").unlink()
 
