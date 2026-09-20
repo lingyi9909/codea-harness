@@ -94,28 +94,28 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_READINESS_METHOD = """    public boolean databaseReady()`,
-		`int probe = mapper.ping();`,
-		`CLEAN_READINESS_METHOD_CHANGED = """    public boolean databaseReady()`,
-		`int result = mapper.ping();`,
-		`CLEAN_READINESS_SQL = "SELECT 1"`,
-		`PublicDatabaseReadinessController.java`,
-		`DatabaseReadinessService.java`,
-		`DatabaseReadinessServiceImpl.java`,
-		`DatabaseReadinessMapper.java`,
-		`DatabaseReadinessMapper.xml`,
-		`public class DatabaseReadinessServiceImpl implements DatabaseReadinessService`,
-		`private final DatabaseReadinessMapper mapper;`,
+		`CLEAN_LITERAL_METHOD = """    public int literalOne()`,
+		`int value = mapper.literalOne();`,
+		`CLEAN_LITERAL_METHOD_CHANGED = """    public int literalOne()`,
+		`int literal = mapper.literalOne();`,
+		`CLEAN_LITERAL_SQL = "SELECT 1"`,
+		`PublicSqlLiteralController.java`,
+		`SqlLiteralService.java`,
+		`SqlLiteralServiceImpl.java`,
+		`SqlLiteralMapper.java`,
+		`SqlLiteralMapper.xml`,
+		`public class SqlLiteralServiceImpl implements SqlLiteralService`,
+		`private final SqlLiteralMapper mapper;`,
 		`@Mapper`,
 		`src" / "main" / "resources" / "com" / "example"`,
-		`<mapper namespace="com.example.DatabaseReadinessMapper">`,
-		`<select id="ping" resultType="int">`,
-		`@GetMapping("/public/readiness/database")`,
-		`return service.databaseReady();`,
-		`int ping();`,
+		`<mapper namespace="com.example.SqlLiteralMapper">`,
+		`<select id="literalOne" resultType="int">`,
+		`@GetMapping("/public/reference/sql/literal-one")`,
+		`return service.literalOne();`,
+		`int literalOne();`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
-		`command_args.append("PublicDatabaseReadinessController.databaseReady")`,
-		`readiness_impl = project / "src" / "main" / "java" / "com" / "example" / "DatabaseReadinessServiceImpl.java"`,
+		`command_args.append("PublicSqlLiteralController.literalOne")`,
+		`literal_impl = project / "src" / "main" / "java" / "com" / "example" / "SqlLiteralServiceImpl.java"`,
 		`not result.get("pendingRisks", [])`,
 		`not result.get("gaps", [])`,
 		`result.get("coverage") == "COMPLETE"`,
@@ -156,6 +156,10 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`ProductCategoryReferenceMapper`,
 		`product_category`,
 		`/public/reference/categories/`,
+		`DatabaseReadinessController`,
+		`DatabaseReadinessService`,
+		`DatabaseReadinessMapper`,
+		`/public/readiness/database`,
 		`CLEAN_ENUM_METHOD`,
 		`OrderStatusCatalogController`,
 		`OrderStatusCatalogServiceImpl`,
@@ -187,51 +191,51 @@ func Test180FinalMatrixCleanFixtureNavigatesCompleteSingleChain(t *testing.T) {
 		}
 	}
 
-	write("src/main/java/com/example/PublicDatabaseReadinessController.java", `package com.example;
+	write("src/main/java/com/example/PublicSqlLiteralController.java", `package com.example;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class PublicDatabaseReadinessController {
-    private final DatabaseReadinessService service;
-    public PublicDatabaseReadinessController(DatabaseReadinessService service) { this.service = service; }
+public class PublicSqlLiteralController {
+    private final SqlLiteralService service;
+    public PublicSqlLiteralController(SqlLiteralService service) { this.service = service; }
 
-    @GetMapping("/public/readiness/database")
-    public boolean databaseReady() {
-        return service.databaseReady();
+    @GetMapping("/public/reference/sql/literal-one")
+    public int literalOne() {
+        return service.literalOne();
     }
 }
 `)
-	write("src/main/java/com/example/DatabaseReadinessService.java", `package com.example;
-public interface DatabaseReadinessService {
-    boolean databaseReady();
+	write("src/main/java/com/example/SqlLiteralService.java", `package com.example;
+public interface SqlLiteralService {
+    int literalOne();
 }
 `)
-	write("src/main/java/com/example/DatabaseReadinessServiceImpl.java", `package com.example;
+	write("src/main/java/com/example/SqlLiteralServiceImpl.java", `package com.example;
 import org.springframework.stereotype.Service;
 
 @Service
-public class DatabaseReadinessServiceImpl implements DatabaseReadinessService {
-    private final DatabaseReadinessMapper mapper;
-    public DatabaseReadinessServiceImpl(DatabaseReadinessMapper mapper) { this.mapper = mapper; }
+public class SqlLiteralServiceImpl implements SqlLiteralService {
+    private final SqlLiteralMapper mapper;
+    public SqlLiteralServiceImpl(SqlLiteralMapper mapper) { this.mapper = mapper; }
 
-    public boolean databaseReady() {
-        int result = mapper.ping();
-        return result == 1;
+    public int literalOne() {
+        int literal = mapper.literalOne();
+        return literal;
     }
 }
 `)
-	write("src/main/java/com/example/DatabaseReadinessMapper.java", `package com.example;
+	write("src/main/java/com/example/SqlLiteralMapper.java", `package com.example;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface DatabaseReadinessMapper {
-    int ping();
+public interface SqlLiteralMapper {
+    int literalOne();
 }
 `)
-	write("src/main/resources/com/example/DatabaseReadinessMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
-<mapper namespace="com.example.DatabaseReadinessMapper">
-  <select id="ping" resultType="int">SELECT 1</select>
+	write("src/main/resources/com/example/SqlLiteralMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.SqlLiteralMapper">
+  <select id="literalOne" resultType="int">SELECT 1</select>
 </mapper>
 `)
 
@@ -243,7 +247,7 @@ public interface DatabaseReadinessMapper {
 		context.Background(),
 		root,
 		started.RunID,
-		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "PublicDatabaseReadinessController.databaseReady"},
+		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "PublicSqlLiteralController.literalOne"},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -254,10 +258,10 @@ public interface DatabaseReadinessMapper {
 	if len(got.Chains[0].Nodes) < 4 {
 		t.Fatalf("clean matrix fixture must preserve Controller -> ServiceImpl -> Mapper -> Mapper XML nodes: %+v", got.Chains[0])
 	}
-	wantSQL := "src/main/resources/com/example/DatabaseReadinessMapper.xml"
+	wantSQL := "src/main/resources/com/example/SqlLiteralMapper.xml"
 	foundSQL := false
 	for _, node := range got.Chains[0].Nodes {
-		if node.Role == "SQL" && node.Path == wantSQL && node.Symbol == "DatabaseReadinessMapper.ping" {
+		if node.Role == "SQL" && node.Path == wantSQL && node.Symbol == "SqlLiteralMapper.literalOne" {
 			foundSQL = true
 		}
 	}

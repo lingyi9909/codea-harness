@@ -23,17 +23,17 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_READINESS_METHOD = """    public boolean databaseReady() {
-        int probe = mapper.ping();
-        return probe == 1;
+CLEAN_LITERAL_METHOD = """    public int literalOne() {
+        int value = mapper.literalOne();
+        return value;
     }
 """
-CLEAN_READINESS_METHOD_CHANGED = """    public boolean databaseReady() {
-        int result = mapper.ping();
-        return result == 1;
+CLEAN_LITERAL_METHOD_CHANGED = """    public int literalOne() {
+        int literal = mapper.literalOne();
+        return literal;
     }
 """
-CLEAN_READINESS_SQL = "SELECT 1"
+CLEAN_LITERAL_SQL = "SELECT 1"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -225,61 +225,60 @@ public class OrderController {
         encoding="utf-8",
     )
     if clean_read:
-        (java / "PublicDatabaseReadinessController.java").write_text(
+        (java / "PublicSqlLiteralController.java").write_text(
             """package com.example;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class PublicDatabaseReadinessController {
-    private final DatabaseReadinessService service;
-    public PublicDatabaseReadinessController(DatabaseReadinessService service) { this.service = service; }
+public class PublicSqlLiteralController {
+    private final SqlLiteralService service;
+    public PublicSqlLiteralController(SqlLiteralService service) { this.service = service; }
 
-    @GetMapping("/public/readiness/database")
-    public boolean databaseReady() {
-        return service.databaseReady();
+    @GetMapping("/public/reference/sql/literal-one")
+    public int literalOne() {
+        return service.literalOne();
     }
 }
 """,
             encoding="utf-8",
         )
-        (java / "DatabaseReadinessService.java").write_text(
-            "package com.example;\npublic interface DatabaseReadinessService {\n"
-            "    boolean databaseReady();\n"
+        (java / "SqlLiteralService.java").write_text(
+            "package com.example;\npublic interface SqlLiteralService {\n"
+            "    int literalOne();\n"
             "}\n",
             encoding="utf-8",
         )
-        (java / "DatabaseReadinessServiceImpl.java").write_text(
+        (java / "SqlLiteralServiceImpl.java").write_text(
             """package com.example;
 import org.springframework.stereotype.Service;
 
 @Service
-public class DatabaseReadinessServiceImpl implements DatabaseReadinessService {
-    private final DatabaseReadinessMapper mapper;
-    public DatabaseReadinessServiceImpl(DatabaseReadinessMapper mapper) { this.mapper = mapper; }
-""" + CLEAN_READINESS_METHOD + "}\n",
+public class SqlLiteralServiceImpl implements SqlLiteralService {
+    private final SqlLiteralMapper mapper;
+    public SqlLiteralServiceImpl(SqlLiteralMapper mapper) { this.mapper = mapper; }
+""" + CLEAN_LITERAL_METHOD + "}\n",
             encoding="utf-8",
         )
-        (java / "DatabaseReadinessMapper.java").write_text(
+        (java / "SqlLiteralMapper.java").write_text(
             """package com.example;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface DatabaseReadinessMapper {
-    int ping();
+public interface SqlLiteralMapper {
+    int literalOne();
 }
 """,
             encoding="utf-8",
         )
-        # MyBatis loads a mapper XML co-located at the mapper interface classpath
-        # name when that @Mapper is registered. Keeping this resource under
-        # com/example removes any dependency on an external mapper-locations rule.
+        # Co-locate mapper XML with the mapper interface classpath name so no
+        # external mapper-locations configuration is required.
         clean_xml = project / "src" / "main" / "resources" / "com" / "example"
         clean_xml.mkdir(parents=True, exist_ok=True)
-        (clean_xml / "DatabaseReadinessMapper.xml").write_text(
+        (clean_xml / "SqlLiteralMapper.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<mapper namespace="com.example.DatabaseReadinessMapper">\n'
-            f'  <select id="ping" resultType="int">{CLEAN_READINESS_SQL}</select>\n'
+            '<mapper namespace="com.example.SqlLiteralMapper">\n'
+            f'  <select id="literalOne" resultType="int">{CLEAN_LITERAL_SQL}</select>\n'
             "</mapper>\n",
             encoding="utf-8",
         )
@@ -398,10 +397,10 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(safe_method in source, "safe Controller seed missing")
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
-        readiness_impl = project / "src" / "main" / "java" / "com" / "example" / "DatabaseReadinessServiceImpl.java"
-        text = readiness_impl.read_text(encoding="utf-8")
-        host.require(CLEAN_READINESS_METHOD in text, "clean readiness method seed missing")
-        readiness_impl.write_text(text.replace(CLEAN_READINESS_METHOD, CLEAN_READINESS_METHOD_CHANGED, 1), encoding="utf-8")
+        literal_impl = project / "src" / "main" / "java" / "com" / "example" / "SqlLiteralServiceImpl.java"
+        text = literal_impl.read_text(encoding="utf-8")
+        host.require(CLEAN_LITERAL_METHOD in text, "clean literal method seed missing")
+        literal_impl.write_text(text.replace(CLEAN_LITERAL_METHOD, CLEAN_LITERAL_METHOD_CHANGED, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
 
@@ -459,7 +458,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("PublicDatabaseReadinessController.databaseReady")
+            command_args.append("PublicSqlLiteralController.literalOne")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would
