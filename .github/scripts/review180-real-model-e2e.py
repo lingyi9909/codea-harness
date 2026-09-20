@@ -23,17 +23,17 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_REFERENCE_METHOD = """    public String findCountryName(String code) {
-        String name = mapper.findCountryName(code);
+CLEAN_REFERENCE_METHOD = """    public String findCountryName(int numericCode) {
+        String name = mapper.findCountryName(numericCode);
         return name;
     }
 """
-CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(String code) {
-        String countryName = mapper.findCountryName(code);
+CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(int numericCode) {
+        String countryName = mapper.findCountryName(numericCode);
         return countryName;
     }
 """
-CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE alpha2_code = #{code}"
+CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE numeric_code = #{numericCode}"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -237,13 +237,13 @@ public class IsoCountryReferenceController {
     public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/iso-countries/{code}")
-    public String countryName(@org.springframework.web.bind.annotation.PathVariable("code") String code) {
-        if (code == null || !code.matches("[A-Z]{2}")) {
+    @GetMapping("/reference/iso-countries/{numericCode}")
+    public String countryName(@org.springframework.web.bind.annotation.PathVariable("numericCode") int numericCode) {
+        if (numericCode < 1 || numericCode > 999) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO country code");
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO numeric country code");
         }
-        String countryName = service.findCountryName(code);
+        String countryName = service.findCountryName(numericCode);
         if (countryName == null) {
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.NOT_FOUND, "country code not found");
@@ -256,7 +256,7 @@ public class IsoCountryReferenceController {
         )
         (java / "IsoCountryReferenceService.java").write_text(
             "package com.example;\npublic interface IsoCountryReferenceService {\n"
-            "    String findCountryName(String code);\n"
+            "    String findCountryName(int numericCode);\n"
             "}\n",
             encoding="utf-8",
         )
@@ -277,7 +277,7 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface IsoCountryReferenceMapper {
-    String findCountryName(@org.apache.ibatis.annotations.Param("code") String code);
+    String findCountryName(@org.apache.ibatis.annotations.Param("numericCode") int numericCode);
 }
 """,
             encoding="utf-8",

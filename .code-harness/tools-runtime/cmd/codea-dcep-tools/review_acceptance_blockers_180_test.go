@@ -94,11 +94,11 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_REFERENCE_METHOD = """    public String findCountryName(String code)`,
-		`String name = mapper.findCountryName(code);`,
-		`CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(String code)`,
-		`String countryName = mapper.findCountryName(code);`,
-		`CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE alpha2_code = #{code}"`,
+		`CLEAN_REFERENCE_METHOD = """    public String findCountryName(int numericCode)`,
+		`String name = mapper.findCountryName(numericCode);`,
+		`CLEAN_REFERENCE_METHOD_CHANGED = """    public String findCountryName(int numericCode)`,
+		`String countryName = mapper.findCountryName(numericCode);`,
+		`CLEAN_REFERENCE_SQL = "SELECT country_name FROM iso_country_codes WHERE numeric_code = #{numericCode}"`,
 		`IsoCountryReferenceController.java`,
 		`IsoCountryReferenceService.java`,
 		`IsoCountryReferenceServiceImpl.java`,
@@ -110,11 +110,11 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`<mapper namespace="com.example.IsoCountryReferenceMapper">`,
 		`<select id="findCountryName" resultType="string">`,
 		`@PreAuthorize("hasAuthority('REFERENCE_READ')")`,
-		`if (code == null || !code.matches("[A-Z]{2}"))`,
-		`String countryName = service.findCountryName(code);`,
+		`if (numericCode < 1 || numericCode > 999)`,
+		`String countryName = service.findCountryName(numericCode);`,
 		`HttpStatus.NOT_FOUND`,
-		`String findCountryName(@org.apache.ibatis.annotations.Param("code") String code);`,
-		`@GetMapping("/reference/iso-countries/{code}")`,
+		`String findCountryName(@org.apache.ibatis.annotations.Param("numericCode") int numericCode);`,
+		`@GetMapping("/reference/iso-countries/{numericCode}")`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
 		`command_args.append("IsoCountryReferenceController.countryName")`,
 		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "IsoCountryReferenceServiceImpl.java"`,
@@ -141,6 +141,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`active = TRUE`,
 		`reference.iso_country_codes`,
 		`countActiveCountries`,
+		`.matches(`,
 		`CLEAN_ENUM_METHOD`,
 		`OrderStatusCatalogController`,
 		`OrderStatusCatalogServiceImpl`,
@@ -183,13 +184,13 @@ public class IsoCountryReferenceController {
     public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/iso-countries/{code}")
-    public String countryName(@org.springframework.web.bind.annotation.PathVariable("code") String code) {
-        if (code == null || !code.matches("[A-Z]{2}")) {
+    @GetMapping("/reference/iso-countries/{numericCode}")
+    public String countryName(@org.springframework.web.bind.annotation.PathVariable("numericCode") int numericCode) {
+        if (numericCode < 1 || numericCode > 999) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO country code");
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid ISO numeric country code");
         }
-        String countryName = service.findCountryName(code);
+        String countryName = service.findCountryName(numericCode);
         if (countryName == null) {
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.NOT_FOUND, "country code not found");
@@ -200,7 +201,7 @@ public class IsoCountryReferenceController {
 `)
 	write("src/main/java/com/example/IsoCountryReferenceService.java", `package com.example;
 public interface IsoCountryReferenceService {
-    String findCountryName(String code);
+    String findCountryName(int numericCode);
 }
 `)
 	write("src/main/java/com/example/IsoCountryReferenceServiceImpl.java", `package com.example;
@@ -211,8 +212,8 @@ public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceServic
     private final IsoCountryReferenceMapper mapper;
     public IsoCountryReferenceServiceImpl(IsoCountryReferenceMapper mapper) { this.mapper = mapper; }
 
-    public String findCountryName(String code) {
-        String countryName = mapper.findCountryName(code);
+    public String findCountryName(int numericCode) {
+        String countryName = mapper.findCountryName(numericCode);
         return countryName;
     }
 }
@@ -222,12 +223,12 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface IsoCountryReferenceMapper {
-    String findCountryName(@org.apache.ibatis.annotations.Param("code") String code);
+    String findCountryName(@org.apache.ibatis.annotations.Param("numericCode") int numericCode);
 }
 `)
 	write("src/main/resources/mapper/IsoCountryReferenceMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <mapper namespace="com.example.IsoCountryReferenceMapper">
-  <select id="findCountryName" resultType="string">SELECT country_name FROM iso_country_codes WHERE alpha2_code = #{code}</select>
+  <select id="findCountryName" resultType="string">SELECT country_name FROM iso_country_codes WHERE numeric_code = #{numericCode}</select>
 </mapper>
 `)
 
