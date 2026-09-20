@@ -23,6 +23,8 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
+CLEAN_PROBE_SQL = "SELECT 1"
+CLEAN_PROBE_SQL_CHANGED = "SELECT 1 AS probe_value"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -112,7 +114,7 @@ def validate_report(project: Path, report: Path, runtime: dict):
     return digest
 
 
-def write_fixture(project: Path, multi: bool):
+def write_fixture(project: Path, multi: bool, clean_probe: bool = False):
     java = project / "src" / "main" / "java" / "com" / "example"
     xml = project / "src" / "main" / "resources" / "mapper"
     java.mkdir(parents=True, exist_ok=True)
@@ -123,6 +125,18 @@ def write_fixture(project: Path, multi: bool):
     impl_extra = ""
     mapper_extra = ""
     sql_extra = ""
+    if clean_probe:
+        controller_extra += '''
+    @PreAuthorize("hasAuthority('ORDER_READ')")
+    @GetMapping("/orders/review-probe")
+    public int reviewProbe() {
+        return service.reviewProbe();
+    }
+'''
+        service_extra += "    int reviewProbe();\n"
+        impl_extra += "    public int reviewProbe() { return mapper.reviewProbe(); }\n"
+        mapper_extra += "    int reviewProbe();\n"
+        sql_extra += f'  <select id="reviewProbe" resultType="int">{CLEAN_PROBE_SQL}</select>\n'
     if multi:
         controller_extra = '''
     @PreAuthorize("hasAuthority('ORDER_WRITE') and principal != null and principal.tenantId != null and principal.tenantId != ''")
@@ -140,6 +154,7 @@ def write_fixture(project: Path, multi: bool):
         """package com.example;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -327,11 +342,9 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(safe_method in source, "safe Controller seed missing")
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
-        text = controller.read_text(encoding="utf-8")
-        before = 'throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported status");'
-        after = 'throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status must be PAID or CANCELLED");'
-        host.require(before in text, "safe explicit status validation seed missing")
-        controller.write_text(text.replace(before, after, 1), encoding="utf-8")
+        text = xml.read_text(encoding="utf-8")
+        host.require(CLEAN_PROBE_SQL in text, "clean probe SQL seed missing")
+        xml.write_text(text.replace(CLEAN_PROBE_SQL, CLEAN_PROBE_SQL_CHANGED, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
 
@@ -375,7 +388,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         temp = Path(raw)
         project = temp / "project"
         extract_install(args.install_zip, project)
-        write_fixture(project, multi)
+        write_fixture(project, multi, clean_probe=(scenario == "single-clean"))
         env = make_env(temp, project, args.sdk_root, 16384)
         env["PATH"] = str(args.opencode.parent) + os.pathsep + env.get("PATH", "")
         init_git(project, env)
@@ -388,6 +401,8 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         command_args = ["--command", "harness-review"]
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
+        elif scenario == "single-clean":
+            command_args.append("OrderController.reviewProbe")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would
