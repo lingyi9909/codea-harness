@@ -23,17 +23,17 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_REFERENCE_METHOD = """    public java.util.List<String> findCategoryNames(long categoryId) {
-        java.util.List<String> names = mapper.findCategoryNames(categoryId);
-        return names;
+CLEAN_REFERENCE_METHOD = """    public long countChildCategories(long parentCategoryId) {
+        long count = mapper.countChildCategories(parentCategoryId);
+        return count;
     }
 """
-CLEAN_REFERENCE_METHOD_CHANGED = """    public java.util.List<String> findCategoryNames(long categoryId) {
-        java.util.List<String> categoryNames = mapper.findCategoryNames(categoryId);
-        return categoryNames;
+CLEAN_REFERENCE_METHOD_CHANGED = """    public long countChildCategories(long parentCategoryId) {
+        long childCount = mapper.countChildCategories(parentCategoryId);
+        return childCount;
     }
 """
-CLEAN_REFERENCE_SQL = "SELECT name FROM product_category WHERE id = #{categoryId}"
+CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM product_category WHERE parent_id = #{parentCategoryId}"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -237,14 +237,14 @@ public class ProductCategoryReferenceController {
     public ProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/categories/{categoryId}")
-    public java.util.List<String> categoryNames(
-            @org.springframework.web.bind.annotation.PathVariable("categoryId") long categoryId) {
-        if (categoryId <= 0) {
+    @GetMapping("/reference/categories/{parentCategoryId}/child-count")
+    public long childCategoryCount(
+            @org.springframework.web.bind.annotation.PathVariable("parentCategoryId") long parentCategoryId) {
+        if (parentCategoryId <= 0) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid category id");
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid parent category id");
         }
-        return service.findCategoryNames(categoryId);
+        return service.countChildCategories(parentCategoryId);
     }
 }
 """,
@@ -252,7 +252,7 @@ public class ProductCategoryReferenceController {
         )
         (java / "ProductCategoryReferenceService.java").write_text(
             "package com.example;\npublic interface ProductCategoryReferenceService {\n"
-            "    java.util.List<String> findCategoryNames(long categoryId);\n"
+            "    long countChildCategories(long parentCategoryId);\n"
             "}\n",
             encoding="utf-8",
         )
@@ -273,8 +273,8 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface ProductCategoryReferenceMapper {
-    java.util.List<String> findCategoryNames(
-        @org.apache.ibatis.annotations.Param("categoryId") long categoryId);
+    long countChildCategories(
+        @org.apache.ibatis.annotations.Param("parentCategoryId") long parentCategoryId);
 }
 """,
             encoding="utf-8",
@@ -282,7 +282,7 @@ public interface ProductCategoryReferenceMapper {
         (xml / "ProductCategoryReferenceMapper.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<mapper namespace="com.example.ProductCategoryReferenceMapper">\n'
-            f'  <select id="findCategoryNames" resultType="string">{CLEAN_REFERENCE_SQL}</select>\n'
+            f'  <select id="countChildCategories" resultType="long">{CLEAN_REFERENCE_SQL}</select>\n'
             "</mapper>\n",
             encoding="utf-8",
         )
@@ -462,7 +462,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("ProductCategoryReferenceController.categoryNames")
+            command_args.append("ProductCategoryReferenceController.childCategoryCount")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would

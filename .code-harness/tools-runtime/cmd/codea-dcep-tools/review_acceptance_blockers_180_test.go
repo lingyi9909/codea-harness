@@ -94,11 +94,11 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_REFERENCE_METHOD = """    public java.util.List<String> findCategoryNames(long categoryId)`,
-		`java.util.List<String> names = mapper.findCategoryNames(categoryId);`,
-		`CLEAN_REFERENCE_METHOD_CHANGED = """    public java.util.List<String> findCategoryNames(long categoryId)`,
-		`java.util.List<String> categoryNames = mapper.findCategoryNames(categoryId);`,
-		`CLEAN_REFERENCE_SQL = "SELECT name FROM product_category WHERE id = #{categoryId}"`,
+		`CLEAN_REFERENCE_METHOD = """    public long countChildCategories(long parentCategoryId)`,
+		`long count = mapper.countChildCategories(parentCategoryId);`,
+		`CLEAN_REFERENCE_METHOD_CHANGED = """    public long countChildCategories(long parentCategoryId)`,
+		`long childCount = mapper.countChildCategories(parentCategoryId);`,
+		`CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM product_category WHERE parent_id = #{parentCategoryId}"`,
 		`ProductCategoryReferenceController.java`,
 		`ProductCategoryReferenceService.java`,
 		`ProductCategoryReferenceServiceImpl.java`,
@@ -108,15 +108,15 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`private final ProductCategoryReferenceMapper mapper;`,
 		`@Mapper`,
 		`<mapper namespace="com.example.ProductCategoryReferenceMapper">`,
-		`<select id="findCategoryNames" resultType="string">`,
+		`<select id="countChildCategories" resultType="long">`,
 		`@PreAuthorize("hasAuthority('REFERENCE_READ')")`,
-		`if (categoryId <= 0)`,
-		`return service.findCategoryNames(categoryId);`,
-		`java.util.List<String> findCategoryNames(`,
-		`@org.apache.ibatis.annotations.Param("categoryId") long categoryId`,
-		`@GetMapping("/reference/categories/{categoryId}")`,
+		`if (parentCategoryId <= 0)`,
+		`return service.countChildCategories(parentCategoryId);`,
+		`long countChildCategories(`,
+		`@org.apache.ibatis.annotations.Param("parentCategoryId") long parentCategoryId`,
+		`@GetMapping("/reference/categories/{parentCategoryId}/child-count")`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
-		`command_args.append("ProductCategoryReferenceController.categoryNames")`,
+		`command_args.append("ProductCategoryReferenceController.childCategoryCount")`,
 		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "ProductCategoryReferenceServiceImpl.java"`,
 		`if scenario in {"early-stop", "timeout"}:`,
 		`mutate_for_scenario(project, "single-issue")`,
@@ -144,6 +144,10 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`numericCode`,
 		`countActiveCountries`,
 		`.matches(`,
+		`findCategoryNames`,
+		`categoryNames`,
+		`WHERE id = #{categoryId}`,
+		`java.util.List<String>`,
 		`CLEAN_ENUM_METHOD`,
 		`OrderStatusCatalogController`,
 		`OrderStatusCatalogServiceImpl`,
@@ -186,20 +190,20 @@ public class ProductCategoryReferenceController {
     public ProductCategoryReferenceController(ProductCategoryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/categories/{categoryId}")
-    public java.util.List<String> categoryNames(
-            @org.springframework.web.bind.annotation.PathVariable("categoryId") long categoryId) {
-        if (categoryId <= 0) {
+    @GetMapping("/reference/categories/{parentCategoryId}/child-count")
+    public long childCategoryCount(
+            @org.springframework.web.bind.annotation.PathVariable("parentCategoryId") long parentCategoryId) {
+        if (parentCategoryId <= 0) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid category id");
+                org.springframework.http.HttpStatus.BAD_REQUEST, "invalid parent category id");
         }
-        return service.findCategoryNames(categoryId);
+        return service.countChildCategories(parentCategoryId);
     }
 }
 `)
 	write("src/main/java/com/example/ProductCategoryReferenceService.java", `package com.example;
 public interface ProductCategoryReferenceService {
-    java.util.List<String> findCategoryNames(long categoryId);
+    long countChildCategories(long parentCategoryId);
 }
 `)
 	write("src/main/java/com/example/ProductCategoryReferenceServiceImpl.java", `package com.example;
@@ -210,9 +214,9 @@ public class ProductCategoryReferenceServiceImpl implements ProductCategoryRefer
     private final ProductCategoryReferenceMapper mapper;
     public ProductCategoryReferenceServiceImpl(ProductCategoryReferenceMapper mapper) { this.mapper = mapper; }
 
-    public java.util.List<String> findCategoryNames(long categoryId) {
-        java.util.List<String> categoryNames = mapper.findCategoryNames(categoryId);
-        return categoryNames;
+    public long countChildCategories(long parentCategoryId) {
+        long childCount = mapper.countChildCategories(parentCategoryId);
+        return childCount;
     }
 }
 `)
@@ -221,13 +225,13 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface ProductCategoryReferenceMapper {
-    java.util.List<String> findCategoryNames(
-        @org.apache.ibatis.annotations.Param("categoryId") long categoryId);
+    long countChildCategories(
+        @org.apache.ibatis.annotations.Param("parentCategoryId") long parentCategoryId);
 }
 `)
 	write("src/main/resources/mapper/ProductCategoryReferenceMapper.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <mapper namespace="com.example.ProductCategoryReferenceMapper">
-  <select id="findCategoryNames" resultType="string">SELECT name FROM product_category WHERE id = #{categoryId}</select>
+  <select id="countChildCategories" resultType="long">SELECT COUNT(*) FROM product_category WHERE parent_id = #{parentCategoryId}</select>
 </mapper>
 `)
 
@@ -239,7 +243,7 @@ public interface ProductCategoryReferenceMapper {
 		context.Background(),
 		root,
 		started.RunID,
-		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "ProductCategoryReferenceController.categoryNames"},
+		reviewrun.Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "ProductCategoryReferenceController.childCategoryCount"},
 	)
 	if err != nil {
 		t.Fatal(err)
