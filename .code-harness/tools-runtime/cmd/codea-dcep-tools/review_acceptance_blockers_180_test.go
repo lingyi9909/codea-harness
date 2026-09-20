@@ -270,6 +270,41 @@ public interface SqlLiteralMapper {
 	}
 }
 
+func Test180PrimaryReviewRejectsHypotheticalFuturePendingRisks(t *testing.T) {
+	root := repoRoot180(t)
+	commandData, err := os.ReadFile(filepath.Join(root, ".code-harness", "commands", "harness-review.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandText := string(commandData)
+	for _, want := range []string{
+		"current unresolved risk in the selected implementation",
+		"Do not add a pending risk for hypothetical future edits",
+		"future endpoint repurposing",
+		"someone could later bind sensitive SQL",
+		"pendingRisks=[]",
+	} {
+		if !strings.Contains(commandText, want) {
+			t.Fatalf("primary review command lost pending-risk boundary %q", want)
+		}
+	}
+
+	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolText := string(toolData)
+	for _, want := range []string{
+		"pendingRisks must describe only a current unresolved harmful condition",
+		"do not report hypothetical future edits",
+		"never hypothetical future changes",
+	} {
+		if !strings.Contains(toolText, want) {
+			t.Fatalf("primary review tool lost pending-risk boundary %q", want)
+		}
+	}
+}
+
 func Test180HumanSelectionMenuIsMachineVerifiable(t *testing.T) {
 	root := repoRoot180(t)
 	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))

@@ -94,7 +94,7 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
       assistantTurnTerminal: false,
       mustContinueToolExecution: true,
       finishRequiredEvenWhenFindingsEmpty: true,
-      instruction: "Read only the authorized scope.reads needed for evidence, review the selected scope, then call codea-review finish in this same assistant turn. Do not end the turn after prepare/select. findings=[] still requires finish.",
+      instruction: "Read only the authorized scope.reads needed for evidence, review the selected scope, then call codea-review finish in this same assistant turn. Do not end the turn after prepare/select. findings=[] still requires finish. pendingRisks must describe only a current unresolved harmful condition supported by current source whose confirmation needs evidence outside the authorized scope; do not report hypothetical future edits, future endpoint repurposing, or generic best-practice concerns.",
     }
   }
   return {
@@ -105,7 +105,7 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
 }
 
 export default tool({
-  description: "Codea Harness 1.8 primary review tool. Prepare bounded chains, verify a real user selection from Host context, or finish the durable report. Always obey the returned nextAction. For WAIT_FOR_REAL_USER_SELECTION, copy requiredMenuText verbatim; for a ready scope, do not end the assistant turn before finish, even when findings are empty.",
+  description: "Codea Harness 1.8 primary review tool. Prepare bounded chains, verify a real user selection from Host context, or finish the durable report. Always obey the returned nextAction. For WAIT_FOR_REAL_USER_SELECTION, copy requiredMenuText verbatim; for a ready scope, do not end the assistant turn before finish, even when findings are empty. pendingRisks are only current unresolved harmful conditions supported by current source and requiring out-of-scope confirmation, never hypothetical future changes.",
   args: {
     action: tool.schema.enum(["prepare", "select", "finish"]),
     runId: tool.schema.string(),
