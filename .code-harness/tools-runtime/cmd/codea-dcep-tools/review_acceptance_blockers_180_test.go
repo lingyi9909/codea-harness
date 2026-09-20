@@ -83,7 +83,7 @@ func Test180ScopeReadyReviewIsNonTerminalAcrossActiveInstructions(t *testing.T) 
 }
 
 func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.T) {
-	// Clean controls must be production-like and self-contained so pending risks reflect product behavior, not fixture-only identity assumptions.
+	// Clean controls must be production-like and preserve the complete Controller -> ServiceImpl -> Mapper -> Mapper XML chain required by 1.8 navigation.
 	root := repoRoot180(t)
 	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-real-model-e2e.py"))
 	if err != nil {
@@ -91,21 +91,26 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 	}
 	text := string(data)
 	for _, want := range []string{
-		`CLEAN_ENUM_METHOD = """    public int countStatuses()`,
-		`int count = OrderStatus.values().length;`,
-		`CLEAN_ENUM_METHOD_CHANGED = """    public int countStatuses()`,
-		`int statusCount = OrderStatus.values().length;`,
-		`OrderStatus.java`,
-		`public enum OrderStatus`,
-		`OrderStatusCatalogController.java`,
+		`CLEAN_REFERENCE_METHOD = """    public long countActiveCountries()`,
+		`long count = mapper.countActiveCountries();`,
+		`CLEAN_REFERENCE_METHOD_CHANGED = """    public long countActiveCountries()`,
+		`long countryCount = mapper.countActiveCountries();`,
+		`CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM reference.iso_country_codes WHERE active = TRUE"`,
+		`IsoCountryReferenceController.java`,
+		`IsoCountryReferenceService.java`,
+		`IsoCountryReferenceServiceImpl.java`,
+		`IsoCountryReferenceMapper.java`,
+		`IsoCountryReferenceMapper.xml`,
+		`public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceService`,
+		`private final IsoCountryReferenceMapper mapper;`,
+		`@Mapper`,
+		`<mapper namespace="com.example.IsoCountryReferenceMapper">`,
+		`<select id="countActiveCountries" resultType="long">`,
 		`@PreAuthorize("hasAuthority('REFERENCE_READ')")`,
-		`@GetMapping("/reference/order-statuses/count")`,
-		`public int countStatuses()`,
-		`return service.countStatuses();`,
-		`public class OrderStatusCatalogServiceImpl implements OrderStatusCatalogService`,
+		`@GetMapping("/reference/iso-countries/count")`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"))`,
-		`command_args.append("OrderStatusCatalogController.countStatuses")`,
-		`catalog_impl = project / "src" / "main" / "java" / "com" / "example" / "OrderStatusCatalogServiceImpl.java"`,
+		`command_args.append("IsoCountryReferenceController.countActiveCountries")`,
+		`reference_impl = project / "src" / "main" / "java" / "com" / "example" / "IsoCountryReferenceServiceImpl.java"`,
 		`if scenario in {"early-stop", "timeout"}:`,
 		`mutate_for_scenario(project, "single-issue")`,
 		`command_args.append("OrderController")`,
@@ -126,7 +131,9 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`CLEAN_PROBE_SQL`,
 		`CLEAN_COUNT_SQL`,
 		`CLEAN_CATALOG_SQL`,
-		`OrderStatusCatalogMapper`,
+		`CLEAN_ENUM_METHOD`,
+		`OrderStatusCatalogController`,
+		`OrderStatusCatalogServiceImpl`,
 		`order_status_catalog`,
 		`/admin/orders/count`,
 		`OrderController.countOrders`,

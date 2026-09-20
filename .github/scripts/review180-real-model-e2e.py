@@ -23,16 +23,17 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 RISKY_SQL = "UPDATE orders SET status = #{status}"
-CLEAN_ENUM_METHOD = """    public int countStatuses() {
-        int count = OrderStatus.values().length;
+CLEAN_REFERENCE_METHOD = """    public long countActiveCountries() {
+        long count = mapper.countActiveCountries();
         return count;
     }
 """
-CLEAN_ENUM_METHOD_CHANGED = """    public int countStatuses() {
-        int statusCount = OrderStatus.values().length;
-        return statusCount;
+CLEAN_REFERENCE_METHOD_CHANGED = """    public long countActiveCountries() {
+        long countryCount = mapper.countActiveCountries();
+        return countryCount;
     }
 """
+CLEAN_REFERENCE_SQL = "SELECT COUNT(*) FROM reference.iso_country_codes WHERE active = TRUE"
 SAFE_SQL = "UPDATE orders SET status = #{status} WHERE id = #{id} AND tenant_id = #{tenantId} AND status = #{expectedStatus}"
 
 
@@ -224,46 +225,60 @@ public class OrderController {
         encoding="utf-8",
     )
     if clean_read:
-        (java / "OrderStatus.java").write_text(
-            """package com.example;
-public enum OrderStatus {
-    PENDING,
-    PAID,
-    CANCELLED
-}
-""",
-            encoding="utf-8",
-        )
-        (java / "OrderStatusCatalogController.java").write_text(
+        (java / "IsoCountryReferenceController.java").write_text(
             """package com.example;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class OrderStatusCatalogController {
-    private final OrderStatusCatalogService service;
-    public OrderStatusCatalogController(OrderStatusCatalogService service) { this.service = service; }
+public class IsoCountryReferenceController {
+    private final IsoCountryReferenceService service;
+    public IsoCountryReferenceController(IsoCountryReferenceService service) { this.service = service; }
 
     @PreAuthorize("hasAuthority('REFERENCE_READ')")
-    @GetMapping("/reference/order-statuses/count")
-    public int countStatuses() {
-        return service.countStatuses();
+    @GetMapping("/reference/iso-countries/count")
+    public long countActiveCountries() {
+        return service.countActiveCountries();
     }
 }
 """,
             encoding="utf-8",
         )
-        (java / "OrderStatusCatalogService.java").write_text(
-            "package com.example;\npublic interface OrderStatusCatalogService {\n"
-            "    int countStatuses();\n"
+        (java / "IsoCountryReferenceService.java").write_text(
+            "package com.example;\npublic interface IsoCountryReferenceService {\n"
+            "    long countActiveCountries();\n"
             "}\n",
             encoding="utf-8",
         )
-        (java / "OrderStatusCatalogServiceImpl.java").write_text(
-            "package com.example;\npublic class OrderStatusCatalogServiceImpl implements OrderStatusCatalogService {\n"
-            + CLEAN_ENUM_METHOD +
-            "}\n",
+        (java / "IsoCountryReferenceServiceImpl.java").write_text(
+            """package com.example;
+import org.springframework.stereotype.Service;
+
+@Service
+public class IsoCountryReferenceServiceImpl implements IsoCountryReferenceService {
+    private final IsoCountryReferenceMapper mapper;
+    public IsoCountryReferenceServiceImpl(IsoCountryReferenceMapper mapper) { this.mapper = mapper; }
+""" + CLEAN_REFERENCE_METHOD + "}
+",
+            encoding="utf-8",
+        )
+        (java / "IsoCountryReferenceMapper.java").write_text(
+            """package com.example;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface IsoCountryReferenceMapper {
+    long countActiveCountries();
+}
+""",
+            encoding="utf-8",
+        )
+        (xml / "IsoCountryReferenceMapper.xml").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<mapper namespace="com.example.IsoCountryReferenceMapper">\n'
+            f'  <select id="countActiveCountries" resultType="long">{CLEAN_REFERENCE_SQL}</select>\n'
+            "</mapper>\n",
             encoding="utf-8",
         )
     (project / "pom.xml").write_text(
@@ -381,10 +396,10 @@ def mutate_for_scenario(project: Path, scenario: str):
         host.require(safe_method in source, "safe Controller seed missing")
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
     elif scenario == "single-clean":
-        catalog_impl = project / "src" / "main" / "java" / "com" / "example" / "OrderStatusCatalogServiceImpl.java"
-        text = catalog_impl.read_text(encoding="utf-8")
-        host.require(CLEAN_ENUM_METHOD in text, "clean enum method seed missing")
-        catalog_impl.write_text(text.replace(CLEAN_ENUM_METHOD, CLEAN_ENUM_METHOD_CHANGED, 1), encoding="utf-8")
+        reference_impl = project / "src" / "main" / "java" / "com" / "example" / "IsoCountryReferenceServiceImpl.java"
+        text = reference_impl.read_text(encoding="utf-8")
+        host.require(CLEAN_REFERENCE_METHOD in text, "clean reference method seed missing")
+        reference_impl.write_text(text.replace(CLEAN_REFERENCE_METHOD, CLEAN_REFERENCE_METHOD_CHANGED, 1), encoding="utf-8")
     elif scenario == "no-relevant-changes":
         (project / "README-review-note.txt").write_text("unrelated documentation change\n", encoding="utf-8")
 
@@ -442,7 +457,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
-            command_args.append("OrderStatusCatalogController.countStatuses")
+            command_args.append("IsoCountryReferenceController.countActiveCountries")
         elif multi:
             # Class target is required to expose both endpoint chains and force
             # the real next-user selection boundary. A method target would
