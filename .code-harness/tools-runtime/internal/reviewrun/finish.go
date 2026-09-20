@@ -331,9 +331,7 @@ func validateFinishRequest(root string, req FinishRequest) error {
 			return fmt.Errorf("REVIEW_FINISH_EVIDENCE_REQUIRED: %s", finding.ID)
 		}
 		for _, ev := range finding.Evidence {
-			key := readKey(ev.Ref)
-			ref, ok := reads[key]
-			if !ok || ref != ev.Ref {
+			if !evidenceReadDeclared180(ev.Ref, req.Reads) {
 				return fmt.Errorf("REVIEW_FINISH_EVIDENCE_READ_NOT_DECLARED: %s", ev.Ref.Path)
 			}
 			if strings.TrimSpace(ev.Quote) == "" {
@@ -345,6 +343,22 @@ func validateFinishRequest(root string, req FinishRequest) error {
 		}
 	}
 	return nil
+}
+
+func evidenceReadDeclared180(evidence ReadRef, reads []ReadRef) bool {
+	if evidence.StartLine < 1 || evidence.EndLine < evidence.StartLine {
+		return false
+	}
+	path := filepath.ToSlash(filepath.Clean(evidence.Path))
+	for _, ref := range reads {
+		if filepath.ToSlash(filepath.Clean(ref.Path)) == path &&
+			ref.SHA256 == evidence.SHA256 &&
+			evidence.StartLine >= ref.StartLine &&
+			evidence.EndLine <= ref.EndLine {
+			return true
+		}
+	}
+	return false
 }
 
 func validateReadRef(rootAbs string, ref ReadRef) (string, error) {
