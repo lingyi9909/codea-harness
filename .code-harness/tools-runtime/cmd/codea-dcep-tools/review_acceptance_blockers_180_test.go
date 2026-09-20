@@ -83,6 +83,7 @@ func Test180ScopeReadyReviewIsNonTerminalAcrossActiveInstructions(t *testing.T) 
 }
 
 func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.T) {
+	// Clean controls must be production-like and self-contained so pending risks reflect product behavior, not fixture-only identity assumptions.
 	root := repoRoot180(t)
 	data, err := os.ReadFile(filepath.Join(root, ".github", "scripts", "review180-real-model-e2e.py"))
 	if err != nil {
