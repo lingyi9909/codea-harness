@@ -305,6 +305,39 @@ func Test180PrimaryReviewRejectsHypotheticalFuturePendingRisks(t *testing.T) {
 	}
 }
 
+func Test180PrimaryReviewNeverFallsBackFromChangesToCurrentImplementation(t *testing.T) {
+	root := repoRoot180(t)
+	commandData, err := os.ReadFile(filepath.Join(root, ".code-harness", "commands", "harness-review.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandText := string(commandData)
+	for _, want := range []string{
+		"Use `CURRENT_IMPLEMENTATION` **only** when the user's request itself explicitly asks",
+		"Never switch or retry from `CHANGES` to `CURRENT_IMPLEMENTATION`",
+		"REVIEW_TARGET_NO_RELEVANT_CHANGES",
+		"must remain fail-closed with the durable report INCOMPLETE",
+	} {
+		if !strings.Contains(commandText, want) {
+			t.Fatalf("primary review command lost CHANGES fail-closed contract %q", want)
+		}
+	}
+
+	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolText := string(toolData)
+	for _, want := range []string{
+		"CHANGES is fail-closed",
+		"never retry or silently fall back to CURRENT_IMPLEMENTATION",
+	} {
+		if !strings.Contains(toolText, want) {
+			t.Fatalf("primary review tool lost CHANGES fail-closed contract %q", want)
+		}
+	}
+}
+
 func Test180HumanSelectionMenuIsMachineVerifiable(t *testing.T) {
 	root := repoRoot180(t)
 	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
