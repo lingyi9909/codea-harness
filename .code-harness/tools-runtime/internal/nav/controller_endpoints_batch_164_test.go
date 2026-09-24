@@ -103,7 +103,7 @@ func Test164EntrypointBatchChunksLongWindowsCommandLinesWithoutDroppingTargets(t
 	targets := make([]string, 0, 420)
 	for i := 0; i < 420; i++ {
 		targets = append(targets, fmt.Sprintf(
-			"src/main/java/acme/%s/VeryLongBusinessController%03d.java",
+			"src/main/java/acme/%sVeryLongBusinessController%03d.java",
 			strings.Repeat("segment/", 12), i,
 		))
 	}
