@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +60,106 @@ func Test164EntrypointBatchTwoProcessesAndMethodNarrowsToControllers(t *testing.
 	if !reflect.DeepEqual(secondTargets, []string{targets[0]}) {
 		t.Fatalf("method batch targets=%v want controller-only=%v", secondTargets, []string{targets[0]})
 	}
+}
+
+type entrypointBudgetRunner164 struct {
+	calls [][]string
+}
+
+func (r *entrypointBudgetRunner164) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
+	copyArgs := append([]string(nil), args...)
+	r.calls = append(r.calls, copyArgs)
+	units := entrypointCommandUnits164("ast-grep")
+	for _, arg := range args {
+		units += entrypointCommandUnits164(arg)
+	}
+	if units > entrypointBatchCommandBudgetUTF16 {
+		return nil, fmt.Errorf("simulated Windows command line overflow: units=%d", units)
+	}
+	targets := batchTargets164(args)
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	rule := ""
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--inline-rules" {
+			rule = args[i+1]
+			break
+		}
+	}
+	var out []byte
+	for _, target := range targets {
+		name := strings.TrimSuffix(filepath.Base(target), ".java")
+		if strings.Contains(rule, "codea-entrypoint-types-164") {
+			out = append(out, entrypointBatchJSON164(target, "@RestController\npublic class "+name+" { }", 1, 20)...)
+		} else if strings.Contains(rule, "codea-entrypoint-methods-164") {
+			out = append(out, entrypointBatchJSON164(target, "@GetMapping\npublic String get() { return \"ok\"; }", 5, 8)...)
+		}
+	}
+	return out, nil
+}
+
+func Test164EntrypointBatchChunksLongWindowsCommandLinesWithoutDroppingTargets(t *testing.T) {
+	targets := make([]string, 0, 420)
+	for i := 0; i < 420; i++ {
+		targets = append(targets, fmt.Sprintf(
+			"src/main/java/acme/%s/VeryLongBusinessController%03d.java",
+			strings.Repeat("segment/", 12), i,
+		))
+	}
+
+	runner := &entrypointBudgetRunner164{}
+	n := Navigator{RepoRoot: ".", AstGrepPath: "ast-grep", Runner: runner}
+	got, err := n.FindControllerEndpointsBatch(context.Background(), targets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(targets) {
+		t.Fatalf("endpoint count=%d want=%d", len(got), len(targets))
+	}
+	if len(runner.calls) <= 2 {
+		t.Fatalf("long target set was not chunked: calls=%d", len(runner.calls))
+	}
+
+	typeTargets := make([]string, 0, len(targets))
+	methodTargets := make([]string, 0, len(targets))
+	for _, call := range runner.calls {
+		units := entrypointCommandUnits164("ast-grep")
+		for _, arg := range call {
+			units += entrypointCommandUnits164(arg)
+		}
+		if units > entrypointBatchCommandBudgetUTF16 {
+			t.Fatalf("call exceeded Windows-safe budget: units=%d budget=%d", units, entrypointBatchCommandBudgetUTF16)
+		}
+		rule := ""
+		for i := 0; i+1 < len(call); i++ {
+			if call[i] == "--inline-rules" {
+				rule = call[i+1]
+				break
+			}
+		}
+		switch {
+		case strings.Contains(rule, "codea-entrypoint-types-164"):
+			typeTargets = append(typeTargets, batchTargets164(call)...)
+		case strings.Contains(rule, "codea-entrypoint-methods-164"):
+			methodTargets = append(methodTargets, batchTargets164(call)...)
+		}
+	}
+	if !reflect.DeepEqual(typeTargets, targets) {
+		t.Fatalf("type batching dropped/reordered targets: got=%d want=%d", len(typeTargets), len(targets))
+	}
+	if !reflect.DeepEqual(methodTargets, targets) {
+		t.Fatalf("method batching dropped/reordered targets: got=%d want=%d", len(methodTargets), len(targets))
+	}
+}
+
+func batchTargets164(args []string) []string {
+	for i, arg := range args {
+		if arg == "--json=stream" && i+1 < len(args) {
+			return append([]string(nil), args[i+1:]...)
+		}
+	}
+	return nil
 }
 
 func Test164EntrypointBatchRejectsBroadOrWildcardTarget(t *testing.T) {
