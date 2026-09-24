@@ -2,7 +2,7 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
-## 1.6.7 Review 使用入口
+## 1.8.0 Review 使用入口
 
 升级后重启 OpenCode，开启主会话，输入 `/harness-review OrderController` 或 `/harness-review OrderController.method`。命令会先创建真实 runId；多调用链必须等待你选择；最终由 Runtime 生成同 run 的 `review.md`。普通文本分析不代表正式 Review 已完成。
 
@@ -60,10 +60,10 @@ Release ZIP = 可安装/可升级产品
 
 ## 首次安装
 
-1.6.7 首次安装必须使用正式 Release 产物：
+1.8.0 首次安装必须使用正式 Release 产物：
 
 ```text
-codea-harness-1.6.7-windows-x64-install.zip
+codea-harness-1.8.0-windows-x64-install.zip
 ```
 
 > ⚠ **不要使用 GitHub Source ZIP / `Code → Download ZIP` / `git clone` 目录替代 Release package。** Source 不含正式 Windows Runtime，也不是可安装产品。
@@ -76,9 +76,12 @@ install.ps1
 .opencode/agents/reviewer.md
 .opencode/commands/harness-review-reviewer.md
 .opencode/tools/codea-reviewer-submit.ts
+.opencode/commands/harness-review.md
+.opencode/agents/orchestrator.md
+.opencode/tools/codea-review.ts
 ```
 
-**不要只复制 `.code-harness/`。** 1.6.7 主 Agent Review 的提交工具位于 package root 中的 `.opencode/**`；同包的四个受管 Host 资源应一起安装。正常评审不再需要 Reviewer 子会话。
+**不要只复制 `.code-harness/`。** 1.8.0 ordinary Review 依赖 package root 中受管的 `.opencode/commands/harness-review.md`、`.opencode/agents/orchestrator.md` 与 `.opencode/tools/codea-review.ts`；历史 Reviewer Host 资源继续按 manifest 受控管理，但不再是普通 Review authority。
 
 从解压后的 package root 执行：
 

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -377,13 +378,44 @@ func loadPreparedOptions180(runDir string) (preparedOptions180, error) {
 	return v, nil
 }
 
+var (
+	exactControllerTarget180 = regexp.MustCompile("^[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)?$")
+	controllerTargetInText180 = regexp.MustCompile("[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)?")
+)
+
 func normalizeIntent180(v Intent) (Intent, error) {
 	v.Mode = strings.ToUpper(strings.TrimSpace(v.Mode))
-	v.Target = strings.TrimSpace(v.Target)
+	v.Target = normalizeReviewTarget180(v.Target)
 	if v.Mode != "CHANGES" && v.Mode != "CURRENT_IMPLEMENTATION" {
 		return Intent{}, fmt.Errorf("REVIEW_PREPARE_INTENT_INVALID: %q", v.Mode)
 	}
 	return v, nil
+}
+
+func normalizeReviewTarget180(raw string) string {
+	target := strings.TrimSpace(raw)
+	if target == "" || exactControllerTarget180.MatchString(target) {
+		return target
+	}
+	// Paths are already supported by filterEndpoints180 and must never be
+	// rewritten just because their basename contains a Controller symbol.
+	if strings.ContainsAny(target, "/\\") {
+		return target
+	}
+	matches := controllerTargetInText180.FindAllString(target, -1)
+	unique := map[string]bool{}
+	for _, match := range matches {
+		unique[match] = true
+	}
+	if len(unique) != 1 {
+		// Fail closed on ambiguous prose instead of guessing which entrypoint
+		// the user intended.
+		return target
+	}
+	for match := range unique {
+		return match
+	}
+	return target
 }
 
 func astGrepPath180(root string) (string, error) {

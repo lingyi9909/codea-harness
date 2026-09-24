@@ -12,11 +12,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 )
 
 // FindControllerEndpointsBatch is the Entrypoint Inventory-specific AST path.
-// It preserves the existing declaration pattern union while executing it as
-// at most one type process and one method process for one exact file set.
+// It preserves the existing declaration pattern union while executing exact
+// file sets in deterministic command-line-safe batches. Windows CreateProcess
+// has a much smaller command-line ceiling than large repositories can require,
+// so file paths must never be appended to one unbounded ast-grep invocation.
 func (n Navigator) FindControllerEndpointsBatch(ctx context.Context, targets []string) ([]ControllerEndpointMatch, error) {
 	cleanTargets, err := n.validateEntrypointBatchTargets164(targets)
 	if err != nil {
@@ -145,17 +148,10 @@ func (n Navigator) runRawBatch164(ctx context.Context, targets []string, ruleID 
 	if runner == nil {
 		runner = ExecRunner{}
 	}
-	args := []string{"scan", "--inline-rules", entrypointInlineRule164(ruleID, patterns), "--json=stream"}
-	args = append(args, cleanTargets...)
-	data, runErr := runner.Run(ctx, n.AstGrepPath, args...)
-	if runErr != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(runErr, &exitErr) {
-			return nil, runErr
-		}
-		if len(data) == 0 {
-			return []rawMatch{}, nil
-		}
+	baseArgs := []string{"scan", "--inline-rules", entrypointInlineRule164(ruleID, patterns), "--json=stream"}
+	batches, err := entrypointTargetBatches164(n.AstGrepPath, baseArgs, cleanTargets)
+	if err != nil {
+		return nil, err
 	}
 
 	allowed := make(map[string]bool, len(cleanTargets))
@@ -164,38 +160,93 @@ func (n Navigator) runRawBatch164(ctx context.Context, targets []string, ruleID 
 	}
 	seen := map[string]bool{}
 	out := make([]rawMatch, 0)
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 64*1024), workspaceASTMaxJSONRecord)
-	for scanner.Scan() {
-		var line sgExtendedLine
-		if json.Unmarshal(scanner.Bytes(), &line) != nil {
-			continue
+	for _, batch := range batches {
+		args := append(append([]string(nil), baseArgs...), batch...)
+		data, runErr := runner.Run(ctx, n.AstGrepPath, args...)
+		if runErr != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(runErr, &exitErr) {
+				return nil, runErr
+			}
+			if len(data) == 0 {
+				continue
+			}
 		}
-		match := rawMatch{
-			Path:        strings.ReplaceAll(line.File, "\\", "/"),
-			Text:        line.Text,
-			StartLine:   line.Range.Start.Line + 1,
-			StartColumn: line.Range.Start.Column + 1,
-			EndLine:     line.Range.End.Line + 1,
-			EndColumn:   line.Range.End.Column + 1,
+
+		scanner := bufio.NewScanner(bytes.NewReader(data))
+		scanner.Buffer(make([]byte, 64*1024), workspaceASTMaxJSONRecord)
+		for scanner.Scan() {
+			var line sgExtendedLine
+			if json.Unmarshal(scanner.Bytes(), &line) != nil {
+				continue
+			}
+			match := rawMatch{
+				Path:        strings.ReplaceAll(line.File, "\\", "/"),
+				Text:        line.Text,
+				StartLine:   line.Range.Start.Line + 1,
+				StartColumn: line.Range.Start.Column + 1,
+				EndLine:     line.Range.End.Line + 1,
+				EndColumn:   line.Range.End.Column + 1,
+			}
+			if match.EndLine < match.StartLine {
+				match.EndLine = match.StartLine
+			}
+			if strings.ContainsAny(match.Path, "\x00\r\n") || !allowed[match.Path] {
+				return nil, fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: %s", match.Path)
+			}
+			key := fmt.Sprintf("%s:%d:%d:%d:%d:%s", match.Path, match.StartLine, match.StartColumn, match.EndLine, match.EndColumn, match.Text)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, match)
 		}
-		if match.EndLine < match.StartLine {
-			match.EndLine = match.StartLine
+		if err := scanner.Err(); err != nil {
+			return nil, err
 		}
-		if strings.ContainsAny(match.Path, "\x00\r\n") || !allowed[match.Path] {
-			return nil, fmt.Errorf("ENTRYPOINT_SCAN_RESULT_OUT_OF_SCOPE: %s", match.Path)
-		}
-		key := fmt.Sprintf("%s:%d:%d:%d:%d:%s", match.Path, match.StartLine, match.StartColumn, match.EndLine, match.EndColumn, match.Text)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, match)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	return out, nil
+}
+
+const entrypointBatchCommandBudgetUTF16 = 20 * 1024
+
+func entrypointTargetBatches164(executable string, baseArgs, targets []string) ([][]string, error) {
+	fixed := entrypointCommandUnits164(executable)
+	for _, arg := range baseArgs {
+		fixed += entrypointCommandUnits164(arg)
+	}
+	if fixed >= entrypointBatchCommandBudgetUTF16 {
+		return nil, fmt.Errorf("ENTRYPOINT_SCAN_ARGUMENT_BUDGET_EXCEEDED: fixed=%d budget=%d", fixed, entrypointBatchCommandBudgetUTF16)
+	}
+
+	batches := make([][]string, 0, 1)
+	current := make([]string, 0)
+	currentUnits := fixed
+	for _, target := range targets {
+		units := entrypointCommandUnits164(target)
+		if fixed+units > entrypointBatchCommandBudgetUTF16 {
+			return nil, fmt.Errorf("ENTRYPOINT_SCAN_ARGUMENT_BUDGET_EXCEEDED: target=%s units=%d budget=%d", target, fixed+units, entrypointBatchCommandBudgetUTF16)
+		}
+		if len(current) > 0 && currentUnits+units > entrypointBatchCommandBudgetUTF16 {
+			batches = append(batches, current)
+			current = make([]string, 0)
+			currentUnits = fixed
+		}
+		current = append(current, target)
+		currentUnits += units
+	}
+	if len(current) > 0 {
+		batches = append(batches, current)
+	}
+	return batches, nil
+}
+
+// Count UTF-16 code units because Windows CreateProcess applies its command-line
+// limit after UTF-16 conversion. The small per-argument allowance covers quotes
+// and separators; the 20 Ki-unit budget leaves substantial headroom below the
+// Windows process command-line ceiling for escaping overhead.
+func entrypointCommandUnits164(value string) int {
+	return len(utf16.Encode([]rune(value))) + 3
 }
 
 func entrypointInlineRule164(ruleID string, patterns []string) string {
