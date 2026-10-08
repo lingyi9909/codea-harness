@@ -33,7 +33,7 @@ func Test180CommittedChangesDetectedFromConfiguredBaseRef(t *testing.T) {
     gitReview180(t, root, "checkout", "feature")
     writeReviewConfig180(t, root, "base", true)
 
-    if status := gitReview180(t, root, "status", "--porcelain"); status != "" {
+    if status := gitReview180(t, root, "status", "--porcelain", "--untracked-files=no"); status != "" {
         t.Fatalf("test must have clean tracked worktree, got %q", status)
     }
     paths, err := changedSourceFiles180(context.Background(), root)
