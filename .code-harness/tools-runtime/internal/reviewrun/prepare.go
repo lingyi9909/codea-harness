@@ -579,30 +579,6 @@ func nonNilStrings180(v []string) []string {
 	return v
 }
 
-func changedSourceFiles180(ctx context.Context, root string) ([]string, error) {
-	set := map[string]bool{}
-	for _, args := range [][]string{{"diff", "--name-only", "-z", "HEAD"}, {"diff", "--cached", "--name-only", "-z", "HEAD"}, {"ls-files", "--others", "--exclude-standard", "-z"}} {
-		cmd := exec.CommandContext(ctx, "git", args...)
-		cmd.Dir = root
-		b, e := cmd.Output()
-		if e != nil {
-			return nil, e
-		}
-		for _, line := range strings.Split(string(b), "\x00") {
-			p := filepath.ToSlash(line)
-			if strings.EqualFold(filepath.Ext(p), ".java") || strings.EqualFold(filepath.Ext(p), ".xml") {
-				set[p] = true
-			}
-		}
-	}
-	out := []string{}
-	for p := range set {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out, nil
-}
-
 func sameProjectPath180(a, b string) bool {
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
