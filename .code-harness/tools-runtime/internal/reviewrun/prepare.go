@@ -141,7 +141,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	// Each Maven module has its own src/main/java root. Using the first
 	// lexicographic Java path silently drops calls from every other module.
 	// Keep facts scoped by source root to avoid conflating same-named types.
-	bySourceRoot, err := discoverScopedNavigation180(ctx, n, javaFiles)
+	bySourceRoot, err := discoverScopedNavigation180(ctx, n, javaFiles, endpoints)
 	if err != nil {
 		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{err.Error()}, runner.Count())
 	}
