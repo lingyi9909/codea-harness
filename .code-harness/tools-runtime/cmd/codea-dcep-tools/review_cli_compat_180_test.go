@@ -2,6 +2,7 @@ package main
 
 import (
  "encoding/json"
+ "errors"
  "strings"
  "testing"
 )
@@ -38,4 +39,14 @@ func Test180NativeWindowsErrorUnicodeTransport(t *testing.T) {
   if !strings.Contains(string(safe), "\\u4e2d") || !strings.Contains(string(safe), "REVIEW_PREPARE_FAILED") {
     t.Fatalf("error code or Unicode content lost: %q", safe)
   }
+}
+
+ 
+func Test180ErrorPipeRetainsUtf8ChineseForOpenCode(t *testing.T) {
+	var stderr strings.Builder
+	message := "REVIEW_PREPARE_FAILED: 中文路径/订单😀"
+	writeCLIError180(&stderr, errors.New(message))
+	if got := stderr.String(); got != message+"\n" {
+		t.Fatalf("piped stderr did not retain readable UTF-8: %q", got)
+	}
 }
