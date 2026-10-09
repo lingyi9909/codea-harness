@@ -63,3 +63,28 @@ func Test180MultiModulePrepareScansAllRoots(t *testing.T) {
   t.Fatalf("cross-module navigation dropped internal calls: options=%+v err=%v",opts,err)
  }
 }
+
+func Test180UnrelatedControllerNotMarkedChangedByIncompleteCall(t *testing.T) {
+ root:=copyControllerReviewFixture180(t)
+ other:="src/main/java/com/example/UnrelatedController.java"
+ p:=filepath.Join(root,filepath.FromSlash(other))
+ source:="package com.example;\nimport org.springframework.web.bind.annotation.RestController;\nimport org.springframework.web.bind.annotation.GetMapping;\n@RestController public class UnrelatedController {\n @GetMapping(\"/unrelated\") public String status() { return \"ok\"; }\n}\n"
+ if err:=os.WriteFile(p,[]byte(source),0600);err!=nil{t.Fatal(err)}
+ initControllerReviewGitBaseline180(t,root)
+ changed:=filepath.Join(root,"src","main","java","com","example","OrderController.java")
+ f,err:=os.OpenFile(changed,os.O_APPEND|os.O_WRONLY,0)
+ if err!=nil{t.Fatal(err)}
+ if _,err=f.WriteString("\n// one controller changed\n");err!=nil{t.Fatal(err)}
+ if err=f.Close();err!=nil{t.Fatal(err)}
+ useRealAstGrep180(t,root)
+ start,err:=Start(root)
+ if err!=nil{t.Fatal(err)}
+ opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
+ if err!=nil{t.Fatal(err)}
+ if len(opts.Chains)==0 {t.Fatalf("actual changed controller was lost: %+v",opts)}
+ for _,ch:=range opts.Chains {
+  if strings.HasPrefix(ch.Name,"UnrelatedController.") {
+   t.Fatalf("unrelated unresolved Controller incorrectly selected: %+v",ch)
+  }
+ }
+}
