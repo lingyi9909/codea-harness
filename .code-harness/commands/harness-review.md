@@ -8,7 +8,7 @@ subtask: false
 
 # Codea Harness 1.8 Review
 
-Review target (OPTIONAL; blank means review the current Git changes without preselecting a Controller): $ARGUMENTS
+Review target: $ARGUMENTS
 
 The command output above is the authoritative `review start` result. It has already created and read back the durable **INCOMPLETE** report before this model turn. Keep its `runId` and `reportPath`; never discover a run by taking the newest directory.
 
