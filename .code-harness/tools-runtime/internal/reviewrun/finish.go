@@ -59,6 +59,14 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		_ = writeState(runDir, state)
 		return Outcome{}, err
 	}
+	if prepared, e := loadPreparedOptions180(runDir); e == nil && prepared.Intent.Mode == "CHANGES" {
+		if prepared.Options.Hash != scope.OptionsHash {
+			return Outcome{}, fmt.Errorf("REVIEW_FINISH_CHANGESET_STALE: prepared scope changed")
+		}
+		if e := verifyPreparedChangesSnapshot180(root, prepared); e != nil {
+			return Outcome{}, fmt.Errorf("REVIEW_FINISH_CHANGESET_STALE: %w", e)
+		}
+	}
 	if err := validateFinishReadsWithinScope180(req.Reads, scope.Reads); err != nil {
 		state.LastError = err.Error()
 		_ = writeState(runDir, state)
@@ -101,6 +109,11 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		return Outcome{}, err
 	}
 
+	if prepared, e := loadPreparedOptions180(runDir); e == nil && prepared.Intent.Mode == "CHANGES" {
+		if e := verifyPreparedChangesSnapshot180(root, prepared); e != nil {
+			return Outcome{}, fmt.Errorf("REVIEW_FINISH_CHANGESET_STALE: %w", e)
+		}
+	}
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("REVIEW_FINISH_REQUEST_ENCODE_FAILED: %w", err)

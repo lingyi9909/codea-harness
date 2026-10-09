@@ -147,3 +147,15 @@ func fullFileReadRange180(root, rel string) ([]ReadRef, error) {
     }
     return []ReadRef{{Path: rel, StartLine: 1, EndLine: lines}}, nil
 }
+
+// verifyPreparedChangesSnapshot180 rejects stale CHANGES selections even when
+// Java/XML bytes are unchanged (commit, rebase, or review.baseRef update).
+// CURRENT_IMPLEMENTATION is independent of the Git change baseline.
+func verifyPreparedChangesSnapshot180(root string, prepared preparedOptions180) error {
+    if prepared.Intent.Mode != "CHANGES" { return nil }
+    if prepared.ChangeSnapshotSHA256 == "" { return fmt.Errorf("CHANGESET_IDENTITY_MISSING") }
+    snapshot, err := reviewChangesSnapshot180(root)
+    if err != nil { return fmt.Errorf("CHANGESET_SNAPSHOT_FAILED: %w", err) }
+    if snapshot.SnapshotSHA256 != prepared.ChangeSnapshotSHA256 { return fmt.Errorf("CHANGESET_CHANGED_SINCE_PREPARE") }
+    return nil
+}

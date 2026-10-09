@@ -54,6 +54,9 @@ func Select(ctx context.Context, root string, req SelectionRequest, turn HostTur
 	if err != nil || !same {
 		return Outcome{}, fmt.Errorf("REVIEW_OPTIONS_STALE: source changed")
 	}
+	if err := verifyPreparedChangesSnapshot180(rootAbs, stored); err != nil {
+		return Outcome{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err)
+	}
 	if !stored.Options.SelectionRequired {
 		return Outcome{}, fmt.Errorf("REVIEW_SELECTION_NOT_REQUIRED")
 	}
@@ -115,6 +118,10 @@ func Select(ctx context.Context, root string, req SelectionRequest, turn HostTur
 	same, err = sourceSnapshotMatches180(rootAbs, current.SourcePaths, current.SourceFingerprint)
 	if err != nil || !same {
 		return Outcome{}, fmt.Errorf("REVIEW_OPTIONS_STALE: source changed")
+	}
+
+	if err := verifyPreparedChangesSnapshot180(rootAbs, current); err != nil {
+		return Outcome{}, fmt.Errorf("REVIEW_OPTIONS_STALE: %w", err)
 	}
 
 	coverage := "COMPLETE"
