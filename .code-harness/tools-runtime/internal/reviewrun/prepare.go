@@ -26,6 +26,7 @@ type preparedOptions180 struct {
 	Intent              Intent   `json:"intent"`
 	ProjectRoot         string   `json:"projectRoot"`
 	SourceFingerprint   string   `json:"sourceFingerprint"`
+	ChangeSnapshotSHA256 string `json:"changeSnapshotSha256,omitempty"`
 	SourcePaths         []string `json:"sourcePaths"`
 	NavigationProcesses int      `json:"navigationProcesses"`
 	Options             Options  `json:"options"`
@@ -93,7 +94,15 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 			return Options{}, x
 		}
 		if old.Options.DiscoveryComplete && same {
-			return old.Options, nil
+			if intent.Mode == "CHANGES" {
+				// Source bytes alone do not identify a change review. Changing
+				// baseRef or HEAD can change impact without changing any Java/XML.
+				snapshot, changeErr := reviewChangesSnapshot180(rootAbs)
+				same = changeErr == nil && snapshot.SnapshotSHA256 != "" && snapshot.SnapshotSHA256 == old.ChangeSnapshotSHA256
+			}
+			if same {
+				return old.Options, nil
+			}
 		}
 	}
 
@@ -107,11 +116,19 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	}
 	javaFiles := filterExt180(sources, ".java")
 	changedSources := []string{}
+	changeSnapshotSHA256 := ""
 	if intent.Mode == "CHANGES" {
-		changedSources, err = changedSourceFiles180(ctx, rootAbs)
-		if err != nil {
-			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CHANGESET_DISCOVERY_FAILED: " + err.Error()}, 0)
+		snapshot, changeErr := reviewChangesSnapshot180(rootAbs)
+		if changeErr != nil {
+			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CHANGESET_DISCOVERY_FAILED: " + changeErr.Error()}, 0)
 		}
+		changeSnapshotSHA256 = snapshot.SnapshotSHA256
+		for _, file := range snapshot.Files {
+			if strings.EqualFold(filepath.Ext(file.Path), ".java") || strings.EqualFold(filepath.Ext(file.Path), ".xml") {
+				changedSources = append(changedSources, filepath.ToSlash(file.Path))
+			}
+		}
+		sort.Strings(changedSources)
 		if len(changedSources) == 0 {
 			// Preserve the run and durable INCOMPLETE report. A later prepare
 			// with the same runId can rescan after the working tree changes.
@@ -290,11 +307,20 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	if after != before || !sameStringSlice180(currentSources, sources) {
 		gaps = append(gaps, "SOURCE_CHANGED_DURING_PREPARE")
 	}
+	if intent.Mode == "CHANGES" {
+		// Fail closed if the Git identity changed while navigation was running.
+		latest, changeErr := reviewChangesSnapshot180(rootAbs)
+		if changeErr != nil {
+			gaps = append(gaps, "CHANGESET_CHANGED_DURING_PREPARE: "+changeErr.Error())
+		} else if latest.SnapshotSHA256 != changeSnapshotSHA256 {
+			gaps = append(gaps, "CHANGESET_CHANGED_DURING_PREPARE")
+		}
+	}
 	complete := len(gaps) == 0
-	return persistPrepared180(runDir, state, intent, rootAbs, sources, before, chains, complete, uniqueStrings180(gaps), runner.Count())
+	return persistPrepared180(runDir, state, intent, rootAbs, sources, before, chains, complete, uniqueStrings180(gaps), runner.Count(), changeSnapshotSHA256)
 }
 
-func persistPrepared180(runDir string, state runState, intent Intent, root string, paths []string, fp string, chains []Chain, complete bool, gaps []string, processes int) (Options, error) {
+func persistPrepared180(runDir string, state runState, intent Intent, root string, paths []string, fp string, chains []Chain, complete bool, gaps []string, processes int, changeSnapshots ...string) (Options, error) {
 	lockCtx, cancel := context.WithTimeout(context.Background(), defaultRunLockWait)
 	defer cancel()
 	unlock, err := acquireRunLock(lockCtx, runDir)
@@ -319,8 +345,17 @@ func persistPrepared180(runDir string, state runState, intent Intent, root strin
 		chains = []Chain{}
 	}
 	opts := Options{RunID: state.RunID, Chains: chains, DiscoveryComplete: complete, SelectionRequired: len(chains) > 1, Gaps: nonNilStrings180(gaps), ReportPath: state.ReportPath}
-	opts.Hash = optionsHash180(root, intent, fp, opts)
-	stored := preparedOptions180{SchemaVersion: SchemaVersion, Intent: intent, ProjectRoot: root, SourceFingerprint: fp, SourcePaths: nonNilStrings180(paths), NavigationProcesses: processes, Options: opts}
+	changeSnapshot := ""
+	if len(changeSnapshots) > 0 {
+		changeSnapshot = changeSnapshots[0]
+	}
+	// A changed baseRef or Git HEAD invalidates prior selection authority.
+	hashFingerprint := fp
+	if changeSnapshot != "" {
+		hashFingerprint += ":" + changeSnapshot
+	}
+	opts.Hash = optionsHash180(root, intent, hashFingerprint, opts)
+	stored := preparedOptions180{SchemaVersion: SchemaVersion, Intent: intent, ProjectRoot: root, SourceFingerprint: fp, ChangeSnapshotSHA256: changeSnapshot, SourcePaths: nonNilStrings180(paths), NavigationProcesses: processes, Options: opts}
 	b, _ := json.MarshalIndent(stored, "", "  ")
 	b = append(b, '\n')
 	state.ScopeReady = false
