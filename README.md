@@ -4,7 +4,7 @@ Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Har
 
 ## 1.8.0 Review 使用入口
 
-升级后重启 OpenCode，开启主会话，输入 `/harness-review OrderController` 或 `/harness-review OrderController.method`。命令会先创建真实 runId；多调用链必须等待你选择；最终由 Runtime 生成同 run 的 `review.md`。普通文本分析不代表正式 Review 已完成。
+升级后重启 OpenCode，开启主会话。默认评审本次 Git 变更输入 `/harness-review`（无需指定 Controller）；可选定向输入 `/harness-review OrderController` 或 `/harness-review OrderController.method`。命令会先创建真实 runId；多调用链必须等待你选择；最终由 Runtime 生成同 run 的 `review.md`。普通文本分析不代表正式 Review 已完成。
 
 ## 1.5.0
 

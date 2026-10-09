@@ -6,7 +6,7 @@
 
 1.8.0 在既有 Host ownership transaction 中更新 `.opencode/commands/harness-review.md`，并新增受管 `.opencode/agents/orchestrator.md` 与 `.opencode/tools/codea-review.ts`。历史 Reviewer Host 文件继续按旧 ownership hash 受控管理，但 ordinary Review 不依赖其 authority。任何目标 Host 文件内容既不匹配已安装 ownership、也不匹配 1.8.0 candidate 时，必须在 framework 写入前返回 `MANUAL_ACTION_REQUIRED`。
 
-升级成功后重启 OpenCode 并开启新的主会话，重新加载 1.8.0 orchestrator / codea-review 工具，再执行 `/harness-review OrderController`（替换为目标类或方法）。不要在缓存旧 1.6.7 指令的会话中继续评审。
+升级成功后重启 OpenCode 并开启新的主会话，重新加载 1.8.0 orchestrator / codea-review 工具，再执行 `/harness-review`（默认 CHANGES，无需指定 Controller），或按需使用 `/harness-review OrderController`（替换为目标类或方法）。多链选择必须在同一 OpenCode 会话中回复 `选择 C1`，由原生 `codea-review` 工具执行，不得通过 PowerShell/bash 直接调用 `review select`。不要在缓存旧 1.6.7 指令的会话中继续评审。
 
 ## 必须使用正式 Windows Release
 

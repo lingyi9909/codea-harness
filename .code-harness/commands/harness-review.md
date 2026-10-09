@@ -8,9 +8,17 @@ subtask: false
 
 # Codea Harness 1.8 Review
 
-Review target: $ARGUMENTS
+Review target (OPTIONAL; blank means review the current Git changes without preselecting a Controller): $ARGUMENTS
 
 The command output above is the authoritative `review start` result. It has already created and read back the durable **INCOMPLETE** report before this model turn. Keep its `runId` and `reportPath`; never discover a run by taking the newest directory.
+
+## Zero-target and Host identity invariants (mandatory)
+
+- `/harness-review` with **NO arguments** is a valid primary Review command. Never require the user to supply a Controller/class/method before calling prepare. Empty arguments mean `intent={mode:"CHANGES"}` with **no target key**. Do not guess or fabricate a target from the repository.
+- `/harness-review OrderController` and `/harness-review OrderController.method` are optional filters, not prerequisites. If there is no relevant Git change or the graph is unresolved, show the concrete Runtime gaps, keep the SAME INCOMPLETE run, and do not turn this into a request for a mandatory target.
+- The entrypoint's pre-model `review start` is the **only** shell Runtime invocation authorized in this slash command. After it, **always** use the native OpenCode `codea-review` tool for `prepare`, `select` and `finish`. NEVER execute `codea-dcep-tools.exe review prepare/select/finish` through bash, PowerShell, terminal, exec, or a generated script.
+- Especially for `select`: native `codea-review` obtains `sessionID`/`messageID` from the actual OpenCode Host context; shell CLI invocations cannot provide the required authenticated user-turn evidence. Never invent IDs, extract another session's IDs, or ask the user to supply them. If the native tool is not advertised or cannot be invoked, fail closed with `CODEA_REVIEW_HOST_TOOL_UNAVAILABLE`, keep the INCOMPLETE report and instruct the user to verify `.opencode/tools/codea-review.ts` and restart OpenCode in a new session. Do not offer a shell workaround.
+- When selection is required, display `requiredMenuText` verbatim, STOP this assistant turn, and wait for the user's new message `选择 C1` (or their chosen IDs). Call the native `codea-review` with `action=select` in that next assistant turn, in the same OpenCode conversation.
 
 Use only the `codea-review` structured tool for the ordinary 1.8 review path.
 The Runtime CLI accepts both `review prepare --run-id <id> --mode CHANGES` and

@@ -438,8 +438,9 @@ def persist_run(evidence_dir: Path, exported, run_dir: Path, record: dict):
     })
 
 
-def successful_run(args, scenario: str, iteration: int, multi: bool, current_impl: bool = False):
-    run_evidence = args.evidence_dir / f"{scenario}-{iteration}"
+def successful_run(args, scenario: str, iteration: int, multi: bool, current_impl: bool = False, no_target: bool = False):
+    scenario_label = f"{scenario}-no-target" if no_target else scenario
+    run_evidence = args.evidence_dir / f"{scenario_label}-{iteration}"
     with tempfile.TemporaryDirectory(prefix=f"Codea 180 {scenario} 空格 & # % ") as raw:
         temp = Path(raw)
         project = temp / "project"
@@ -455,7 +456,11 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         version = host.command([str(binary), "--version"], temp, env, timeout=30).strip()
         host.require(version == "1.18.25", f"OpenCode mismatch: {version}")
         command_args = ["--command", "harness-review"]
-        if current_impl:
+        if no_target:
+            # The real Host must accept a bare /harness-review and prepare
+            # CHANGES without requesting a Controller or inventing a target.
+            pass
+        elif current_impl:
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
             command_args.append("PublicSqlLiteralController.literalOne")
@@ -488,6 +493,8 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
 
         actions = host.tool_actions(exported)
         names = [host.normalized(name) for name in completed_tools(exported)]
+        if no_target:
+            host.require("bash" not in names, f"{scenario_label}: shell was used instead of the native review tool: {names}")
         prepare_states = [state for state in host.tool_parts(exported, "prepare") if state.get("status") == "completed"]
         prepare_output = parse_tool_output(prepare_states[-1]) if prepare_states else {}
         prepare_next_action = prepare_output.get("nextAction")
@@ -551,7 +558,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         record = {
             "schemaVersion": 1,
             "head": args.head,
-            "scenario": scenario,
+            "scenario": scenario_label,
             "iteration": iteration,
             "testKind": "REAL_MODEL_AUTONOMOUS",
             "model": model,
@@ -579,7 +586,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         }
         persist_run(run_evidence, exported, run_dir, record)
         print(
-            f"RELEASE180_REAL_MODEL PASS scenario={scenario} iteration={iteration} "
+            f"RELEASE180_REAL_MODEL PASS scenario={scenario_label} iteration={iteration} "
             f"runId={run_dir.name} actions={actions} conclusion={result.get('reviewConclusion')} reportSha256={report_sha}",
             flush=True,
         )
@@ -720,6 +727,10 @@ def main():
         for iteration in range(1, 4):
             records.append(successful_run(args, scenario, iteration, multi))
 
+    # Regression for real intranet issues: bare slash-command Review may not
+    # demand a Controller, and next-turn selection must use the native tool.
+    records.append(successful_run(args, "single-issue", 1, False, no_target=True))
+    records.append(successful_run(args, "two-chains-select-c1", 1, True, no_target=True))
     records.append(successful_run(args, "current-implementation-no-diff", 1, False, current_impl=True))
     records.append(no_relevant_changes_run(args))
     records.append(negative_run(args, "early-stop", output_limit=32, timeout=180))
@@ -736,6 +747,8 @@ def main():
             "single-issue": 3,
             "single-clean": 3,
             "two-chains-select-c1": 3,
+            "single-issue-no-target": 1,
+            "two-chains-select-c1-no-target": 1,
         },
         "status": "PASS",
     }
@@ -743,7 +756,7 @@ def main():
     print(
         "RELEASE180_REAL_MODEL_MATRIX PASS "
         "singleIssue=3 singleClean=3 twoChainsSelectC1=3 "
-        "extra=currentImplementation,noRelevantChanges,earlyStop,toolFailure,timeout",
+        "extra=zeroTargetSingle,zeroTargetMultiSelection,currentImplementation,noRelevantChanges,earlyStop,toolFailure,timeout",
         flush=True,
     )
 
