@@ -149,8 +149,9 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	xmlIndex := indexMapperXML180(rootAbs, filterExt180(sources, ".xml"))
 	changedSet := pathSet180(changedSources)
 	chains := make([]Chain, 0, len(endpoints))
-	affected := map[string]bool{}
+	affected := make([]bool, 0, len(endpoints))
 	for _, ep := range endpoints {
+		isAffected := false
 		navFacts, ok := bySourceRoot[javaSourceRoot180(ep.Path)]
 		if !ok {
 			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CALL_DISCOVERY_FAILED: entrypoint has no matching source root: " + ep.Path}, runner.Count())
@@ -162,7 +163,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 			Unresolved: []string{},
 		}
 		if changedSet[filepath.ToSlash(ep.Path)] {
-			affected[ch.Name] = true
+			isAffected = true
 		}
 		facts := calls[ep.Symbol]
 		if len(facts) != 1 {
@@ -172,14 +173,14 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		} else {
 			first := facts[0]
 			if info, ok := infos[first.ReceiverType]; ok && changedSet[filepath.ToSlash(info.Path)] {
-				affected[ch.Name] = true
+				isAffected = true
 			}
 			xs := impls[first.ReceiverType]
 			// Candidate implementations establish possible impact, not a
 			// unique execution path. Keep ambiguity in Unresolved below.
 			for _, candidate := range xs {
 				if changedSet[filepath.ToSlash(candidate.Path)] {
-					affected[ch.Name] = true
+					isAffected = true
 				}
 			}
 			if len(xs) != 1 {
@@ -189,7 +190,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 				ss := service.Symbol + "." + first.Method
 				ch.Nodes = append(ch.Nodes, Node{Path: filepath.ToSlash(service.Path), Symbol: ss, Role: "SERVICE", Workspace: "current"})
 				if changedSet[filepath.ToSlash(service.Path)] {
-					affected[ch.Name] = true
+					isAffected = true
 				}
 				sf := calls[ss]
 				if len(sf) != 1 {
@@ -204,14 +205,14 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 					} else {
 						ch.Nodes = append(ch.Nodes, Node{Path: filepath.ToSlash(info.Path), Symbol: ms, Role: "MAPPER", Workspace: "current"})
 						if changedSet[filepath.ToSlash(info.Path)] {
-							affected[ch.Name] = true
+							isAffected = true
 						}
 						xmlKey, identityOK := mapperXMLIdentity180(rootAbs, info, ms)
 						if identityOK {
 							if xp, ok := xmlIndex[xmlKey]; ok {
 								ch.Nodes = append(ch.Nodes, Node{Path: xp, Symbol: ms, Role: "SQL", Workspace: "current"})
 								if changedSet[xp] {
-									affected[ch.Name] = true
+									isAffected = true
 								}
 							} else {
 								ch.Unresolved = append(ch.Unresolved, ms+" XML statement unresolved")
@@ -224,21 +225,22 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 			}
 		}
 		chains = append(chains, ch)
+		affected = append(affected, isAffected)
 	}
 
 	if intent.Mode == "CHANGES" {
 		filtered := make([]Chain, 0, len(chains))
-		for _, ch := range chains {
+		for i, ch := range chains {
 			// Unfiltered CHANGES must never mark hundreds of unresolved
 			// Controllers affected because some unrelated file changed.
 			// An explicit target is different: preserve the requested
 			// incomplete candidate (with a gap) if the diff cannot map back
 			// to this endpoint, rather than silently dropping the user target.
-			if !affected[ch.Name] && intent.Target != "" && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
+			if !affected[i] && intent.Target != "" && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
 				ch.Unresolved = append(ch.Unresolved, "CHANGE_IMPACT_UNRESOLVED: "+ch.Name)
-				affected[ch.Name] = true
+				isAffected = true
 			}
-			if affected[ch.Name] {
+			if affected[i] {
 				filtered = append(filtered, ch)
 			}
 		}

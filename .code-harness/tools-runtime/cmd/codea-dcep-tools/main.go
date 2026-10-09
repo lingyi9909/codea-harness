@@ -30,7 +30,7 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		writeCLIError180(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -595,4 +595,14 @@ func escapeNonASCIIJSON180(raw []byte) []byte {
 		raw = raw[size:]
 	}
 	return []byte(b.String())
+}
+
+// writeCLIError180 prevents native stderr from being misdecoded by legacy
+// Windows PowerShell OEM/GBK pipelines. Structured stdout uses the same
+// ASCII-safe JSON encoding; stderr stays an ASCII-safe diagnostic string.
+func writeCLIError180(w io.Writer, err error) {
+    if err == nil { return }
+    raw := []byte(err.Error())
+    if runtime.GOOS == "windows" { raw = escapeNonASCIIJSON180(raw) }
+    _, _ = fmt.Fprintln(w, string(raw))
 }

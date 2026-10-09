@@ -30,3 +30,12 @@ func Test180ReviewPrepareIntentAliasAndConflict(t *testing.T) {
   t.Fatalf("conflicting alias accepted: %v",err)
  }
 }
+
+func Test180NativeWindowsErrorUnicodeTransport(t *testing.T) {
+  input := []byte("REVIEW_PREPARE_FAILED: 中文路径/订单")
+  safe := escapeNonASCIIJSON180(input)
+  for _, b := range safe { if b >= 0x80 { t.Fatalf("native stderr transport is not ASCII-safe: %q", safe) } }
+  if !strings.Contains(string(safe), "\\u4e2d") || !strings.Contains(string(safe), "REVIEW_PREPARE_FAILED") {
+    t.Fatalf("error code or Unicode content lost: %q", safe)
+  }
+}
