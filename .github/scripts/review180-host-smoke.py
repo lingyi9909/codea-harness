@@ -82,6 +82,25 @@ def latest_user_text(messages):
     return ""
 
 
+def is_explicit_selection_reply(messages):
+    """Only an exact new user reply authorizes the smoke provider to request select.
+
+    The expanded /harness-review command itself includes the literal example
+    "选择 C1"; substring matching that instruction is NOT user consent.
+    Runtime independently authenticates the user turn with OpenCode export.
+    """
+    return latest_user_text(messages).strip() == "选择 C1"
+
+
+def verify_selection_reply_guard():
+    """Permanent regression: slash-command instructions cannot impersonate a choice."""
+    command_turn = [{"role": "user", "content": "Review target: OrderController\nAfter menu, reply 选择 C1"}]
+    require(not is_explicit_selection_reply(command_turn), "embedded example was misread as human selection")
+    require(is_explicit_selection_reply([{"role": "user", "content": "选择 C1"}]), "actual selection was rejected")
+    require(not is_explicit_selection_reply([{"role": "user", "content": "不选择 C1"}]), "non-consent was accepted")
+    require(not is_explicit_selection_reply([{"role": "assistant", "content": "选择 C1"}]), "assistant text was accepted as user consent")
+
+
 def call(tool_name, arguments, suffix):
     return {
         "id": f"call_review180_{suffix}_{time.time_ns()}",
@@ -148,7 +167,6 @@ class Provider(BaseHTTPRequestHandler):
             require(match is not None, "review start runId was not injected before first model request")
             run_id = match.group(1)
             payload = latest_tool_payload(messages)
-            user = latest_user_text(messages)
 
             if self.server.scenario == "concurrent" and ("REVIEW_FINISH_OVERWRITE_REJECTED" in whole or '"execution": "COMPLETE"' in whole):
                 self.reply(body, content="concurrent finish race observed")
@@ -167,7 +185,7 @@ class Provider(BaseHTTPRequestHandler):
             if isinstance(runtime, dict) and "optionsHash" in runtime:
                 chains = runtime.get("chains", [])
                 if runtime.get("selectionRequired"):
-                    if "选择 C1" not in user:
+                    if not is_explicit_selection_reply(messages):
                         lines = [f"{run_id} options={runtime['optionsHash']}"]
                         lines.extend(f"{chain['id']} {chain['name']}" for chain in chains)
                         self.reply(body, content="\n".join(lines))
@@ -424,6 +442,7 @@ def init_fixture_repo(project, env):
 
 
 def main():
+    verify_selection_reply_guard()
     parser = argparse.ArgumentParser()
     parser.add_argument("--opencode", required=True, type=Path)
     parser.add_argument("--runtime", required=True, type=Path)
