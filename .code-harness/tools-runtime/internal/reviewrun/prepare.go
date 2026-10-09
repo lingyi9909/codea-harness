@@ -238,7 +238,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 			// to this endpoint, rather than silently dropping the user target.
 			if !affected[i] && intent.Target != "" && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
 				ch.Unresolved = append(ch.Unresolved, "CHANGE_IMPACT_UNRESOLVED: "+ch.Name)
-				isAffected = true
+				affected[i] = true
 			}
 			if affected[i] {
 				filtered = append(filtered, ch)
