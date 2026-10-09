@@ -229,9 +229,15 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	if intent.Mode == "CHANGES" {
 		filtered := make([]Chain, 0, len(chains))
 		for _, ch := range chains {
-			// Do not declare every unresolved Controller affected just because
-			// some other, unrelated source file changed. Inability to map
-			// impact is a global discovery gap, never proof of 275 changes.
+			// Unfiltered CHANGES must never mark hundreds of unresolved
+			// Controllers affected because some unrelated file changed.
+			// An explicit target is different: preserve the requested
+			// incomplete candidate (with a gap) if the diff cannot map back
+			// to this endpoint, rather than silently dropping the user target.
+			if !affected[ch.Name] && intent.Target != "" && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
+				ch.Unresolved = append(ch.Unresolved, "CHANGE_IMPACT_UNRESOLVED: "+ch.Name)
+				affected[ch.Name] = true
+			}
 			if affected[ch.Name] {
 				filtered = append(filtered, ch)
 			}
