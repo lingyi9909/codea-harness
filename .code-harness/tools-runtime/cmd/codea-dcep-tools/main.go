@@ -597,12 +597,15 @@ func escapeNonASCIIJSON180(raw []byte) []byte {
 	return []byte(b.String())
 }
 
-// writeCLIError180 prevents native stderr from being misdecoded by legacy
-// Windows PowerShell OEM/GBK pipelines. Structured stdout uses the same
-// ASCII-safe JSON encoding; stderr stays an ASCII-safe diagnostic string.
+// writeCLIError180 emits readable Unicode on Windows Console through its
+// UTF-16 API, and ordinary UTF-8 when stderr is a pipe (for OpenCode/Node).
+// stdout remains an independent ASCII-safe JSON protocol.
 func writeCLIError180(w io.Writer, err error) {
-    if err == nil { return }
-    raw := []byte(err.Error())
-    if runtime.GOOS == "windows" { raw = escapeNonASCIIJSON180(raw) }
-    _, _ = fmt.Fprintln(w, string(raw))
+	if err == nil {
+		return
+	}
+	if writeWindowsConsoleError180(w, err.Error()) {
+		return
+	}
+	_, _ = fmt.Fprintln(w, err.Error())
 }
