@@ -163,7 +163,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{err.Error()}, runner.Count())
 	}
 
-	xmlIndex := indexMapperXML180(rootAbs, filterExt180(sources, ".xml"))
+	xmlCandidates := indexMapperXMLCandidates180(rootAbs, filterExt180(sources, ".xml"))
 	changedSet := pathSet180(changedSources)
 	chains := make([]Chain, 0, len(endpoints))
 	affected := make([]bool, 0, len(endpoints))
@@ -226,7 +226,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 						}
 						xmlKey, identityOK := mapperXMLIdentity180(rootAbs, info, ms)
 						if identityOK {
-							if xp, ok := xmlIndex[xmlKey]; ok {
+							if xp, ok := selectMapperXML180(info.Path, xmlCandidates[xmlKey]); ok {
 								ch.Nodes = append(ch.Nodes, Node{Path: xp, Symbol: ms, Role: "SQL", Workspace: "current"})
 								if changedSet[xp] {
 									isAffected = true
@@ -690,4 +690,88 @@ func pathSet180(paths []string) map[string]bool {
 		}
 	}
 	return out
+}
+
+ 
+// indexMapperXMLCandidates180 deliberately retains duplicate namespace/id
+// matches. A single-value map can silently select a Mapper XML belonging to
+// another Maven module, incorrectly expanding CHANGES impact.
+func indexMapperXMLCandidates180(root string, ps []string) map[string][]string {
+	out := map[string][]string{}
+	for _, p := range ps {
+		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
+		if err != nil {
+			continue
+		}
+		var m mapperXML180
+		if xml.Unmarshal(b, &m) != nil {
+			continue
+		}
+		namespace := strings.TrimSpace(m.Namespace)
+		if namespace == "" {
+			continue
+		}
+		for _, statement := range m.Statements {
+			if statement.ID == "" {
+				continue
+			}
+			key := namespace + "." + statement.ID
+			duplicate := false
+			for _, existing := range out[key] {
+				if existing == p {
+					duplicate = true
+					break
+				}
+			}
+			if !duplicate {
+				out[key] = append(out[key], filepath.ToSlash(p))
+			}
+		}
+	}
+	for key := range out {
+		sort.Strings(out[key])
+	}
+	return out
+}
+
+// Maven project roots are discovered from actual source/resource layout,
+// not a fixed directory name or module list.
+func mavenModuleRoot180(p string) (string, bool) {
+	p = filepath.ToSlash(p)
+	if strings.HasPrefix(p, "src/main/") {
+		return "", true
+	}
+	if at := strings.Index(p, "/src/main/"); at > 0 {
+		return p[:at], true
+	}
+	return "", false
+}
+
+// A globally unique XML declaration can live in a separate Maven module;
+// otherwise prefer the declaration in the Mapper interface's own module.
+// If several candidates remain, fail closed rather than attributing the
+// change to whichever XML appeared last during repository traversal.
+func selectMapperXML180(mapperPath string, candidates []string) (string, bool) {
+	if len(candidates) == 1 {
+		return candidates[0], true
+	}
+	if len(candidates) == 0 {
+		return "", false
+	}
+	module, ok := mavenModuleRoot180(mapperPath)
+	if !ok {
+		return "", false
+	}
+	selection := ""
+	for _, candidate := range candidates {
+		other, exists := mavenModuleRoot180(candidate)
+		if !exists || module != other {
+			continue
+		}
+		if selection != "" {
+			return "", false
+		}
+		selection = candidate
+	}
+	return selection, selection != ""
 }
