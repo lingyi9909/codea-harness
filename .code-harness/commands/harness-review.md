@@ -12,7 +12,14 @@ Review target: $ARGUMENTS
 
 The command output above is the authoritative `review start` result. It has already created and read back the durable **INCOMPLETE** report before this model turn. Keep its `runId` and `reportPath`; never discover a run by taking the newest directory.
 
-Use only the `codea-review` structured tool for the ordinary 1.8 review path:
+Use only the `codea-review` structured tool for the ordinary 1.8 review path.
+The Runtime CLI accepts both `review prepare --run-id <id> --mode CHANGES` and
+`review prepare --run-id <id> --intent CHANGES`; conflicting flags are rejected.
+For NO_RELEVANT_CHANGES, retain the SAME runId and the durable INCOMPLETE report;
+no replacement `review start` is required. When sources change, rerun prepare on
+that original runId. Never switch to CURRENT_IMPLEMENTATION automatically.
+
+
 
 ## Assistant-turn execution control
 

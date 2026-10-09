@@ -113,8 +113,10 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		if err != nil {
 			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CHANGESET_DISCOVERY_FAILED: " + err.Error()}, 0)
 		}
-		if intent.Target != "" && len(changedSources) == 0 {
-			return Options{}, fmt.Errorf("REVIEW_TARGET_NO_RELEVANT_CHANGES")
+		if len(changedSources) == 0 {
+			// Preserve the run and durable INCOMPLETE report. A later prepare
+			// with the same runId can rescan after the working tree changes.
+			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, []Chain{}, false, []string{"NO_RELEVANT_CHANGES"}, 0)
 		}
 	}
 
@@ -137,50 +139,12 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, []Chain{}, false, []string{"ENTRYPOINT_NOT_FOUND"}, runner.Count())
 	}
 
-	scope := scanScope180(javaFiles)
-	calls, err := n.FindDirectMethodCallsBatch180(ctx, scope)
+	// Each Maven module has its own src/main/java root. Using the first
+	// lexicographic Java path silently drops calls from every other module.
+	// Keep facts scoped by source root to avoid conflating same-named types.
+	bySourceRoot, err := discoverScopedNavigation180(ctx, n, javaFiles)
 	if err != nil {
-		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CALL_DISCOVERY_FAILED: " + err.Error()}, runner.Count())
-	}
-	receivers := []string{}
-	for _, facts := range calls {
-		for _, f := range facts {
-			if f.Resolved && f.ReceiverType != "" {
-				receivers = append(receivers, f.ReceiverType)
-			}
-		}
-	}
-	impls, err := n.FindImplementationTypesBatch180(ctx, uniqueStrings180(receivers), scope)
-	if err != nil {
-		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"IMPLEMENTATION_DISCOVERY_FAILED: " + err.Error()}, runner.Count())
-	}
-
-	targetSymbols := []string{}
-	infoSymbols := append([]string{}, receivers...)
-	for _, ep := range endpoints {
-		for _, c := range calls[ep.Symbol] {
-			if !c.Resolved {
-				continue
-			}
-			symbol := c.TargetSymbol
-			if xs := impls[c.ReceiverType]; len(xs) == 1 {
-				symbol = xs[0].Symbol + "." + c.Method
-			}
-			for _, sc := range calls[symbol] {
-				if sc.Resolved {
-					targetSymbols = append(targetSymbols, sc.TargetSymbol)
-					infoSymbols = append(infoSymbols, sc.ReceiverType)
-				}
-			}
-		}
-	}
-	infoSymbols = append(infoSymbols, targetSymbols...)
-	infos := map[string]nav.SymbolInfo{}
-	if len(infoSymbols) > 0 {
-		infos, err = n.GetSymbolInfos(ctx, uniqueStrings180(infoSymbols), scope)
-		if err != nil && !errors.Is(err, nav.ErrSymbolNotFound) {
-			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"TARGET_DISCOVERY_FAILED: " + err.Error()}, runner.Count())
-		}
+		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{err.Error()}, runner.Count())
 	}
 
 	xmlIndex := indexMapperXML180(rootAbs, filterExt180(sources, ".xml"))
@@ -188,6 +152,11 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	chains := make([]Chain, 0, len(endpoints))
 	affected := map[string]bool{}
 	for _, ep := range endpoints {
+		navFacts, ok := bySourceRoot[javaSourceRoot180(ep.Path)]
+		if !ok {
+			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CALL_DISCOVERY_FAILED: entrypoint has no matching source root: " + ep.Path}, runner.Count())
+		}
+		calls, impls, infos := navFacts.Calls, navFacts.Impls, navFacts.Infos
 		ch := Chain{
 			Name:       ep.Symbol,
 			Nodes:      []Node{{Path: filepath.ToSlash(ep.Path), Symbol: ep.Symbol, Role: "CONTROLLER", Workspace: "current"}},
@@ -261,13 +230,9 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	if intent.Mode == "CHANGES" {
 		filtered := make([]Chain, 0, len(chains))
 		for _, ch := range chains {
-			// An incomplete path cannot prove that downstream changed code
-			// is unrelated. Retain the entry and its gap rather than allow
-			// another, complete chain to manufacture AUTO_SINGLE.
-			if !affected[ch.Name] && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
-				ch.Unresolved = append(ch.Unresolved, "CHANGE_IMPACT_UNRESOLVED: "+ch.Name)
-				affected[ch.Name] = true
-			}
+			// Do not declare every unresolved Controller affected just because
+			// some other, unrelated source file changed. Inability to map
+			// impact is a global discovery gap, never proof of 275 changes.
 			if affected[ch.Name] {
 				filtered = append(filtered, ch)
 			}
@@ -280,6 +245,26 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		chains[i].ID = fmt.Sprintf("C%d", i+1)
 	}
 	gaps := []string{}
+	if intent.Mode == "CHANGES" {
+		// Fail closed when a changed source cannot be attributed to any
+		// discovered entrypoint. Do not inflate the options menu or silently
+		// claim complete coverage for the remaining chains.
+		matched := map[string]bool{}
+		for _, ch := range chains {
+			for _, node := range ch.Nodes {
+				matched[filepath.ToSlash(node.Path)] = true
+			}
+		}
+		unmapped := 0
+		for source := range changedSet {
+			if !matched[source] {
+				unmapped++
+			}
+		}
+		if unmapped > 0 {
+			gaps = append(gaps, fmt.Sprintf("CHANGE_IMPACT_UNRESOLVED: %d changed source files lack a proven selected call chain", unmapped))
+		}
+	}
 	if len(chains) == 0 {
 		gaps = append(gaps, "ENTRYPOINT_NOT_FOUND")
 	}
