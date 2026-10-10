@@ -7,13 +7,28 @@ import (
 	"strings"
 )
 
+// MethodSpan180 is derived from the exact ast-grep method-declaration range.
+// A path and source interval are necessary for method-level change attribution.
+type MethodSpan180 struct {
+    Path string
+    StartLine int
+    EndLine int
+}
+
 // FindDirectMethodCallsBatch180 snapshots Java declarations and call expressions
 // with one ast-grep process, then projects direct calls for every method. It is
 // intentionally narrow for the 1.8 review prepare path.
 func (n Navigator) FindDirectMethodCallsBatch180(ctx context.Context, scope string) (map[string][]DirectMethodCall, error) {
+    calls, _, err := n.FindDirectMethodCallsWithSpansBatch180(ctx, scope)
+    return calls, err
+}
+
+// FindDirectMethodCallsWithSpansBatch180 shares the same single ast-grep pass;
+// no extra process per endpoint or method is allowed.
+func (n Navigator) FindDirectMethodCallsWithSpansBatch180(ctx context.Context, scope string) (map[string][]DirectMethodCall, map[string][]MethodSpan180, error) {
 	records, err := n.runDirectCallsBatch180(ctx, scope)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var types, methods, calls []rawMatch
 	for _, r := range records {
@@ -25,10 +40,11 @@ func (n Navigator) FindDirectMethodCallsBatch180(ctx context.Context, scope stri
 		case "codea-direct-calls-180-calls":
 			calls = append(calls, r)
 		default:
-			return nil, fmt.Errorf("unexpected direct-call ruleId %q", r.RuleID)
+			return nil, nil, fmt.Errorf("unexpected direct-call ruleId %q", r.RuleID)
 		}
 	}
 	out := map[string][]DirectMethodCall{}
+    spans := map[string][]MethodSpan180{}
 	for _, method := range methods {
 		ownerType, ok := smallestContaining(types, method)
 		if !ok {
@@ -40,6 +56,7 @@ func (n Navigator) FindDirectMethodCallsBatch180(ctx context.Context, scope stri
 			continue
 		}
 		from := owner + "." + member
+        spans[from] = append(spans[from], MethodSpan180{Path: method.Path, StartLine: method.StartLine, EndLine: method.EndLine})
 		seen := map[string]bool{}
 		for _, call := range calls {
 			if !contains(method, call) {
@@ -77,7 +94,7 @@ func (n Navigator) FindDirectMethodCallsBatch180(ctx context.Context, scope stri
 			return out[from][i].TargetSymbol < out[from][j].TargetSymbol
 		})
 	}
-	return out, nil
+    return out, spans, nil
 }
 
 // FindImplementationTypesBatch180 resolves concrete implementations for a set
