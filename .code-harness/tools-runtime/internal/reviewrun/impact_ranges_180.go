@@ -133,6 +133,7 @@ func mapperStatementRange180(root, rel, identity string) (ReadRef, error) {
     dec := xml.NewDecoder(bytes.NewReader(data))
     namespace := ""
     found := []ReadRef{}
+    statementRanges := []ReadRef{}
     for {
         token, err := dec.Token()
         if err == io.EOF { break }
@@ -151,10 +152,18 @@ func mapperStatementRange180(root, rel, identity string) (ReadRef, error) {
         if opening<0 { return ReadRef{},fmt.Errorf("Mapper XML opening tag missing: %s",rel) }
         if err:=dec.Skip();err!=nil {return ReadRef{},err}
         end:=int(dec.InputOffset())
+        span:=ReadRef{Path:filepath.ToSlash(rel),StartLine:1+bytes.Count(data[:opening],[]byte("\n")),EndLine:1+bytes.Count(data[:end],[]byte("\n"))}
+        statementRanges=append(statementRanges,span)
         if namespace+"."+id != identity {continue}
-        found=append(found,ReadRef{Path:filepath.ToSlash(rel),StartLine:1+bytes.Count(data[:opening],[]byte("\n")),EndLine:1+bytes.Count(data[:end],[]byte("\n"))})
+        found=append(found,span)
     }
     if len(found)!=1 { return ReadRef{},fmt.Errorf("Mapper XML statement not unique: %s in %s count=%d",identity,rel,len(found)) }
+    for _,other:=range statementRanges {
+        if other.StartLine==found[0].StartLine && other.EndLine==found[0].EndLine {continue}
+        if other.StartLine<=found[0].EndLine && other.EndLine>=found[0].StartLine {
+            return ReadRef{},fmt.Errorf("Mapper XML statements share a source line: %s in %s",identity,rel)
+        }
+    }
     return found[0],nil
 }
 
