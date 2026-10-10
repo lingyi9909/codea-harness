@@ -31,11 +31,7 @@ func Test180PrepareNoRelevantChangesRetainsRunForRetry(t *testing.T) {
  }
  status,err:=Status(root,started.RunID)
  if err!=nil||status.Execution!="INCOMPLETE" {t.Fatalf("wrong status: %+v %v",status,err)}
- file:=filepath.Join(root,"src","main","java","com","example","OrderController.java")
- f,err:=os.OpenFile(file,os.O_APPEND|os.O_WRONLY,0)
- if err!=nil{t.Fatal(err)}
- if _,err=f.WriteString("\n// changed after original start\n");err!=nil{t.Fatal(err)}
- if err=f.Close();err!=nil{t.Fatal(err)}
+ replaceT5Fixture180(t,root,"src/main/java/com/example/OrderController.java","orderService.create();","orderService.create(); // changed after original start")
  paths,err:=changedSourceFiles180(context.Background(),root)
  if err!=nil||len(paths)!=1{t.Fatalf("same run changes now missing: %v %v",paths,err)}
  useRealAstGrep180(t,root)
@@ -71,11 +67,7 @@ func Test180UnrelatedControllerNotMarkedChangedByIncompleteCall(t *testing.T) {
  source:="package com.example;\nimport org.springframework.web.bind.annotation.RestController;\nimport org.springframework.web.bind.annotation.GetMapping;\n@RestController public class UnrelatedController {\n @GetMapping(\"/unrelated\") public String status() { return \"ok\"; }\n}\n"
  if err:=os.WriteFile(p,[]byte(source),0600);err!=nil{t.Fatal(err)}
  initControllerReviewGitBaseline180(t,root)
- changed:=filepath.Join(root,"src","main","java","com","example","OrderController.java")
- f,err:=os.OpenFile(changed,os.O_APPEND|os.O_WRONLY,0)
- if err!=nil{t.Fatal(err)}
- if _,err=f.WriteString("\n// one controller changed\n");err!=nil{t.Fatal(err)}
- if err=f.Close();err!=nil{t.Fatal(err)}
+ replaceT5Fixture180(t,root,"src/main/java/com/example/OrderController.java","orderService.create();","orderService.create(); // one controller changed")
  useRealAstGrep180(t,root)
  start,err:=Start(root)
  if err!=nil{t.Fatal(err)}
