@@ -64,7 +64,12 @@ func buildBoundedChain180(
                 continue
             }
             method:=call.TargetSymbol
-            if info,ok:=facts.Infos[method];ok && strings.HasSuffix(call.ReceiverType,"Mapper") {
+            if strings.HasSuffix(call.ReceiverType,"Mapper") {
+                info, ok := facts.Infos[method]
+                if !ok {
+                    ch.Unresolved=append(ch.Unresolved,method+" Mapper declaration unresolved")
+                    continue
+                }
                 // A Mapper declaration without an unambiguous matching SQL
                 // remains an explicit gap, never an implementation guess.
                 if xmlKey,identityOK:=mapperXMLIdentity180(root,info,method);identityOK {
@@ -90,7 +95,7 @@ func buildBoundedChain180(
                 for _,span:=range facts.Methods[method] {
                     if filepath.ToSlash(span.Path)==filepath.ToSlash(call.Path) {own=append(own,span)}
                 }
-                if len(own)!=1 {
+                if len(own)!=1 || !own[0].HasBody {
                     ch.Unresolved=append(ch.Unresolved,"SELF_METHOD_UNRESOLVED: "+method)
                     continue
                 }
@@ -105,7 +110,7 @@ func buildBoundedChain180(
                 // needs no interface implementation lookup. Only a unique
                 // in-scope actual method body can authorize this edge.
                 bodies:=facts.Methods[method]
-                if len(bodies)==1 {
+                if len(bodies)==1 && bodies[0].HasBody {
                     addNode(Node{Path:bodies[0].Path,Symbol:method,Role:"SERVICE",Workspace:"current"})
                     if impact!=nil && impact.method(bodies,bodies[0].Path,method) {affected=true}
                     walk(method,depth+1)
