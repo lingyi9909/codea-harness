@@ -3,6 +3,7 @@ package reviewrun
 import (
     "fmt"
     "path/filepath"
+    "strings"
 
     "codea-harness-tools/internal/nav"
 )
@@ -44,7 +45,10 @@ func buildBoundedChain180(
         }
         calls:=facts.Calls[from]
         if len(calls)==0 {
-            ch.Unresolved=append(ch.Unresolved,fmt.Sprintf("%s direct internal calls=0",from))
+            // A leaf helper/service that performs validation or computation
+            // legitimately has no further internal calls. The Controller and
+            // first Service hop still require an observable downstream edge.
+            if depth<=1 {ch.Unresolved=append(ch.Unresolved,fmt.Sprintf("%s direct internal calls=0",from))}
             return
         }
         active[from]=true
@@ -73,6 +77,24 @@ func buildBoundedChain180(
                         continue
                     }
                 }
+            }
+            // Java this/super/unqualified calls are direct methods on the
+            // current implementation, not interface-implementation lookups.
+            owner:=from
+            if at:=strings.LastIndexByte(from,'.');at>=0 {owner=from[:at]}
+            if owner==call.ReceiverType {
+                own:=[]nav.MethodSpan180{}
+                for _,span:=range facts.Methods[method] {
+                    if filepath.ToSlash(span.Path)==filepath.ToSlash(call.Path) {own=append(own,span)}
+                }
+                if len(own)!=1 {
+                    ch.Unresolved=append(ch.Unresolved,"SELF_METHOD_UNRESOLVED: "+method)
+                    continue
+                }
+                addNode(Node{Path:own[0].Path,Symbol:method,Role:"SERVICE",Workspace:"current"})
+                if impact!=nil && impact.method(own,own[0].Path,method) {affected=true}
+                walk(method,depth+1)
+                continue
             }
             xs:=facts.Impls[call.ReceiverType]
             if len(xs)!=1 {
