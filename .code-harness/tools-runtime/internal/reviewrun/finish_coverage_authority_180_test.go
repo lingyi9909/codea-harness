@@ -88,7 +88,7 @@ func TestT5ActualUnresolvedChainRemainsUndeterminedWithCriticalFinding(t *testin
             ID:"F-critical",Severity:"CRITICAL",
             Problem:"unsafe entrypoint",Impact:"unauthorized write",
             Recommendation:"restrict access",Verification:"review callsite",
-            Evidence: []Evidence{{Ref:ref,Quote:"class A { void entry() {} }"}},
+            Evidence: []Evidence{{Ref:ref,Quote:"void entry() {}"}},
         }},
         Gaps: []string{externalSchemaNote180},
     })
