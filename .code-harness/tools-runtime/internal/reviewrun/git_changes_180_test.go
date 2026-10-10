@@ -104,7 +104,7 @@ func Test180CommittedBranchPrepareDetectsAffectedChain(t *testing.T) {
     gitReview180(t, root, "branch", "base")
     gitReview180(t, root, "checkout", "-b", "feature")
     path := "src/main/java/com/example/OrderController.java"
-    appendReviewFile180(t, root, path, "\n// committed only\n")
+    replaceT5Fixture180(t,root,path,"orderService.create();","orderService.create(); // committed only")
     gitReview180(t, root, "add", path)
     gitReview180(t, root, "commit", "-m", "change controller")
     writeReviewConfig180(t, root, "base", true)
