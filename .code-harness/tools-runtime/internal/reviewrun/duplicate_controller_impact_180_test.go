@@ -30,11 +30,7 @@ func Test180ChangesSameNamedControllersInDifferentModulesDoNotCrossContaminate(t
  })
  if err != nil { t.Fatal(err) }
  initControllerReviewGitBaseline180(t, root)
- changed := filepath.Join(moduleA, "main", "java", "com", "example", "OrderController.java")
- f, err := os.OpenFile(changed, os.O_APPEND|os.O_WRONLY, 0)
- if err != nil { t.Fatal(err) }
- if _, err = f.WriteString("\n// only module-a changed\n"); err != nil { _ = f.Close(); t.Fatal(err) }
- if err := f.Close(); err != nil { t.Fatal(err) }
+ replaceT5Fixture180(t,root,"module-a/src/main/java/com/example/OrderController.java","orderService.create();","orderService.create(); // only module-a changed")
  start, err := Start(root)
  if err != nil { t.Fatal(err) }
  opts, err := Prepare(context.Background(), root, start.RunID, Intent{Mode:"CHANGES", Target:"OrderController.create"})
