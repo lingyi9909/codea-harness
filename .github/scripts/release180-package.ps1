@@ -39,7 +39,14 @@ function Add-PrimaryReview180Host([string]$ZipPath, [string]$Kind) {
         New-Item -ItemType Directory -Force (Split-Path -Parent $primaryAgent) | Out-Null
         New-Item -ItemType Directory -Force (Split-Path -Parent $primaryTool) | Out-Null
         Copy-Item -LiteralPath (Join-Path $repoRoot '.code-harness/agents/orchestrator.md') -Destination $primaryAgent -Force
-        Copy-Item -LiteralPath (Join-Path $repoRoot '.code-harness/tools/codea-review.ts') -Destination $primaryTool -Force
+        # The source uses @opencode-ai/plugin for schema construction, but the
+        # delivered Host tool must load with *no* npm, SDK install, or network.
+        # CI bundles the pinned plugin SDK into this standalone ESM artifact.
+        $offlineTool = Join-Path $repoRoot '.code-harness/tools/codea-review.offline.ts'
+        if (-not (Test-Path $offlineTool -PathType Leaf)) {
+            throw 'Offline native tool bundle missing. Build the pinned SDK bundle before packaging.'
+        }
+        Copy-Item -LiteralPath $offlineTool -Destination $primaryTool -Force
 
         $manifestPath = Join-Path $harnessRoot 'RELEASE-MANIFEST.json'
         $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
