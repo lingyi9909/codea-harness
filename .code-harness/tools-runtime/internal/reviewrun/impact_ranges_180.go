@@ -32,10 +32,17 @@ func buildImpactRanges180(ctx context.Context, root string, paths []string) (*im
     idx := &impactRanges180{changed: map[string][]ReadRef{}, mapped: map[string][]ReadRef{}, gaps: []string{}}
     snapshot, err := reviewChangesSnapshot180(root)
     if err != nil {return nil,fmt.Errorf("CHANGE_IMPACT_DIFF_FAILED: %w",err)}
+    // The canonical Git ChangeSet also includes configuration, docs and
+    // manifests. They must not enter the Java/XML method-attribution index.
+    // Keep untracked-file handling scoped to the same approved source set.
+    eligible:=make(map[string]bool,len(paths))
+    for _,path:=range paths {eligible[filepath.ToSlash(path)]=true}
     untracked:=map[string]bool{}
     for _,file:=range snapshot.Files {
+        path:=filepath.ToSlash(file.Path)
+        if !eligible[path] {continue}
         for _,source:=range file.Sources {
-            if source==changeset.SourceUntracked {untracked[filepath.ToSlash(file.Path)]=true}
+            if source==changeset.SourceUntracked {untracked[path]=true}
         }
     }
     args:=[]string{"-c","core.quotePath=false","diff","--unified=0","--no-ext-diff","--no-color","--no-renames",snapshot.MergeBase}
@@ -64,7 +71,7 @@ func buildImpactRanges180(ctx context.Context, root string, paths []string) (*im
             }
             continue
         }
-        if current=="" {continue}
+        if current=="" || !eligible[current] {continue}
         m:=diffHunk180.FindStringSubmatch(line)
         if len(m)==0 {continue}
         first,e:=strconv.Atoi(m[1])
