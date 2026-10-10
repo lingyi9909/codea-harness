@@ -41,6 +41,25 @@ jobs:
           if ($head -ne '${{ github.sha }}') { throw "checkout HEAD mismatch: expected=${{ github.sha }} actual=$head" }
           Write-Output "RELEASE180_INPUT PASS version=$version head=$head"
 
+      - name: Bundle pinned native tool for truly offline Host installation
+        shell: pwsh
+        run: |
+          # SDK and bundler downloads happen only on the public CI builder.
+          # The delivered project never runs npm, bun install or a package fetch.
+          $buildRoot = Join-Path $env:RUNNER_TEMP 'review180 offline bundle & sdk'
+          npm.cmd install --prefix $buildRoot --no-audit --no-fund --save-exact @opencode-ai/plugin@1.18.25 esbuild@0.25.12
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $source = Join-Path $buildRoot 'codea-review.ts'
+          Copy-Item '.code-harness/tools/codea-review.ts' $source -Force
+          $esbuild = Join-Path $buildRoot 'node_modules/esbuild/bin/esbuild'
+          $out = Join-Path (Get-Location) '.code-harness/tools/codea-review.offline.ts'
+          & node.exe $esbuild $source --bundle --platform=node --format=esm --target=es2022 "--outfile=$out"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out -PathType Leaf)) { throw 'native Host offline bundle failed' }
+          $body = Get-Content $out -Raw
+          if ($body -match '(?m)^\\s*import.*@opencode-ai/plugin') { throw 'native Host bundle retained runtime SDK dependency' }
+          if ($body -notmatch 'CODEA_REVIEW_RUN_ID_INVALID') { throw 'native Host bundle omitted review tool payload' }
+          Write-Output "REVIEW180_OFFLINE_BUNDLE PASS sha256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
       - name: Build 1.8.0 official candidate package
         shell: pwsh
         run: ./.github/scripts/release180-package.ps1
@@ -198,7 +217,7 @@ jobs:
             '--ast-grep', (Join-Path $package '.code-harness/bin/ast-grep.exe'),
             '--tool-source', (Join-Path $package '.opencode/tools/codea-review.ts'),
             '--command-source', (Join-Path $package '.opencode/commands/harness-review.md'),
-            '--sdk-root', $env:CODEA_180_SDK
+            '--offline'
           )
           python @args
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
