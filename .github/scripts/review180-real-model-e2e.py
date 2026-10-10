@@ -362,7 +362,7 @@ def extract_install(install_zip: Path, project: Path):
 def mutate_for_scenario(project: Path, scenario: str):
     xml = project / "src" / "main" / "resources" / "mapper" / "OrderMapper.xml"
     controller = project / "src" / "main" / "java" / "com" / "example" / "OrderController.java"
-    if scenario in {"single-issue", "two-chains-select-c1", "early-stop", "timeout"}:
+    if scenario in {"single-issue", "single-affected-two-endpoint", "two-chains-select-c1", "early-stop", "timeout"}:
         text = xml.read_text(encoding="utf-8")
         host.require(SAFE_SQL in text, "safe SQL seed missing")
         xml.write_text(text.replace(SAFE_SQL, RISKY_SQL, 1), encoding="utf-8")
@@ -396,6 +396,18 @@ def mutate_for_scenario(project: Path, scenario: str):
 """
         host.require(safe_method in source, "safe Controller seed missing")
         controller.write_text(source.replace(safe_method, vulnerable_method, 1), encoding="utf-8")
+        if scenario == "two-chains-select-c1":
+            # A two-endpoint project is not necessarily a two-IMPACTED-chain
+            # project. The updateStatus change above only affects one chain.
+            # Independently modify voidOrder's own SQL statement, preserving
+            # its tenant predicate and keeping C1's high-risk seed unchanged.
+            # A file-wide attribution shortcut is forbidden.
+            second_sql = "UPDATE orders SET status = 'CANCELLED' WHERE id = #{id} AND tenant_id = #{tenantId}"
+            second_new = "UPDATE orders SET status = 'VOIDED' WHERE id = #{id} AND tenant_id = #{tenantId}"
+            existing = xml.read_text(encoding="utf-8")
+            host.require(existing.count(second_sql) == 1,
+                         "two-chain fixture needs one independent voidOrder SQL statement")
+            xml.write_text(existing.replace(second_sql, second_new, 1), encoding="utf-8")
     elif scenario == "single-clean":
         literal_impl = project / "src" / "main" / "java" / "com" / "example" / "SqlLiteralServiceImpl.java"
         text = literal_impl.read_text(encoding="utf-8")
@@ -438,7 +450,12 @@ def persist_run(evidence_dir: Path, exported, run_dir: Path, record: dict):
     })
 
 
-def successful_run(args, scenario: str, iteration: int, multi: bool, current_impl: bool = False, no_target: bool = False):
+def successful_run(args, scenario: str, iteration: int, multi: bool, current_impl: bool = False, no_target: bool = False, expect_selection=None):
+    # The existence of two endpoints must not itself require user selection.
+    # Selection is required only when two separate chains were actually
+    # changed (or the user explicitly requests current-implementation scope).
+    if expect_selection is None:
+        expect_selection = multi
     scenario_label = f"{scenario}-no-target" if no_target else scenario
     run_evidence = args.evidence_dir / f"{scenario_label}-{iteration}"
     with tempfile.TemporaryDirectory(prefix=f"Codea 180 {scenario} 空格 & # % ") as raw:
@@ -479,17 +496,75 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
         first_actions = host.tool_actions(exported)
 
+        # Capture the exact first real-model prepare response *before* any
+        # assertion, selection or finish. Even a failed release must retain
+        # complete options, coverage, gaps and user-turn evidence for audit.
+        first_prepares = [state for state in host.tool_parts(exported, "prepare")
+                          if state.get("status") == "completed"]
+        first_prepare = parse_tool_output(first_prepares[-1]) if first_prepares else {}
+        first_runtime = first_prepare.get("runtime", {})
+        run_candidates = list((project / ".code-harness" / "runs").glob("review-*"))
+        first_report = (run_candidates[0] / "review.md") if len(run_candidates) == 1 else None
+        first_report_text = first_report.read_text(encoding="utf-8") if first_report and first_report.is_file() else ""
+        proof = {
+            "schemaVersion": 1,
+            "head": args.head,
+            "scenario": scenario_label,
+            "iteration": iteration,
+            "testKind": "REAL_MODEL_AUTONOMOUS",
+            "sessionId": sid,
+            "actionsBeforeUserSelection": first_actions,
+            "runId": run_candidates[0].name if len(run_candidates) == 1 else None,
+            "optionsHash": first_runtime.get("optionsHash"),
+            "chains": first_runtime.get("chains"),
+            "selectionRequired": first_runtime.get("selectionRequired"),
+            "discoveryComplete": first_runtime.get("discoveryComplete"),
+            "gaps": first_runtime.get("gaps"),
+            "nextAction": first_prepare.get("nextAction"),
+            "reportSha256BeforeSelection": sha256_file(first_report) if first_report_text else None,
+            "reportCompleteBeforeSelection": '"execution":"COMPLETE"' in first_report_text,
+        }
+        write_json(run_evidence / "prepare-before-selection.json", redact(proof))
+        write_json(run_evidence / "trajectory-before-selection.json", redact(exported))
+        if first_report_text:
+            (run_evidence / "review-before-selection.md").write_text(first_report_text, encoding="utf-8")
+        print("RELEASE180_PREPARE_BEFORE_SELECTION " + json.dumps(redact(proof), ensure_ascii=False), flush=True)
+
         user_selection = False
-        if multi:
-            host.require("prepare" in first_actions, f"{scenario}: prepare missing before selection: {first_actions}")
-            host.require("select" not in first_actions and "finish" not in first_actions, f"{scenario}: crossed selection boundary: {first_actions}")
-            runs = list((project / ".code-harness" / "runs").glob("review-*"))
-            host.require(len(runs) == 1, f"{scenario}: durable run missing before selection")
-            before_report = (runs[0] / "review.md").read_text(encoding="utf-8")
-            host.require('"execution":"COMPLETE"' not in before_report, f"{scenario}: report completed before user selection")
+        host.require(len(first_prepares) == 1, f"{scenario_label}: expected one completed prepare, got {first_actions}")
+        host.require(isinstance(first_runtime, dict), f"{scenario_label}: invalid prepare runtime {first_prepare}")
+        if expect_selection:
+            host.require(first_runtime.get("discoveryComplete") is True,
+                         f"{scenario_label}: incomplete discovery before selection: {proof}")
+            host.require(first_runtime.get("selectionRequired") is True,
+                         f"{scenario_label}: two impacted chains did not require human selection: {proof}")
+            host.require(first_runtime.get("gaps") == [],
+                         f"{scenario_label}: unexpected partial coverage: {proof}")
+            chains = first_runtime.get("chains")
+            host.require(isinstance(chains, list) and len(chains) == 2,
+                         f"{scenario_label}: expected TWO impacted chains: {proof}")
+            host.require(
+                [(item.get("id"), item.get("name")) for item in chains] == [
+                    ("C1", "OrderController.updateStatus"), ("C2", "OrderController.voidOrder")
+                ],
+                f"{scenario_label}: expected exact distinct C1/C2 identities: {proof}"
+            )
+            host.require(first_actions == ["prepare"],
+                         f"{scenario_label}: crossed real user selection boundary: {first_actions}")
+            host.require(len(run_candidates) == 1 and bool(first_report_text),
+                         f"{scenario_label}: durable INCOMPLETE report missing before selection")
+            host.require(not proof["reportCompleteBeforeSelection"],
+                         f"{scenario_label}: report completed before user choice: {proof}")
             host.command(run + ["--session", sid, "选择", "C1"], project, env, timeout=420)
             user_selection = True
             exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
+        else:
+            host.require(first_runtime.get("discoveryComplete") is True,
+                         f"{scenario_label}: expected complete single affected scope: {proof}")
+            host.require(first_runtime.get("selectionRequired") is False,
+                         f"{scenario_label}: false multi-selection for a single impacted chain: {proof}")
+            host.require(len(first_runtime.get("chains") or []) == 1,
+                         f"{scenario_label}: incorrectly included unrelated endpoint: {proof}")
 
         actions = host.tool_actions(exported)
         names = [host.normalized(name) for name in completed_tools(exported)]
@@ -515,10 +590,10 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             "prepare" in actions and "finish" in actions,
             f"{scenario}: autonomous path incomplete actions={actions} completedTools={names} nextAction={prepare_next_action}",
         )
-        if multi:
-            host.require(actions.count("select") == 1, f"{scenario}: expected one real-user select: {actions}")
+        if expect_selection:
+            host.require(actions.count("select") == 1, f"{scenario_label}: expected one real-user select: {actions}")
         else:
-            host.require("select" not in actions, f"{scenario}: single chain unexpectedly selected: {actions}")
+            host.require("select" not in actions, f"{scenario_label}: single chain unexpectedly selected: {actions}")
         host.require("read" in names, f"{scenario}: no native source read: {names}")
 
         finish_states = [state for state in host.tool_parts(exported, "finish") if state.get("status") == "completed"]
@@ -536,7 +611,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         findings = result.get("findings", [])
 
         expected = True
-        if scenario in {"single-issue", "two-chains-select-c1"}:
+        if scenario in {"single-issue", "single-affected-two-endpoint", "two-chains-select-c1"}:
             expected = risky_found(findings)
             host.require(expected, f"{scenario}: expected high-risk seeded SQL/tenant finding missing: {findings}")
         elif scenario == "single-clean":
@@ -549,8 +624,10 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             )
             host.require(expected, f"{scenario}: clean control produced issues: {result}")
 
-        if multi:
+        if expect_selection:
             host.require(scope.get("selectedIds") == ["C1"], f"{scenario}: selected scope mismatch: {scope.get('selectedIds')}")
+            host.require(first_runtime.get("selectionRequired") is True,
+                         f"{scenario}: original prepare menu did not require selection")
 
         total_ms = int((time.monotonic() - started) * 1000)
         nav_ms = sum(tool_duration_ms(s) for a in ("prepare", "select") for s in host.tool_parts(exported, a))
@@ -566,6 +643,11 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             "runId": run_dir.name,
             "sessionId": sid,
             "userSelectionObserved": user_selection,
+            "prepareOptionsHash": first_runtime.get("optionsHash"),
+            "prepareChains": first_runtime.get("chains"),
+            "prepareDiscoveryComplete": first_runtime.get("discoveryComplete"),
+            "prepareSelectionRequired": first_runtime.get("selectionRequired"),
+            "prepareGaps": first_runtime.get("gaps"),
             "modelInvokedFinish": True,
             "driverInvokedRuntimeBusinessSteps": False,
             "actions": actions,
@@ -727,10 +809,14 @@ def main():
         for iteration in range(1, 4):
             records.append(successful_run(args, scenario, iteration, multi))
 
-    # Regression for real intranet issues: bare slash-command Review may not
-    # demand a Controller, and next-turn selection must use the native tool.
+    # A project with two actual entrypoints but only ONE impacted endpoint
+    # must remain a single-chain review; never inflate the options menu.
+    records.append(successful_run(args, "single-affected-two-endpoint", 1, True, expect_selection=False))
+    # Both with-target and no-target two-impacted-chain acceptance must
+    # independently PASS three fresh native real-model runs.
     records.append(successful_run(args, "single-issue", 1, False, no_target=True))
-    records.append(successful_run(args, "two-chains-select-c1", 1, True, no_target=True))
+    for iteration in range(1, 4):
+        records.append(successful_run(args, "two-chains-select-c1", iteration, True, no_target=True))
     records.append(successful_run(args, "current-implementation-no-diff", 1, False, current_impl=True))
     records.append(no_relevant_changes_run(args))
     records.append(negative_run(args, "early-stop", output_limit=32, timeout=180))
@@ -748,15 +834,16 @@ def main():
             "single-clean": 3,
             "two-chains-select-c1": 3,
             "single-issue-no-target": 1,
-            "two-chains-select-c1-no-target": 1,
+            "two-chains-select-c1-no-target": 3,
+            "single-affected-two-endpoint": 1,
         },
         "status": "PASS",
     }
     write_json(args.evidence_dir / "summary.json", summary)
     print(
         "RELEASE180_REAL_MODEL_MATRIX PASS "
-        "singleIssue=3 singleClean=3 twoChainsSelectC1=3 "
-        "extra=zeroTargetSingle,zeroTargetMultiSelection,currentImplementation,noRelevantChanges,earlyStop,toolFailure,timeout",
+        "singleIssue=3 singleClean=3 twoChainsSelectC1=3 twoChainsSelectC1NoTarget=3 "
+        "extra=singleImpactedFromTwoEndpoints,zeroTargetSingle,currentImplementation,noRelevantChanges,earlyStop,toolFailure,timeout",
         flush=True,
     )
 
