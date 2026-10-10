@@ -17,7 +17,8 @@ func Test180SelectRejectsChangedGitBaselineAfterMenu(t *testing.T) {
     useRealAstGrep180(t, root)
     initControllerReviewGitBaseline180(t, root)
     changed := "src/main/java/com/example/OrderServiceImpl.java"
-    appendReviewFile180(t, root, changed, "\n// changed for menu\n")
+    replaceT5Fixture180(t,root,changed,"orderMapper.insertOrder();","orderMapper.insertOrder(); // changed create for menu")
+    replaceT5Fixture180(t,root,changed,"orderMapper.cancelOrder();","orderMapper.cancelOrder(); // changed cancel for menu")
     started, err := Start(root)
     if err != nil { t.Fatal(err) }
     options, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CHANGES"})
@@ -44,7 +45,7 @@ func Test180FinishRejectsChangedGitBaselineWithoutIntroducedFindings(t *testing.
     useRealAstGrep180(t, root)
     initControllerReviewGitBaseline180(t, root)
     changed := "src/main/java/com/example/OrderController.java"
-    appendReviewFile180(t,root,changed,"\n// review target changed\n")
+    replaceT5Fixture180(t,root,changed,"orderService.create();","orderService.create(); // review target changed")
     started, err := Start(root)
     if err != nil { t.Fatal(err) }
     options, err := Prepare(context.Background(),root,started.RunID,Intent{Mode:"CHANGES",Target:"OrderController.create"})
