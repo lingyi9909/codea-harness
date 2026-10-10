@@ -203,7 +203,17 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		chains = filtered
 	}
 
-	sort.Slice(chains, func(i, j int) bool { return chains[i].Name < chains[j].Name })
+	// A symbol name alone is not a unique entrypoint identity in a Maven
+    // reactor. Only disambiguate duplicates so existing single-module review
+    // names and stable report snapshots remain unchanged.
+    duplicateNames := map[string]int{}
+    for _, chain := range chains { duplicateNames[chain.Name]++ }
+    for i := range chains {
+        if duplicateNames[chains[i].Name] > 1 && len(chains[i].Nodes) != 0 {
+            chains[i].Name += " [" + filepath.ToSlash(chains[i].Nodes[0].Path) + "]"
+        }
+    }
+    sort.Slice(chains, func(i, j int) bool { return chains[i].Name < chains[j].Name })
 	for i := range chains {
 		chains[i].ID = fmt.Sprintf("C%d", i+1)
 	}
@@ -518,7 +528,7 @@ func filterEndpoints180(in []nav.ControllerEndpointMatch, target string) []nav.C
 	}
 	out := []nav.ControllerEndpointMatch{}
 	for _, e := range in {
-		if e.Symbol == target || strings.HasPrefix(e.Symbol, target+".") || strings.HasSuffix(e.Path, "/"+target) || strings.TrimSuffix(filepath.Base(e.Path), filepath.Ext(e.Path)) == target {
+		if e.Symbol == target || strings.HasPrefix(e.Symbol, target+".") || e.Path == target || strings.HasSuffix(e.Path, "/"+target) || strings.TrimSuffix(filepath.Base(e.Path), filepath.Ext(e.Path)) == target {
 			out = append(out, e)
 		}
 	}
