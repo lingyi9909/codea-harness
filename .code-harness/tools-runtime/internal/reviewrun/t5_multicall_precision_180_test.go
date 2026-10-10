@@ -135,3 +135,43 @@ func TestT5ConcreteHelperInAnotherJavaFileIsTracked(t *testing.T) {
     }
     if !hasHelper {t.Fatalf("no verified helper method in chain: %+v",opts.Chains[0])}
 }
+
+func TestT5AbstractInterfaceMethodMustNotCountAsResolvedConcreteCall(t *testing.T) {
+    root:=copyControllerReviewFixture180(t)
+    useRealAstGrep180(t,root)
+    rel:="src/main/java/com/example/AuditPort.java"
+    if err:=os.WriteFile(filepath.Join(root,filepath.FromSlash(rel)),
+        []byte("package com.example;\npublic interface AuditPort { void record(); }\n"),0600);err!=nil {t.Fatal(err)}
+    impl:="src/main/java/com/example/OrderServiceImpl.java"
+    replaceT5Fixture180(t,root,impl,
+        "private final OrderMapper orderMapper;",
+        "private final OrderMapper orderMapper;\n    private AuditPort auditPort;")
+    replaceT5Fixture180(t,root,impl,
+        "orderMapper.insertOrder();",
+        "orderMapper.insertOrder();\n        auditPort.record();")
+    started,err:=Start(root)
+    if err!=nil {t.Fatal(err)}
+    opts,err:=Prepare(context.Background(),root,started.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION",Target:"OrderController.create"})
+    if err!=nil {t.Fatal(err)}
+    if opts.DiscoveryComplete||!strings.Contains(strings.Join(opts.Gaps,"\n"),"AuditPort implementations=0") {
+        t.Fatalf("abstract interface method was treated as executable leaf: %+v",opts)
+    }
+    _,state,err:=loadRun(root,started.RunID)
+    if err!=nil {t.Fatal(err)}
+    if state.ScopeReady {t.Fatalf("unimplemented interface silently authorized review scope: %+v",state)}
+}
+
+func TestT5MissingMapperMethodDeclarationRemainsExplicitGap(t *testing.T) {
+    root:=copyControllerReviewFixture180(t)
+    useRealAstGrep180(t,root)
+    replaceT5Fixture180(t,root,
+        "src/main/java/com/example/OrderMapper.java",
+        "void insertOrder();","void insertOrderRenamed();")
+    started,err:=Start(root)
+    if err!=nil {t.Fatal(err)}
+    opts,err:=Prepare(context.Background(),root,started.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION",Target:"OrderController.create"})
+    if err!=nil {t.Fatal(err)}
+    if opts.DiscoveryComplete || !strings.Contains(strings.Join(opts.Gaps,"\n"),"Mapper declaration unresolved") {
+        t.Fatalf("missing mapper method declaration was masked: %+v",opts)
+    }
+}
