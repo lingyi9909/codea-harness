@@ -58,18 +58,11 @@ func Test180ChangesServiceKeepsAffectedControllerEntrypoint(t *testing.T) {
 	initControllerReviewGitBaseline180(t, root)
 
 	service := filepath.Join(root, "src", "main", "java", "com", "example", "OrderServiceImpl.java")
-	f, err := os.OpenFile(service, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("\n// service implementation changed\n"); err != nil {
-		_ = f.Close()
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-
+	b, err := os.ReadFile(service)
+    if err != nil { t.Fatal(err) }
+    updated := strings.Replace(string(b), "orderMapper.insertOrder();", "orderMapper.insertOrder(); // service method changed", 1)
+    if updated == string(b) { t.Fatal("fixture service call missing") }
+    if err := os.WriteFile(service, []byte(updated), 0600); err != nil { t.Fatal(err) }
 	started, err := Start(root)
 	if err != nil {
 		t.Fatal(err)
