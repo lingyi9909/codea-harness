@@ -76,6 +76,14 @@ func buildBoundedChain180(
             }
             xs:=facts.Impls[call.ReceiverType]
             if len(xs)!=1 {
+                // Retain proven candidate impact but never guess which
+                // implementation runs or authorize AUTO_SINGLE.
+                if impact != nil {
+                    for _,candidate:=range xs {
+                        sym:=candidate.Symbol+"."+call.Method
+                        if impact.method(facts.Methods[sym],candidate.Path,sym) {affected=true}
+                    }
+                }
                 ch.Unresolved=append(ch.Unresolved,fmt.Sprintf("%s implementations=%d",call.ReceiverType,len(xs)))
                 continue
             }
