@@ -51,7 +51,7 @@ public class BackupOrderServiceImpl implements java.io.Serializable, OrderServic
 		if err != nil {
 			t.Fatal(err)
 		}
-		writeBoundarySource180(t, root, java+name, strings.Replace(string(b), "orderMapper.insertOrder();", "orderMapper.insertOrder(); // changed implementation", 1))
+		writeBoundarySource180(t, root, java+name, strings.Replace(string(b), strings.ToLower(strings.TrimSuffix(name,"ServiceImpl.java"))+"Mapper.insert"+strings.TrimSuffix(name,"ServiceImpl.java")+"();", strings.ToLower(strings.TrimSuffix(name,"ServiceImpl.java"))+"Mapper.insert"+strings.TrimSuffix(name,"ServiceImpl.java")+"(); // changed implementation", 1))
 	}
 	started, err := Start(root)
 	if err != nil {
