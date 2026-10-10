@@ -58,6 +58,49 @@ func Test180PrepareTwoEndpointsRequiresSelection(t *testing.T) {
 	}
 }
 
+func Test180PrepareNaturalLanguageCurrentImplementationTarget(t *testing.T) {
+	root := copyControllerReviewFixture180(t)
+	useRealAstGrep180(t, root)
+	started, err := Start(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Prepare(context.Background(), root, started.RunID, Intent{
+		Mode:   "CURRENT_IMPLEMENTATION",
+		Target: "请检查当前实现 OrderController.create",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 1 {
+		t.Fatalf("natural-language current-implementation target did not resolve uniquely: %+v", got)
+	}
+	if got.Chains[0].Name != "OrderController.create" {
+		t.Fatalf("natural-language target resolved to wrong chain: %+v", got.Chains)
+	}
+}
+
+func Test180NormalizeReviewTargetIsConservative(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "exact method", in: "OrderController.create", want: "OrderController.create"},
+		{name: "natural language", in: "请检查当前实现 OrderController.create", want: "OrderController.create"},
+		{name: "class prose", in: "review OrderController please", want: "OrderController"},
+		{name: "path preserved", in: "src/main/java/com/example/OrderController.java", want: "src/main/java/com/example/OrderController.java"},
+		{name: "ambiguous fails closed", in: "compare OrderController.create and OrderController.cancel", want: "compare OrderController.create and OrderController.cancel"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeReviewTarget180(tc.in); got != tc.want {
+				t.Fatalf("normalizeReviewTarget180(%q)=%q want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func Test180PrepareSingleCompleteAutoSelects(t *testing.T) {
 	root := copyControllerReviewFixture180(t)
 	useRealAstGrep180(t, root)
@@ -166,17 +209,11 @@ func Test180PrepareChangesUsesReproducibleGitBaseline(t *testing.T) {
 	useRealAstGrep180(t, root)
 	baseline := initControllerReviewGitBaseline180(t, root)
 	controller := filepath.Join(root, "src", "main", "java", "com", "example", "OrderController.java")
-	f, err := os.OpenFile(controller, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("\n// changed for Task 2 CHANGES-mode fixture\n"); err != nil {
-		_ = f.Close()
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	b, err := os.ReadFile(controller)
+    if err != nil { t.Fatal(err) }
+    updated := strings.Replace(string(b), "orderService.create();", "orderService.create(); // committed method change", 1)
+    if updated == string(b) { t.Fatal("fixture method missing") }
+    if err := os.WriteFile(controller, []byte(updated), 0600); err != nil { t.Fatal(err) }
 	started, err := Start(root)
 	if err != nil {
 		t.Fatal(err)

@@ -12,14 +12,17 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	version, err := os.ReadFile(filepath.Join(root, ".code-harness", "VERSION"))
 	if err != nil { t.Fatal(err) }
 	currentVersion := strings.TrimSpace(string(version))
-	if currentVersion != "1.6.7" {
-		t.Fatalf("VERSION must match current release 1.6.7, got %q", currentVersion)
+	if currentVersion != "1.8.0" {
+		t.Fatalf("VERSION must match current release 1.8.0, got %q", currentVersion)
 	}
 
 	changelog, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
 	if err != nil { t.Fatal(err) }
 	text := string(changelog)
 	for _, want := range []string{
+		"## 1.8.0",
+		"report-first",
+		"1.6.7 → 1.8.0",
 		"## 1.6.4",
 		"Batch Entrypoint Inventory",
 		"Analysis Certify Performance Evidence",
@@ -77,5 +80,19 @@ func TestTask160ReleaseMetadataAndPackageWorkflow(t *testing.T) {
 	}
 	if strings.Contains(r, "review units --run-id __missing__ --project-root") {
 		t.Fatal("review units capability probe must not pass unsupported --project-root")
+	}
+
+	release180, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release-1.8.0-windows-x64.yml"))
+	if err != nil { t.Fatal(err) }
+	r180 := string(release180)
+	for _, want := range []string{
+		"./.github/scripts/release180-package.ps1",
+		"./.github/scripts/release180-upgrade-regression.ps1",
+		".github/scripts/review180-real-model-e2e.py",
+		"codea-harness-1.8.0-windows-x64-install",
+		"codea-harness-1.8.0-windows-x64-upgrade",
+		"codea-harness-1.8.0-release-checklist",
+	} {
+		if !strings.Contains(r180, want) { t.Fatalf("1.8.0 release workflow missing %q", want) }
 	}
 }

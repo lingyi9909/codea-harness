@@ -6,13 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -26,6 +26,7 @@ type preparedOptions180 struct {
 	Intent              Intent   `json:"intent"`
 	ProjectRoot         string   `json:"projectRoot"`
 	SourceFingerprint   string   `json:"sourceFingerprint"`
+	ChangeSnapshotSHA256 string `json:"changeSnapshotSha256,omitempty"`
 	SourcePaths         []string `json:"sourcePaths"`
 	NavigationProcesses int      `json:"navigationProcesses"`
 	Options             Options  `json:"options"`
@@ -93,7 +94,15 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 			return Options{}, x
 		}
 		if old.Options.DiscoveryComplete && same {
-			return old.Options, nil
+			if intent.Mode == "CHANGES" {
+				// Source bytes alone do not identify a change review. Changing
+				// baseRef or HEAD can change impact without changing any Java/XML.
+				snapshot, changeErr := reviewChangesSnapshot180(rootAbs)
+				same = changeErr == nil && snapshot.SnapshotSHA256 != "" && snapshot.SnapshotSHA256 == old.ChangeSnapshotSHA256
+			}
+			if same {
+				return old.Options, nil
+			}
 		}
 	}
 
@@ -107,13 +116,23 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	}
 	javaFiles := filterExt180(sources, ".java")
 	changedSources := []string{}
+	changeSnapshotSHA256 := ""
 	if intent.Mode == "CHANGES" {
-		changedSources, err = changedSourceFiles180(ctx, rootAbs)
-		if err != nil {
-			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CHANGESET_DISCOVERY_FAILED: " + err.Error()}, 0)
+		snapshot, changeErr := reviewChangesSnapshot180(rootAbs)
+		if changeErr != nil {
+			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CHANGESET_DISCOVERY_FAILED: " + changeErr.Error()}, 0)
 		}
-		if intent.Target != "" && len(changedSources) == 0 {
-			return Options{}, fmt.Errorf("REVIEW_TARGET_NO_RELEVANT_CHANGES")
+		changeSnapshotSHA256 = snapshot.SnapshotSHA256
+		for _, file := range snapshot.Files {
+			if strings.EqualFold(filepath.Ext(file.Path), ".java") || strings.EqualFold(filepath.Ext(file.Path), ".xml") {
+				changedSources = append(changedSources, filepath.ToSlash(file.Path))
+			}
+		}
+		sort.Strings(changedSources)
+		if len(changedSources) == 0 {
+			// Preserve the run and durable INCOMPLETE report. A later prepare
+			// with the same runId can rescan after the working tree changes.
+			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, []Chain{}, false, []string{"NO_RELEVANT_CHANGES"}, 0)
 		}
 	}
 
@@ -136,149 +155,90 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, []Chain{}, false, []string{"ENTRYPOINT_NOT_FOUND"}, runner.Count())
 	}
 
-	scope := scanScope180(javaFiles)
-	calls, err := n.FindDirectMethodCallsBatch180(ctx, scope)
+	// Each Maven module has its own src/main/java root. Using the first
+	// lexicographic Java path silently drops calls from every other module.
+	// Keep facts scoped by source root to avoid conflating same-named types.
+	bySourceRoot, err := discoverScopedNavigation180(ctx, n, javaFiles, endpoints)
 	if err != nil {
-		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CALL_DISCOVERY_FAILED: " + err.Error()}, runner.Count())
-	}
-	receivers := []string{}
-	for _, facts := range calls {
-		for _, f := range facts {
-			if f.Resolved && f.ReceiverType != "" {
-				receivers = append(receivers, f.ReceiverType)
-			}
-		}
-	}
-	impls, err := n.FindImplementationTypesBatch180(ctx, uniqueStrings180(receivers), scope)
-	if err != nil {
-		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"IMPLEMENTATION_DISCOVERY_FAILED: " + err.Error()}, runner.Count())
+		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{err.Error()}, runner.Count())
 	}
 
-	targetSymbols := []string{}
-	infoSymbols := append([]string{}, receivers...)
-	for _, ep := range endpoints {
-		for _, c := range calls[ep.Symbol] {
-			if !c.Resolved {
-				continue
-			}
-			symbol := c.TargetSymbol
-			if xs := impls[c.ReceiverType]; len(xs) == 1 {
-				symbol = xs[0].Symbol + "." + c.Method
-			}
-			for _, sc := range calls[symbol] {
-				if sc.Resolved {
-					targetSymbols = append(targetSymbols, sc.TargetSymbol)
-					infoSymbols = append(infoSymbols, sc.ReceiverType)
-				}
-			}
-		}
-	}
-	infoSymbols = append(infoSymbols, targetSymbols...)
-	infos := map[string]nav.SymbolInfo{}
-	if len(infoSymbols) > 0 {
-		infos, err = n.GetSymbolInfos(ctx, uniqueStrings180(infoSymbols), scope)
-		if err != nil && !errors.Is(err, nav.ErrSymbolNotFound) {
-			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"TARGET_DISCOVERY_FAILED: " + err.Error()}, runner.Count())
-		}
-	}
-
-	xmlIndex := indexMapperXML180(rootAbs, filterExt180(sources, ".xml"))
+	xmlCandidates := indexMapperXMLCandidates180(rootAbs, filterExt180(sources, ".xml"))
 	changedSet := pathSet180(changedSources)
-	chains := make([]Chain, 0, len(endpoints))
-	affected := map[string]bool{}
-	for _, ep := range endpoints {
-		ch := Chain{
-			Name:       ep.Symbol,
-			Nodes:      []Node{{Path: filepath.ToSlash(ep.Path), Symbol: ep.Symbol, Role: "CONTROLLER", Workspace: "current"}},
-			Unresolved: []string{},
-		}
-		if changedSet[filepath.ToSlash(ep.Path)] {
-			affected[ch.Name] = true
-		}
-		facts := calls[ep.Symbol]
-		if len(facts) != 1 {
-			ch.Unresolved = append(ch.Unresolved, fmt.Sprintf("%s direct internal calls=%d", ep.Symbol, len(facts)))
-		} else if !facts[0].Resolved {
-			ch.Unresolved = append(ch.Unresolved, ep.Symbol+" receiver unresolved")
-		} else {
-			first := facts[0]
-			if info, ok := infos[first.ReceiverType]; ok && changedSet[filepath.ToSlash(info.Path)] {
-				affected[ch.Name] = true
-			}
-			xs := impls[first.ReceiverType]
-			// Candidate implementations establish possible impact, not a
-			// unique execution path. Keep ambiguity in Unresolved below.
-			for _, candidate := range xs {
-				if changedSet[filepath.ToSlash(candidate.Path)] {
-					affected[ch.Name] = true
-				}
-			}
-			if len(xs) != 1 {
-				ch.Unresolved = append(ch.Unresolved, fmt.Sprintf("%s implementations=%d", first.ReceiverType, len(xs)))
-			} else {
-				service := xs[0]
-				ss := service.Symbol + "." + first.Method
-				ch.Nodes = append(ch.Nodes, Node{Path: filepath.ToSlash(service.Path), Symbol: ss, Role: "SERVICE", Workspace: "current"})
-				if changedSet[filepath.ToSlash(service.Path)] {
-					affected[ch.Name] = true
-				}
-				sf := calls[ss]
-				if len(sf) != 1 {
-					ch.Unresolved = append(ch.Unresolved, fmt.Sprintf("%s direct internal calls=%d", ss, len(sf)))
-				} else if !sf[0].Resolved {
-					ch.Unresolved = append(ch.Unresolved, ss+" receiver unresolved")
-				} else {
-					ms := sf[0].TargetSymbol
-					info, ok := infos[ms]
-					if !ok {
-						ch.Unresolved = append(ch.Unresolved, ms+" declaration unresolved")
-					} else {
-						ch.Nodes = append(ch.Nodes, Node{Path: filepath.ToSlash(info.Path), Symbol: ms, Role: "MAPPER", Workspace: "current"})
-						if changedSet[filepath.ToSlash(info.Path)] {
-							affected[ch.Name] = true
-						}
-						xmlKey, identityOK := mapperXMLIdentity180(rootAbs, info, ms)
-						if identityOK {
-							if xp, ok := xmlIndex[xmlKey]; ok {
-								ch.Nodes = append(ch.Nodes, Node{Path: xp, Symbol: ms, Role: "SQL", Workspace: "current"})
-								if changedSet[xp] {
-									affected[ch.Name] = true
-								}
-							} else {
-								ch.Unresolved = append(ch.Unresolved, ms+" XML statement unresolved")
-							}
-						} else {
-							ch.Unresolved = append(ch.Unresolved, ms+" XML statement unresolved")
-						}
-					}
-				}
-			}
-		}
-		chains = append(chains, ch)
-	}
+    var impact *impactRanges180
+    if intent.Mode == "CHANGES" {
+        impact, err = buildImpactRanges180(ctx, rootAbs, changedSources)
+        if err != nil {
+            return persistPrepared180(runDir,state,intent,rootAbs,sources,before,nil,false,[]string{err.Error()},runner.Count(),changeSnapshotSHA256)
+        }
+    }
+    chains := make([]Chain, 0, len(endpoints))
+    affected := make([]bool, 0, len(endpoints))
+    for _, ep := range endpoints {
+        facts, ok := bySourceRoot[javaSourceRoot180(ep.Path)]
+        if !ok {
+            return persistPrepared180(runDir,state,intent,rootAbs,sources,before,nil,false,[]string{"CALL_DISCOVERY_FAILED: entrypoint has no matching source root: "+ep.Path},runner.Count(),changeSnapshotSHA256)
+        }
+        chain, isAffected := buildBoundedChain180(rootAbs,ep,facts,xmlCandidates,impact)
+        chains = append(chains,chain)
+        affected = append(affected,isAffected)
+    }
 
 	if intent.Mode == "CHANGES" {
 		filtered := make([]Chain, 0, len(chains))
-		for _, ch := range chains {
-			// An incomplete path cannot prove that downstream changed code
-			// is unrelated. Retain the entry and its gap rather than allow
-			// another, complete chain to manufacture AUTO_SINGLE.
-			if !affected[ch.Name] && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
+		for i, ch := range chains {
+			// Unfiltered CHANGES must never mark hundreds of unresolved
+			// Controllers affected because some unrelated file changed.
+			// An explicit target is different: preserve the requested
+			// incomplete candidate (with a gap) if the diff cannot map back
+			// to this endpoint, rather than silently dropping the user target.
+			if !affected[i] && intent.Target != "" && len(ch.Unresolved) > 0 && len(changedSet) > 0 {
 				ch.Unresolved = append(ch.Unresolved, "CHANGE_IMPACT_UNRESOLVED: "+ch.Name)
-				affected[ch.Name] = true
+				affected[i] = true
 			}
-			if affected[ch.Name] {
+			if affected[i] {
 				filtered = append(filtered, ch)
 			}
 		}
 		chains = filtered
 	}
 
-	sort.Slice(chains, func(i, j int) bool { return chains[i].Name < chains[j].Name })
+	// A symbol name alone is not a unique entrypoint identity in a Maven
+    // reactor. Only disambiguate duplicates so existing single-module review
+    // names and stable report snapshots remain unchanged.
+    duplicateNames := map[string]int{}
+    for _, chain := range chains { duplicateNames[chain.Name]++ }
+    for i := range chains {
+        if duplicateNames[chains[i].Name] > 1 && len(chains[i].Nodes) != 0 {
+            chains[i].Name += " [" + filepath.ToSlash(chains[i].Nodes[0].Path) + "]"
+        }
+    }
+    sort.Slice(chains, func(i, j int) bool { return chains[i].Name < chains[j].Name })
 	for i := range chains {
 		chains[i].ID = fmt.Sprintf("C%d", i+1)
 	}
 	gaps := []string{}
+    if impact != nil { gaps = append(gaps,impact.uncoveredGaps()...) }
+	if intent.Mode == "CHANGES" {
+		// Fail closed when a changed source cannot be attributed to any
+		// discovered entrypoint. Do not inflate the options menu or silently
+		// claim complete coverage for the remaining chains.
+		matched := map[string]bool{}
+		for _, ch := range chains {
+			for _, node := range ch.Nodes {
+				matched[filepath.ToSlash(node.Path)] = true
+			}
+		}
+		unmapped := 0
+		for source := range changedSet {
+			if !matched[source] {
+				unmapped++
+			}
+		}
+		if unmapped > 0 {
+			gaps = append(gaps, fmt.Sprintf("CHANGE_IMPACT_UNRESOLVED: %d changed source files lack a proven selected call chain", unmapped))
+		}
+	}
 	if len(chains) == 0 {
 		gaps = append(gaps, "ENTRYPOINT_NOT_FOUND")
 	}
@@ -297,11 +257,20 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 	if after != before || !sameStringSlice180(currentSources, sources) {
 		gaps = append(gaps, "SOURCE_CHANGED_DURING_PREPARE")
 	}
+	if intent.Mode == "CHANGES" {
+		// Fail closed if the Git identity changed while navigation was running.
+		latest, changeErr := reviewChangesSnapshot180(rootAbs)
+		if changeErr != nil {
+			gaps = append(gaps, "CHANGESET_CHANGED_DURING_PREPARE: "+changeErr.Error())
+		} else if latest.SnapshotSHA256 != changeSnapshotSHA256 {
+			gaps = append(gaps, "CHANGESET_CHANGED_DURING_PREPARE")
+		}
+	}
 	complete := len(gaps) == 0
-	return persistPrepared180(runDir, state, intent, rootAbs, sources, before, chains, complete, uniqueStrings180(gaps), runner.Count())
+	return persistPrepared180(runDir, state, intent, rootAbs, sources, before, chains, complete, uniqueStrings180(gaps), runner.Count(), changeSnapshotSHA256)
 }
 
-func persistPrepared180(runDir string, state runState, intent Intent, root string, paths []string, fp string, chains []Chain, complete bool, gaps []string, processes int) (Options, error) {
+func persistPrepared180(runDir string, state runState, intent Intent, root string, paths []string, fp string, chains []Chain, complete bool, gaps []string, processes int, changeSnapshots ...string) (Options, error) {
 	lockCtx, cancel := context.WithTimeout(context.Background(), defaultRunLockWait)
 	defer cancel()
 	unlock, err := acquireRunLock(lockCtx, runDir)
@@ -326,8 +295,17 @@ func persistPrepared180(runDir string, state runState, intent Intent, root strin
 		chains = []Chain{}
 	}
 	opts := Options{RunID: state.RunID, Chains: chains, DiscoveryComplete: complete, SelectionRequired: len(chains) > 1, Gaps: nonNilStrings180(gaps), ReportPath: state.ReportPath}
-	opts.Hash = optionsHash180(root, intent, fp, opts)
-	stored := preparedOptions180{SchemaVersion: SchemaVersion, Intent: intent, ProjectRoot: root, SourceFingerprint: fp, SourcePaths: nonNilStrings180(paths), NavigationProcesses: processes, Options: opts}
+	changeSnapshot := ""
+	if len(changeSnapshots) > 0 {
+		changeSnapshot = changeSnapshots[0]
+	}
+	// A changed baseRef or Git HEAD invalidates prior selection authority.
+	hashFingerprint := fp
+	if changeSnapshot != "" {
+		hashFingerprint += ":" + changeSnapshot
+	}
+	opts.Hash = optionsHash180(root, intent, hashFingerprint, opts)
+	stored := preparedOptions180{SchemaVersion: SchemaVersion, Intent: intent, ProjectRoot: root, SourceFingerprint: fp, ChangeSnapshotSHA256: changeSnapshot, SourcePaths: nonNilStrings180(paths), NavigationProcesses: processes, Options: opts}
 	b, _ := json.MarshalIndent(stored, "", "  ")
 	b = append(b, '\n')
 	state.ScopeReady = false
@@ -377,13 +355,44 @@ func loadPreparedOptions180(runDir string) (preparedOptions180, error) {
 	return v, nil
 }
 
+var (
+	exactControllerTarget180 = regexp.MustCompile("^[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)?$")
+	controllerTargetInText180 = regexp.MustCompile("[A-Za-z_$][A-Za-z0-9_$]*Controller(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)?")
+)
+
 func normalizeIntent180(v Intent) (Intent, error) {
 	v.Mode = strings.ToUpper(strings.TrimSpace(v.Mode))
-	v.Target = strings.TrimSpace(v.Target)
+	v.Target = normalizeReviewTarget180(v.Target)
 	if v.Mode != "CHANGES" && v.Mode != "CURRENT_IMPLEMENTATION" {
 		return Intent{}, fmt.Errorf("REVIEW_PREPARE_INTENT_INVALID: %q", v.Mode)
 	}
 	return v, nil
+}
+
+func normalizeReviewTarget180(raw string) string {
+	target := strings.TrimSpace(raw)
+	if target == "" || exactControllerTarget180.MatchString(target) {
+		return target
+	}
+	// Paths are already supported by filterEndpoints180 and must never be
+	// rewritten just because their basename contains a Controller symbol.
+	if strings.ContainsAny(target, "/\\") {
+		return target
+	}
+	matches := controllerTargetInText180.FindAllString(target, -1)
+	unique := map[string]bool{}
+	for _, match := range matches {
+		unique[match] = true
+	}
+	if len(unique) != 1 {
+		// Fail closed on ambiguous prose instead of guessing which entrypoint
+		// the user intended.
+		return target
+	}
+	for match := range unique {
+		return match
+	}
+	return target
 }
 
 func astGrepPath180(root string) (string, error) {
@@ -519,7 +528,7 @@ func filterEndpoints180(in []nav.ControllerEndpointMatch, target string) []nav.C
 	}
 	out := []nav.ControllerEndpointMatch{}
 	for _, e := range in {
-		if e.Symbol == target || strings.HasPrefix(e.Symbol, target+".") || strings.HasSuffix(e.Path, "/"+target) || strings.TrimSuffix(filepath.Base(e.Path), filepath.Ext(e.Path)) == target {
+		if e.Symbol == target || strings.HasPrefix(e.Symbol, target+".") || e.Path == target || strings.HasSuffix(e.Path, "/"+target) || strings.TrimSuffix(filepath.Base(e.Path), filepath.Ext(e.Path)) == target {
 			out = append(out, e)
 		}
 	}
@@ -545,30 +554,6 @@ func nonNilStrings180(v []string) []string {
 		return []string{}
 	}
 	return v
-}
-
-func changedSourceFiles180(ctx context.Context, root string) ([]string, error) {
-	set := map[string]bool{}
-	for _, args := range [][]string{{"diff", "--name-only", "-z", "HEAD"}, {"diff", "--cached", "--name-only", "-z", "HEAD"}, {"ls-files", "--others", "--exclude-standard", "-z"}} {
-		cmd := exec.CommandContext(ctx, "git", args...)
-		cmd.Dir = root
-		b, e := cmd.Output()
-		if e != nil {
-			return nil, e
-		}
-		for _, line := range strings.Split(string(b), "\x00") {
-			p := filepath.ToSlash(line)
-			if strings.EqualFold(filepath.Ext(p), ".java") || strings.EqualFold(filepath.Ext(p), ".xml") {
-				set[p] = true
-			}
-		}
-	}
-	out := []string{}
-	for p := range set {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out, nil
 }
 
 func sameProjectPath180(a, b string) bool {
@@ -655,4 +640,88 @@ func pathSet180(paths []string) map[string]bool {
 		}
 	}
 	return out
+}
+
+ 
+// indexMapperXMLCandidates180 deliberately retains duplicate namespace/id
+// matches. A single-value map can silently select a Mapper XML belonging to
+// another Maven module, incorrectly expanding CHANGES impact.
+func indexMapperXMLCandidates180(root string, ps []string) map[string][]string {
+	out := map[string][]string{}
+	for _, p := range ps {
+		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
+		if err != nil {
+			continue
+		}
+		var m mapperXML180
+		if xml.Unmarshal(b, &m) != nil {
+			continue
+		}
+		namespace := strings.TrimSpace(m.Namespace)
+		if namespace == "" {
+			continue
+		}
+		for _, statement := range m.Statements {
+			if statement.ID == "" {
+				continue
+			}
+			key := namespace + "." + statement.ID
+			duplicate := false
+			for _, existing := range out[key] {
+				if existing == p {
+					duplicate = true
+					break
+				}
+			}
+			if !duplicate {
+				out[key] = append(out[key], filepath.ToSlash(p))
+			}
+		}
+	}
+	for key := range out {
+		sort.Strings(out[key])
+	}
+	return out
+}
+
+// Maven project roots are discovered from actual source/resource layout,
+// not a fixed directory name or module list.
+func mavenModuleRoot180(p string) (string, bool) {
+	p = filepath.ToSlash(p)
+	if strings.HasPrefix(p, "src/main/") {
+		return "", true
+	}
+	if at := strings.Index(p, "/src/main/"); at > 0 {
+		return p[:at], true
+	}
+	return "", false
+}
+
+// A globally unique XML declaration can live in a separate Maven module;
+// otherwise prefer the declaration in the Mapper interface's own module.
+// If several candidates remain, fail closed rather than attributing the
+// change to whichever XML appeared last during repository traversal.
+func selectMapperXML180(mapperPath string, candidates []string) (string, bool) {
+	if len(candidates) == 1 {
+		return candidates[0], true
+	}
+	if len(candidates) == 0 {
+		return "", false
+	}
+	module, ok := mavenModuleRoot180(mapperPath)
+	if !ok {
+		return "", false
+	}
+	selection := ""
+	for _, candidate := range candidates {
+		other, exists := mavenModuleRoot180(candidate)
+		if !exists || module != other {
+			continue
+		}
+		if selection != "" {
+			return "", false
+		}
+		selection = candidate
+	}
+	return selection, selection != ""
 }

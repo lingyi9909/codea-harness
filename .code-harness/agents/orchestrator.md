@@ -8,7 +8,7 @@ version: 10
 
 ## Codea Harness 1.8 普通 Review 主路径
 
-`/harness-review <target>` 的唯一 active ordinary Review 流程：
+`/harness-review [target]` 的唯一 active ordinary Review 流程（target 可省略）：
 
 `固定入口 review start → codea-review prepare → 可选的真实下一用户选择 + select → 主 Agent 语义评审 → codea-review finish`
 
@@ -16,16 +16,16 @@ version: 10
 
 - 命令入口必须在第一条模型回复前创建并回读 INCOMPLETE `review.md`。
 - 本次入口返回的 `runId` 是唯一 run identity；禁止按目录时间或“最新 run”猜测。
-- `target` 作为普通 prompt 文本和 `intent.target` 传给 `prepare`，不得进入 shell 拼接。
+- `target` 可省略。用户只输入 `/harness-review` 时，必须使用 `CHANGES` 且不传 `intent.target`，自动识别 Git 变更影响链路；不得要求用户先指定 Controller。只有用户明确给出 target 时才作为 `intent.target` 传给 `prepare`，不得进入 shell 拼接。
 - 单链且 discovery 完整时直接进入读取/评审；多链时展示完整 C1..Cn 菜单和当前 `optionsHash`，立即结束本 turn。
-- 下一条真实用户消息明确选择后才调用 `select`。Host session/message identity 只来自 tool context。
+- 下一条真实用户消息明确选择后才调用 `select`。`prepare/select/finish` 必须调用原生 OpenCode `codea-review` 工具，严禁通过 bash、PowerShell 或脚本直接执行 Runtime CLI。Host session/message identity 只来自原生 tool context；工具不存在时保持 INCOMPLETE，提示重启 OpenCode 并核查 `.opencode/tools/codea-review.ts`，绝不伪造身份或走 shell 降级。
 - `scope.reads` 是上下文读取范围；正式 finding 的证据还必须通过 Runtime 的所选链行级范围校验。同文件未选方法、共享 Service 的 sibling method、共享 Mapper XML 的未选 statement 均不能产生本次 finding。
 - `prepare/select` 返回 scope 后，普通 Review 不再探索 Harness/Git 元数据：禁止读取 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、prompt/agent/tool 实现或无关项目元数据，也禁止用 glob/grep 扩大已选范围；只读取 `scope.reads` 授权的源码范围。
 - finding 必须包含真实 source evidence。`introducedByChange` 不是模型 authority：CURRENT_IMPLEMENTATION 禁止声称本次变更引入；CHANGES 必须命中当前真实 diff 行。
 - 调用 `finish` 时，`result.reads` 不仅要覆盖全部 `scope.reads`，每个 `evidence.ref` 的完整 `path/sha256/startLine/endLine` tuple 也必须作为一条精确 read 同时列入 `result.reads`；不能只提交包含它的更宽 read range。
 - `evidence.quote` 直接复制 read 工具显示的源码字符，不自行补/删缩进。Runtime 将 Windows CRLF 与可见 LF 视为同一换行；遇到 evidence 校验错误只重读对应 scope source，不通过读取 `.git/**` 猜测证据或 diff authority。
 - 已完成足够的 selected-scope 源码读取并形成 source-grounded findings 后，应立即 `finish`；不得为了理解 Harness、Git diff authority 或内部 prompt 再开启额外探索轮次。
-- 无 finding 也要 `finish`。只有 `finish.runtime.execution == COMPLETE` 且返回 path/hash 与磁盘报告一致，才向用户宣布完成。
+- 无 finding 也要 `finish`。只要 prepare/select 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，当前 assistant turn 就是 non-terminal：禁止在 prepare/select 后直接输出自然语言或结束生成，必须继续 source read → semantic review → finish；空 findings 不构成停点。只有 `finish.runtime.execution == COMPLETE` 且返回 path/hash 与磁盘报告一致，才向用户宣布完成。
 - PARTIAL coverage 的结论只能是 `UNDETERMINED`。
 - 任一步失败时保留本 run 的 INCOMPLETE 报告并展示具体错误；不得自动换 run、不得用脚本补 finish、不得在 ordinary Review 内自动修改代码。
 

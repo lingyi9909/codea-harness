@@ -165,6 +165,50 @@ func Test180FinishAcceptsLFVisibleEvidenceForCRLFSource(t *testing.T) {
 	}
 }
 
+func Test180FinishEvidenceSubrangeIsDeclaredByContainingRead(t *testing.T) {
+	root := t.TempDir()
+	content := []byte("line one\nline two defect\nline three\n")
+	if err := os.WriteFile(filepath.Join(root, "A.java"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sha := bytesSHA256(content)
+	declared := ReadRef{Path: "A.java", SHA256: sha, StartLine: 1, EndLine: 3}
+	evidenceRef := ReadRef{Path: "A.java", SHA256: sha, StartLine: 2, EndLine: 2}
+	finding := Finding{
+		ID: "F1", Severity: "HIGH",
+		Problem: "problem", Impact: "impact", Recommendation: "fix", Verification: "verify",
+		Evidence: []Evidence{{Ref: evidenceRef, Quote: "line two defect"}},
+	}
+	err := validateFinishRequest(root, FinishRequest{
+		Reads: []ReadRef{declared}, Findings: []Finding{finding},
+	})
+	if err != nil {
+		t.Fatalf("evidence subrange inside a declared read must be accepted: %v", err)
+	}
+}
+
+func Test180FinishEvidenceOutsideDeclaredReadStillRejected(t *testing.T) {
+	root := t.TempDir()
+	content := []byte("line one\nline two\nline three defect\n")
+	if err := os.WriteFile(filepath.Join(root, "A.java"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sha := bytesSHA256(content)
+	declared := ReadRef{Path: "A.java", SHA256: sha, StartLine: 1, EndLine: 2}
+	evidenceRef := ReadRef{Path: "A.java", SHA256: sha, StartLine: 3, EndLine: 3}
+	finding := Finding{
+		ID: "F1", Severity: "HIGH",
+		Problem: "problem", Impact: "impact", Recommendation: "fix", Verification: "verify",
+		Evidence: []Evidence{{Ref: evidenceRef, Quote: "line three defect"}},
+	}
+	err := validateFinishRequest(root, FinishRequest{
+		Reads: []ReadRef{declared}, Findings: []Finding{finding},
+	})
+	if err == nil || !strings.Contains(err.Error(), "REVIEW_FINISH_EVIDENCE_READ_NOT_DECLARED") {
+		t.Fatalf("evidence outside the declared read must remain rejected: %v", err)
+	}
+}
+
 func setupT3Scope180(t *testing.T, partial bool) (string, Outcome, ReadRef) {
 	t.Helper()
 	root := t.TempDir()

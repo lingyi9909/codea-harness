@@ -22,6 +22,8 @@ type resultEnvelope struct {
 	Findings         []Finding `json:"findings"`
 	PendingRisks     []string  `json:"pendingRisks"`
 	Gaps             []string  `json:"gaps"`
+	CoverageGaps     []string  `json:"coverageGaps"`
+	InformationalGaps []string `json:"informationalGaps"`
 }
 
 func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error) {
@@ -59,15 +61,31 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		_ = writeState(runDir, state)
 		return Outcome{}, err
 	}
+	if prepared, e := loadPreparedOptions180(runDir); e == nil && prepared.Intent.Mode == "CHANGES" {
+		if prepared.Options.Hash != scope.OptionsHash {
+			return Outcome{}, fmt.Errorf("REVIEW_FINISH_CHANGESET_STALE: prepared scope changed")
+		}
+		if e := verifyPreparedChangesSnapshot180(root, prepared); e != nil {
+			return Outcome{}, fmt.Errorf("REVIEW_FINISH_CHANGESET_STALE: %w", e)
+		}
+	}
 	if err := validateFinishReadsWithinScope180(req.Reads, scope.Reads); err != nil {
 		state.LastError = err.Error()
 		_ = writeState(runDir, state)
 		return Outcome{}, err
 	}
+	// Only Runtime-authenticated scope and chain resolution can establish a
+	// navigation COVERAGE defect. The model's free-form result.gaps may
+	// describe external database schema, deployment context or documentation:
+	// preserve those notes for the user, but never let them overrule a complete
+	// Runtime call chain or erase a source-grounded CRITICAL/HIGH finding.
+	informationalGaps := uniqueStrings180(append([]string{}, req.Gaps...))
+	coverageGaps := []string{}
 	for _, chain := range scope.Chains {
-		req.Gaps = append(req.Gaps, chain.Unresolved...)
+		coverageGaps = append(coverageGaps, chain.Unresolved...)
 	}
-	req.Gaps = uniqueStrings180(req.Gaps)
+	coverageGaps = uniqueStrings180(coverageGaps)
+	req.Gaps = uniqueStrings180(append(append([]string{}, coverageGaps...), informationalGaps...))
 	coverage := stateCoverage(state)
 	if coverage != "COMPLETE" && coverage != "PARTIAL" {
 		err := fmt.Errorf("REVIEW_FINISH_COVERAGE_INVALID: %q", coverage)
@@ -75,7 +93,7 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		_ = writeState(runDir, state)
 		return Outcome{}, err
 	}
-	if scope.Coverage == "PARTIAL" || len(req.Gaps) > 0 {
+	if scope.Coverage == "PARTIAL" || len(coverageGaps) > 0 {
 		coverage = "PARTIAL"
 	}
 	if coverage == "PARTIAL" && len(state.SelectedIDs) == 0 {
@@ -101,6 +119,11 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		return Outcome{}, err
 	}
 
+	if prepared, e := loadPreparedOptions180(runDir); e == nil && prepared.Intent.Mode == "CHANGES" {
+		if e := verifyPreparedChangesSnapshot180(root, prepared); e != nil {
+			return Outcome{}, fmt.Errorf("REVIEW_FINISH_CHANGESET_STALE: %w", e)
+		}
+	}
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("REVIEW_FINISH_REQUEST_ENCODE_FAILED: %w", err)
@@ -131,6 +154,8 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		Findings:         req.Findings,
 		PendingRisks:     req.PendingRisks,
 		Gaps:             req.Gaps,
+		CoverageGaps:     coverageGaps,
+		InformationalGaps: informationalGaps,
 	}
 	resultBytes, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
@@ -174,6 +199,8 @@ func Finish(ctx context.Context, root string, req FinishRequest) (Outcome, error
 		Findings:         req.Findings,
 		PendingRisks:     req.PendingRisks,
 		Gaps:             req.Gaps,
+		CoverageGaps:     coverageGaps,
+		InformationalGaps: informationalGaps,
 		Intent:           reportIntent,
 		Chains:           reportChains,
 		SelectedIDs:      append([]string{}, scope.SelectedIDs...),
@@ -331,9 +358,7 @@ func validateFinishRequest(root string, req FinishRequest) error {
 			return fmt.Errorf("REVIEW_FINISH_EVIDENCE_REQUIRED: %s", finding.ID)
 		}
 		for _, ev := range finding.Evidence {
-			key := readKey(ev.Ref)
-			ref, ok := reads[key]
-			if !ok || ref != ev.Ref {
+			if !evidenceReadDeclared180(ev.Ref, req.Reads) {
 				return fmt.Errorf("REVIEW_FINISH_EVIDENCE_READ_NOT_DECLARED: %s", ev.Ref.Path)
 			}
 			if strings.TrimSpace(ev.Quote) == "" {
@@ -345,6 +370,22 @@ func validateFinishRequest(root string, req FinishRequest) error {
 		}
 	}
 	return nil
+}
+
+func evidenceReadDeclared180(evidence ReadRef, reads []ReadRef) bool {
+	if evidence.StartLine < 1 || evidence.EndLine < evidence.StartLine {
+		return false
+	}
+	path := filepath.ToSlash(filepath.Clean(evidence.Path))
+	for _, ref := range reads {
+		if filepath.ToSlash(filepath.Clean(ref.Path)) == path &&
+			ref.SHA256 == evidence.SHA256 &&
+			evidence.StartLine >= ref.StartLine &&
+			evidence.EndLine <= ref.EndLine {
+			return true
+		}
+	}
+	return false
 }
 
 func validateReadRef(rootAbs string, ref ReadRef) (string, error) {

@@ -63,11 +63,18 @@
 当前没有可展示的调用链。若这是无变更、无入口或发现失败场景，请结合下方覆盖缺口理解，不能仅凭“0 条链”推断为无问题。
 {{end}}
 
-{{if .Gaps}}**覆盖缺口：**
+{{if .CoverageGaps}}**Runtime 已确认的调用链覆盖缺口：**
+{{range .CoverageGaps}}- {{cell .}}
+{{end}}
+{{else if and .Gaps (not .InformationalGaps)}}**覆盖缺口：**
 {{range .Gaps}}- {{cell .}}
 {{end}}
 {{else if eq .Coverage "COMPLETE"}}**覆盖说明：** 当前所选范围已完成覆盖；该结论不扩展到未选择调用链或外部依赖。
 {{else}}**覆盖说明：** 范围尚未完整，当前结论保持未确定。
+{{end}}{{if .InformationalGaps}}
+**模型提示的外部信息 / 说明性待核实项（不代表本次调用链覆盖缺口）：**
+{{range .InformationalGaps}}- {{cell .}}
+{{end}}
 {{end}}
 
 ## 风险清单
@@ -134,7 +141,10 @@
 {{end}}{{end}}
 {{if .PendingRisks}}{{range .PendingRisks}}| 待确认风险 | {{cell .}} |
 {{end}}{{end}}
-{{if .Gaps}}{{range .Gaps}}| 补齐覆盖缺口 | {{cell .}} |
+{{if .CoverageGaps}}{{range .CoverageGaps}}| 补齐调用链覆盖缺口 | {{cell .}} |
+{{end}}{{else if and .Gaps (not .InformationalGaps)}}{{range .Gaps}}| 补齐覆盖缺口 | {{cell .}} |
+{{end}}{{end}}{{if .InformationalGaps}}{{range .InformationalGaps}}
+| 核实外部信息（不影响当前调用链覆盖判定） | {{cell .}} |
 {{end}}{{end}}
 {{if and (not .Findings) (not .PendingRisks) (not .Gaps)}}| 回归 | 保持当前保护条件；后续变更后重新评审声明范围 |
 {{end}}

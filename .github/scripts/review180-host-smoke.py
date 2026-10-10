@@ -82,6 +82,25 @@ def latest_user_text(messages):
     return ""
 
 
+def is_explicit_selection_reply(messages):
+    """Only an exact new user reply authorizes the smoke provider to request select.
+
+    The expanded /harness-review command itself includes the literal example
+    "选择 C1"; substring matching that instruction is NOT user consent.
+    Runtime independently authenticates the user turn with OpenCode export.
+    """
+    return latest_user_text(messages).strip() == "选择 C1"
+
+
+def verify_selection_reply_guard():
+    """Permanent regression: slash-command instructions cannot impersonate a choice."""
+    command_turn = [{"role": "user", "content": "Review target: OrderController\nAfter menu, reply 选择 C1"}]
+    require(not is_explicit_selection_reply(command_turn), "embedded example was misread as human selection")
+    require(is_explicit_selection_reply([{"role": "user", "content": "选择 C1"}]), "actual selection was rejected")
+    require(not is_explicit_selection_reply([{"role": "user", "content": "不选择 C1"}]), "non-consent was accepted")
+    require(not is_explicit_selection_reply([{"role": "assistant", "content": "选择 C1"}]), "assistant text was accepted as user consent")
+
+
 def call(tool_name, arguments, suffix):
     return {
         "id": f"call_review180_{suffix}_{time.time_ns()}",
@@ -148,7 +167,6 @@ class Provider(BaseHTTPRequestHandler):
             require(match is not None, "review start runId was not injected before first model request")
             run_id = match.group(1)
             payload = latest_tool_payload(messages)
-            user = latest_user_text(messages)
 
             if self.server.scenario == "concurrent" and ("REVIEW_FINISH_OVERWRITE_REJECTED" in whole or '"execution": "COMPLETE"' in whole):
                 self.reply(body, content="concurrent finish race observed")
@@ -167,7 +185,7 @@ class Provider(BaseHTTPRequestHandler):
             if isinstance(runtime, dict) and "optionsHash" in runtime:
                 chains = runtime.get("chains", [])
                 if runtime.get("selectionRequired"):
-                    if "选择 C1" not in user:
+                    if not is_explicit_selection_reply(messages):
                         lines = [f"{run_id} options={runtime['optionsHash']}"]
                         lines.extend(f"{chain['id']} {chain['name']}" for chain in chains)
                         self.reply(body, content="\n".join(lines))
@@ -298,10 +316,11 @@ def bootstrap_project(temp, args, sdk_root, port, multi, name=None):
     (project / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
     for config_dir in (project / ".opencode", Path(os.environ["REVIEW180_XDG_CONFIG"]) / "opencode"):
         config_dir.mkdir(parents=True, exist_ok=True)
-        for package_name in ("package.json", "package-lock.json"):
-            shutil.copyfile(sdk_root / package_name, config_dir / package_name)
-        if not (config_dir / "node_modules").exists():
-            shutil.copytree(sdk_root / "node_modules", config_dir / "node_modules")
+        if sdk_root is not None:
+            for package_name in ("package.json", "package-lock.json"):
+                shutil.copyfile(sdk_root / package_name, config_dir / package_name)
+            if not (config_dir / "node_modules").exists():
+                shutil.copytree(sdk_root / "node_modules", config_dir / "node_modules")
     return project
 
 
@@ -420,23 +439,42 @@ def init_fixture_repo(project, env):
     command(["git", "add", "."], project, env, timeout=20)
     command(["git", "-c", "user.name=Host Fixture", "-c", "user.email=host-fixture@example.test", "commit", "-m", "baseline"], project, env, timeout=20)
     impl = project / "src" / "main" / "java" / "com" / "example" / "OrderServiceImpl.java"
-    impl.write_text(impl.read_text(encoding="utf-8") + "// changed for review180\n", encoding="utf-8")
+    # A trailing file-level comment is NOT a method change. With exact
+    # Java-method Git attribution it legitimately yields KEEP_REPORT_INCOMPLETE.
+    # Change actual method bodies instead, preserving the source's original
+    # CRLF/LF bytes; for the multi-chain scenario, change both methods.
+    raw = impl.read_bytes()
+    targets = (b"mapper.insertOrder();", b"mapper.cancelOrder();")
+    changed = 0
+    for call in targets:
+        if call in raw:
+            require(raw.count(call) == 1, f"ambiguous Host smoke fixture call {call!r}")
+            raw = raw.replace(call, call + b" // changed for review180", 1)
+            changed += 1
+    require(changed >= 1, "Host smoke fixture did not modify an actual Java method")
+    impl.write_bytes(raw)
 
 
 def main():
+    verify_selection_reply_guard()
     parser = argparse.ArgumentParser()
     parser.add_argument("--opencode", required=True, type=Path)
     parser.add_argument("--runtime", required=True, type=Path)
     parser.add_argument("--ast-grep", required=True, type=Path)
     parser.add_argument("--tool-source", required=True, type=Path)
     parser.add_argument("--command-source", required=True, type=Path)
-    parser.add_argument("--sdk-root", required=True, type=Path)
+    parser.add_argument("--sdk-root", type=Path)
+    parser.add_argument("--offline", action="store_true",
+                        help="No SDK preseed, npm install, or public network access")
     args = parser.parse_args()
     for value in (args.opencode, args.runtime, args.ast_grep, args.tool_source, args.command_source):
         require(value.resolve().is_file(), f"required file missing: {value}")
-    sdk_root = args.sdk_root.resolve()
-    package = json.loads((sdk_root / "node_modules" / "@opencode-ai" / "plugin" / "package.json").read_text(encoding="utf-8"))
-    require(package.get("version") == "1.18.25", f"expected @opencode-ai/plugin 1.18.25, got {package.get('version')}")
+    require(args.offline or args.sdk_root is not None, "choose --offline or --sdk-root")
+    require(not (args.offline and args.sdk_root is not None), "offline test must not preseed the SDK")
+    sdk_root = None if args.offline else args.sdk_root.resolve()
+    if sdk_root is not None:
+        package = json.loads((sdk_root / "node_modules" / "@opencode-ai" / "plugin" / "package.json").read_text(encoding="utf-8"))
+        require(package.get("version") == "1.18.25", f"expected @opencode-ai/plugin 1.18.25, got {package.get('version')}")
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     server.requests, server.errors, server.scenario = [], [], "bootstrap"
@@ -449,6 +487,13 @@ def main():
             env["REVIEW180_XDG_CONFIG"] = str(temp / "xdg-config")
             for key, suffix in (("XDG_CONFIG_HOME", "xdg-config"), ("XDG_DATA_HOME", "xdg-data"), ("XDG_CACHE_HOME", "xdg-cache"), ("XDG_STATE_HOME", "xdg-state")):
                 env[key] = str(temp / suffix)
+            if args.offline:
+                # Fail any accidental registry/network fetch. The native model
+                # fixture remains reachable on loopback via NO_PROXY below.
+                env["NPM_CONFIG_OFFLINE"] = "true"
+                env["npm_config_offline"] = "true"
+                for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+                    env[proxy] = "http://127.0.0.1:1"
             env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
             env["OPENCODE_DISABLE_AUTOUPDATE"] = "true"
             env["OPENCODE_CONFIG_CONTENT"] = "{}"
@@ -468,7 +513,7 @@ def main():
             concurrent_project = bootstrap_project(temp, args, sdk_root, server.server_port, False, name="concurrent")
             init_fixture_repo(concurrent_project, env)
             run_concurrent_finish_scenario(args.opencode.resolve(), concurrent_project, env, server)
-            print("REVIEW180_NATIVE_HOST_SMOKE PASS opencode=1.18.25 deterministic=true", flush=True)
+            print(f"REVIEW180_NATIVE_HOST_SMOKE PASS opencode=1.18.25 deterministic=true offlineSdkless={args.offline}", flush=True)
     finally:
         server.shutdown()
         server.server_close()
