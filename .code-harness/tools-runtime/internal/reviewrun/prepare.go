@@ -165,85 +165,24 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 
 	xmlCandidates := indexMapperXMLCandidates180(rootAbs, filterExt180(sources, ".xml"))
 	changedSet := pathSet180(changedSources)
-	chains := make([]Chain, 0, len(endpoints))
-	affected := make([]bool, 0, len(endpoints))
-	for _, ep := range endpoints {
-		isAffected := false
-		navFacts, ok := bySourceRoot[javaSourceRoot180(ep.Path)]
-		if !ok {
-			return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"CALL_DISCOVERY_FAILED: entrypoint has no matching source root: " + ep.Path}, runner.Count())
-		}
-		calls, impls, infos := navFacts.Calls, navFacts.Impls, navFacts.Infos
-		ch := Chain{
-			Name:       ep.Symbol,
-			Nodes:      []Node{{Path: filepath.ToSlash(ep.Path), Symbol: ep.Symbol, Role: "CONTROLLER", Workspace: "current"}},
-			Unresolved: []string{},
-		}
-		if changedSet[filepath.ToSlash(ep.Path)] {
-			isAffected = true
-		}
-		facts := calls[ep.Symbol]
-		if len(facts) != 1 {
-			ch.Unresolved = append(ch.Unresolved, fmt.Sprintf("%s direct internal calls=%d", ep.Symbol, len(facts)))
-		} else if !facts[0].Resolved {
-			ch.Unresolved = append(ch.Unresolved, ep.Symbol+" receiver unresolved")
-		} else {
-			first := facts[0]
-			if info, ok := infos[first.ReceiverType]; ok && changedSet[filepath.ToSlash(info.Path)] {
-				isAffected = true
-			}
-			xs := impls[first.ReceiverType]
-			// Candidate implementations establish possible impact, not a
-			// unique execution path. Keep ambiguity in Unresolved below.
-			for _, candidate := range xs {
-				if changedSet[filepath.ToSlash(candidate.Path)] {
-					isAffected = true
-				}
-			}
-			if len(xs) != 1 {
-				ch.Unresolved = append(ch.Unresolved, fmt.Sprintf("%s implementations=%d", first.ReceiverType, len(xs)))
-			} else {
-				service := xs[0]
-				ss := service.Symbol + "." + first.Method
-				ch.Nodes = append(ch.Nodes, Node{Path: filepath.ToSlash(service.Path), Symbol: ss, Role: "SERVICE", Workspace: "current"})
-				if changedSet[filepath.ToSlash(service.Path)] {
-					isAffected = true
-				}
-				sf := calls[ss]
-				if len(sf) != 1 {
-					ch.Unresolved = append(ch.Unresolved, fmt.Sprintf("%s direct internal calls=%d", ss, len(sf)))
-				} else if !sf[0].Resolved {
-					ch.Unresolved = append(ch.Unresolved, ss+" receiver unresolved")
-				} else {
-					ms := sf[0].TargetSymbol
-					info, ok := infos[ms]
-					if !ok {
-						ch.Unresolved = append(ch.Unresolved, ms+" declaration unresolved")
-					} else {
-						ch.Nodes = append(ch.Nodes, Node{Path: filepath.ToSlash(info.Path), Symbol: ms, Role: "MAPPER", Workspace: "current"})
-						if changedSet[filepath.ToSlash(info.Path)] {
-							isAffected = true
-						}
-						xmlKey, identityOK := mapperXMLIdentity180(rootAbs, info, ms)
-						if identityOK {
-							if xp, ok := selectMapperXML180(info.Path, xmlCandidates[xmlKey]); ok {
-								ch.Nodes = append(ch.Nodes, Node{Path: xp, Symbol: ms, Role: "SQL", Workspace: "current"})
-								if changedSet[xp] {
-									isAffected = true
-								}
-							} else {
-								ch.Unresolved = append(ch.Unresolved, ms+" XML statement unresolved")
-							}
-						} else {
-							ch.Unresolved = append(ch.Unresolved, ms+" XML statement unresolved")
-						}
-					}
-				}
-			}
-		}
-		chains = append(chains, ch)
-		affected = append(affected, isAffected)
-	}
+    var impact *impactRanges180
+    if intent.Mode == "CHANGES" {
+        impact, err = buildImpactRanges180(ctx, rootAbs, changedSources)
+        if err != nil {
+            return persistPrepared180(runDir,state,intent,rootAbs,sources,before,nil,false,[]string{err.Error()},runner.Count(),changeSnapshotSHA256)
+        }
+    }
+    chains := make([]Chain, 0, len(endpoints))
+    affected := make([]bool, 0, len(endpoints))
+    for _, ep := range endpoints {
+        facts, ok := bySourceRoot[javaSourceRoot180(ep.Path)]
+        if !ok {
+            return persistPrepared180(runDir,state,intent,rootAbs,sources,before,nil,false,[]string{"CALL_DISCOVERY_FAILED: entrypoint has no matching source root: "+ep.Path},runner.Count(),changeSnapshotSHA256)
+        }
+        chain, isAffected := buildBoundedChain180(rootAbs,ep,facts,xmlCandidates,impact)
+        chains = append(chains,chain)
+        affected = append(affected,isAffected)
+    }
 
 	if intent.Mode == "CHANGES" {
 		filtered := make([]Chain, 0, len(chains))
@@ -269,6 +208,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		chains[i].ID = fmt.Sprintf("C%d", i+1)
 	}
 	gaps := []string{}
+    if impact != nil { gaps = append(gaps,impact.uncoveredGaps()...) }
 	if intent.Mode == "CHANGES" {
 		// Fail closed when a changed source cannot be attributed to any
 		// discovered entrypoint. Do not inflate the options menu or silently
