@@ -614,6 +614,26 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if scenario in {"single-issue", "single-affected-two-endpoint", "two-chains-select-c1"}:
             expected = risky_found(findings)
             host.require(expected, f"{scenario}: expected high-risk seeded SQL/tenant finding missing: {findings}")
+            # A model-provided external-schema note is not a Runtime call-chain
+            # coverage gap. The FULLY resolved, changed unsafe SQL must stay
+            # BLOCKING for all THREE independent real-model single-issue runs.
+            # This guards the former single-issue-2 false CI PASS, where a
+            # CRITICAL/HIGH/MEDIUM result became PARTIAL -> UNDETERMINED.
+            if scenario == "single-issue":
+                host.require(first_runtime.get("discoveryComplete") is True and
+                             first_runtime.get("gaps") == [],
+                             f"{scenario_label}: Runtime navigation incomplete: {proof}")
+                host.require(result.get("coverage") == "COMPLETE" and
+                             finish_runtime.get("coverage") == "COMPLETE" and
+                             result.get("reviewConclusion") == "BLOCKING" and
+                             finish_runtime.get("reviewConclusion") == "BLOCKING",
+                             f"{scenario_label}: critical finding was wrongly downgraded; "
+                             f"result={result.get('coverage')}/{result.get('reviewConclusion')} "
+                             f"finish={finish_runtime}")
+                host.require(result.get("coverageGaps") == [],
+                             f"{scenario_label}: complete Runtime scope has coverage gaps: {result}")
+                host.require(isinstance(result.get("informationalGaps"), list),
+                             f"{scenario_label}: missing explicit model informational-gap evidence")
         elif scenario == "single-clean":
             expected = (
                 not findings
