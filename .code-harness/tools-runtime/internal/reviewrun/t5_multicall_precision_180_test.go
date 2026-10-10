@@ -105,3 +105,33 @@ func TestT5SameLineMapperStatementsDoNotClaimPreciseImpact(t *testing.T) {
         t.Fatalf("same physical line cannot prove which SQL statement changed: %+v",opts)
     }
 }
+
+func TestT5ConcreteHelperInAnotherJavaFileIsTracked(t *testing.T) {
+    root:=copyControllerReviewFixture180(t)
+    useRealAstGrep180(t,root)
+    java:="src/main/java/com/example/"
+    helper:=java+"AuditTrail.java"
+    if err:=os.WriteFile(filepath.Join(root,filepath.FromSlash(helper)),
+        []byte("package com.example;\npublic class AuditTrail { public int record() { return 1; } }\n"),0600);err!=nil{t.Fatal(err)}
+    impl:=java+"OrderServiceImpl.java"
+    replaceT5Fixture180(t,root,impl,
+        "private final OrderMapper orderMapper;",
+        "private final OrderMapper orderMapper;\n    private final AuditTrail auditTrail = new AuditTrail();")
+    replaceT5Fixture180(t,root,impl,
+        "orderMapper.insertOrder();",
+        "orderMapper.insertOrder();\n        auditTrail.record();")
+    initControllerReviewGitBaseline180(t,root)
+    replaceT5Fixture180(t,root,helper,"return 1;","return 2;")
+    start,err:=Start(root)
+    if err!=nil {t.Fatal(err)}
+    opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
+    if err!=nil {t.Fatal(err)}
+    if !opts.DiscoveryComplete||len(opts.Chains)!=1||opts.Chains[0].Name!="OrderController.create" {
+        t.Fatalf("unique cross-file concrete helper change not propagated precisely: %+v",opts)
+    }
+    hasHelper:=false
+    for _,node:=range opts.Chains[0].Nodes {
+        if node.Symbol=="AuditTrail.record" && node.Path==helper {hasHelper=true}
+    }
+    if !hasHelper {t.Fatalf("no verified helper method in chain: %+v",opts.Chains[0])}
+}
