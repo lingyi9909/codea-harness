@@ -184,3 +184,21 @@ func TestT5MissingMapperMethodDeclarationRemainsExplicitGap(t *testing.T) {
         t.Fatalf("missing mapper method declaration was masked: %+v",opts)
     }
 }
+
+func TestT5ChangedHostConfigDoesNotContaminateJavaImpact(t *testing.T) {
+    root := copyControllerReviewFixture180(t)
+    useRealAstGrep180(t, root)
+    config := filepath.Join(root, "opencode.json")
+    if err := os.WriteFile(config, []byte(`{"version":1}\n`), 0600); err != nil {t.Fatal(err)}
+    initControllerReviewGitBaseline180(t, root)
+    replaceT5Fixture180(t,root,"src/main/java/com/example/OrderServiceImpl.java",
+        "orderMapper.insertOrder();","orderMapper.insertOrder(); // changed business method")
+    if err := os.WriteFile(config, []byte(`{"version":2}\n`), 0600); err != nil {t.Fatal(err)}
+    start,err := Start(root)
+    if err != nil {t.Fatal(err)}
+    opts,err := Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
+    if err != nil {t.Fatal(err)}
+    if !opts.DiscoveryComplete || len(opts.Chains)!=1 || opts.Chains[0].Name!="OrderController.create" {
+        t.Fatalf("non-Java Host config entered method impact scope: %+v",opts)
+    }
+}
