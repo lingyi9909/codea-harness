@@ -13,6 +13,12 @@ on:
       - 'README.md'
       - 'CHANGELOG.md'
 
+# Only the newest exact-HEAD candidate may consume the expensive Windows
+# real-model release gate. A superseded run is not valid release evidence.
+concurrency:
+  group: release180-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   actions: read
