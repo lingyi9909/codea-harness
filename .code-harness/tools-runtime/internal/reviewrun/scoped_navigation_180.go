@@ -13,6 +13,7 @@ type scopedNavigation180 struct {
 	Calls map[string][]nav.DirectMethodCall
 	Impls map[string][]nav.ImplementationType
 	Infos map[string]nav.SymbolInfo
+    Methods map[string][]nav.MethodSpan180
 }
 
 // javaSourceRoot180 is the exact Maven Java-source root, not the first
@@ -52,7 +53,7 @@ func discoverScopedNavigation180(ctx context.Context, n nav.Navigator, javaFiles
 			}
 		}
 		if len(selected) == 0 { continue }
-		calls, err := n.FindDirectMethodCallsBatch180(ctx, root)
+		calls, spans, err := n.FindDirectMethodCallsWithSpansBatch180(ctx, root)
 		if err != nil {
 			return nil, fmt.Errorf("CALL_DISCOVERY_FAILED: scope=%s: %w", root, err)
 		}
@@ -94,7 +95,7 @@ func discoverScopedNavigation180(ctx context.Context, n nav.Navigator, javaFiles
 				return nil, fmt.Errorf("TARGET_DISCOVERY_FAILED: scope=%s: %w", root, err)
 			}
 		}
-		out[root] = scopedNavigation180{Calls: calls, Impls: impls, Infos: infos}
+		out[root] = scopedNavigation180{Calls: calls, Impls: impls, Infos: infos, Methods: spans}
 	}
 
 	// A Controller module can depend on a different Maven module containing
@@ -187,15 +188,17 @@ func recoverExternalNavigation180(ctx context.Context, n nav.Navigator, roots []
 		out[root] = facts
 	}
 	externalCalls := map[string]map[string][]nav.DirectMethodCall{}
+    externalSpans := map[string]map[string][]nav.MethodSpan180{}
 	for _, root := range roots {
 		if !callRoots[root] {
 			continue
 		}
-		calls, err := n.FindDirectMethodCallsBatch180(ctx, root)
+		calls, spans, err := n.FindDirectMethodCallsWithSpansBatch180(ctx, root)
 		if err != nil {
 			return fmt.Errorf("CALL_DISCOVERY_FAILED: scope=%s: %w", root, err)
 		}
 		externalCalls[root] = calls
+        externalSpans[root] = spans
 	}
 
 	// Gather declarations required by downstream edges. Look across source
@@ -218,6 +221,7 @@ func recoverExternalNavigation180(ctx context.Context, n nav.Navigator, roots []
 				method := impl.Symbol + "." + first.Method
 				if len(facts.Calls[method]) == 0 {
 					facts.Calls[method] = append([]nav.DirectMethodCall(nil), externalCalls[javaSourceRoot180(impl.Path)][method]...)
+                    facts.Methods[method] = append([]nav.MethodSpan180(nil), externalSpans[javaSourceRoot180(impl.Path)][method]...)
 				}
 				for _, downstream := range facts.Calls[method] {
 					if downstream.Resolved {
