@@ -158,11 +158,12 @@ func mapperStatementRange180(root, rel, identity string) (ReadRef, error) {
         found=append(found,span)
     }
     if len(found)!=1 { return ReadRef{},fmt.Errorf("Mapper XML statement not unique: %s in %s count=%d",identity,rel,len(found)) }
+    overlaps:=0
     for _,other:=range statementRanges {
-        if other.StartLine==found[0].StartLine && other.EndLine==found[0].EndLine {continue}
-        if other.StartLine<=found[0].EndLine && other.EndLine>=found[0].StartLine {
-            return ReadRef{},fmt.Errorf("Mapper XML statements share a source line: %s in %s",identity,rel)
-        }
+        if other.StartLine<=found[0].EndLine && other.EndLine>=found[0].StartLine {overlaps++}
+    }
+    if overlaps!=1 {
+        return ReadRef{},fmt.Errorf("Mapper XML statements share a source line: %s in %s",identity,rel)
     }
     return found[0],nil
 }
