@@ -439,7 +439,20 @@ def init_fixture_repo(project, env):
     command(["git", "add", "."], project, env, timeout=20)
     command(["git", "-c", "user.name=Host Fixture", "-c", "user.email=host-fixture@example.test", "commit", "-m", "baseline"], project, env, timeout=20)
     impl = project / "src" / "main" / "java" / "com" / "example" / "OrderServiceImpl.java"
-    impl.write_text(impl.read_text(encoding="utf-8") + "// changed for review180\n", encoding="utf-8")
+    # A trailing file-level comment is NOT a method change. With exact
+    # Java-method Git attribution it legitimately yields KEEP_REPORT_INCOMPLETE.
+    # Change actual method bodies instead, preserving the source's original
+    # CRLF/LF bytes; for the multi-chain scenario, change both methods.
+    raw = impl.read_bytes()
+    targets = (b"mapper.insertOrder();", b"mapper.cancelOrder();")
+    changed = 0
+    for call in targets:
+        if call in raw:
+            require(raw.count(call) == 1, f"ambiguous Host smoke fixture call {call!r}")
+            raw = raw.replace(call, call + b" // changed for review180", 1)
+            changed += 1
+    require(changed >= 1, "Host smoke fixture did not modify an actual Java method")
+    impl.write_bytes(raw)
 
 
 def main():
