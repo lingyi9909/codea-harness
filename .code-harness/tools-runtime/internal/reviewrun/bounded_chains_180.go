@@ -64,8 +64,9 @@ func buildBoundedChain180(
                 continue
             }
             method:=call.TargetSymbol
-            if info,ok:=facts.Infos[method];ok {
-                // Exact Mapper namespace and id, never a name-only guess.
+            if info,ok:=facts.Infos[method];ok && strings.HasSuffix(call.ReceiverType,"Mapper") {
+                // A Mapper declaration without an unambiguous matching SQL
+                // remains an explicit gap, never an implementation guess.
                 if xmlKey,identityOK:=mapperXMLIdentity180(root,info,method);identityOK {
                     if xp,found:=selectMapperXML180(info.Path,xmlCandidates[xmlKey]);found {
                         addNode(Node{Path:info.Path,Symbol:method,Role:"MAPPER",Workspace:"current"})
@@ -77,6 +78,8 @@ func buildBoundedChain180(
                         continue
                     }
                 }
+                ch.Unresolved=append(ch.Unresolved,method+" XML statement unresolved")
+                continue
             }
             // Java this/super/unqualified calls are direct methods on the
             // current implementation, not interface-implementation lookups.
