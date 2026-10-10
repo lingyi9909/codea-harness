@@ -100,6 +100,18 @@ func buildBoundedChain180(
                 continue
             }
             xs:=facts.Impls[call.ReceiverType]
+            if len(xs)==0 {
+                // A field statically typed as an ordinary concrete class
+                // needs no interface implementation lookup. Only a unique
+                // in-scope actual method body can authorize this edge.
+                bodies:=facts.Methods[method]
+                if len(bodies)==1 && filepath.ToSlash(bodies[0].Path)==filepath.ToSlash(call.Path) {
+                    addNode(Node{Path:bodies[0].Path,Symbol:method,Role:"SERVICE",Workspace:"current"})
+                    if impact!=nil && impact.method(bodies,bodies[0].Path,method) {affected=true}
+                    walk(method,depth+1)
+                    continue
+                }
+            }
             if len(xs)!=1 {
                 // Retain proven candidate impact but never guess which
                 // implementation runs or authorize AUTO_SINGLE.
