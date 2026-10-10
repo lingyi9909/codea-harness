@@ -71,8 +71,7 @@
 {{end}}
 {{else if eq .Coverage "COMPLETE"}}**覆盖说明：** 当前所选范围已完成覆盖；该结论不扩展到未选择调用链或外部依赖。
 {{else}}**覆盖说明：** 范围尚未完整，当前结论保持未确定。
-{{end}}
-{{if .InformationalGaps}}
+{{end}}{{if .InformationalGaps}}
 **模型提示的外部信息 / 说明性待核实项（不代表本次调用链覆盖缺口）：**
 {{range .InformationalGaps}}- {{cell .}}
 {{end}}
