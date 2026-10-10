@@ -13,6 +13,7 @@ type MethodSpan180 struct {
     Path string
     StartLine int
     EndLine int
+    HasBody bool
 }
 
 // FindDirectMethodCallsBatch180 snapshots Java declarations and call expressions
@@ -56,7 +57,7 @@ func (n Navigator) FindDirectMethodCallsWithSpansBatch180(ctx context.Context, s
 			continue
 		}
 		from := owner + "." + member
-        spans[from] = append(spans[from], MethodSpan180{Path: method.Path, StartLine: method.StartLine, EndLine: method.EndLine})
+        spans[from] = append(spans[from], MethodSpan180{Path: method.Path, StartLine: method.StartLine, EndLine: method.EndLine, HasBody: strings.Contains(method.Text, "{") && !strings.HasSuffix(strings.TrimSpace(method.Text), ";")})
 		seen := map[string]bool{}
 		for _, call := range calls {
 			if !contains(method, call) {
