@@ -105,7 +105,7 @@ func buildBoundedChain180(
                 // needs no interface implementation lookup. Only a unique
                 // in-scope actual method body can authorize this edge.
                 bodies:=facts.Methods[method]
-                if len(bodies)==1 && filepath.ToSlash(bodies[0].Path)==filepath.ToSlash(call.Path) {
+                if len(bodies)==1 {
                     addNode(Node{Path:bodies[0].Path,Symbol:method,Role:"SERVICE",Workspace:"current"})
                     if impact!=nil && impact.method(bodies,bodies[0].Path,method) {affected=true}
                     walk(method,depth+1)
