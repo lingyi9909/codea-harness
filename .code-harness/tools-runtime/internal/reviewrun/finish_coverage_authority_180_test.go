@@ -68,7 +68,7 @@ func TestT5CompleteCriticalAndExternalSchemaNoteRemainsBlocking(t *testing.T) {
     }
     report,err:=os.ReadFile(started.ReportPath)
     if err!=nil {t.Fatal(err)}
-    for _,want:=range []string{"存在阻断问题","覆盖说明：","模型提示的外部信息",externalSchemaNote180} {
+    for _,want:=range []string{"存在阻断问题","覆盖说明：","模型提示的外部信息",markdownText180(externalSchemaNote180)} {
         if !strings.Contains(string(report),want) {
             t.Fatalf("report missing %q:\n%s",want,report)
         }
@@ -108,7 +108,7 @@ func TestT5ActualUnresolvedChainRemainsUndeterminedWithCriticalFinding(t *testin
     report,err:=os.ReadFile(started.ReportPath)
     if err!=nil {t.Fatal(err)}
     for _,want:=range []string{"Runtime 已确认的调用链覆盖缺口","A.entry receiver unresolved",
-        "模型提示的外部信息",externalSchemaNote180} {
+        "模型提示的外部信息",markdownText180(externalSchemaNote180)} {
         if !strings.Contains(string(report),want) {
             t.Fatalf("partial report missing %q:\n%s",want,report)
         }
