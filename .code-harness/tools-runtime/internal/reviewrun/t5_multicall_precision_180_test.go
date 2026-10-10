@@ -13,9 +13,17 @@ func replaceT5Fixture180(t *testing.T,root,rel,old,new string) {
     path:=filepath.Join(root,filepath.FromSlash(rel))
     b,err:=os.ReadFile(path)
     if err!=nil {t.Fatal(err)}
-    normalized:=strings.ReplaceAll(string(b),"\r\n","\n")
-    if !strings.Contains(normalized,old) {t.Fatalf("fixture missing %q in %s",old,rel)}
-    if err:=os.WriteFile(path,[]byte(strings.Replace(normalized,old,new,1)),0600);err!=nil {t.Fatal(err)}
+    content:=string(b)
+    needle,replacement:=old,new
+    // Git on Windows commonly checks out CRLF fixtures. Do not normalize
+    // the entire file when changing a single method/SQL line: that would
+    // turn a precise one-line diff into a false file-wide impact.
+    if strings.Contains(content,"\r\n") {
+        needle=strings.ReplaceAll(needle,"\n","\r\n")
+        replacement=strings.ReplaceAll(replacement,"\n","\r\n")
+    }
+    if !strings.Contains(content,needle) {t.Fatalf("fixture missing %q in %s",old,rel)}
+    if err:=os.WriteFile(path,[]byte(strings.Replace(content,needle,replacement,1)),0600);err!=nil {t.Fatal(err)}
 }
 
 func TestT5OneControllerMethodCanCallMultipleServiceMethods(t *testing.T) {
