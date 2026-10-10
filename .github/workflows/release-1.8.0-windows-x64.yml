@@ -8,6 +8,7 @@ on:
       - '.code-harness/**'
       - '.github/scripts/release180-*.ps1'
       - '.github/scripts/review180-real-model-e2e.py'
+      - '.github/scripts/review180-real-model-fixture-test.py'
       - '.github/scripts/review180-host-smoke.py'
       - '.github/workflows/release-1.8.0-windows-x64.yml'
       - 'README.md'
@@ -46,6 +47,12 @@ jobs:
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne '${{ github.sha }}') { throw "checkout HEAD mismatch: expected=${{ github.sha }} actual=$head" }
           Write-Output "RELEASE180_INPUT PASS version=$version head=$head"
+
+      - name: Verify exact Java and MyBatis multi-chain fixture diffs
+        shell: pwsh
+        run: |
+          python .github/scripts/review180-real-model-fixture-test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Bundle pinned native tool for truly offline Host installation
         shell: pwsh
