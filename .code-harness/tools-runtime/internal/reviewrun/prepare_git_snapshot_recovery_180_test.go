@@ -18,7 +18,7 @@ func Test180ChangesPrepareRechecksGitSnapshotOnSameRun(t *testing.T) {
 	gitReview180(t, root, "branch", "base")
 	gitReview180(t, root, "checkout", "-b", "feature")
 	changed := "src/main/java/com/example/OrderController.java"
-	appendReviewFile180(t, root, changed, "\n// committed change\n")
+	replaceT5Fixture180(t, root, changed, "orderService.create();", "orderService.create(); // committed change")
 	gitReview180(t, root, "add", changed)
 	gitReview180(t, root, "commit", "-m", "feature controller change")
 	writeReviewConfig180(t, root, "base", true)
@@ -74,7 +74,7 @@ func Test180ChangesPrepareInvalidBaseRefInvalidatesCompleteCache(t *testing.T) {
 	gitReview180(t, root, "branch", "base")
 	gitReview180(t, root, "checkout", "-b", "feature")
 	changed := "src/main/java/com/example/OrderController.java"
-	appendReviewFile180(t, root, changed, "\n// branch change\n")
+	replaceT5Fixture180(t, root, changed, "orderService.create();", "orderService.create(); // branch change")
 	gitReview180(t, root, "add", changed)
 	gitReview180(t, root, "commit", "-m", "feature branch change")
 	writeReviewConfig180(t, root, "base", true)
