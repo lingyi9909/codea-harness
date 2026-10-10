@@ -209,17 +209,11 @@ func Test180PrepareChangesUsesReproducibleGitBaseline(t *testing.T) {
 	useRealAstGrep180(t, root)
 	baseline := initControllerReviewGitBaseline180(t, root)
 	controller := filepath.Join(root, "src", "main", "java", "com", "example", "OrderController.java")
-	f, err := os.OpenFile(controller, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("\n// changed for Task 2 CHANGES-mode fixture\n"); err != nil {
-		_ = f.Close()
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	b, err := os.ReadFile(controller)
+    if err != nil { t.Fatal(err) }
+    updated := strings.Replace(string(b), "orderService.create();", "orderService.create(); // committed method change", 1)
+    if updated == string(b) { t.Fatal("fixture method missing") }
+    if err := os.WriteFile(controller, []byte(updated), 0600); err != nil { t.Fatal(err) }
 	started, err := Start(root)
 	if err != nil {
 		t.Fatal(err)
