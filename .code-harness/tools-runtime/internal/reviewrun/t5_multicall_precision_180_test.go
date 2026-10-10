@@ -87,3 +87,21 @@ func TestT5UnmappedClassLevelChangeDoesNotClaimComplete(t *testing.T) {
     if err!=nil {t.Fatal(err)}
     if state.ScopeReady {t.Fatalf("unmapped edit authorized scope: %+v",state)}
 }
+
+func TestT5SameLineMapperStatementsDoNotClaimPreciseImpact(t *testing.T) {
+    root:=copyControllerReviewFixture180(t)
+    useRealAstGrep180(t,root)
+    rel:="src/main/resources/mapper/OrderMapper.xml"
+    replaceT5Fixture180(t,root,rel,
+        "</insert>\n  <update",
+        "</insert><update")
+    initControllerReviewGitBaseline180(t,root)
+    replaceT5Fixture180(t,root,rel,"VALUES (1)","VALUES (99)")
+    start,err:=Start(root)
+    if err!=nil {t.Fatal(err)}
+    opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
+    if err!=nil {t.Fatal(err)}
+    if opts.DiscoveryComplete || !strings.Contains(strings.Join(opts.Gaps,"\n"),"CHANGE_IMPACT_UNRESOLVED") {
+        t.Fatalf("same physical line cannot prove which SQL statement changed: %+v",opts)
+    }
+}
