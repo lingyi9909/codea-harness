@@ -13,8 +13,9 @@ func replaceT5Fixture180(t *testing.T,root,rel,old,new string) {
     path:=filepath.Join(root,filepath.FromSlash(rel))
     b,err:=os.ReadFile(path)
     if err!=nil {t.Fatal(err)}
-    if !strings.Contains(string(b),old) {t.Fatalf("fixture missing %q in %s",old,rel)}
-    if err:=os.WriteFile(path,[]byte(strings.Replace(string(b),old,new,1)),0600);err!=nil {t.Fatal(err)}
+    normalized:=strings.ReplaceAll(string(b),"\\r\\n","\\n")
+    if !strings.Contains(normalized,old) {t.Fatalf("fixture missing %q in %s",old,rel)}
+    if err:=os.WriteFile(path,[]byte(strings.Replace(normalized,old,new,1)),0600);err!=nil {t.Fatal(err)}
 }
 
 func TestT5OneControllerMethodCanCallMultipleServiceMethods(t *testing.T) {
