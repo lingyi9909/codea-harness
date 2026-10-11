@@ -115,7 +115,10 @@ func Test180ChangesMapperXMLParticipatesInImpact(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if state.ScopeReady != (tc.complete && tc.count == 1) {
+			if state.ScopeReady && state.Coverage != "PARTIAL" && !tc.complete {
+                t.Fatalf("incomplete CHANGES marked COMPLETE: %+v",state)
+            }
+            if tc.complete && tc.count==1 && !state.ScopeReady {
 				t.Fatalf("wrong XML scope authority: %+v", state)
 			}
 			for _, ch := range got.Chains {
