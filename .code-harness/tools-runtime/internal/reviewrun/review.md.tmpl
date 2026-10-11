@@ -35,10 +35,22 @@
 {{if isSelected $.SelectedIDs .ID}}
 ### {{code .ID}} · {{cell .Name}} · 本次已选择
 
+{{if .Methods}}**本次实际纳入的 Controller 方法链：{{len .Methods}} 条；以下均由方法级变更影响归因确定。**
+
+{{range .Methods}}
+#### {{cell .Name}}
+
 | 顺序 | 角色 | 代码位置 |
 |---:|---|---|
 {{range $index, $node := .Nodes}}| {{add1 $index}} | {{cell (roleLabel $node.Role)}} | {{code $node.Path}} · {{code $node.Symbol}} |
 {{end}}
+{{if .Unresolved}}**此方法链未解析项：** {{range .Unresolved}}{{cell .}}；{{end}}
+{{end}}
+{{end}}
+{{else}}| 顺序 | 角色 | 代码位置 |
+|---:|---|---|
+{{range $index, $node := .Nodes}}| {{add1 $index}} | {{cell (roleLabel $node.Role)}} | {{code $node.Path}} · {{code $node.Symbol}} |
+{{end}}{{end}}
 {{if .Unresolved}}
 **未解析项：**
 {{range .Unresolved}}- {{cell .}}
