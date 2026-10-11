@@ -214,9 +214,9 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
         }
     }
     sort.Slice(chains, func(i, j int) bool { return chains[i].Name < chains[j].Name })
-	for i := range chains {
-		chains[i].ID = fmt.Sprintf("C%d", i+1)
-	}
+    // Only AFTER precise per-method change attribution, aggregate user
+    // choices by actual Controller identity; never inflate the diff scope.
+    chains = groupControllerChains180(chains, intent.Mode)
 	gaps := []string{}
     if impact != nil { gaps = append(gaps,impact.uncoveredGaps()...) }
 	if intent.Mode == "CHANGES" {
@@ -322,19 +322,20 @@ func persistPrepared180(runDir string, state runState, intent Intent, root strin
 	if err := atomicWrite(filepath.Join(runDir, "options.json"), b); err != nil {
 		return Options{}, fmt.Errorf("REVIEW_OPTIONS_WRITE_FAILED: %w", err)
 	}
-	if complete && len(chains) <= 1 {
-		if len(chains) == 1 {
-			state.SelectedIDs = []string{chains[0].ID}
-		}
-		if err := writeScope180(runDir, state.RunID, opts.Hash, state.SelectedIDs, chainsForIDs180(chains, state.SelectedIDs), root); err != nil {
-			return Options{}, err
-		}
-		state.ScopeReady = true
-		state.Coverage = "COMPLETE"
-		if err := writeState(runDir, state); err != nil {
-			return Options{}, err
-		}
-	}
+	if len(chains) == 1 && len(chains[0].Nodes) > 0 {
+        // One Controller is a single choice, even if it owns several
+        // affected methods. Persist only its actual member chains.
+        state.SelectedIDs = []string{chains[0].ID}
+        if err := writeScope180(runDir, state.RunID, opts.Hash, state.SelectedIDs, expandSelectedMethodChains180(chains), root); err != nil {
+            return Options{}, err
+        }
+        state.ScopeReady = true
+        state.Coverage = "COMPLETE"
+        if !complete || len(chains[0].Unresolved)>0 {state.Coverage="PARTIAL"}
+        if err := writeState(runDir, state); err != nil {
+            return Options{}, err
+        }
+    }
 	return opts, nil
 }
 
