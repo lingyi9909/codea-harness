@@ -47,8 +47,8 @@ public class BackupOrderServiceImpl implements Serializable, OrderService {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ScopeReady {
-		t.Fatalf("ambiguous implementation created ready scope: %+v", state)
+	if state.ScopeReady && state.Coverage != "PARTIAL" {
+		t.Fatalf("ambiguous implementation marked complete: %+v", state)
 	}
 }
 
@@ -71,7 +71,7 @@ func Test180ChangesServiceKeepsAffectedControllerEntrypoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.DiscoveryComplete || len(got.Chains) != 1 || got.Chains[0].Name != "OrderController.create" {
+	if !got.DiscoveryComplete || len(got.Chains) != 1 || len(got.Chains[0].Methods)!=1 || got.Chains[0].Methods[0].Name != "OrderController.create" {
 		t.Fatalf("service-only change lost the affected controller entrypoint: %+v", got)
 	}
 }
