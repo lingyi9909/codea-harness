@@ -175,6 +175,9 @@ func chainsForIDs180(all []Chain, ids []string) []Chain {
 }
 
 func writeScope180(runDir, runID, hash string, ids []string, chains []Chain, root string) error {
+    // The menu IDs are Controller groups. Only their exact child methods
+    // are authorized to support source evidence and report findings.
+    chains = expandSelectedMethodChains180(chains)
 	reads := []ReadRef{}
 	seen := map[string]bool{}
 	for _, c := range chains {
