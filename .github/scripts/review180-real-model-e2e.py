@@ -472,13 +472,13 @@ def persist_run(evidence_dir: Path, exported, run_dir: Path, record: dict):
     })
 
 
-def successful_run(args, scenario: str, iteration: int, multi: bool, current_impl: bool = False, no_target: bool = False, expect_selection=None):
+def successful_run(args, scenario: str, iteration: int, multi: bool, current_impl: bool = False, no_target: bool = False, expect_selection=None, auxiliary: bool = False):
     # The existence of two endpoints must not itself require user selection.
     # Selection is required only when two separate chains were actually
     # changed (or the user explicitly requests current-implementation scope).
     if expect_selection is None:
         expect_selection = multi
-    scenario_label = f"{scenario}-no-target" if no_target else scenario
+    scenario_label = f"{scenario}-auxiliary" if auxiliary else (f"{scenario}-no-target" if no_target else scenario)
     run_evidence = args.evidence_dir / f"{scenario_label}-{iteration}"
     with tempfile.TemporaryDirectory(prefix=f"Codea 180 {scenario} 空格 & # % ") as raw:
         temp = Path(raw)
@@ -580,7 +580,30 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
                          f"{scenario_label}: durable INCOMPLETE report missing before selection")
             host.require(not proof["reportCompleteBeforeSelection"],
                          f"{scenario_label}: report completed before user choice: {proof}")
-            host.command(run + ["--session", sid, "选择", "C1"], project, env, timeout=420)
+            if auxiliary:
+                # A real intervening Host user question is answered before a
+                # new, current menu is emitted by native codea-review resume.
+                host.command(run + ["--session", sid,
+                    "辅助问题：C1 和 C2 分别代表什么？我现在不选择。回答后请重新展示当前完整菜单。"],project,env,timeout=420)
+                aux_export = json.loads(host.command([str(binary),"export",sid],project,env,timeout=30))
+                write_json(run_evidence / "trajectory-auxiliary.json",redact(aux_export))
+                aux_actions = host.tool_actions(aux_export)
+                host.require(aux_actions.count("resume")==1,
+                             f"{scenario_label}: did not invoke native same-run resume: {aux_actions}")
+                resumed = [s for s in host.tool_parts(aux_export,"resume") if s.get("status")=="completed"]
+                host.require(len(resumed)==1,f"{scenario_label}: native resume incomplete")
+                fresh=parse_tool_output(resumed[0]).get("runtime",{})
+                host.require(fresh.get("runId")==proof["runId"] and
+                             fresh.get("optionsHash")==proof["optionsHash"] and
+                             fresh.get("selectionRequired") is True,
+                             f"{scenario_label}: resume changed or lost current menu: {fresh}")
+                last_assistant="\n".join(str(part.get("text",""))
+                    for m in aux_export.get("messages",[])
+                    if m.get("info",{}).get("role")=="assistant"
+                    for part in m.get("parts",[]) if part.get("type")=="text")
+                host.require(fresh["runId"]+" options="+fresh["optionsHash"] in last_assistant,
+                             f"{scenario_label}: latest menu was not displayed after auxiliary question")
+            host.command(run + ["--session", sid, "C1"], project, env, timeout=420)
             user_selection = True
             exported = json.loads(host.command([str(binary), "export", sid], project, env, timeout=30))
         else:
@@ -688,6 +711,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             "runId": run_dir.name,
             "sessionId": sid,
             "userSelectionObserved": user_selection,
+            "auxiliaryResumeObserved": auxiliary,
             "prepareOptionsHash": first_runtime.get("optionsHash"),
             "prepareChains": first_runtime.get("chains"),
             "prepareDiscoveryComplete": first_runtime.get("discoveryComplete"),
@@ -862,6 +886,7 @@ def main():
     records.append(successful_run(args, "single-issue", 1, False, no_target=True))
     for iteration in range(1, 4):
         records.append(successful_run(args, "two-chains-select-c1", iteration, True, no_target=True))
+    records.append(successful_run(args, "two-chains-select-c1", 1, True, auxiliary=True))
     records.append(successful_run(args, "current-implementation-no-diff", 1, False, current_impl=True))
     records.append(no_relevant_changes_run(args))
     records.append(negative_run(args, "early-stop", output_limit=32, timeout=180))
@@ -881,6 +906,7 @@ def main():
             "single-issue-no-target": 1,
             "two-chains-select-c1-no-target": 3,
             "single-affected-two-endpoint": 1,
+            "two-chains-select-c1-auxiliary": 1,
         },
         "status": "PASS",
     }
@@ -888,7 +914,7 @@ def main():
     print(
         "RELEASE180_REAL_MODEL_MATRIX PASS "
         "singleIssue=3 singleClean=3 twoChainsSelectC1=3 twoChainsSelectC1NoTarget=3 "
-        "extra=singleImpactedFromTwoEndpoints,zeroTargetSingle,currentImplementation,noRelevantChanges,earlyStop,toolFailure,timeout",
+        "extra=singleImpactedFromTwoEndpoints,auxiliaryResume,zeroTargetSingle,currentImplementation,noRelevantChanges,earlyStop,toolFailure,timeout",
         flush=True,
     )
 
