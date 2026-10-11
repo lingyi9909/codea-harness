@@ -131,7 +131,8 @@ func Select(ctx context.Context, root string, req SelectionRequest, turn HostTur
 			break
 		}
 	}
-	if err := writeScope180(runDir, req.RunID, req.OptionsHash, ids, selected, rootAbs); err != nil {
+    if !current.Options.DiscoveryComplete {coverage="PARTIAL"}
+	if err := writeScope180(runDir, req.RunID, req.OptionsHash, ids, selected, rootAbs, !current.Options.DiscoveryComplete); err != nil {
 		return Outcome{}, err
 	}
 	same, err = sourceSnapshotMatches180(rootAbs, current.SourcePaths, current.SourceFingerprint)
@@ -174,7 +175,7 @@ func chainsForIDs180(all []Chain, ids []string) []Chain {
 	return out
 }
 
-func writeScope180(runDir, runID, hash string, ids []string, chains []Chain, root string) error {
+func writeScope180(runDir, runID, hash string, ids []string, chains []Chain, root string, extraIncomplete ...bool) error {
     // The menu IDs are Controller groups. Only their exact child methods
     // are authorized to support source evidence and report findings.
     chains = expandSelectedMethodChains180(chains)
@@ -211,6 +212,9 @@ func writeScope180(runDir, runID, hash string, ids []string, chains []Chain, roo
 			coverage = "PARTIAL"
 		}
 	}
+    // A globally unresolved CHANGES impact is a Runtime coverage defect
+    // even when the chosen Controller's known child methods look complete.
+    if len(extraIncomplete)>0 && extraIncomplete[0] {coverage="PARTIAL"}
 	v := scopeState180{
 		SchemaVersion: SchemaVersion, RunID: runID, OptionsHash: hash,
 		SelectedIDs: append([]string{}, ids...), Chains: chains, Reads: reads,
