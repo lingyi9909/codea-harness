@@ -11,12 +11,13 @@ import (
 
 func Test180ReprepareInvalidatesOldSelectedScope(t *testing.T) {
 	root := copyControllerReviewFixture180(t)
+    addSecondController180(t,root)
 	useRealAstGrep180(t, root)
 	started, err := Start(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "OrderController"})
+	first, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CURRENT_IMPLEMENTATION"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +43,7 @@ func Test180ReprepareInvalidatesOldSelectedScope(t *testing.T) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	second, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CURRENT_IMPLEMENTATION", Target: "OrderController"})
+	second, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CURRENT_IMPLEMENTATION"})
 	if err != nil {
 		t.Fatal(err)
 	}
