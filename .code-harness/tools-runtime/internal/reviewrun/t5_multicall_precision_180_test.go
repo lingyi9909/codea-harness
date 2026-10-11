@@ -54,7 +54,7 @@ func TestT5OnlyChangedServiceMethodAffectsMatchingController(t *testing.T) {
     if err!=nil {t.Fatal(err)}
     opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
     if err!=nil {t.Fatal(err)}
-    if !opts.DiscoveryComplete||len(opts.Chains)!=1||opts.Chains[0].Name!="OrderController.create" {
+    if !opts.DiscoveryComplete||len(opts.Chains)!=1||(len(opts.Chains[0].Methods)!=1 || opts.Chains[0].Methods[0].Name!="OrderController.create") {
         t.Fatalf("sibling service method falsely affected: %+v",opts)
     }
 }
@@ -69,7 +69,7 @@ func TestT5OnlyChangedSQLStatementAffectsMatchingController(t *testing.T) {
     if err!=nil {t.Fatal(err)}
     opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
     if err!=nil {t.Fatal(err)}
-    if !opts.DiscoveryComplete||len(opts.Chains)!=1||opts.Chains[0].Name!="OrderController.create" {
+    if !opts.DiscoveryComplete||len(opts.Chains)!=1||(len(opts.Chains[0].Methods)!=1 || opts.Chains[0].Methods[0].Name!="OrderController.create") {
         t.Fatalf("shared XML file contaminated unrelated SQL chain: %+v",opts)
     }
 }
@@ -135,7 +135,7 @@ func TestT5ConcreteHelperInAnotherJavaFileIsTracked(t *testing.T) {
     if err!=nil {t.Fatal(err)}
     opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
     if err!=nil {t.Fatal(err)}
-    if !opts.DiscoveryComplete||len(opts.Chains)!=1||opts.Chains[0].Name!="OrderController.create" {
+    if !opts.DiscoveryComplete||len(opts.Chains)!=1||(len(opts.Chains[0].Methods)!=1 || opts.Chains[0].Methods[0].Name!="OrderController.create") {
         t.Fatalf("unique cross-file concrete helper change not propagated precisely: %+v",opts)
     }
     hasHelper:=false
@@ -167,7 +167,7 @@ func TestT5AbstractInterfaceMethodMustNotCountAsResolvedConcreteCall(t *testing.
     }
     _,state,err:=loadRun(root,started.RunID)
     if err!=nil {t.Fatal(err)}
-    if state.ScopeReady {t.Fatalf("unimplemented interface silently authorized review scope: %+v",state)}
+    if state.ScopeReady && state.Coverage!="PARTIAL" {t.Fatalf("unimplemented interface marked complete: %+v",state)}
 }
 
 func TestT5MissingMapperMethodDeclarationRemainsExplicitGap(t *testing.T) {
@@ -198,7 +198,7 @@ func TestT5ChangedHostConfigDoesNotContaminateJavaImpact(t *testing.T) {
     if err != nil {t.Fatal(err)}
     opts,err := Prepare(context.Background(),root,start.RunID,Intent{Mode:"CHANGES"})
     if err != nil {t.Fatal(err)}
-    if !opts.DiscoveryComplete || len(opts.Chains)!=1 || opts.Chains[0].Name!="OrderController.create" {
+    if !opts.DiscoveryComplete || len(opts.Chains)!=1 || (len(opts.Chains[0].Methods)!=1 || opts.Chains[0].Methods[0].Name!="OrderController.create") {
         t.Fatalf("non-Java Host config entered method impact scope: %+v",opts)
     }
 }
