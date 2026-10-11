@@ -14,6 +14,7 @@ import (
 // baseline without changing any Java bytes. The old menu must be rejected.
 func Test180SelectRejectsChangedGitBaselineAfterMenu(t *testing.T) {
     root := copyControllerReviewFixture180(t)
+    addSecondController180(t,root)
     useRealAstGrep180(t, root)
     initControllerReviewGitBaseline180(t, root)
     changed := "src/main/java/com/example/OrderServiceImpl.java"
