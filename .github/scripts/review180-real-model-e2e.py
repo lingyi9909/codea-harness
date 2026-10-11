@@ -123,7 +123,7 @@ def validate_report(project: Path, report: Path, runtime: dict):
     return digest
 
 
-def write_fixture(project: Path, multi: bool, clean_read: bool = False):
+def write_fixture(project: Path, multi: bool, clean_read: bool = False, multiple_controllers: bool = False):
     java = project / "src" / "main" / "java" / "com" / "example"
     xml = project / "src" / "main" / "resources" / "mapper"
     java.mkdir(parents=True, exist_ok=True)
@@ -224,6 +224,28 @@ public class OrderController {
         + sql_extra + "</mapper>\n",
         encoding="utf-8",
     )
+    if multiple_controllers:
+        host.require(multi, "multi-Controller fixture needs two real method chains")
+        # A genuinely second Controller, independently identified from its
+        # Java path/class and sharing both impacted downstream SQL statements.
+        (java / "UserController.java").write_text(
+            """package com.example;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class UserController {
+    private final OrderService service;
+    public UserController(OrderService service) { this.service = service; }
+    @PostMapping("/users/sync")
+    public void syncUser(String tenantId, long id, String status) {
+        service.updateStatus(tenantId, id, status);
+    }
+    @PostMapping("/users/close")
+    public void closeUser(String tenantId, long id) {
+        service.voidOrder(tenantId, id);
+    }
+}
+""", encoding="utf-8")
     if clean_read:
         (java / "PublicSqlLiteralController.java").write_text(
             """package com.example;
@@ -462,7 +484,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         temp = Path(raw)
         project = temp / "project"
         extract_install(args.install_zip, project)
-        write_fixture(project, multi, clean_read=(scenario == "single-clean"))
+        write_fixture(project, multi, clean_read=(scenario == "single-clean"), multiple_controllers=(scenario == "two-chains-select-c1"))
         env = make_env(temp, project, args.sdk_root, 16384)
         env["PATH"] = str(args.opencode.parent) + os.pathsep + env.get("PATH", "")
         init_git(project, env)
@@ -481,11 +503,12 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             command_args.append("请检查当前实现 OrderController.updateStatus")
         elif scenario == "single-clean":
             command_args.append("PublicSqlLiteralController.literalOne")
-        elif multi:
-            # Class target is required to expose both endpoint chains and force
-            # the real next-user selection boundary. A method target would
-            # collapse this acceptance case to one chain.
+        elif multi and scenario != "two-chains-select-c1":
             command_args.append("OrderController")
+        elif multi:
+            # Two distinct Controllers must be discovered from the same
+            # impact-attributed change; no explicit class filter.
+            pass
         else:
             command_args.append("OrderController.updateStatus")
 
@@ -544,9 +567,11 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             host.require(isinstance(chains, list) and len(chains) == 2,
                          f"{scenario_label}: expected TWO impacted chains: {proof}")
             host.require(
-                [(item.get("id"), item.get("name")) for item in chains] == [
-                    ("C1", "OrderController.updateStatus"), ("C2", "OrderController.voidOrder")
-                ],
+                [item.get("id") for item in chains] == ["C1", "C2"]
+                and all(isinstance(item.get("methods"),list) and len(item["methods"])==2
+                        for item in chains)
+                and chains[0].get("controllerPath","").endswith("/OrderController.java")
+                and chains[1].get("controllerPath","").endswith("/UserController.java"),
                 f"{scenario_label}: expected exact distinct C1/C2 identities: {proof}"
             )
             host.require(first_actions == ["prepare"],
