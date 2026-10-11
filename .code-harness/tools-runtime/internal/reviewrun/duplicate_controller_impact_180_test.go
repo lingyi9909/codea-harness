@@ -68,7 +68,7 @@ func TestT5DuplicateControllerMenuIsDisambiguatedAndPathTargetResolves(t *testin
         t.Fatalf("duplicate modules need exactly two distinct real options: %+v",opts)
     }
     for i,ch:=range opts.Chains {
-        if !strings.Contains(ch.Name,"OrderController.create [module-")||!strings.Contains(ch.Name,"OrderController.java]") {
+        if !strings.Contains(ch.Name,"OrderController [module-")||!strings.Contains(ch.Name,"OrderController.java]") || len(ch.Methods)!=1 {
             t.Fatalf("candidate %d cannot be distinguished by module: %+v",i,ch)
         }
     }
@@ -78,7 +78,7 @@ func TestT5DuplicateControllerMenuIsDisambiguatedAndPathTargetResolves(t *testin
     if err!=nil {t.Fatal(err)}
     pathOptions,err:=Prepare(context.Background(),root,second.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION",Target:file})
     if err!=nil {t.Fatal(err)}
-    if !pathOptions.DiscoveryComplete||len(pathOptions.Chains)!=2 {
+    if !pathOptions.DiscoveryComplete||len(pathOptions.Chains)!=1||len(pathOptions.Chains[0].Methods)!=2 {
         t.Fatalf("exact module path was not accepted as Controller target: %+v",pathOptions)
     }
     for _,ch:=range pathOptions.Chains {
