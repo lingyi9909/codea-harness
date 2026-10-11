@@ -322,7 +322,18 @@ func persistPrepared180(runDir string, state runState, intent Intent, root strin
 	if err := atomicWrite(filepath.Join(runDir, "options.json"), b); err != nil {
 		return Options{}, fmt.Errorf("REVIEW_OPTIONS_WRITE_FAILED: %w", err)
 	}
-	if len(chains) == 1 && len(chains[0].Nodes) > 0 {
+	// A source/Git snapshot that changed DURING discovery has no
+    // authoritative menu, even for a single Controller. Preserve the same
+    // run INCOMPLETE until a fresh stable prepare can establish identity.
+    stableSnapshot:=true
+    for _,gap:=range gaps {
+        if strings.HasPrefix(gap,"SOURCE_CHANGED_DURING_PREPARE") ||
+           strings.HasPrefix(gap,"CHANGESET_CHANGED_DURING_PREPARE") {
+            stableSnapshot=false
+            break
+        }
+    }
+    if stableSnapshot && len(chains) == 1 && len(chains[0].Nodes) > 0 {
         // One Controller is a single choice, even if it owns several
         // affected methods. Persist only its actual member chains.
         state.SelectedIDs = []string{chains[0].ID}
@@ -353,6 +364,15 @@ func loadPreparedOptions180(runDir string) (preparedOptions180, error) {
 	if v.SchemaVersion != SchemaVersion || v.Options.RunID == "" {
 		return v, fmt.Errorf("REVIEW_OPTIONS_STALE")
 	}
+    // The menu hash commits to Controller identity, every included method
+    // subchain, source fingerprint and immutable Git snapshot. Do not allow
+    // edited options.json to authorize a stale or expanded selected scope.
+    fingerprint:=v.SourceFingerprint
+    if v.ChangeSnapshotSHA256!="" {fingerprint+=":"+v.ChangeSnapshotSHA256}
+    expectedHash:=optionsHash180(v.ProjectRoot,v.Intent,fingerprint,v.Options)
+    if v.Options.Hash!=expectedHash {
+        return v,fmt.Errorf("REVIEW_OPTIONS_STALE: Controller options hash mismatch")
+    }
 	return v, nil
 }
 
