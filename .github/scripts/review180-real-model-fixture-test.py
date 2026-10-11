@@ -28,7 +28,7 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
         temp = tempfile.TemporaryDirectory(prefix="Codea fixture proof ")
         self.addCleanup(temp.cleanup)
         project = Path(temp.name)
-        model.write_fixture(project, multi)
+        model.write_fixture(project, multi, multiple_controllers=(scenario == "two-chains-select-c1"))
         git(project, "init", "--quiet")
         git(project, "config", "core.autocrlf", "false")
         git(project, "add", ".")
