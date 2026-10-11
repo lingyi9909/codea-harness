@@ -119,3 +119,29 @@ func TestT5ControllerGroupingPreservesUnresolvedAndMavenIdentity(t *testing.T){
         t.Fatalf("unresolved child or module identity was lost: %+v",choices)
     }
 }
+
+func TestT5OneControllerMixedResolvedAndUnresolvedMethodsIsPartial(t *testing.T){
+    root:=copyControllerReviewFixture180(t)
+    useRealAstGrep180(t,root)
+    replaceT5Fixture180(t,root,
+        "src/main/java/com/example/OrderMapper.java",
+        "void cancelOrder();","void cancelOrderRenamed();")
+    run,err:=Start(root)
+    if err!=nil{t.Fatal(err)}
+    opts,err:=Prepare(context.Background(),root,run.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION",Target:"OrderController"})
+    if err!=nil{t.Fatal(err)}
+    if opts.DiscoveryComplete||opts.SelectionRequired||len(opts.Chains)!=1||
+       len(opts.Chains[0].Methods)!=2||len(opts.Chains[0].Unresolved)==0 {
+        t.Fatalf("mixed complete/incomplete Controller was falsely COMPLETE: %+v",opts)
+    }
+    scope,err:=loadScope180(filepath.Dir(run.ReportPath),run.RunID)
+    if err!=nil{t.Fatal(err)}
+    if scope.Coverage!="PARTIAL"||len(scope.Chains)!=2 {
+        t.Fatalf("mixed Controller lost PARTIAL method-level state: %+v",scope)
+    }
+    _,state,err:=loadRun(root,run.RunID)
+    if err!=nil{t.Fatal(err)}
+    if !state.ScopeReady||state.Coverage!="PARTIAL" {
+        t.Fatalf("auto-selected partial Controller marked COMPLETE or not scoped: %+v",state)
+    }
+}
