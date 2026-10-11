@@ -326,7 +326,7 @@ func persistPrepared180(runDir string, state runState, intent Intent, root strin
         // One Controller is a single choice, even if it owns several
         // affected methods. Persist only its actual member chains.
         state.SelectedIDs = []string{chains[0].ID}
-        if err := writeScope180(runDir, state.RunID, opts.Hash, state.SelectedIDs, expandSelectedMethodChains180(chains), root); err != nil {
+        if err := writeScope180(runDir, state.RunID, opts.Hash, state.SelectedIDs, expandSelectedMethodChains180(chains), root, !complete); err != nil {
             return Options{}, err
         }
         state.ScopeReady = true
