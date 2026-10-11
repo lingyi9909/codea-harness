@@ -34,6 +34,8 @@ func groupControllerChains180(methods []Chain, mode string) []Chain {
         module, ok := mavenModuleRoot180(path)
         if !ok {
             module = path // conservative fallback preserves identity
+        } else if module == "" {
+            module = "." // explicit root Maven module identity
         }
         key := module + "\x00" + path + "\x00" + class
         group := byKey[key]
