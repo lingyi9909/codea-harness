@@ -17,9 +17,9 @@ version: 10
 - 命令入口必须在第一条模型回复前创建并回读 INCOMPLETE `review.md`。
 - 本次入口返回的 `runId` 是唯一 run identity；禁止按目录时间或“最新 run”猜测。
 - `target` 可省略。用户只输入 `/harness-review` 时，必须使用 `CHANGES` 且不传 `intent.target`，自动识别 Git 变更影响链路；不得要求用户先指定 Controller。只有用户明确给出 target 时才作为 `intent.target` 传给 `prepare`，不得进入 shell 拼接。
-- 单链且 discovery 完整时直接进入读取/评审；多链时展示完整 C1..Cn 菜单和当前 `optionsHash`，立即结束本 turn。
-- 下一条真实用户消息明确选择后才调用 `select`。`prepare/select/finish` 必须调用原生 OpenCode `codea-review` 工具，严禁通过 bash、PowerShell 或脚本直接执行 Runtime CLI。Host session/message identity 只来自原生 tool context；工具不存在时保持 INCOMPLETE，提示重启 OpenCode 并核查 `.opencode/tools/codea-review.ts`，绝不伪造身份或走 shell 降级。
-- `scope.reads` 是上下文读取范围；正式 finding 的证据还必须通过 Runtime 的所选链行级范围校验。同文件未选方法、共享 Service 的 sibling method、共享 Mapper XML 的未选 statement 均不能产生本次 finding。
+- 只有一个受影响 Controller 时自动选中其中全部受影响方法链并读取评审；多个 Controller 才展示 C1..Cn 菜单和当前 `optionsHash`，立即结束本 turn。
+- 下一条真实用户消息明确选择后才调用 `select`，Runtime 严格接受 `C1`、`选择C1`、`选择 C1`、`C1,C3`、`选择 C1,C3` 等表达。若此消息是辅助问题，先回答，再在同一 turn 调用原生 `codea-review action=resume`，使用原 runId 重新核验源码/Git 并完整重展有效菜单，结束 turn 等下一次真实选择。旧 hash 失效不复用，绝不重新 start。`prepare/resume/select/finish` 必须调用原生 OpenCode `codea-review` 工具，严禁通过 bash、PowerShell 或脚本直接执行 Runtime CLI。Host session/message identity 只来自原生 tool context；工具不存在时保持 INCOMPLETE，提示重启 OpenCode 并核查 `.opencode/tools/codea-review.ts`，绝不伪造身份或走 shell 降级。
+- Controller 选项以 Maven 模块 + Controller Java 文件路径 + 类名为唯一标识；菜单聚合不扩张 CHANGES 的方法级变更影响归因。`scope.reads` 是上下文读取范围；正式 finding 的证据还必须通过 Runtime 的所选链行级范围校验。同文件未选方法、共享 Service 的 sibling method、共享 Mapper XML 的未选 statement 均不能产生本次 finding。
 - `prepare/select` 返回 scope 后，普通 Review 不再探索 Harness/Git 元数据：禁止读取 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、prompt/agent/tool 实现或无关项目元数据，也禁止用 glob/grep 扩大已选范围；只读取 `scope.reads` 授权的源码范围。
 - finding 必须包含真实 source evidence。`introducedByChange` 不是模型 authority：CURRENT_IMPLEMENTATION 禁止声称本次变更引入；CHANGES 必须命中当前真实 diff 行。
 - 调用 `finish` 时，`result.reads` 不仅要覆盖全部 `scope.reads`，每个 `evidence.ref` 的完整 `path/sha256/startLine/endLine` tuple 也必须作为一条精确 read 同时列入 `result.reads`；不能只提交包含它的更宽 read range。
