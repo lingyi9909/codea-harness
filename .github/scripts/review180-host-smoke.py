@@ -89,7 +89,7 @@ def is_explicit_selection_reply(messages):
     "选择 C1"; substring matching that instruction is NOT user consent.
     Runtime independently authenticates the user turn with OpenCode export.
     """
-    return latest_user_text(messages).strip() == "选择 C1"
+    return latest_user_text(messages).strip() in {"C1", "选择C1", "选择 C1"}
 
 
 def verify_selection_reply_guard():
@@ -176,7 +176,7 @@ class Provider(BaseHTTPRequestHandler):
                 self.reply(body, tool_call=call(tool_name, {
                     "action": "prepare",
                     "runId": run_id,
-                    "intent": {"mode": "CHANGES", "target": "OrderController"},
+                    "intent": {"mode": "CHANGES", **({} if self.server.scenario == "multi" else {"target": "OrderController"})},
                 }, "prepare"))
                 return
 
@@ -286,6 +286,20 @@ def write_fixture(project, multi):
         impl_methods += "    public void cancel() { mapper.cancelOrder(); }\n"
         mapper_methods += "    void cancelOrder();\n"
         sql += '  <update id="cancelOrder">UPDATE orders SET status = 0 WHERE id = 1</update>\n'
+    if multi:
+        (java / "UserController.java").write_text(
+            'package com.example;\n'
+            'import org.springframework.web.bind.annotation.PostMapping;\n'
+            'import org.springframework.web.bind.annotation.RestController;\n'
+            '@RestController\n'
+            'public class UserController {\n'
+            '    private final OrderService service;\n'
+            '    public UserController(OrderService service) { this.service=service; }\n'
+            '    @PostMapping("/users/create")\n'
+            '    public void syncUser() { service.create(); }\n'
+            '    @PostMapping("/users/cancel")\n'
+            '    public void closeUser() { service.cancel(); }\n'
+            '}\n',encoding="utf-8")
     (java / "OrderController.java").write_text('''package com.example;\nimport org.springframework.web.bind.annotation.PostMapping;\nimport org.springframework.web.bind.annotation.RestController;\n@RestController\npublic class OrderController {\n    private final OrderService service;\n    public OrderController(OrderService service) { this.service = service; }\n''' + endpoints + "}\n", encoding="utf-8")
     (java / "OrderService.java").write_text("package com.example;\npublic interface OrderService {\n" + service_methods + "}\n", encoding="utf-8")
     (java / "OrderServiceImpl.java").write_text("package com.example;\npublic class OrderServiceImpl implements OrderService {\n    private final OrderMapper mapper;\n    public OrderServiceImpl(OrderMapper mapper) { this.mapper = mapper; }\n" + impl_methods + "}\n", encoding="utf-8")
@@ -363,7 +377,7 @@ def run_scenario(binary, project, env, server, multi):
     scenario = "multi" if multi else "single"
     server.scenario = scenario
     run = [str(binary), "run", "--print-logs", "--dir", str(project), "--model", "fixture/review180", "--format", "json"]
-    first = command(run + ["--command", "harness-review", "OrderController"], project, env)
+    first = command(run + (["--command", "harness-review"] if multi else ["--command", "harness-review", "OrderController"]), project, env)
     require(not server.errors, f"{scenario}: provider errors: {server.errors}")
     runs = list((project / ".code-harness" / "runs").glob("review-*"))
     require(len(runs) == 1, f"{scenario}: expected exactly one run, got {runs}")
@@ -387,7 +401,7 @@ def run_scenario(binary, project, env, server, multi):
 
     require("finish" not in actions and "select" not in actions, f"multi: model crossed human-selection boundary before user reply; actions={actions}")
     require(" options=" in flatten(exported), "multi: current run/hash menu was not displayed")
-    command(run + ["--session", session, "选择", "C1"], project, env)
+    command(run + ["--session", session, "C1"], project, env)
     require(not server.errors, f"multi selection: provider errors: {server.errors}")
     exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
     actions = tool_actions(exported)
