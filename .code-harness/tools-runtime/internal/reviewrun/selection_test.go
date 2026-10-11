@@ -13,9 +13,10 @@ import (
 
 func Test180SelectRejectsStaleMenu(t *testing.T) {
     root := copyControllerReviewFixture180(t)
+    addSecondController180(t, root)
     useRealAstGrep180(t, root)
     started, _ := Start(root)
-    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION", Target:"OrderController"})
+    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION"})
     if err != nil { t.Fatal(err) }
     service := filepath.Join(root,"src","main","java","com","example","OrderServiceImpl.java")
     f, err := os.OpenFile(service, os.O_APPEND|os.O_WRONLY, 0); if err != nil { t.Fatal(err) }
@@ -29,9 +30,10 @@ func Test180SelectRejectsStaleMenu(t *testing.T) {
 
 func Test180SelectRechecksSourceAfterTurnBeforePersist(t *testing.T) {
     root := copyControllerReviewFixture180(t)
+    addSecondController180(t, root)
     useRealAstGrep180(t, root)
     started, _ := Start(root)
-    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION", Target:"OrderController"})
+    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION"})
     if err != nil { t.Fatal(err) }
     service := filepath.Join(root,"src","main","java","com","example","OrderServiceImpl.java")
     old := verifySelectionTurn180
@@ -51,9 +53,10 @@ func Test180SelectRechecksSourceAfterTurnBeforePersist(t *testing.T) {
 
 func Test180SelectedSubsetIsExact(t *testing.T) {
     root := copyControllerReviewFixture180(t)
+    addSecondController180(t, root)
     useRealAstGrep180(t, root)
     started, _ := Start(root)
-    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION", Target:"OrderController"})
+    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION"})
     if err != nil { t.Fatal(err) }
     old := verifySelectionTurn180
     verifySelectionTurn180 = func(context.Context,string,reviewauthority.SelectionTurnRequest180) error { return nil }
@@ -70,9 +73,10 @@ func Test180SelectedSubsetIsExact(t *testing.T) {
 
 func Test180SelectUnknownAndDuplicateIDsReject(t *testing.T) {
     root := copyControllerReviewFixture180(t)
+    addSecondController180(t, root)
     useRealAstGrep180(t, root)
     started, _ := Start(root)
-    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION", Target:"OrderController"}); if err != nil { t.Fatal(err) }
+    opts, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CURRENT_IMPLEMENTATION"}); if err != nil { t.Fatal(err) }
     old := verifySelectionTurn180
     verifySelectionTurn180 = func(context.Context,string,reviewauthority.SelectionTurnRequest180) error { return nil }
     defer func(){ verifySelectionTurn180 = old }()
