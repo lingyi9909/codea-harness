@@ -145,3 +145,28 @@ func TestT5OneControllerMixedResolvedAndUnresolvedMethodsIsPartial(t *testing.T)
         t.Fatalf("auto-selected partial Controller marked COMPLETE or not scoped: %+v",state)
     }
 }
+
+func TestT5TamperedControllerChildInvalidatesPersistedOptionsHash(t *testing.T) {
+    root:=copyControllerReviewFixture180(t)
+    addSecondController180(t,root)
+    useRealAstGrep180(t,root)
+    run,err:=Start(root)
+    if err!=nil{t.Fatal(err)}
+    opts,err:=Prepare(context.Background(),root,run.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION"})
+    if err!=nil{t.Fatal(err)}
+    if len(opts.Chains)!=2 || !opts.SelectionRequired {t.Fatalf("need Controller menu: %+v",opts)}
+    path:=filepath.Join(filepath.Dir(run.ReportPath),"options.json")
+    bytes,err:=os.ReadFile(path)
+    if err!=nil{t.Fatal(err)}
+    // Modify only a method-child symbol, not the Controller menu name or
+    // saved hash, simulating subchain expansion/tampering after prepare.
+    before:="OrderServiceImpl.create"
+    after:="OrderServiceImpl.attackerAdded"
+    if !strings.Contains(string(bytes),before){t.Fatalf("missing actual child in options: %s",bytes)}
+    changed:=strings.Replace(string(bytes),before,after,1)
+    if err:=os.WriteFile(path,[]byte(changed),0600);err!=nil{t.Fatal(err)}
+    _,err=loadPreparedOptions180(filepath.Dir(run.ReportPath))
+    if err==nil || !strings.Contains(err.Error(),"REVIEW_OPTIONS_STALE") {
+        t.Fatalf("edited method subchain accepted despite immutable optionsHash: %v",err)
+    }
+}
