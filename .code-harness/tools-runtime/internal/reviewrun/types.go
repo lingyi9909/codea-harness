@@ -17,10 +17,15 @@ type Node struct {
 }
 
 type Chain struct {
-	ID         string   `json:"id"`
-	Name       string   `json:"name"`
-	Nodes      []Node   `json:"nodes"`
-	Unresolved []string `json:"unresolved"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Nodes          []Node   `json:"nodes"`
+	Unresolved     []string `json:"unresolved"`
+	Module         string   `json:"module,omitempty"`
+	ControllerPath string   `json:"controllerPath,omitempty"`
+	// Methods contains the exact affected endpoint chains behind a Controller
+	// menu item; scope and finding evidence always use these method chains.
+	Methods        []Chain  `json:"methods,omitempty"`
 }
 
 type ReadRef struct {
