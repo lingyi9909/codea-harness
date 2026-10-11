@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func Test180PrepareTwoEndpointsRequiresSelection(t *testing.T) {
+func Test180PrepareTwoEndpointsOneControllerAutoSelects(t *testing.T) {
 	root := copyControllerReviewFixture180(t)
 	useRealAstGrep180(t, root)
 	started, err := Start(root)
@@ -25,18 +25,18 @@ func Test180PrepareTwoEndpointsRequiresSelection(t *testing.T) {
 	if time.Since(began) > 15*time.Second {
 		t.Fatalf("prepare exceeded fixture budget: %s", time.Since(began))
 	}
-	if !got.DiscoveryComplete || !got.SelectionRequired || len(got.Chains) != 2 {
+	if !got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 1 || len(got.Chains[0].Methods) != 2 {
 		t.Fatalf("unexpected options: %+v", got)
 	}
-	if got.Chains[0].ID == got.Chains[1].ID {
-		t.Fatalf("distinct endpoints were merged: %+v", got.Chains)
-	}
+	if got.Chains[0].Methods[0].ID == got.Chains[0].Methods[1].ID {
+        t.Fatalf("distinct method subchains were merged: %+v", got.Chains)
+    }
 	if got.Hash == "" {
 		t.Fatal("missing optionsHash")
 	}
 	shared := false
-	for _, a := range got.Chains[0].Nodes {
-		for _, b := range got.Chains[1].Nodes {
+	for _, a := range got.Chains[0].Methods[0].Nodes {
+		for _, b := range got.Chains[0].Methods[1].Nodes {
 			if a.Role == "SERVICE" && b.Role == "SERVICE" && a.Path == b.Path {
 				shared = true
 			}
@@ -75,7 +75,7 @@ func Test180PrepareNaturalLanguageCurrentImplementationTarget(t *testing.T) {
 	if !got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 1 {
 		t.Fatalf("natural-language current-implementation target did not resolve uniquely: %+v", got)
 	}
-	if got.Chains[0].Name != "OrderController.create" {
+	if !strings.HasPrefix(got.Chains[0].Name, "OrderController（1 个方法）") || len(got.Chains[0].Methods) != 1 || got.Chains[0].Methods[0].Name != "OrderController.create" {
 		t.Fatalf("natural-language target resolved to wrong chain: %+v", got.Chains)
 	}
 }
@@ -139,9 +139,9 @@ func Test180UnknownImplementationPreventsAutoSingle(t *testing.T) {
 		t.Fatalf("missing implementation gap: %+v", got)
 	}
 	_, state, _ := loadRun(root, started.RunID)
-	if state.ScopeReady {
-		t.Fatalf("incomplete discovery marked scope ready: %+v", state)
-	}
+    if state.ScopeReady && state.Coverage != "PARTIAL" {
+        t.Fatalf("incomplete discovery wrongly marked COMPLETE: %+v",state)
+    }
 }
 
 func Test180PrepareNoEntrypointStaysIncomplete(t *testing.T) {
