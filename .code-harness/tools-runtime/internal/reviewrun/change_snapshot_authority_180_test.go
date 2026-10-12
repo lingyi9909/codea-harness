@@ -2,7 +2,6 @@ package reviewrun
 
 import (
     "context"
-    "os"
     "path/filepath"
     "strings"
     "testing"
