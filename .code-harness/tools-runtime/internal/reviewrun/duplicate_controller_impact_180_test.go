@@ -64,7 +64,7 @@ func TestT5DuplicateControllerMenuIsDisambiguatedAndPathTargetResolves(t *testin
     if err!=nil {t.Fatal(err)}
     opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION",Target:"OrderController.create"})
     if err!=nil {t.Fatal(err)}
-    if !opts.DiscoveryComplete||!opts.SelectionRequired||len(opts.Chains)!=2 {
+    if !opts.DiscoveryComplete||opts.SelectionRequired||len(opts.Chains)!=2 {
         t.Fatalf("duplicate modules need exactly two distinct real options: %+v",opts)
     }
     for i,ch:=range opts.Chains {
