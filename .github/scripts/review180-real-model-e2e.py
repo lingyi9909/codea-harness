@@ -13,9 +13,18 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
 import time
 import zipfile
+
+# GitHub Windows runners may default Python stdout to cp1252. Controller
+# display names deliberately contain Unicode (including Chinese brackets).
+# Force UTF-8 for stdout/stderr before any model-evidence logging, without
+# weakening or escaping the source-grounded review assertions.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 HERE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("review180_host", HERE / "review180-host-smoke.py")
