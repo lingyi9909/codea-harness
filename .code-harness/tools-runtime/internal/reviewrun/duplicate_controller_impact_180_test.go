@@ -33,7 +33,7 @@ func Test180ChangesSameNamedControllersInDifferentModulesDoNotCrossContaminate(t
  replaceT5Fixture180(t,root,"module-a/src/main/java/com/example/OrderController.java","orderService.create();","orderService.create(); // only module-a changed")
  start, err := Start(root)
  if err != nil { t.Fatal(err) }
- opts, err := Prepare(context.Background(), root, start.RunID, Intent{Mode:"CHANGES", Target:"OrderController.create"})
+ opts, err := Prepare(context.Background(), root, start.RunID, Intent{Mode:"CHANGES", Target:"module-a/src/main/java/com/example/OrderController.java"})
  if err != nil { t.Fatal(err) }
  if len(opts.Chains) != 1 { t.Fatalf("unmodified duplicate Controller was falsely affected: %+v", opts) }
  if !strings.HasPrefix(opts.Chains[0].Nodes[0].Path, "module-a/") {
@@ -62,7 +62,7 @@ func TestT5DuplicateControllerMenuIsDisambiguatedAndPathTargetResolves(t *testin
     if err!=nil {t.Fatal(err)}
     start,err:=Start(root)
     if err!=nil {t.Fatal(err)}
-    opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION",Target:"OrderController.create"})
+    opts,err:=Prepare(context.Background(),root,start.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION"})
     if err!=nil {t.Fatal(err)}
     if !opts.DiscoveryComplete||opts.SelectionRequired||len(opts.Chains)!=2 {
         t.Fatalf("duplicate modules need exactly two distinct real options: %+v",opts)
@@ -73,6 +73,15 @@ func TestT5DuplicateControllerMenuIsDisambiguatedAndPathTargetResolves(t *testin
         }
     }
     if opts.Chains[0].Name==opts.Chains[1].Name {t.Fatal("duplicate menu names remain indistinguishable")}
+    ambiguous,err:=Start(root)
+    if err!=nil{t.Fatal(err)}
+    ambiguity,err:=Prepare(context.Background(),root,ambiguous.RunID,Intent{
+        Mode:"CURRENT_IMPLEMENTATION",Target:"OrderController"})
+    if err!=nil{t.Fatal(err)}
+    if ambiguity.DiscoveryComplete || len(ambiguity.Chains)!=0 ||
+        !strings.Contains(strings.Join(ambiguity.Gaps,"\\n"),"REVIEW_TARGET_AMBIGUOUS"){
+        t.Fatalf("bare same-name Controller incorrectly selects multiple modules: %+v",ambiguity)
+    }
     file:="module-b/src/main/java/com/example/OrderController.java"
     second,err:=Start(root)
     if err!=nil {t.Fatal(err)}
