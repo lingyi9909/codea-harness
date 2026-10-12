@@ -391,26 +391,22 @@ def run_scenario(binary, project, env, server, multi):
     actions = tool_actions(exported)
     require("prepare" in actions, f"{scenario}: model never called prepare; actions={actions}")
 
-    if not multi:
-        require("finish" in actions, f"single: model never autonomously called finish; actions={actions}\n{first[-3000:]}")
-        require("select" not in actions, f"single: unexpected selection; actions={actions}")
-        final = report.read_text(encoding="utf-8")
-        require('"execution":"COMPLETE"' in final, f"single: durable report not COMPLETE:\n{final}")
-        print(f"REVIEW180_HOST_SINGLE PASS runId={run_id} actions={actions}", flush=True)
-        return
-
-    require("finish" not in actions and "select" not in actions, f"multi: model crossed human-selection boundary before user reply; actions={actions}")
-    require(" options=" in flatten(exported), "multi: current run/hash menu was not displayed")
-    command(run + ["--session", session, "C1"], project, env)
-    require(not server.errors, f"multi selection: provider errors: {server.errors}")
-    exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
-    actions = tool_actions(exported)
-    require(actions.count("select") == 1 and actions.count("finish") == 1, f"multi: expected one select and finish after real reply; actions={actions}")
-    scope = json.loads((run_dir / "scope.json").read_text(encoding="utf-8"))
-    require(scope.get("selectedIds") == ["C1"], f"multi: selected scope mismatch: {scope}")
-    final = report.read_text(encoding="utf-8")
-    require('"execution":"COMPLETE"' in final, f"multi: report not COMPLETE after selection:\n{final}")
-    print(f"REVIEW180_HOST_MULTI PASS runId={run_id} actions={actions} actualUserReply=true", flush=True)
+    # Both one and multiple Controllers must auto-finish in the first Host turn.
+    require(actions.count("finish")==1 and "select" not in actions and "resume" not in actions,
+            f"{scenario}: expected autonomous prepare/finish: {actions}")
+    scope=json.loads((run_dir / "scope.json").read_text(encoding="utf-8"))
+    options=json.loads((run_dir / "options.json").read_text(encoding="utf-8"))["options"]
+    expected=2 if multi else 1
+    require(options.get("selectionRequired") is False and len(options["chains"])==expected,
+            f"{scenario}: unexpected Controller options: {options}")
+    require(scope.get("selectedIds")==[f"C{i}" for i in range(1,expected+1)],
+            f"{scenario}: auto selection did not cover all Controllers: {scope}")
+    require(len(scope.get("chains",[]))==(4 if multi else 1),
+            f"{scenario}: method chains not preserved: {scope}")
+    final=report.read_text(encoding="utf-8")
+    require('"execution":"COMPLETE"' in final,
+            f"{scenario}: incomplete report: {final}")
+    print(f"REVIEW180_HOST_{'MULTI_AUTO' if multi else 'SINGLE'} PASS runId={run_id} actions={actions}",flush=True)
 
 
 def run_concurrent_finish_scenario(binary, project, env, server):
@@ -463,7 +459,7 @@ def init_fixture_repo(project, env):
     for call in targets:
         if call in raw:
             require(raw.count(call) == 1, f"ambiguous Host smoke fixture call {call!r}")
-            raw = raw.replace(call, call + b" // changed for review180", 1)
+            raw = raw.replace(call, call + b" /* changed for review180 */", 1)
             changed += 1
     require(changed >= 1, "Host smoke fixture did not modify an actual Java method")
     impl.write_bytes(raw)
