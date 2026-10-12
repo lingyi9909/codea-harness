@@ -7,7 +7,6 @@ import (
     "strings"
     "testing"
 
-    "codea-harness-tools/internal/reviewauthority"
 )
 
 // A real user can select a chain after another process changes the Git
@@ -23,22 +22,26 @@ func Test180SelectRejectsChangedGitBaselineAfterMenu(t *testing.T) {
     started, err := Start(root)
     if err != nil { t.Fatal(err) }
     options, err := Prepare(context.Background(), root, started.RunID, Intent{Mode:"CHANGES"})
-    if err != nil || !options.SelectionRequired || len(options.Chains)<2 {
+    if err != nil || options.SelectionRequired || len(options.Chains)!=2 {
         t.Fatalf("expected multiple CHANGES chains: %+v %v", options, err)
     }
     // The next Git commit changes diff identity, not on-disk source bytes.
     gitReview180(t, root, "add", changed)
     gitReview180(t, root, "commit", "-m", "code changed after menu")
-    old := verifySelectionTurn180
-    verifySelectionTurn180 = func(context.Context,string,reviewauthority.SelectionTurnRequest180) error { return nil }
-    defer func(){ verifySelectionTurn180 = old }()
-    _, err = Select(context.Background(), root, SelectionRequest{RunID:started.RunID,OptionsHash:options.Hash,IDs:[]string{options.Chains[0].ID}},HostTurn{SessionID:"s",MessageID:"m"})
-    if err == nil || !strings.Contains(err.Error(),"REVIEW_OPTIONS_STALE") {
-        t.Fatalf("stale Git menu accepted: %v",err)
+    scope,err:=loadScope180(filepath.Dir(started.ReportPath),started.RunID)
+    if err!=nil{t.Fatal(err)}
+    if len(scope.SelectedIDs)!=2 {t.Fatalf("not all Controller groups auto-scoped: %+v",scope)}
+    _,err=Finish(context.Background(),root,FinishRequest{
+        RunID:started.RunID,Reads:scope.Reads,Findings:[]Finding{},
+        PendingRisks:[]string{},Gaps:[]string{}})
+    if err==nil || !strings.Contains(err.Error(),"REVIEW_FINISH_CHANGESET_STALE"){
+        t.Fatalf("finish accepted old auto scope after Git base changed: %v",err)
     }
-    if _, err := os.Stat(filepath.Join(root,".code-harness","runs",started.RunID,"scope.json")); !os.IsNotExist(err) {
-        t.Fatalf("stale Git selection generated scope: %v",err)
+    status,err:=Status(root,started.RunID)
+    if err!=nil || status.Execution!="INCOMPLETE"{
+        t.Fatalf("stale Git finish changed report state: %+v %v",status,err)
     }
+
 }
 
 func Test180FinishRejectsChangedGitBaselineWithoutIntroducedFindings(t *testing.T) {
