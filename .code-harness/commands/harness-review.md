@@ -12,50 +12,26 @@ Review target: $ARGUMENTS
 
 The command output above is the authoritative `review start` result. It has already created and read back the durable **INCOMPLETE** report before this model turn. Keep its `runId` and `reportPath`; never discover a run by taking the newest directory.
 
-## Zero-target and Host identity invariants (mandatory)
+## 自动评审范围与原生工具边界
 
-- `/harness-review` with **NO arguments** is a valid primary Review command. Never require the user to supply a Controller/class/method before calling prepare. Empty arguments mean `intent={mode:"CHANGES"}` with **no target key**. Do not guess or fabricate a target from the repository.
-- `/harness-review OrderController` and `/harness-review OrderController.method` are optional filters, not prerequisites. If there is no relevant Git change or the graph is unresolved, show the concrete Runtime gaps, keep the SAME INCOMPLETE run, and do not turn this into a request for a mandatory target.
-- The entrypoint's pre-model `review start` is the **only** shell Runtime invocation authorized in this slash command. After it, **always** use the native OpenCode `codea-review` tool for `prepare`, `resume`, `select` and `finish`. NEVER execute `codea-dcep-tools.exe review prepare/select/finish` through bash, PowerShell, terminal, exec, or a generated script.
-- Especially for `select`: native `codea-review` obtains `sessionID`/`messageID` from the actual OpenCode Host context; shell CLI invocations cannot provide the required authenticated user-turn evidence. Never invent IDs, extract another session's IDs, or ask the user to supply them. If the native tool is not advertised or cannot be invoked, fail closed with `CODEA_REVIEW_HOST_TOOL_UNAVAILABLE`, keep the INCOMPLETE report and instruct the user to verify `.opencode/tools/codea-review.ts` and restart OpenCode in a new session. Do not offer a shell workaround.
-- When selection is required, display `requiredMenuText` verbatim, STOP this assistant turn, and wait for the user's new message `C1`, `选择C1`, `选择 C1`, or the comma-separated Controller IDs. Runtime verifies the literal real Host user message. Call the native `codea-review` with `action=select` in that next assistant turn, in the same OpenCode conversation.
-
-Use only the `codea-review` structured tool for the ordinary 1.8 review path.
-The Runtime CLI accepts both `review prepare --run-id <id> --mode CHANGES` and
-`review prepare --run-id <id> --intent CHANGES`; conflicting flags are rejected.
-For NO_RELEVANT_CHANGES, retain the SAME runId and the durable INCOMPLETE report;
-no replacement `review start` is required. When sources change, rerun prepare on
-that original runId. Never switch to CURRENT_IMPLEMENTATION automatically.
-
-
+- `/harness-review` 没有参数时，`intent={mode:"CHANGES"}`（没有 target），自动评审**全部本次 Git 变更实际影响的 Controller**及其方法级下游调用链，不做 C1/C2/C3 人工选择。没有有效变更时保持 INCOMPLETE，不能自行改成全仓当前实现。
+- `/harness-review OrderController` 仅评审该 Controller 的受影响方法和下游；`OrderController.method` 可进一步限定方法。对于 Maven 同名 Controller，优先使用完整 Java 文件路径指定目标以消除歧义。不得因同名误合并或扩大范围。
+- 用户明确提出“当前实现”时才使用 `CURRENT_IMPLEMENTATION`。Use `CURRENT_IMPLEMENTATION` **only** when the user's request itself explicitly asks to inspect the current implementation. Never switch or retry from `CHANGES` to `CURRENT_IMPLEMENTATION` after `REVIEW_TARGET_NO_RELEVANT_CHANGES`, `NO_RELEVANT_CHANGES` or any prepare failure. CHANGES must remain fail-closed with the durable report INCOMPLETE.
+- 唯一允许的 Shell Runtime 调用是命令最开始的 `review start`。此后 `prepare` 和 `finish` 必须通过**原生** OpenCode `codea-review` 工具调用；不得通过 PowerShell、bash、脚本或伪造 Host 身份调用 Runtime。若原生工具未加载，报告 `CODEA_REVIEW_HOST_TOOL_UNAVAILABLE`，保持 INCOMPLETE。
+- **不再支持普通 Review 的人工菜单、select、resume 或要求用户输入“选择 C1”**。内部 `C1` 等 ID 仅用于自动 scope 的稳定身份与报告归属，不能向用户索要选择。即使受影响 Controller 有多个，也应自动包含全部，不创建新 run。
+- Runtime 负责源码/Git 快照、optionsHash、所有子链范围及未解析项校验。Agent 不得补读 scope 外方法来掩盖归因缺口；`PARTIAL` 必须对应 `UNDETERMINED`；模型说明性 gap 不得误降级真实 `COMPLETE/BLOCKING`。
 
 ## Assistant-turn execution control
 
-A completed `prepare` or `select` tool call is **not** itself a completed assistant turn.
+`prepare` 返回已授权 `scope` 后，主 Agent **non-terminal**：必须在同一 turn 中读源码、评审并 `finish`。返回 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN` 是强制续行，不得在 prepare 后先给用户自然语言答复或结束 turn；没有 finding 也必须 `finish`。
 
-- If the returned `nextAction.type` is `READ_SCOPE_AND_FINISH_THIS_TURN`, this assistant turn is non-terminal. Do **not** emit a user-facing answer and do **not** stop generation after prepare/select. Continue immediately with authorized source reads, perform the semantic review, and call `codea-review finish` in the same assistant turn. This rule is identical when the correct finding list is empty.
-- The only normal pre-finish terminal state is `WAIT_FOR_REAL_USER_SELECTION`. In that state copy `nextAction.requiredMenuText` **verbatim** as one plain-text/code block. The first line must remain exactly `<runId> options=<optionsHash>`, followed by the exact `C<n> <name>` lines in returned order. Do not turn this block into a Markdown table or rewrite the header. Then end the turn exactly because a real next user message is required.
-- `KEEP_REPORT_INCOMPLETE` or an actual tool/runtime error may end the turn with the concrete failure state.
-- Therefore a single-chain, scope-ready review has only one valid normal terminal tool path: `prepare → source reads → finish`. An assistant message produced after only `prepare` is a protocol violation, even if no issue appears obvious.
-
-1. Call `codea-review` with `action=prepare`, this exact `runId`, and intent `CHANGES` by default. Pass the user target as `intent.target` only when it is non-empty. Use `CURRENT_IMPLEMENTATION` **only** when the user's request itself explicitly asks to inspect the current implementation rather than current changes. Never switch or retry from `CHANGES` to `CURRENT_IMPLEMENTATION` because CHANGES returns no relevant source changes, `REVIEW_TARGET_NO_RELEVANT_CHANGES`, an incomplete scope, or any other prepare failure. Those states must remain fail-closed with the durable report INCOMPLETE.
-2. If prepare reports multiple Controllers and `selectionRequired=true`, present the complete current menu exactly as `optionsHash` plus one line per chain in the form `<id> <name>`. Explain any gaps without claiming they are absent chains. **End this assistant turn. Do not call select or finish.**
-3. On the next real user message, call `codea-review` with `action=select`, the same `runId`, the current `optionsHash`, and only the Controller IDs the user explicitly selected. `C1`, `选择C1` and `选择 C1` are all accepted; never demand a fixed prefix. The tool obtains Host session/message identity from OpenCode context; never ask the user or model to provide those IDs.
-4. When prepare auto-selects one Controller (with its exact affected method subchains), or select succeeds, use the returned `scope.reads` as the authority for source reading. Review only that selected scope. Do not add files or ranges that are not present in the scope. After scope is available, do not inspect `.git/**`, `opencode.json`, `.opencode/**`, `.code-harness/**`, prompt/agent/tool implementation, or unrelated project metadata; do not use glob/grep to widen the scope. Read only the authorized source ranges needed for evidence.
-5. Perform the code review in this primary Agent. Record only source-grounded findings. Every finding must include severity, problem, impact, recommendation, verification, and evidence whose exact `ref` was actually read. Do not modify production or test code.
-6. `pendingRisks` is only for a **current unresolved risk in the selected implementation**: the current source must support a plausible harmful condition, but confirming whether it actually applies requires evidence outside the authorized scope. Do not add a pending risk for hypothetical future edits, future endpoint repurposing, "someone could later bind sensitive SQL", generic best-practice reminders, or policy/configuration that the current implementation does not depend on. If the selected current code has no finding and no such current unresolved harmful condition, send `pendingRisks=[]`.
-7. Once the selected source ranges have been read and findings are source-grounded, immediately call `codea-review` with `action=finish`, even when findings are empty. Do not spend extra turns reverse-engineering Harness/Git internals or re-discovering Runtime authority. Send every actual read, findings, pending risks, and gaps. Only the finish result may authorize the words “评审完成”.
-8. If coverage is `PARTIAL`, preserve the disclosed gaps and treat `reviewConclusion=UNDETERMINED` as intentional. Never convert partial coverage into `NO_ISSUES_FOUND`.
-9. After successful finish, tell the user the report path and concise conclusion. If any tool call fails, report the concrete error and leave the already-created report INCOMPLETE.
-
-## 辅助对话后的安全恢复（必须）
-
-- Controller 菜单展示后，若下一条真实用户消息是明确 Controller 选择，直接调用原生 `codea-review select`；不要求用户输入固定“选择”前缀，不从模型文本伪造选择。
-- 若是辅助问题或确认而非选择，先回答该问题；然后在同一 assistant turn 调用原生 `codea-review` 的 `action=resume`，使用 **同一 runId**，读取其 fresh `nextAction.requiredMenuText`，原样重展完整 Controller 菜单并结束 turn，等真正的下一条用户选择。禁止重新 `review start`。
-- `resume` 使用存储的原始 intent 在 Runtime 重新核验源码指纹、Controller optionsHash 和 CHANGES Git snapshot。若已变化则生成新菜单，旧菜单必然失效，不允许复用旧 hash/IDs；若未变化则保留原 runId/hash。
-- Runtime 继续严格检查 Host session/message 身份及 user reply，辅助消息本身不得授权 select。工具不可用时保持 INCOMPLETE，不使用 shell 绕过。
-- Controller 分组只折叠 UI：CHANGES 仍须精确到受影响方法；选中 Controller 后必须覆盖其全部受影响方法子链；部分未解析就 PARTIAL。
-- 说明性外部信息与 Runtime 覆盖缺口分别保存，不能掩盖 CRITICAL/HIGH findings。
+1. 使用本次 `review start` 的 exact `runId`，通过 `codea-review action=prepare` 执行 `CHANGES`；只有用户提供 Controller 时传 `intent.target`。
+2. `prepare` 的 `options.chains` 按 Controller 分组，仅供查看本次自动纳入的范围；实际源码范围以 `scope.reads` 为准，报告 finding 证据仍受 `findingReads` 方法级行范围限制。多个 Controller 也不得展示人工选择菜单或等待用户回复。
+3. 如果 `nextAction.type=KEEP_REPORT_INCOMPLETE`，说明没有有效范围或安全条件不足，显示 Runtime 具体原因，保留现有 run 的 INCOMPLETE 报告。不能伪造完成态。
+4. 仅读取 `scope.reads` 授权的源码内容用于 source-grounded finding；禁止为了扩大范围探索 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、Prompt 和无关元数据。用户指定 Controller 不允许混入其他 Controller，未指定则自动覆盖**所有已发现且受变更影响**的 Controller。
+5. 每项 finding 必须提供 severity、problem、impact、recommendation、verification、以及实际读取过且被 Runtime 许可的 evidence。保持 `introducedByChange` 和数据库说明性 gap 的既有安全语义，不要修改业务代码。
+6. `pendingRisks` 只描述 current unresolved risk in the selected implementation。Do not add a pending risk for hypothetical future edits, future endpoint repurposing, someone could later bind sensitive SQL, or generic best-practice concerns. 不存在现实待核实风险时传 `pendingRisks=[]`。
+7. 不论是否发现问题都通过原生 `codea-review action=finish` 提交 reads、findings、pendingRisks、gaps。若模型已读取更精确 evidence ref，必须把该 ref 原样纳入 result.reads。仅 `finish` 返回 COMPLETE 后才允许宣布评审完成。
 
 ## 历史隔离
 
