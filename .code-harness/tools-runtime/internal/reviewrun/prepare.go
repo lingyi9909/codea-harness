@@ -294,7 +294,7 @@ func persistPrepared180(runDir string, state runState, intent Intent, root strin
 	if chains == nil {
 		chains = []Chain{}
 	}
-	opts := Options{RunID: state.RunID, Chains: chains, DiscoveryComplete: complete, SelectionRequired: len(chains) > 1, Gaps: nonNilStrings180(gaps), ReportPath: state.ReportPath}
+	opts := Options{RunID: state.RunID, Chains: chains, DiscoveryComplete: complete, SelectionRequired: false, Gaps: nonNilStrings180(gaps), ReportPath: state.ReportPath}
 	changeSnapshot := ""
 	if len(changeSnapshots) > 0 {
 		changeSnapshot = changeSnapshots[0]
@@ -333,19 +333,41 @@ func persistPrepared180(runDir string, state runState, intent Intent, root strin
             break
         }
     }
-    if stableSnapshot && len(chains) == 1 && len(chains[0].Nodes) > 0 {
-        // One Controller is a single choice, even if it owns several
-        // affected methods. Persist only its actual member chains.
-        state.SelectedIDs = []string{chains[0].ID}
-        if err := writeScope180(runDir, state.RunID, opts.Hash, state.SelectedIDs, expandSelectedMethodChains180(chains), root, !complete); err != nil {
-            return Options{}, err
+    if stableSnapshot && len(chains) > 0 {
+        // Ordinary review no longer requires or accepts human chain IDs.
+        // A target filters endpoints before graph discovery; without a
+        // target, ALL impact-attributed Controller groups are authorized.
+        // Expanding preserves only genuinely impacted method subchains.
+        ids:=make([]string,0,len(chains))
+        for _,controller:=range chains {
+            if len(controller.Methods)==0 || len(controller.Nodes)==0 {
+                return Options{},fmt.Errorf("REVIEW_SCOPE_UNRESOLVED: Controller %s has no method graph",controller.Name)
+            }
+            ids=append(ids,controller.ID)
         }
-        state.ScopeReady = true
-        state.Coverage = "COMPLETE"
-        if !complete || len(chains[0].Unresolved)>0 {state.Coverage="PARTIAL"}
-        if err := writeState(runDir, state); err != nil {
-            return Options{}, err
+        state.SelectedIDs=ids
+        if err := writeScope180(runDir,state.RunID,opts.Hash,ids,chains,root,!complete);err!=nil {
+            return Options{},err
         }
+        // Verify that source/Git did not move DURING authorization; do not
+        // leave a stale combined scope available to finish.
+        same,checkErr:=sourceSnapshotMatches180(root,paths,fp)
+        if checkErr!=nil || !same {
+            _=os.Remove(scopePath)
+            return Options{},fmt.Errorf("REVIEW_OPTIONS_STALE: source changed during auto-scope")
+        }
+        if intent.Mode=="CHANGES" {
+            latest,changeErr:=reviewChangesSnapshot180(root)
+            if changeErr!=nil || latest.SnapshotSHA256!=changeSnapshot {
+                _=os.Remove(scopePath)
+                return Options{},fmt.Errorf("REVIEW_OPTIONS_STALE: Git changed during auto-scope")
+            }
+        }
+        state.ScopeReady=true
+        state.Coverage="COMPLETE"
+        if !complete {state.Coverage="PARTIAL"}
+        for _,controller:=range chains {if len(controller.Unresolved)>0 {state.Coverage="PARTIAL"}}
+        if err:=writeState(runDir,state);err!=nil{return Options{},err}
     }
 	return opts, nil
 }
