@@ -8,26 +8,23 @@ version: 10
 
 ## Codea Harness 1.8 普通 Review 主路径
 
-`/harness-review [target]` 的唯一 active ordinary Review 流程（target 可省略）：
+`/harness-review [Controller]` 为唯一 active ordinary Review 流程；Controller 参数可省略。
 
-`固定入口 review start → codea-review prepare → 可选的真实下一用户选择 + select → 主 Agent 语义评审 → codea-review finish`
+`固定入口 review start → 原生 codea-review prepare（自动纳入范围）→ 主 Agent 语义评审 → 原生 codea-review finish`
 
 ### 编排规则
 
-- 命令入口必须在第一条模型回复前创建并回读 INCOMPLETE `review.md`。
-- 本次入口返回的 `runId` 是唯一 run identity；禁止按目录时间或“最新 run”猜测。
-- `target` 可省略。用户只输入 `/harness-review` 时，必须使用 `CHANGES` 且不传 `intent.target`，自动识别 Git 变更影响链路；不得要求用户先指定 Controller。只有用户明确给出 target 时才作为 `intent.target` 传给 `prepare`，不得进入 shell 拼接。
-- 只有一个受影响 Controller 时自动选中其中全部受影响方法链并读取评审；多个 Controller 才展示 C1..Cn 菜单和当前 `optionsHash`，立即结束本 turn。
-- 下一条真实用户消息明确选择后才调用 `select`，Runtime 严格接受 `C1`、`选择C1`、`选择 C1`、`C1,C3`、`选择 C1,C3` 等表达。若此消息是辅助问题，先回答，再在同一 turn 调用原生 `codea-review action=resume`，使用原 runId 重新核验源码/Git 并完整重展有效菜单，结束 turn 等下一次真实选择。旧 hash 失效不复用，绝不重新 start。`prepare/resume/select/finish` 必须调用原生 OpenCode `codea-review` 工具，严禁通过 bash、PowerShell 或脚本直接执行 Runtime CLI。Host session/message identity 只来自原生 tool context；工具不存在时保持 INCOMPLETE，提示重启 OpenCode 并核查 `.opencode/tools/codea-review.ts`，绝不伪造身份或走 shell 降级。
-- Controller 选项以 Maven 模块 + Controller Java 文件路径 + 类名为唯一标识；菜单聚合不扩张 CHANGES 的方法级变更影响归因。`scope.reads` 是上下文读取范围；正式 finding 的证据还必须通过 Runtime 的所选链行级范围校验。同文件未选方法、共享 Service 的 sibling method、共享 Mapper XML 的未选 statement 均不能产生本次 finding。
-- `prepare/select` 返回 scope 后，普通 Review 不再探索 Harness/Git 元数据：禁止读取 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、prompt/agent/tool 实现或无关项目元数据，也禁止用 glob/grep 扩大已选范围；只读取 `scope.reads` 授权的源码范围。
-- finding 必须包含真实 source evidence。`introducedByChange` 不是模型 authority：CURRENT_IMPLEMENTATION 禁止声称本次变更引入；CHANGES 必须命中当前真实 diff 行。
-- 调用 `finish` 时，`result.reads` 不仅要覆盖全部 `scope.reads`，每个 `evidence.ref` 的完整 `path/sha256/startLine/endLine` tuple 也必须作为一条精确 read 同时列入 `result.reads`；不能只提交包含它的更宽 read range。
-- `evidence.quote` 直接复制 read 工具显示的源码字符，不自行补/删缩进。Runtime 将 Windows CRLF 与可见 LF 视为同一换行；遇到 evidence 校验错误只重读对应 scope source，不通过读取 `.git/**` 猜测证据或 diff authority。
-- 已完成足够的 selected-scope 源码读取并形成 source-grounded findings 后，应立即 `finish`；不得为了理解 Harness、Git diff authority 或内部 prompt 再开启额外探索轮次。
-- 无 finding 也要 `finish`。只要 prepare/select 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，当前 assistant turn 就是 non-terminal：禁止在 prepare/select 后直接输出自然语言或结束生成，必须继续 source read → semantic review → finish；空 findings 不构成停点。只有 `finish.runtime.execution == COMPLETE` 且返回 path/hash 与磁盘报告一致，才向用户宣布完成。
-- PARTIAL coverage 的结论只能是 `UNDETERMINED`。
-- 任一步失败时保留本 run 的 INCOMPLETE 报告并展示具体错误；不得自动换 run、不得用脚本补 finish、不得在 ordinary Review 内自动修改代码。
+- 首次模型调用前通过固定入口创建并回读 INCOMPLETE `review.md`；只使用返回的 exact `runId`，不得猜测最近创建的 run。
+- **不指定 Controller**：按 `CHANGES` 自动评审所有真正受当前 Git 变更影响的 Controller 及其已归因的方法级调用链。无相关变更则报告具体原因并保持 INCOMPLETE，不自动扩张为全仓当前实现。
+- **指定 Controller**：必须设置 `intent.target`，只纳入该 Controller 的实际受影响方法及下游；同名类以 Maven module + Java 文件路径 + 类名隔离。可显式使用文件路径区分同名 Controller。明确要求当前实现时才能使用 `CURRENT_IMPLEMENTATION`。
+- **取消人工选择**：无论发现 1 个还是多个 Controller，Runtime 都自动生成相应 scope；不展示 C1 菜单、不要求用户选择、不调用 `select`/`resume`。内部 selectedIds 仅代表自动纳入 Controller 组，不代表人工审批。
+- `prepare/finish` 必须调用原生 OpenCode `codea-review` 工具。严禁通过 bash、PowerShell 或脚本直接执行 Runtime CLI；原生工具不可用时保持 INCOMPLETE，不得伪造工具 Host session/message identity。
+- `scope.reads` 是授权源码范围；`findingReads` 继续限制证据到方法、Mapper XML statement 的具体行。禁止额外读取 scope 外 Controller、同文件无关 sibling 方法、无关 SQL、Harness/Git 元数据。定向评审不等于整个 Change Set。
+- 源码指纹、Git 快照与 optionsHash 必须保持一致；过期或篡改时 fail-closed。若任一子链未解析，覆盖为 `PARTIAL`，结论为 `UNDETERMINED`。说明性外部信息不应导致完整 CRITICAL/HIGH finding 错误降级。
+- 只要 `prepare` 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，该 assistant turn 就是 non-terminal：立即读取授权代码、在本主 Agent 完成评审，然后 `finish`；空 findings 也要提交。
+- finding 必须含真实 source evidence。`introducedByChange` 必须由 Runtime 与真实 Git diff 核对，不能由模型伪造。
+- `result.reads` 要包含全部实际读取的 scope read ref，证据的精确 tuple（path/sha256/startLine/endLine）也必须包含；不要凭模型猜测源码字符、行号或 `optionsHash`。
+- `pendingRisks` 只记录当前实现真实的未解决风险，不记录未来假设；finish 成功且报告 path/hash 一致才能宣告完成。任何步骤失败保留本 run INCOMPLETE，不自动换 run 或修改业务代码。
 
 pre-1.8 ordinary Review 仅在 `.code-harness/history/ordinary-review-pre-1.8.md` 留作历史解释，不参与当前路由。
 
@@ -142,5 +139,5 @@ Chain list/show/discover/validate/refresh/edit 保持现有确定性事实边界
 - 不得自动保存 DISCOVERED Chain
 - 是否沉淀到项目 `.code-harness/chains/`？
 
-这些术语不改变 1.8 的 `review start → codea-review prepare/select/finish` 唯一 ordinary Review 主路径。
+这些历史术语不改变 1.8 的 `review start → codea-review prepare/finish` 无人工选择主路径。
 
