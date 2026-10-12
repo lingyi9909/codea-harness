@@ -6,7 +6,6 @@ import (
     "path/filepath"
     "strings"
     "testing"
-    "codea-harness-tools/internal/reviewauthority"
 )
 
 func addSecondController180(t *testing.T,root string) {
@@ -72,38 +71,43 @@ func TestT5SingleControllerTwoMethodsAutoReadsBoth(t *testing.T){
     }
 }
 
-func TestT5TwoControllersEachTwoMethodsSelectExactController(t *testing.T){
-    root:=copyControllerReviewFixture180(t)
-    addSecondController180(t,root)
-    useRealAstGrep180(t,root)
-    run,err:=Start(root);if err!=nil{t.Fatal(err)}
-    opts,err:=Prepare(context.Background(),root,run.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION"})
-    if err!=nil{t.Fatal(err)}
-    if len(opts.Chains)!=2||!opts.SelectionRequired||!opts.DiscoveryComplete {
-        t.Fatalf("need exactly two Controller menu options: %+v",opts)
-    }
-    if !strings.HasPrefix(opts.Chains[0].Name,"OrderController")||
-       !strings.HasPrefix(opts.Chains[1].Name,"UserController") {
-        t.Fatalf("Controller menu order wrong: %+v",opts.Chains)
-    }
-    for _,c:=range opts.Chains{if len(c.Methods)!=2{t.Fatalf("Controller lost affected child methods: %+v",c)}}
-    old:=verifySelectionTurn180
-    verifySelectionTurn180=func(context.Context,string,reviewauthority.SelectionTurnRequest180)error{return nil}
-    defer func(){verifySelectionTurn180=old}()
-    out,err:=Select(context.Background(),root,SelectionRequest{
-        RunID:run.RunID,OptionsHash:opts.Hash,IDs:[]string{"C1"}},
-        HostTurn{SessionID:"unit-host",MessageID:"unit-user"})
-    if err!=nil{t.Fatal(err)}
-    if out.Coverage!="COMPLETE"{t.Fatalf("selected Controller coverage: %+v",out)}
-    scope,err:=loadScope180(filepath.Dir(run.ReportPath),run.RunID)
-    if err!=nil{t.Fatal(err)}
-    if len(scope.Chains)!=2||len(scope.SelectedIDs)!=1||scope.SelectedIDs[0]!="C1"{
-        t.Fatalf("selection failed to expand only Controller methods: %+v",scope)
-    }
-    for _,m:=range scope.Chains{
-        if !strings.HasPrefix(m.Name,"OrderController.") {
-            t.Fatalf("unselected Controller method leaked into review: %+v",m)
-        }
+func TestT5TwoControllersAutoReviewAllOrExactTarget(t *testing.T){
+    for _,test:=range []struct{target string;controllerCount int;methods int}{
+        {"",2,4},{"OrderController",1,2},{"UserController",1,2},
+    } {
+        t.Run("target="+test.target,func(t *testing.T){
+            root:=copyControllerReviewFixture180(t)
+            addSecondController180(t,root)
+            useRealAstGrep180(t,root)
+            run,err:=Start(root);if err!=nil{t.Fatal(err)}
+            opts,err:=Prepare(context.Background(),root,run.RunID,
+                Intent{Mode:"CURRENT_IMPLEMENTATION",Target:test.target})
+            if err!=nil{t.Fatal(err)}
+            if !opts.DiscoveryComplete||opts.SelectionRequired||
+                len(opts.Chains)!=test.controllerCount {
+                t.Fatalf("no manual menu; exact Controller target/all expected: %+v",opts)
+            }
+            _,state,err:=loadRun(root,run.RunID);if err!=nil{t.Fatal(err)}
+            scope,err:=loadScope180(filepath.Dir(run.ReportPath),run.RunID)
+            if err!=nil{t.Fatal(err)}
+            if !state.ScopeReady||state.Coverage!="COMPLETE"||
+                len(scope.Chains)!=test.methods||len(scope.SelectedIDs)!=test.controllerCount {
+                t.Fatalf("scope is not automatically complete: state=%+v scope=%+v",state,scope)
+            }
+            for _,method:=range scope.Chains {
+                if test.target!="" && !strings.HasPrefix(method.Name,test.target+"."){
+                    t.Fatalf("unrelated Controller method leaked into targeted scope: %+v",method)
+                }
+            }
+            // Manual select is no longer authorized even if a caller knows
+            // a previous hash or can forge a Host identity.
+            _,err=Select(context.Background(),root,SelectionRequest{
+                RunID:run.RunID,OptionsHash:opts.Hash,IDs:[]string{"C1"}},
+                HostTurn{SessionID:"forged",MessageID:"forged"})
+            if err==nil || !strings.Contains(err.Error(),"REVIEW_SELECTION_NOT_REQUIRED"){
+                t.Fatalf("manual selection unexpectedly accepted: %v",err)
+            }
+        })
     }
 }
 
@@ -154,7 +158,7 @@ func TestT5TamperedControllerChildInvalidatesPersistedOptionsHash(t *testing.T) 
     if err!=nil{t.Fatal(err)}
     opts,err:=Prepare(context.Background(),root,run.RunID,Intent{Mode:"CURRENT_IMPLEMENTATION"})
     if err!=nil{t.Fatal(err)}
-    if len(opts.Chains)!=2 || !opts.SelectionRequired {t.Fatalf("need Controller menu: %+v",opts)}
+    if len(opts.Chains)!=2 || opts.SelectionRequired {t.Fatalf("need Controller menu: %+v",opts)}
     path:=filepath.Join(filepath.Dir(run.ReportPath),"options.json")
     bytes,err:=os.ReadFile(path)
     if err!=nil{t.Fatal(err)}
