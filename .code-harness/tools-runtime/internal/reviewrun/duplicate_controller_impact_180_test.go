@@ -68,7 +68,7 @@ func TestT5DuplicateControllerMenuIsDisambiguatedAndPathTargetResolves(t *testin
         t.Fatalf("duplicate modules need exactly two distinct real options: %+v",opts)
     }
     for i,ch:=range opts.Chains {
-        if !strings.Contains(ch.Name,"OrderController [module-")||!strings.Contains(ch.Name,"OrderController.java]") || len(ch.Methods)!=1 {
+        if !strings.Contains(ch.Name,"OrderController [module-")||!strings.Contains(ch.Name,"OrderController.java]") || len(ch.Methods)!=2 {
             t.Fatalf("candidate %d cannot be distinguished by module: %+v",i,ch)
         }
     }
