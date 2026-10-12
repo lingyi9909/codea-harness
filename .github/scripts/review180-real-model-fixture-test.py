@@ -8,6 +8,7 @@ import importlib.util
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -42,6 +43,24 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
                    "src/main/java/com/example/OrderController.java",
                    "src/main/resources/mapper/OrderMapper.xml")
         return java.read_text(encoding="utf-8"), mapper.read_text(encoding="utf-8"), diff
+
+    def test_windows_cp1252_console_can_log_unicode_controller_names(self):
+        # Reproduce the real CI #192 traceback without a model invocation.
+        # The script itself must set UTF-8 before it logs options/proofs.
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "cp1252"
+        code = (
+            "import importlib.util; "
+            f"spec=importlib.util.spec_from_file_location('release180_log_check', {str(SCRIPT)!r}); "
+            "m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+            "print('C1 OrderController（3 个受影响方法）')"
+        )
+        proc = subprocess.run([sys.executable, "-c", code], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              cwd=SCRIPT.parent, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+        self.assertIn("OrderController（3 个受影响方法）",
+                      proc.stdout.decode("utf-8"))
 
     def test_two_independent_changed_chain_sql_statements(self):
         controller, mapper, diff = self.fixture(True, "two-chains-select-c1")
