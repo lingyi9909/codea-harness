@@ -37,7 +37,7 @@ func Test180PrimaryToolMakesEmptyFindingFinishContinuationExplicit(t *testing.T)
 	for _, want := range []string{
 		"READ_SCOPE_AND_FINISH_THIS_TURN",
 		"finishRequiredEvenWhenFindingsEmpty",
-		"WAIT_FOR_REAL_USER_SELECTION",
+		"READ_SCOPE_AND_FINISH_THIS_TURN",
 		"KEEP_REPORT_INCOMPLETE",
 		"nextAction: nextAction(runtime, scope)",
 	} {
@@ -115,10 +115,10 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`int literalOne();`,
 		`write_fixture(project, multi, clean_read=(scenario == "single-clean"), multiple_controllers=(scenario == "two-chains-select-c1"))`,
         `UserController.java`,
-        `auxiliaryResumeObserved`,
-        `host.tool_actions(aux_export)`,
-        `fresh.get("optionsHash")==proof["optionsHash"]`,
-        `scope.get("selectedIds") == ["C1"]`,
+        `manualSelectionDisabled`,
+        `host.require("select" not in first_actions`,
+        `first_runtime.get("selectionRequired") is False`,
+        `scope.get("selectedIds")==[f"C{i}" for i in range(1, expected_controllers+1)]`,
 		`command_args.append("PublicSqlLiteralController.literalOne")`,
 		`literal_impl = project / "src" / "main" / "java" / "com" / "example" / "SqlLiteralServiceImpl.java"`,
 		`not result.get("pendingRisks", [])`,
@@ -127,7 +127,7 @@ func Test180FinalMatrixFixturesRespectNavigationAndSelectionContract(t *testing.
 		`if scenario in {"early-stop", "timeout"}:`,
 		`mutate_for_scenario(project, "single-issue")`,
 		`command_args.append("OrderController")`,
-		`host.require(scope.get("selectedIds") == ["C1"]`,
+		`host.require(len(scope.get("chains",[]))==expected_method_chains`,
 		`safe_method = """    @PreAuthorize`,
 		`boolean updated = service.updateStatus(tenantId, id, status);`,
 	} {
@@ -343,39 +343,25 @@ func Test180PrimaryReviewNeverFallsBackFromChangesToCurrentImplementation(t *tes
 	}
 }
 
-func Test180HumanSelectionMenuIsMachineVerifiable(t *testing.T) {
-	root := repoRoot180(t)
-	toolData, err := os.ReadFile(filepath.Join(root, ".code-harness", "tools", "codea-review.ts"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	toolText := string(toolData)
-	for _, want := range []string{
-		"function selectionMenuText",
-		"requiredMenuText",
-		" options=",
-		"copy requiredMenuText verbatim",
-		"Do not convert it to a Markdown table",
-	} {
-		if !strings.Contains(toolText, want) {
-			t.Fatalf("primary review tool lost exact human-selection menu contract; missing %q", want)
-		}
-	}
-
-	commandData, err := os.ReadFile(filepath.Join(root, ".code-harness", "commands", "harness-review.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	commandText := string(commandData)
-	for _, want := range []string{
-		"nextAction.requiredMenuText",
-		"<runId> options=<optionsHash>",
-		"Do not turn this block into a Markdown table",
-	} {
-		if !strings.Contains(commandText, want) {
-			t.Fatalf("ordinary review command lost exact menu rendering contract; missing %q", want)
-		}
-	}
+func Test180ReviewUsesAutonomousScopeAndNeverAdvertisesSelection(t *testing.T) {
+    root:=repoRoot180(t)
+    toolData,err:=os.ReadFile(filepath.Join(root,".code-harness","tools","codea-review.ts"))
+    if err!=nil {t.Fatal(err)}
+    text:=string(toolData)
+    for _,want:=range []string{"READ_SCOPE_AND_FINISH_THIS_TURN","KEEP_REPORT_INCOMPLETE",
+        "action: tool.schema.enum([\"prepare\", \"finish\"])", "nextAction: nextAction(runtime, scope)"} {
+        if !strings.Contains(text,want){t.Fatalf("missing mandatory automatic review contract %q",want)}
+    }
+    for _,forbidden:=range []string{"WAIT_FOR_REAL_USER_SELECTION", "function selectionMenuText",
+        "action: \"select\"", "action: \"resume\""}{
+        if strings.Contains(text,forbidden){t.Fatalf("manual selection must not appear in active native tool: %q",forbidden)}
+    }
+    instructions,err:=os.ReadFile(filepath.Join(root,".code-harness","commands","harness-review.md"))
+    if err!=nil{t.Fatal(err)}
+    for _,want:=range []string{"全部本次 Git 变更实际影响的 Controller","不再支持普通 Review 的人工菜单",
+        "nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN"}{
+        if !strings.Contains(string(instructions),want){t.Fatalf("missing no-target scope contract %q",want)}
+    }
 }
 
 func Test180HostSmokeRunsRealConcurrentFinishRegression(t *testing.T) {
