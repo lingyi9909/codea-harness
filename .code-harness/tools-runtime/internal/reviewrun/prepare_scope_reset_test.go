@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"codea-harness-tools/internal/reviewauthority"
 )
 
 func Test180ReprepareInvalidatesOldSelectedScope(t *testing.T) {
@@ -19,12 +17,6 @@ func Test180ReprepareInvalidatesOldSelectedScope(t *testing.T) {
 	}
 	first, err := Prepare(context.Background(), root, started.RunID, Intent{Mode: "CURRENT_IMPLEMENTATION"})
 	if err != nil {
-		t.Fatal(err)
-	}
-	oldVerify := verifySelectionTurn180
-	verifySelectionTurn180 = func(context.Context, string, reviewauthority.SelectionTurnRequest180) error { return nil }
-	defer func() { verifySelectionTurn180 = oldVerify }()
-	if _, err := Select(context.Background(), root, SelectionRequest{RunID: started.RunID, OptionsHash: first.Hash, IDs: []string{first.Chains[0].ID}}, HostTurn{SessionID: "s", MessageID: "m"}); err != nil {
 		t.Fatal(err)
 	}
 	scopePath := filepath.Join(root, ".code-harness", "runs", started.RunID, "scope.json")
@@ -47,17 +39,19 @@ func Test180ReprepareInvalidatesOldSelectedScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Hash == first.Hash || !second.SelectionRequired {
+	if second.Hash == first.Hash || second.SelectionRequired {
 		t.Fatalf("reprepare did not create fresh multi-chain options: first=%+v second=%+v", first, second)
 	}
-	if _, err := os.Stat(scopePath); !os.IsNotExist(err) {
-		t.Fatalf("stale scope survived reprepare: %v", err)
-	}
+	scope,err:=loadScope180(filepath.Dir(started.ReportPath),started.RunID)
+    if err!=nil{t.Fatal(err)}
+    if scope.OptionsHash!=second.Hash || len(scope.SelectedIDs)!=2 || len(scope.Chains)!=4 {
+        t.Fatalf("reprepare did not atomically re-authorize current all-Controller scope: %+v",scope)
+    }
 	_, state, err := loadRun(root, started.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ScopeReady || len(state.SelectedIDs) != 0 {
-		t.Fatalf("reprepare retained stale selected state: %+v", state)
-	}
+	if !state.ScopeReady || len(state.SelectedIDs)!=2 || state.Coverage!="COMPLETE" {
+        t.Fatalf("reprepare lost new source-bound auto scope: %+v",state)
+    }
 }
