@@ -64,29 +64,7 @@ async function readScope(worktree: string, runId: string) {
   }
 }
 
-function selectionMenuText(runtime: Record<string, unknown>) {
-  const runId = String(runtime.runId ?? "").trim()
-  const optionsHash = String(runtime.optionsHash ?? "").trim()
-  const chains = Array.isArray(runtime.chains) ? runtime.chains : []
-  const lines = chains.map((item) => {
-    const chain = item as Record<string, unknown>
-    return `${String(chain.id ?? "").trim()} ${String(chain.name ?? "").trim()}`.trim()
-  }).filter(Boolean)
-  if (!runId || !optionsHash || lines.length === 0) return ""
-  return [`${runId} options=${optionsHash}`, ...lines].join("\n")
-}
-
 function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unknown>) {
-  if (runtime.selectionRequired === true) {
-    const requiredMenuText = selectionMenuText(runtime)
-    return {
-      type: "WAIT_FOR_REAL_USER_SELECTION",
-      mandatory: true,
-      assistantTurnTerminal: true,
-      requiredMenuText,
-      instruction: "Render requiredMenuText verbatim as one plain-text/code block, with the exact '<runId> options=<optionsHash>' header and exact 'C<n> <name>' lines. Do not convert it to a Markdown table, relabel the hash, reorder chains, or omit the header. Then end this assistant turn and wait for the next real user message. Do not call select or finish yet.",
-    }
-  }
   if (scope) {
     return {
       type: "READ_SCOPE_AND_FINISH_THIS_TURN",
@@ -105,17 +83,13 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
 }
 
 export default tool({
-  description: "Codea Harness 1.8 primary review tool. Prepare grouped Controllers, resume a pending real-user Controller menu after an auxiliary turn (same runId, fresh source/Git validation), verify a real user selection from Host context, or finish the durable report. Always obey the returned nextAction. For WAIT_FOR_REAL_USER_SELECTION, copy requiredMenuText verbatim; for a ready scope, do not end the assistant turn before finish, even when findings are empty. pendingRisks are only current unresolved harmful conditions supported by current source and requiring out-of-scope confirmation, never hypothetical future changes. CHANGES is fail-closed: never retry or silently fall back to CURRENT_IMPLEMENTATION after no relevant changes or any CHANGES prepare failure.",
+  description: "Codea Harness 1.8 ordinary review. Prepare automatically authorizes all change-impacted Controllers if no target is supplied, or only the explicitly targeted Controller if given, preserving method-level impact and scoped evidence. No human C1/C2 selection or auxiliary menu resume. If a scope is ready, review and finish in this same assistant turn, even when findings are empty. pendingRisks are only current unresolved harmful conditions supported by current source and requiring out-of-scope confirmation, never hypothetical future changes. CHANGES is fail-closed: never retry or silently fall back to CURRENT_IMPLEMENTATION after no relevant changes or any CHANGES prepare failure.",
   args: {
-    action: tool.schema.enum(["prepare", "resume", "select", "finish"]),
+    action: tool.schema.enum(["prepare", "finish"]),
     runId: tool.schema.string(),
     intent: tool.schema.object({
       mode: tool.schema.enum(["CHANGES", "CURRENT_IMPLEMENTATION"]),
       target: tool.schema.string().optional(),
-    }).optional(),
-    selection: tool.schema.object({
-      optionsHash: tool.schema.string(),
-      ids: tool.schema.array(tool.schema.string()).min(1),
     }).optional(),
     result: tool.schema.object({
       reads: tool.schema.array(readRef),
@@ -133,40 +107,6 @@ export default tool({
       const argv = ["review", "prepare", "--run-id", args.runId, "--mode", args.intent.mode]
       if (args.intent.target?.trim()) argv.push("--target", args.intent.target.trim())
       const runtime = await invoke(worktree, argv)
-      const scope = await readScope(worktree, args.runId)
-      return JSON.stringify({ runtime, scope, nextAction: nextAction(runtime, scope) }, null, 2)
-    }
-
-    if (args.action === "resume") {
-      // The assistant must not synthesize a menu from remembered state.
-      // Recover the original Runtime-normalized intent and have Runtime
-      // re-check the entire source and Git snapshot in this SAME run.
-      const optionsPath = path.resolve(worktree, ".code-harness", "runs", args.runId, "options.json")
-      const stored = JSON.parse(await readFile(optionsPath, "utf8")) as Record<string, unknown>
-      const oldIntent = stored.intent as Record<string, unknown> | undefined
-      if (!oldIntent || !["CHANGES", "CURRENT_IMPLEMENTATION"].includes(String(oldIntent.mode))) {
-        throw new Error("CODEA_REVIEW_RESUME_INTENT_INVALID")
-      }
-      const argv = ["review", "prepare", "--run-id", args.runId, "--mode", String(oldIntent.mode)]
-      if (typeof oldIntent.target === "string" && oldIntent.target.trim()) {
-        argv.push("--target", oldIntent.target.trim())
-      }
-      const runtime = await invoke(worktree, argv)
-      const scope = await readScope(worktree, args.runId)
-      return JSON.stringify({ runtime, scope, nextAction: nextAction(runtime, scope) }, null, 2)
-    }
-
-    if (args.action === "select") {
-      if (!args.selection) throw new Error("CODEA_REVIEW_SELECTION_REQUIRED")
-      if (!context.sessionID || !context.messageID) throw new Error("HUMAN_SELECTION_REQUIRED: Host context unavailable")
-      const runtime = await invoke(worktree, [
-        "review", "select",
-        "--run-id", args.runId,
-        "--options-hash", args.selection.optionsHash,
-        "--ids", args.selection.ids.join(","),
-        "--session-id", context.sessionID,
-        "--message-id", context.messageID,
-      ])
       const scope = await readScope(worktree, args.runId)
       return JSON.stringify({ runtime, scope, nextAction: nextAction(runtime, scope) }, null, 2)
     }
