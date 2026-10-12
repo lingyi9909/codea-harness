@@ -75,32 +75,6 @@ def latest_tool_payload(messages):
     return None
 
 
-def latest_user_text(messages):
-    for message in reversed(messages):
-        if message.get("role") == "user":
-            return flatten(message.get("content", ""))
-    return ""
-
-
-def is_explicit_selection_reply(messages):
-    """Only an exact new user reply authorizes the smoke provider to request select.
-
-    The expanded /harness-review command itself includes the literal example
-    "选择 C1"; substring matching that instruction is NOT user consent.
-    Runtime independently authenticates the user turn with OpenCode export.
-    """
-    return latest_user_text(messages).strip() in {"C1", "选择C1", "选择 C1"}
-
-
-def verify_selection_reply_guard():
-    """Permanent regression: slash-command instructions cannot impersonate a choice."""
-    command_turn = [{"role": "user", "content": "Review target: OrderController\nAfter menu, reply 选择 C1"}]
-    require(not is_explicit_selection_reply(command_turn), "embedded example was misread as human selection")
-    require(is_explicit_selection_reply([{"role": "user", "content": "选择 C1"}]), "actual selection was rejected")
-    require(not is_explicit_selection_reply([{"role": "user", "content": "不选择 C1"}]), "non-consent was accepted")
-    require(not is_explicit_selection_reply([{"role": "assistant", "content": "选择 C1"}]), "assistant text was accepted as user consent")
-
-
 def call(tool_name, arguments, suffix):
     return {
         "id": f"call_review180_{suffix}_{time.time_ns()}",
@@ -184,18 +158,8 @@ class Provider(BaseHTTPRequestHandler):
             scope = payload.get("scope") if isinstance(payload, dict) else None
             if isinstance(runtime, dict) and "optionsHash" in runtime:
                 chains = runtime.get("chains", [])
-                if runtime.get("selectionRequired"):
-                    if not is_explicit_selection_reply(messages):
-                        lines = [f"{run_id} options={runtime['optionsHash']}"]
-                        lines.extend(f"{chain['id']} {chain['name']}" for chain in chains)
-                        self.reply(body, content="\n".join(lines))
-                        return
-                    self.reply(body, tool_call=call(tool_name, {
-                        "action": "select",
-                        "runId": run_id,
-                        "selection": {"optionsHash": runtime["optionsHash"], "ids": ["C1"]},
-                    }, "select"))
-                    return
+                require(runtime.get("selectionRequired") is False,
+                        "ordinary Review must auto-scope all impacted Controllers; manual selection forbidden")
 
             if isinstance(scope, dict) and scope.get("reads") is not None:
                 if self.server.scenario == "concurrent":
@@ -466,7 +430,6 @@ def init_fixture_repo(project, env):
 
 
 def main():
-    verify_selection_reply_guard()
     parser = argparse.ArgumentParser()
     parser.add_argument("--opencode", required=True, type=Path)
     parser.add_argument("--runtime", required=True, type=Path)
