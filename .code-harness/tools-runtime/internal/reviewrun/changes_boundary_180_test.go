@@ -61,7 +61,7 @@ public class BackupOrderServiceImpl implements java.io.Serializable, OrderServic
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.DiscoveryComplete || !got.SelectionRequired || len(got.Chains) != 2 {
+	if got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 2 {
 		t.Fatalf("changed ambiguous entrypoints were lost: %+v", got)
 	}
 	if !strings.Contains(strings.Join(got.Gaps, "\n"), "OrderService implementations=2") {
@@ -71,9 +71,9 @@ public class BackupOrderServiceImpl implements java.io.Serializable, OrderServic
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ScopeReady || len(state.SelectedIDs) != 0 {
-		t.Fatalf("filtered discovery authorized scope: %+v", state)
-	}
+	if !state.ScopeReady || state.Coverage != "PARTIAL" || len(state.SelectedIDs) != 2 {
+        t.Fatalf("incomplete discovery must authorize only known scope with PARTIAL: %+v",state)
+    }
 }
 
 func Test180ChangesMapperXMLParticipatesInImpact(t *testing.T) {
