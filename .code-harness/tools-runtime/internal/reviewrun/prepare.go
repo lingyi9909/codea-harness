@@ -93,7 +93,7 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		if x != nil {
 			return Options{}, x
 		}
-		if old.Options.DiscoveryComplete && same {
+		if old.Options.DiscoveryComplete && !old.Options.SelectionRequired && same {
 			if intent.Mode == "CHANGES" {
 				// Source bytes alone do not identify a change review. Changing
 				// baseRef or HEAD can change impact without changing any Java/XML.
@@ -151,6 +151,21 @@ func Prepare(ctx context.Context, root, runID string, intent Intent) (Options, e
 		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, nil, false, []string{"ENTRYPOINT_DISCOVERY_FAILED: " + err.Error()}, runner.Count())
 	}
 	endpoints = filterEndpoints180(endpoints, intent.Target)
+    // A bare Java class name is not a unique Controller identity in a
+    // multi-module Maven reactor. Fail closed instead of silently reviewing
+    // multiple same-named classes for a user who requested just one.
+    if intent.Target!="" && !strings.ContainsAny(intent.Target,"/\\") {
+        uniquePaths:=map[string]bool{}
+        for _,ep:=range endpoints {uniquePaths[filepath.ToSlash(ep.Path)]=true}
+        if len(uniquePaths)>1 {
+            paths:=make([]string,0,len(uniquePaths))
+            for path:=range uniquePaths {paths=append(paths,path)}
+            sort.Strings(paths)
+            return persistPrepared180(runDir,state,intent,rootAbs,sources,before,
+                []Chain{},false,[]string{"REVIEW_TARGET_AMBIGUOUS: specify Controller Java path: "+
+                    strings.Join(paths,", ")},runner.Count(),changeSnapshotSHA256)
+        }
+    }
 	if len(endpoints) == 0 {
 		return persistPrepared180(runDir, state, intent, rootAbs, sources, before, []Chain{}, false, []string{"ENTRYPOINT_NOT_FOUND"}, runner.Count())
 	}
