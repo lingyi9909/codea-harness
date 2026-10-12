@@ -174,3 +174,38 @@ func TestT5TamperedControllerChildInvalidatesPersistedOptionsHash(t *testing.T) 
         t.Fatalf("edited method subchain accepted despite immutable optionsHash: %v",err)
     }
 }
+
+func TestT5ChangesNoTargetReviewsEveryAffectedControllerWithoutSelection(t *testing.T){
+    for _,tc:=range []struct{target string;controllers int;methods int}{
+        {"",2,4},{"OrderController",1,2},{"UserController",1,2},
+    }{
+        t.Run("target="+tc.target,func(t *testing.T){
+            root:=copyControllerReviewFixture180(t)
+            addSecondController180(t,root)
+            useRealAstGrep180(t,root)
+            initControllerReviewGitBaseline180(t,root)
+            replaceT5Fixture180(t,root,"src/main/java/com/example/OrderServiceImpl.java",
+                "orderMapper.insertOrder();","orderMapper.insertOrder(); /* changed create */")
+            replaceT5Fixture180(t,root,"src/main/java/com/example/OrderServiceImpl.java",
+                "orderMapper.cancelOrder();","orderMapper.cancelOrder(); /* changed cancel */")
+            run,err:=Start(root);if err!=nil{t.Fatal(err)}
+            opts,err:=Prepare(context.Background(),root,run.RunID,
+                Intent{Mode:"CHANGES",Target:tc.target})
+            if err!=nil{t.Fatal(err)}
+            if !opts.DiscoveryComplete||opts.SelectionRequired||len(opts.Chains)!=tc.controllers {
+                t.Fatalf("target/all CHANGES Controller scope mismatch: %+v",opts)
+            }
+            scope,err:=loadScope180(filepath.Dir(run.ReportPath),run.RunID)
+            if err!=nil{t.Fatal(err)}
+            if scope.Coverage!="COMPLETE"||len(scope.Chains)!=tc.methods ||
+                len(scope.SelectedIDs)!=tc.controllers {
+                t.Fatalf("exact impacted Controller methods missing: %+v",scope)
+            }
+            for _,method:=range scope.Chains{
+                if tc.target!="" && !strings.HasPrefix(method.Name,tc.target+"."){
+                    t.Fatalf("unrelated Controller leaked into explicit target: %+v",method)
+                }
+            }
+        })
+    }
+}
