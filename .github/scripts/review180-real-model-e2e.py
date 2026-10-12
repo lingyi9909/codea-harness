@@ -545,7 +545,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         write_json(run_evidence / "trajectory-auto-scope.json", redact(exported))
         if first_report_text:
             (run_evidence / "review-after-auto-scope.md").write_text(first_report_text, encoding="utf-8")
-        print("RELEASE180_PREPARE_AUTO_SCOPE " + json.dumps(redact(proof), ensure_ascii=False), flush=True)
+        # Emit ASCII-safe diagnostic JSON on Windows runners with cp1252 stdout.\n        # Full UTF-8 evidence is still persisted in prepare-auto-scope.json.\n        print("RELEASE180_PREPARE_AUTO_SCOPE " + json.dumps(redact(proof), ensure_ascii=True), flush=True)
 
         host.require(len(first_prepares) == 1,
                      f"{scenario_label}: expected one completed prepare: {first_actions}")
