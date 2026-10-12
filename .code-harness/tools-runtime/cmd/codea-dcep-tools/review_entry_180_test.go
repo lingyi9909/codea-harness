@@ -38,8 +38,8 @@ func Test180PrimaryReviewUsesSingleStructuredTool(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"prepare", "select", "finish", "runId", "intent", "selection", "result",
-		"context.sessionID", "context.messageID", "execFile",
+		"prepare", "finish", "runId", "intent", "result",
+        `action: tool.schema.enum(["prepare", "finish"])`, "execFile",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("codea-review tool missing %q", want)
