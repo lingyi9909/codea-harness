@@ -89,6 +89,21 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
         self.assertNotIn("voidOrder", mapper)
         self.assertIn("+  <update id=\"updateStatus\">", diff)
 
+    def test_agent_evidence_quote_contract_is_consistent(self):
+        # CI #195: a model dedented a multiline Java quote, then retried with
+        # corrected line numbers only. Assert all three shipped instructions
+        # steer it to a literal single physical source line instead.
+        root = SCRIPT.parents[2]
+        for path in (
+            ".code-harness/tools/codea-review.ts",
+            ".code-harness/commands/harness-review.md",
+            ".code-harness/agents/orchestrator.md",
+        ):
+            with self.subTest(path=path):
+                text = (root / path).read_text(encoding="utf-8")
+                self.assertIn("single physical source line", text)
+                self.assertIn("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH", text)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

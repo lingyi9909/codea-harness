@@ -22,6 +22,8 @@ version: 10
 - `scope.reads` 是授权源码范围；`findingReads` 继续限制证据到方法、Mapper XML statement 的具体行。禁止额外读取 scope 外 Controller、同文件无关 sibling 方法、无关 SQL、Harness/Git 元数据。定向评审不等于整个 Change Set。
 - 源码指纹、Git 快照与 optionsHash 必须保持一致；过期或篡改时 fail-closed。若任一子链未解析，覆盖为 `PARTIAL`，结论为 `UNDETERMINED`。说明性外部信息不应导致完整 CRITICAL/HIGH finding 错误降级。
 - 只要 `prepare` 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，该 assistant turn 就是 non-terminal：立即读取授权代码、在本主 Agent 完成评审，然后 `finish`；空 findings 也要提交。
+- 证据复制必须遵守 single physical source line 规则：每个 evidence.quote 只引用一行源码原文的连续片段，ref.startLine=endLine 使用该行真实行号；涉及多行逻辑时提交多个独立单行 evidence，禁止重排缩进、合并或编写伪源码。
+- 遇到 REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH 时重新读取授权行并替换 quote，不可只调整 ref 行范围、更改校验或跳过 finding。
 - finding 必须含真实 source evidence。`introducedByChange` 必须由 Runtime 与真实 Git diff 核对，不能由模型伪造。
 - `result.reads` 要包含全部实际读取的 scope read ref，证据的精确 tuple（path/sha256/startLine/endLine）也必须包含；不要凭模型猜测源码字符、行号或 `optionsHash`。
 - `pendingRisks` 只记录当前实现真实的未解决风险，不记录未来假设；finish 成功且报告 path/hash 一致才能宣告完成。任何步骤失败保留本 run INCOMPLETE，不自动换 run 或修改业务代码。

@@ -33,6 +33,12 @@ The command output above is the authoritative `review start` result. It has alre
 6. `pendingRisks` 只描述 current unresolved risk in the selected implementation。Do not add a pending risk for hypothetical future edits, future endpoint repurposing, someone could later bind sensitive SQL, or generic best-practice concerns. 不存在现实待核实风险时传 `pendingRisks=[]`。
 7. 不论是否发现问题都通过原生 `codea-review action=finish` 提交 reads、findings、pendingRisks、gaps。若模型已读取更精确 evidence ref，必须把该 ref 原样纳入 result.reads。仅 `finish` 返回 COMPLETE 后才允许宣布评审完成。
 
+### 证据引用严格规则（CI #195 永久修复）
+
+- **single physical source line（单个源码物理行）**：每条 `evidence.quote` 必须从本轮 `read` 返回的源码行原样复制连续片段；`ref.startLine = ref.endLine` 为该行真实行号，SHA/路径与授权范围一致。允许在同一 finding 中添加多条独立单行证据来支撑跨行结论。
+- **严禁模型重排代码块**：不得对多行 Java/XML 片段去缩进、重缩进、合并行或改写空白；不得把几行拼接成一条 quote。Runtime 只兼容 CRLF/LF 的换行差异，并不会忽略原文缩进。
+- 如果 `finish` 返回 `REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH`，重新读取失败文件的已授权精确源码行，替换不匹配的 quote；**仅修改 ref 行号无法修复被改写的 quote**。不能删除 evidence、放宽校验或绕开 Runtime。
+
 ## 历史隔离
 
 The historical certification, ReviewUnit, RuleDispatch/rule-dispatch, reviewer-attestation, `codea-reviewer-submit`, `analysis certify`, `REPORT SUCCEEDED`, and legacy report pipeline are not part of the ordinary 1.8 path above. Do not call `review finish` directly from shell; finish is owned by the structured tool.
