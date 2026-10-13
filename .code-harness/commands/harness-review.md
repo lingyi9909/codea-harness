@@ -10,6 +10,8 @@ subtask: false
 
 Host 自动从当前命令入口绑定 exact run 身份；`codea-review` 不接收模型填写的 `runId`。所有 prepare/read/finish 调用均省略 runId；工具输出的 `hostBinding` 记录真实会话、入口消息和 run 身份。Host 上下文缺失或不一致时 fail-closed，不按最新目录猜测。
 
+`gaps` 只记录当前评审确实缺失、使具体问题无法判断的信息或证据，不是备注或结论解释字段。已确认安全、刻意公开的接口、没有可利用条件等说明，应放在 finish 成功后的自然语言答复，不能填入 gaps。授权源码已足够且没有真实缺失信息时提交 `gaps=[]`；真实缺口必须保留，不能为得到干净结论而删除。
+
 Review target: $ARGUMENTS
 
 The command output above is the authoritative `review start` result. It has already created and read back the durable **INCOMPLETE** report before this model turn. Keep its `runId` and `reportPath`; never discover a run by taking the newest directory.

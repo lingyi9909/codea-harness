@@ -229,7 +229,7 @@ export default tool({
       reads: tool.schema.array(readRef),
       findings: tool.schema.array(finding),
       pendingRisks: tool.schema.array(tool.schema.string()),
-      gaps: tool.schema.array(tool.schema.string()),
+      gaps: tool.schema.array(tool.schema.string()).describe("Specific information or evidence that is actually missing and prevents resolving a current review question. This is NOT a notes, rationale, or review-summary field. Do not put explanations that code is safe, intentional public access, absence of exploitable conditions, or hypothetical future concerns here. If authorized sources fully resolve the review and no information is missing, send gaps=[]. Put any no-issue rationale in the final natural-language response after successful finish. Preserve genuine missing-evidence gaps; never hide one to obtain a clean result."),
     }).optional(),
   },
   async execute(args, context) {
