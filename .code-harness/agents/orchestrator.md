@@ -23,6 +23,7 @@ version: 10
 - `scope.reads` 是授权源码范围；`findingReads` 继续限制证据到方法、Mapper XML statement 的具体行。禁止额外读取 scope 外 Controller、同文件无关 sibling 方法、无关 SQL、Harness/Git 元数据。定向评审不等于整个 Change Set。
 - 源码指纹、Git 快照与 optionsHash 必须保持一致；过期或篡改时 fail-closed。若任一子链未解析，覆盖为 `PARTIAL`，结论为 `UNDETERMINED`。说明性外部信息不应导致完整 CRITICAL/HIGH finding 错误降级。
 - 只要 `prepare` 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，该 assistant turn 就是 non-terminal：立即读取授权代码、在本主 Agent 完成评审，然后 `finish`；空 findings 也要提交。
+- **CI #201 证据范围固定约束**：`scope.reads` 允许整文件做上下文阅读，但 **scope.findingReads** 才是 finding 引用权限。原生 `codea-review action=read` 对每行输出 `source.lines[].evidenceEligible`：**false 的 import、class 头、兄弟方法、无关 SQL 一律不能引用，不能作为 evidence**；只能引用 true 且精确落在 Runtime 受影响方法/SQL span 内的真实代码。引用前自行逐行核对，不得先尝试越界 finish 再重试。 
 - 证据复制必须遵守 single physical source line 规则：每个 evidence.quote 只引用一行源码原文的连续片段，ref.startLine=endLine 使用该行真实行号；涉及多行逻辑时提交多个独立单行 evidence，禁止重排缩进、合并或编写伪源码。
 - 遇到 REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH 时重新读取授权行并替换 quote，不可只调整 ref 行范围、更改校验或跳过 finding。
 - finding 必须含真实 source evidence。**introducedByChange=true requires proof**：只有 finding 自身由本次真实 Git changed lines 引入，才可设为 true；Controller/子链被选中不等于所有发现为新增问题。未修改的 Controller 原有鉴权缺失、租户隔离缺失，即便关联 SQL 变更，仍标记 **introducedByChange=false**；无法证明变更归因时省略可选字段或填 false，绝不猜测 true 后重试。Runtime 的 REVIEW_FINISH_CHANGE_ATTRIBUTION_UNPROVEN 必须继续拒绝无证据的 true。

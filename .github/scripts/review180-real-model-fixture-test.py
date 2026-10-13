@@ -151,6 +151,24 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
             self.assertIn(control, tool)
 
 
+    def test_ci201_line_evidence_eligibility_contract(self):
+        # CI #201: source reads cover entire files, but a quoted Controller import
+        # from line 2 is not method-scoped evidence and must not be selectable.
+        root = SCRIPT.parents[2]
+        native = (root / ".code-harness/tools/codea-review.ts").read_text(encoding="utf-8")
+        host_smoke = (root / ".github/scripts/review180-host-smoke.py").read_text(encoding="utf-8")
+        for required in ("scope.findingReads", "findingRanges", "evidenceEligible",
+                         "CODEA_REVIEW_FINDING_SCOPE_NOT_READY"):
+            self.assertIn(required, native)
+        self.assertIn('row.get("evidenceEligible") is expected', host_smoke)
+        for agent in (".code-harness/commands/harness-review.md",
+                      ".code-harness/agents/orchestrator.md"):
+            with self.subTest(agent=agent):
+                md = (root / agent).read_text(encoding="utf-8")
+                self.assertIn("scope.findingReads", md)
+                self.assertIn("evidenceEligible", md)
+                self.assertIn("不能引用", md)
+
     def test_ci200_introduced_by_change_guidance(self):
         # CI #200: real model incorrectly called an unchanged Controller
         # authorization flaw newly introduced by changed downstream SQL.

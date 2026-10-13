@@ -36,6 +36,7 @@ The command output above is the authoritative `review start` result. It has alre
 
 ### 证据引用严格规则（CI #195 永久修复）
 
+- **CI #201 证据范围固定约束**：`scope.reads` 是上下文阅读授权，**不是** finding 证据授权；证据必须属于 `scope.findingReads` 的实际受影响方法/SQL statement。原生 `codea-review action=read` 返回的每行 `source.lines[].evidenceEligible` 必须为 `true` 才能作为 finding evidence；标为 `false` 的 import、class 头、兄弟方法、无关 SQL 只能辅助理解，**不能引用**。即使为 true，Runtime 仍会按精确字节范围独立校验。引用前先逐条按行验证，不得靠第一次 finish 被拒绝再删除引用重试。 
 - **single physical source line（单个源码物理行）**：每条 `evidence.quote` 必须从本轮 `read` 返回的源码行原样复制连续片段；`ref.startLine = ref.endLine` 为该行真实行号，SHA/路径与授权范围一致。允许在同一 finding 中添加多条独立单行证据来支撑跨行结论。
 - **严禁模型重排代码块**：不得对多行 Java/XML 片段去缩进、重缩进、合并行或改写空白；不得把几行拼接成一条 quote。Runtime 只兼容 CRLF/LF 的换行差异，并不会忽略原文缩进。
 - 如果 `finish` 返回 `REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH`，重新读取失败文件的已授权精确源码行，替换不匹配的 quote；**仅修改 ref 行号无法修复被改写的 quote**。不能删除 evidence、放宽校验或绕开 Runtime。

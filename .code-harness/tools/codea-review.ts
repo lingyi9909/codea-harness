@@ -100,13 +100,31 @@ async function readAuthorizedSource(worktree: string, runId: string, requested: 
   if (requested.startLine < 1 || requested.endLine < requested.startLine || requested.endLine > lines.length) {
     throw new Error("CODEA_REVIEW_SOURCE_RANGE_INVALID")
   }
+  // scope.reads permits source CONTEXT; scope.findingReads permits EVIDENCE.
+  // Never advertise an import, class header or sibling method as quotable
+  // just because the entire file is authorized for contextual reading.
+  if (!Array.isArray(scope.findingReads)) throw new Error("CODEA_REVIEW_FINDING_SCOPE_NOT_READY")
+  const findingRanges = (scope.findingReads as SourceRef180[]).filter(ref =>
+    ref.path === requested.path && ref.sha256 === requested.sha256 &&
+    Number.isInteger(ref.startLine) && Number.isInteger(ref.endLine) &&
+    ref.startLine >= 1 && ref.endLine >= ref.startLine && ref.endLine <= lines.length
+  )
+  if (findingRanges.length === 0) throw new Error("CODEA_REVIEW_FINDING_SCOPE_NOT_READY")
+  const annotatedLines = lines.slice(requested.startLine - 1, requested.endLine)
+    .map((text, offset) => {
+      const line = requested.startLine + offset
+      return {
+        line, text,
+        evidenceEligible: findingRanges.some(ref => ref.startLine <= line && line <= ref.endLine),
+      }
+    })
   return {
     source: {
       ref: requested,
-      lines: lines.slice(requested.startLine - 1, requested.endLine)
-        .map((text, offset) => ({ line: requested.startLine + offset, text })),
+      findingRanges,
+      lines: annotatedLines,
     },
-    nextAction: "Continue reviewing only scope.reads; then finish in this same assistant turn.",
+    nextAction: "Only source.lines with evidenceEligible=true may be quoted in finding.evidence; evidenceEligible=false lines are CONTEXT ONLY, never evidence. Only cite an exact physical source line within scope.findingReads and preserve the real SHA/path/line. The Runtime independently checks exact code spans and will reject even a marked line if its quoted bytes fall outside the method. Continue reading all prepared scope.reads and finish once in this same assistant turn.",
   }
 }
 
@@ -118,7 +136,7 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
       assistantTurnTerminal: false,
       mustContinueToolExecution: true,
       finishRequiredEvenWhenFindingsEmpty: true,
-      instruction: "For every source read call only codea-review action=read with an exact ref from scope.reads (path, sha256, startLine, endLine). Never use built-in read, glob, grep, list, bash or out-of-scope exploration. Review the returned source, then call codea-review finish in this same assistant turn. Do not end the turn after prepare/select. findings=[] still requires finish. Evidence quote rule: use a verbatim substring from a single physical source line for each evidence entry; set ref.startLine = ref.endLine to that exact line number, and include that read ref if necessary. For a defect spanning multiple lines, give several separate one-line evidence entries. Never dedent, reindent, splice, or compact multiline source into quote. If the Runtime reports REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH, reread that exact authorized line and replace the quote rather than merely changing ref.startLine/endLine. introducedByChange=true requires proof that the finding itself was introduced by changed Git lines. A finding in a change-impacted Controller chain does NOT imply its own defect was introduced by the change. For unchanged Controller authorization or tenant-boundary defects, use introducedByChange=false even if a downstream SQL statement changed. Never mark true merely because CHANGES mode selected the Controller; when change attribution cannot be proven, omit introducedByChange or set it false; do not submit an unproven true and then retry finish. pendingRisks must describe only a current unresolved harmful condition supported by current source whose confirmation needs evidence outside the authorized scope; do not report hypothetical future edits, future endpoint repurposing, or generic best-practice concerns.",
+      instruction: "For every source read call only codea-review action=read with an exact ref from scope.reads (path, sha256, startLine, endLine). Never use built-in read, glob, grep, list, bash or out-of-scope exploration. Review the returned source, then call codea-review finish in this same assistant turn. Do not end the turn after prepare/select. findings=[] still requires finish. CRITICAL METHOD EVIDENCE SCOPE: scope.reads authorizes whole-file context only; scope.findingReads controls which method or SQL-statement lines may be cited. Every codea-review read response marks each source.lines item evidenceEligible=true/false. NEVER cite a line marked false (imports, class headers, unrelated sibling methods); select a true line showing the affected method/statement instead. Treat true as a necessary but not sufficient condition, because Runtime also validates exact code spans. Evidence quote rule: use a verbatim substring from a single physical source line for each evidence entry; set ref.startLine = ref.endLine to that exact line number, and include that read ref if necessary. For a defect spanning multiple lines, give several separate one-line evidence entries. Never dedent, reindent, splice, or compact multiline source into quote. If the Runtime reports REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH, reread that exact authorized line and replace the quote rather than merely changing ref.startLine/endLine. introducedByChange=true requires proof that the finding itself was introduced by changed Git lines. A finding in a change-impacted Controller chain does NOT imply its own defect was introduced by the change. For unchanged Controller authorization or tenant-boundary defects, use introducedByChange=false even if a downstream SQL statement changed. Never mark true merely because CHANGES mode selected the Controller; when change attribution cannot be proven, omit introducedByChange or set it false; do not submit an unproven true and then retry finish. pendingRisks must describe only a current unresolved harmful condition supported by current source whose confirmation needs evidence outside the authorized scope; do not report hypothetical future edits, future endpoint repurposing, or generic best-practice concerns.",
     }
   }
   return {
@@ -129,7 +147,7 @@ function nextAction(runtime: Record<string, unknown>, scope?: Record<string, unk
 }
 
 export default tool({
-  description: "Codea Harness 1.8 ordinary review. Prepare, scope-verified read, finish. Use action=read with exact source ref from scope.reads; built-in read/glob/grep/list/bash are forbidden. Prepare automatically authorizes all change-impacted Controllers if no target is supplied, or only the explicitly targeted Controller if given, preserving method-level impact and scoped evidence. No human C1/C2 selection or auxiliary menu resume. If a scope is ready, review and finish in this same assistant turn, even when findings are empty. pendingRisks are only current unresolved harmful conditions supported by current source and requiring out-of-scope confirmation, never hypothetical future changes. Each evidence.quote must be a verbatim substring of a single physical source line, cited with startLine=endLine; multiple evidence entries are preferable to a reformatted multiline block. introducedByChange=true requires proof that the finding itself was introduced by changed Git lines. A finding in a change-impacted Controller chain does NOT imply its own defect was introduced by the change. For unchanged Controller authorization or tenant-boundary defects, use introducedByChange=false even if a downstream SQL statement changed. Never mark true merely because CHANGES mode selected the Controller; when change attribution cannot be proven, omit introducedByChange or set it false; do not submit an unproven true and then retry finish. CHANGES is fail-closed: never retry or silently fall back to CURRENT_IMPLEMENTATION after no relevant changes or any CHANGES prepare failure.",
+  description: "Codea Harness 1.8 ordinary review. Prepare, scope-verified read, finish. Use action=read with exact source ref from scope.reads; built-in read/glob/grep/list/bash are forbidden. Prepare automatically authorizes all change-impacted Controllers if no target is supplied, or only the explicitly targeted Controller if given, preserving method-level impact and scoped evidence. No human C1/C2 selection or auxiliary menu resume. If a scope is ready, review and finish in this same assistant turn, even when findings are empty. pendingRisks are only current unresolved harmful conditions supported by current source and requiring out-of-scope confirmation, never hypothetical future changes. Only source.lines with evidenceEligible=true (from scope.findingReads) can support a finding; false-marked context lines must NEVER become finding evidence. Each evidence.quote must be a verbatim substring of a single physical source line, cited with startLine=endLine; multiple evidence entries are preferable to a reformatted multiline block. introducedByChange=true requires proof that the finding itself was introduced by changed Git lines. A finding in a change-impacted Controller chain does NOT imply its own defect was introduced by the change. For unchanged Controller authorization or tenant-boundary defects, use introducedByChange=false even if a downstream SQL statement changed. Never mark true merely because CHANGES mode selected the Controller; when change attribution cannot be proven, omit introducedByChange or set it false; do not submit an unproven true and then retry finish. CHANGES is fail-closed: never retry or silently fall back to CURRENT_IMPLEMENTATION after no relevant changes or any CHANGES prepare failure.",
   args: {
     action: tool.schema.enum(["prepare", "read", "finish"]),
     runId: tool.schema.string(),

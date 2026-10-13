@@ -175,6 +175,26 @@ class Provider(BaseHTTPRequestHandler):
                 lines = source.get("lines", [])
                 require(isinstance(lines, list) and lines,
                         "native authorized source read returned no source lines")
+                allowed = [r for r in scoped.get("findingReads", [])
+                           if r.get("path") == source["ref"]["path"] and
+                           r.get("sha256") == source["ref"]["sha256"]]
+                require(allowed, "native read missing scoped method evidence ranges")
+                require(source.get("findingRanges") == allowed,
+                        "native read method evidence ranges do not match immutable Runtime scope")
+                for row in lines:
+                    line = row.get("line")
+                    expected = any(r["startLine"] <= line <= r["endLine"] for r in allowed)
+                    require(row.get("evidenceEligible") is expected,
+                            f"native read evidenceEligible mismatch: {source['ref']['path']}:{line}")
+                if source["ref"]["path"].endswith("Controller.java"):
+                    require(any(row["evidenceEligible"] for row in lines),
+                            "Controller read contains no authorized method evidence")
+                    require(any(not row["evidenceEligible"] for row in lines),
+                            "Controller read failed to separate whole-file context from method evidence")
+                    require(not any(row["evidenceEligible"] and
+                                    row["text"].lstrip().startswith("import ")
+                                    for row in lines),
+                            "Controller import incorrectly authorized as method evidence")
                 refs = scoped["reads"]
                 index = self.server.read_index[run_id]
                 require(ref == refs[index - 1],
