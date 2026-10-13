@@ -600,6 +600,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         if len(run_candidates) == 1 and (run_candidates[0] / "scope.json").is_file():
             durable_scope = json.loads((run_candidates[0] / "scope.json").read_text(encoding="utf-8"))
         audit = audit_native_review_tools(exported, durable_scope)
+        audit["violations"].extend(host.host_binding_violations(exported, proof["runId"]))
         write_json(run_evidence / "tool-audit.json", redact(audit))
         host.require(not audit["violations"],
                      f"{scenario_label}: tool/evidence integrity violations: {audit['violations']}")

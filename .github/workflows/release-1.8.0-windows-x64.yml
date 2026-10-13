@@ -10,6 +10,7 @@ on:
       - '.github/scripts/review180-real-model-e2e.py'
       - '.github/scripts/review180-real-model-fixture-test.py'
       - '.github/scripts/review180-host-smoke.py'
+      - '.github/scripts/review180-host-binding-test.mjs'
       - '.github/workflows/release-1.8.0-windows-x64.yml'
       - 'README.md'
       - 'CHANGELOG.md'
@@ -72,6 +73,11 @@ jobs:
           if ($body -match '(?m)^\\s*import.*@opencode-ai/plugin') { throw 'native Host bundle retained runtime SDK dependency' }
           if ($body -notmatch 'CODEA_REVIEW_RUN_ID_INVALID') { throw 'native Host bundle omitted review tool payload' }
           Write-Output "REVIEW180_OFFLINE_BUNDLE PASS sha256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+          $bindingTestTool = Join-Path $buildRoot 'codea-review-test.mjs'
+          Copy-Item $out $bindingTestTool -Force
+          $env:CODEA_REVIEW_TEST_TOOL = $bindingTestTool
+          node.exe --test .github/scripts/review180-host-binding-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'native Host run-binding regression failed' }
           # OpenCode loads ALL installed custom tools before it can enforce
           # the Review agent permission allowlist. The retained 1.6.x submit
           # tool must therefore also be SDK-free to support real offline install.

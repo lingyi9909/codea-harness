@@ -8,6 +8,8 @@ subtask: false
 
 # Codea Harness 1.8 Review
 
+Host 自动从当前命令入口绑定 exact run 身份；`codea-review` 不接收模型填写的 `runId`。所有 prepare/read/finish 调用均省略 runId；工具输出的 `hostBinding` 记录真实会话、入口消息和 run 身份。Host 上下文缺失或不一致时 fail-closed，不按最新目录猜测。
+
 Review target: $ARGUMENTS
 
 The command output above is the authoritative `review start` result. It has already created and read back the durable **INCOMPLETE** report before this model turn. Keep its `runId` and `reportPath`; never discover a run by taking the newest directory.
@@ -27,7 +29,7 @@ The command output above is the authoritative `review start` result. It has alre
 
 `prepare` 返回已授权 `scope` 后，主 Agent **non-terminal**：必须在同一 turn 中读源码、评审并 `finish`。返回 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN` 是强制续行，不得在 prepare 后先给用户自然语言答复或结束 turn；没有 finding 也必须 `finish`。
 
-1. 使用本次 `review start` 的 exact `runId`，通过 `codea-review action=prepare` 执行 `CHANGES`；只有用户提供 Controller 时传 `intent.target`。
+1. 由 Host 绑定本次 `review start` 的 exact `runId`，通过 `codea-review action=prepare` 执行 `CHANGES`；只有用户提供 Controller 时传 `intent.target`。
 2. `prepare` 的 `options.chains` 按 Controller 分组，仅供查看本次自动纳入的范围；实际源码范围以 `scope.reads` 为准，报告 finding 证据仍受 `findingReads` 方法级行范围限制。多个 Controller 也不得展示人工选择菜单或等待用户回复。
 3. 如果 `nextAction.type=KEEP_REPORT_INCOMPLETE`，说明没有有效范围或安全条件不足，显示 Runtime 具体原因，保留现有 run 的 INCOMPLETE 报告。不能伪造完成态。
 4. 仅通过 `codea-review action=read`，传入 `scope.reads` 中完整、原样的 `path/sha256/startLine/endLine` 元组读取源码；禁止内置 `read/glob/grep/list/bash`，拒绝任何范围外读取、路径枚举及试探。禁止为了扩大范围探索 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、Prompt 和无关元数据。用户指定 Controller 不允许混入其他 Controller，未指定则自动覆盖**所有已发现且受变更影响**的 Controller。

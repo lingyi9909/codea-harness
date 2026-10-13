@@ -171,10 +171,24 @@ class Provider(BaseHTTPRequestHandler):
             require(tool_name is not None, f"{TOOL_NAME} not advertised: {names}")
 
             whole = flatten(messages)
+            if self.server.scenario == "missing-entry":
+                if "CODEA_REVIEW_HOST_ENTRY_REQUIRED" in whole:
+                    self.reply(body, content="missing entry correctly rejected")
+                else:
+                    self.reply(body, tool_call=call(tool_name, {"action": "prepare", "intent": {"mode": "CHANGES"}}, "unbound_prepare"))
+                return
             match = RUN_ID_FIELD_RE.search(whole)
             require(match is not None, "review start runId was not injected before first model request")
             run_id = match.group(1)
             payload = latest_tool_payload(messages)
+
+            if self.server.scenario == "wrong-run-id":
+                if "CODEA_REVIEW_RUN_ID_MISMATCH" in whole:
+                    self.reply(body, content="model run override correctly rejected")
+                else:
+                    wrong = run_id[:-1] + ("0" if run_id[-1] != "0" else "1")
+                    self.reply(body, tool_call=call(tool_name, {"action": "prepare", "runId": wrong, "intent": {"mode": "CHANGES"}}, "wrong_run_prepare"))
+                return
 
             if self.server.scenario == "forbidden-source" and "CODEA_REVIEW_SOURCE_OUTSIDE_SCOPE" in whole:
                 self.reply(body, content="native source scope correctly rejected")
@@ -187,7 +201,6 @@ class Provider(BaseHTTPRequestHandler):
             if payload is None:
                 self.reply(body, tool_call=call(tool_name, {
                     "action": "prepare",
-                    "runId": run_id,
                     "intent": {"mode": "CHANGES", **({} if self.server.scenario == "multi" else {"target": "OrderController"})},
                 }, "prepare"))
                 return
@@ -236,11 +249,11 @@ class Provider(BaseHTTPRequestHandler):
                 if index < len(refs):
                     self.server.read_index[run_id] = index + 1
                     self.reply(body, tool_call=call(tool_name, {
-                        "action": "read", "runId": run_id, "source": refs[index],
+                        "action": "read", "source": refs[index],
                     }, f"authorized_read_{index}"))
                 else:
                     self.reply(body, tool_call=call(tool_name, {
-                        "action": "finish", "runId": run_id,
+                        "action": "finish",
                         "result": {"reads": refs, "findings": [], "pendingRisks": [], "gaps": []},
                     }, "finish"))
                 return
@@ -249,7 +262,7 @@ class Provider(BaseHTTPRequestHandler):
                 if self.server.scenario == "forbidden-source":
                     forged = dict(scope["reads"][0], path="src/main/java/com/example/OutsideController.java")
                     self.reply(body, tool_call=call(tool_name, {
-                        "action": "read", "runId": run_id, "source": forged,
+                        "action": "read", "source": forged,
                     }, "scope_denied"))
                     return
                 if self.server.scenario == "concurrent":
@@ -270,8 +283,8 @@ class Provider(BaseHTTPRequestHandler):
                         "evidence": [{"ref": controller_ref, "quote": "service.create();"}],
                     }]}
                     self.reply(body, tool_calls=[
-                        call(tool_name, {"action": "finish", "runId": run_id, "result": a}, "finish_a"),
-                        call(tool_name, {"action": "finish", "runId": run_id, "result": b}, "finish_b"),
+                        call(tool_name, {"action": "finish", "result": a}, "finish_a"),
+                        call(tool_name, {"action": "finish", "result": b}, "finish_b"),
                     ])
                     return
                 refs = scope.get("reads", [])
@@ -279,7 +292,7 @@ class Provider(BaseHTTPRequestHandler):
                 self.server.scope_by_run[run_id] = scope
                 self.server.read_index[run_id] = 1
                 self.reply(body, tool_call=call(tool_name, {
-                    "action": "read", "runId": run_id, "source": refs[0],
+                    "action": "read", "source": refs[0],
                 }, "authorized_read_0"))
                 return
 
@@ -419,6 +432,46 @@ def tool_parts(exported, action):
     return out
 
 
+def host_binding_violations(exported, run_id):
+    """Compare native tool binding to the actual exported Host parent message."""
+    violations = []
+    session = exported.get("info", {}).get("id")
+    messages = {m.get("info", {}).get("id"): m for m in exported.get("messages", [])}
+    for message in exported.get("messages", []):
+        info = message.get("info", {})
+        for part in message.get("parts", []):
+            state = part.get("state", {})
+            if part.get("type") != "tool" or normalized(str(part.get("tool", ""))) != normalized(TOOL_NAME) or state.get("status") != "completed":
+                continue
+            try:
+                output = state.get("output", {})
+                output = json.loads(output) if isinstance(output, str) else output
+                binding = output.get("hostBinding")
+                expected = {"runId": run_id, "sessionID": session,
+                            "userMessageID": info.get("parentID"), "toolMessageID": info.get("id")}
+                require(session and info.get("id") and info.get("parentID") and binding == expected,
+                        "native Host binding differs from session/parent/run")
+                parent = messages.get(info["parentID"], {})
+                require(parent.get("info", {}).get("role") == "user" and
+                        parent.get("info", {}).get("sessionID") == session,
+                        "native Host binding has no matching user entry")
+                receipts = []
+                for item in parent.get("parts", []):
+                    if item.get("type") != "text":
+                        continue
+                    text = item.get("text", "").lstrip()
+                    if not text.startswith("{"):
+                        continue
+                    receipt, end = json.JSONDecoder().raw_decode(text)
+                    if text[end:].lstrip().startswith("# Codea Harness 1.8 Review"):
+                        receipts.append(receipt)
+                require(len(receipts) == 1 and receipts[0].get("runId") == run_id,
+                        "native Host binding differs from command entry run")
+            except (ValueError, TypeError, AttributeError, KeyError, RuntimeError) as error:
+                violations.append("Host run binding invalid: " + str(error))
+    return violations
+
+
 def session_for_run(stdout, binary, project, env, scenario):
     sessions = list((Path(env["XDG_DATA_HOME"]) / "opencode" / "storage" / "session").rglob("*.json"))
     session_match = re.search(r'"sessionID"\s*:\s*"([^"]+)"', stdout)
@@ -447,6 +500,8 @@ def run_scenario(binary, project, env, server, multi):
     exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
     actions = tool_actions(exported)
     require("prepare" in actions, f"{scenario}: model never called prepare; actions={actions}")
+    require(not host_binding_violations(exported, run_id),
+            f"{scenario}: invalid Host run binding: {host_binding_violations(exported, run_id)}")
 
     # Both one and multiple Controllers must auto-finish in the first Host turn.
     require(actions.count("finish")==1 and actions.count("read") >= 1 and
@@ -500,6 +555,36 @@ def run_concurrent_finish_scenario(binary, project, env, server):
     final = (run_dir / "review.md").read_text(encoding="utf-8")
     require('"execution":"COMPLETE"' in final, f"concurrent: winning result did not create COMPLETE report:\n{final}")
     print(f"REVIEW180_HOST_CONCURRENT_FINISH PASS runId={run_dir.name} completed=1 rejected=1 uniqueRequests=2", flush=True)
+
+
+def run_binding_rejection_scenario(binary, project, env, server, scenario):
+    server.scenario = scenario
+    server.errors.clear()
+    run = [str(binary), "run", "--print-logs", "--dir", str(project),
+           "--model", "fixture/review180", "--format", "json"]
+    if scenario == "wrong-run-id":
+        run += ["--command", "harness-review", "OrderController"]
+        expected_error = "CODEA_REVIEW_RUN_ID_MISMATCH"
+    else:
+        run += ["--agent", "codea-review-restricted", "Prepare a review without a command entry."]
+        expected_error = "CODEA_REVIEW_HOST_ENTRY_REQUIRED"
+    stdout = command(run, project, env, timeout=150)
+    require(not server.errors, f"{scenario}: provider errors: {server.errors}")
+    session = session_for_run(stdout, binary, project, env, scenario)
+    exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
+    attempts = tool_parts(exported, "prepare")
+    require(len(attempts) == 1 and attempts[0].get("status") == "error" and
+            expected_error in str(attempts[0].get("error")),
+            f"{scenario}: native Host did not reject run identity: {attempts}")
+    require(tool_actions(exported) == ["prepare"], f"{scenario}: unexpected recovery attempt")
+    runs = list((project / ".code-harness" / "runs").glob("review-*"))
+    require(len(runs) == (1 if scenario == "wrong-run-id" else 0), f"{scenario}: unexpected run creation")
+    for run_dir in runs:
+        require(not (run_dir / "scope.json").exists() and not (run_dir / "result.json").exists(),
+                f"{scenario}: rejected call mutated review scope/result")
+        report = (run_dir / "review.md").read_text(encoding="utf-8")
+        require('"execution":"INCOMPLETE"' in report, f"{scenario}: report not INCOMPLETE")
+    print(f"REVIEW180_HOST_BINDING_DENIED PASS scenario={scenario} error={expected_error}", flush=True)
 
 
 
@@ -675,6 +760,10 @@ def main():
                 project = bootstrap_project(temp, args, sdk_root, server.server_port, multi)
                 init_fixture_repo(project, env)
                 run_scenario(args.opencode.resolve(), project, env, server, multi)
+            for scenario in ("wrong-run-id", "missing-entry"):
+                project = bootstrap_project(temp, args, sdk_root, server.server_port, False, name=scenario)
+                init_fixture_repo(project, env)
+                run_binding_rejection_scenario(args.opencode.resolve(), project, env, server, scenario)
             forbidden_project = bootstrap_project(temp, args, sdk_root, server.server_port, False, name="forbidden-source")
             init_fixture_repo(forbidden_project, env)
             run_forbidden_source_scenario(args.opencode.resolve(), forbidden_project, env, server)

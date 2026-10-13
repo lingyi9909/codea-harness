@@ -8,6 +8,8 @@ version: 10
 
 ## Codea Harness 1.8 普通 Review 主路径
 
+Host 自动从当前命令入口绑定 exact run 身份；`codea-review` 不接收模型填写的 `runId`。所有 prepare/read/finish 调用均省略 runId；工具输出的 `hostBinding` 记录真实会话、入口消息和 run 身份。Host 上下文缺失或不一致时 fail-closed，不按最新目录猜测。
+
 `/harness-review [Controller]` 为唯一 active ordinary Review 流程；Controller 参数可省略。
 
 `固定入口 review start → 原生 codea-review prepare（自动纳入范围）→ 原生 codea-review read（仅 scope.reads）→ 主 Agent 语义评审 → 原生 codea-review finish`

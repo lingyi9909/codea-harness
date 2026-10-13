@@ -5,6 +5,8 @@ This test checks REAL changed Java/MyBatis source bytes; it is not a stand-in
 for native Host selection or the real-model autonomous acceptance matrix.
 """
 import importlib.util
+import copy
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -25,6 +27,25 @@ def git(project, *args):
 
 
 class ExactImpactedChainFixtureTest(unittest.TestCase):
+    def test_host_binding_audit_rejects_mismatched_or_missing_identity(self):
+        entry = {"info": {"id": "user", "sessionID": "session", "role": "user"},
+                 "parts": [{"type": "text", "text": '{"runId":"review-exact"}\n# Codea Harness 1.8 Review\n'}]}
+        binding = {"runId": "review-exact", "sessionID": "session", "userMessageID": "user", "toolMessageID": "assistant"}
+        good = {"info": {"id": "session"}, "messages": [entry, {
+            "info": {"id": "assistant", "parentID": "user", "sessionID": "session", "role": "assistant"},
+            "parts": [{"type": "tool", "tool": "codea-review", "state": {"status": "completed", "output": {"hostBinding": binding}}}]}]}
+        self.assertEqual(model.host.host_binding_violations(good, "review-exact"), [])
+        for key in binding:
+            broken = copy.deepcopy(good)
+            broken["messages"][1]["parts"][0]["state"]["output"]["hostBinding"][key] = "wrong"
+            self.assertTrue(model.host.host_binding_violations(broken, "review-exact"), key)
+        missing = copy.deepcopy(good)
+        missing["messages"][1]["parts"][0]["state"]["output"] = '{}'
+        self.assertTrue(model.host.host_binding_violations(missing, "review-exact"))
+        wrong_entry = copy.deepcopy(good)
+        wrong_entry["messages"][0]["parts"][0]["text"] = '{"runId":"review-other"}\n# Codea Harness 1.8 Review\n'
+        self.assertTrue(model.host.host_binding_violations(wrong_entry, "review-exact"))
+
     def fixture(self, multi, scenario):
         temp = tempfile.TemporaryDirectory(prefix="Codea fixture proof ")
         self.addCleanup(temp.cleanup)
