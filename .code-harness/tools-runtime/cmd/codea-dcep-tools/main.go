@@ -6,6 +6,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"runtime"
+	"unicode/utf16"
+	"unicode/utf8"
 	"io"
 	"os"
 	"path/filepath"
@@ -27,7 +30,7 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		writeCLIError180(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -563,9 +566,46 @@ func writeJSONAndStatus(v any, success bool) error {
 	if err != nil {
 		return err
 	}
+	if runtime.GOOS == "windows" {
+		// Windows PowerShell 5.1 may decode native pipes with the OEM/GBK
+		// codepage. ASCII JSON transports Unicode escapes losslessly.
+		b = escapeNonASCIIJSON180(b)
+	}
 	fmt.Println(string(b))
 	if !success {
 		return errors.New("operation did not complete successfully")
 	}
 	return nil
+}
+
+// escapeNonASCIIJSON180 preserves valid JSON semantics while ensuring every
+// output byte is ASCII. This prevents GBK/UTF-8 decoding mismatch when Windows
+// PowerShell captures native process output. ConvertFrom-Json recovers Chinese.
+func escapeNonASCIIJSON180(raw []byte) []byte {
+	var b strings.Builder
+	for len(raw) > 0 {
+		r, size := utf8.DecodeRune(raw)
+		if r < utf8.RuneSelf {
+			b.WriteByte(raw[0])
+		} else {
+			for _, u := range utf16.Encode([]rune{r}) {
+				fmt.Fprintf(&b, "\\u%04x", u)
+			}
+		}
+		raw = raw[size:]
+	}
+	return []byte(b.String())
+}
+
+// writeCLIError180 emits readable Unicode on Windows Console through its
+// UTF-16 API, and ordinary UTF-8 when stderr is a pipe (for OpenCode/Node).
+// stdout remains an independent ASCII-safe JSON protocol.
+func writeCLIError180(w io.Writer, err error) {
+	if err == nil {
+		return
+	}
+	if writeWindowsConsoleError180(w, err.Error()) {
+		return
+	}
+	_, _ = fmt.Fprintln(w, err.Error())
 }

@@ -29,14 +29,23 @@ func runReviewPrepare180(args []string) error {
 	fs := flag.NewFlagSet("review prepare", flag.ContinueOnError)
 	runID := fs.String("run-id", "", "1.8 review run id")
 	mode := fs.String("mode", "", "CHANGES|CURRENT_IMPLEMENTATION")
+	intentAlias := fs.String("intent", "", "alias for --mode (CHANGES|CURRENT_IMPLEMENTATION)")
 	target := fs.String("target", "", "optional review target")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 || strings.TrimSpace(*runID) == "" || strings.TrimSpace(*mode) == "" {
-		return errors.New("review prepare requires --run-id and --mode")
+	selectedMode := strings.TrimSpace(*mode)
+	aliasMode := strings.TrimSpace(*intentAlias)
+	if selectedMode != "" && aliasMode != "" && !strings.EqualFold(selectedMode, aliasMode) {
+		return errors.New("REVIEW_PREPARE_INTENT_CONFLICT: --mode and --intent disagree")
 	}
-	out, err := reviewrun.Prepare(context.Background(), ".", *runID, reviewrun.Intent{Mode: *mode, Target: *target})
+	if selectedMode == "" {
+		selectedMode = aliasMode
+	}
+	if fs.NArg() != 0 || strings.TrimSpace(*runID) == "" || selectedMode == "" {
+		return errors.New("review prepare requires --run-id and --mode (or --intent)")
+	}
+	out, err := reviewrun.Prepare(context.Background(), ".", *runID, reviewrun.Intent{Mode: selectedMode, Target: *target})
 	if err != nil {
 		return err
 	}

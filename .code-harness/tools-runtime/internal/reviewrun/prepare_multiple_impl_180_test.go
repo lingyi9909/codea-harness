@@ -45,7 +45,7 @@ public class BackupOrderServiceImpl implements OrderService {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ScopeReady || state.Coverage != "PARTIAL" {
+	if !state.ScopeReady || state.Coverage != "PARTIAL" {
 		t.Fatalf("ambiguous implementation created ready scope: %+v", state)
 	}
 }

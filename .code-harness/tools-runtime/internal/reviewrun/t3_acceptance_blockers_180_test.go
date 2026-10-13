@@ -105,18 +105,7 @@ func prepareCreateScope180(t *testing.T, mode string, seedChange bool) (string, 
 	if mode == "CHANGES" {
 		initControllerReviewGitBaseline180(t, root)
 		if seedChange {
-			path := filepath.Join(root, "src", "main", "java", "com", "example", "OrderController.java")
-			f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := f.WriteString("\n// unrelated controller file change keeps create chain affected\n"); err != nil {
-				_ = f.Close()
-				t.Fatal(err)
-			}
-			if err := f.Close(); err != nil {
-				t.Fatal(err)
-			}
+			replaceT5Fixture180(t,root,"src/main/java/com/example/OrderController.java","orderService.create();","orderService.create(); // matching create method change")
 		}
 	}
 	started, err := Start(root)

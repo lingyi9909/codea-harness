@@ -290,6 +290,17 @@ func (n Navigator) GetSymbolInfo(ctx context.Context, symbol, scope string) (Sym
 
 // GetSymbolInfos resolves a set of symbols from one declaration snapshot.
 func (n Navigator) GetSymbolInfos(ctx context.Context, symbols []string, scope string) (map[string]SymbolInfo, error) {
+	return n.getSymbolInfosWithMissing180(ctx, symbols, scope, false)
+}
+
+// GetSymbolInfosPartial180 is for scoped review navigation. Missing external
+// receiver types are not evidence that other, local symbol facts disappeared.
+// Ambiguous declarations and malformed scans still fail closed.
+func (n Navigator) GetSymbolInfosPartial180(ctx context.Context, symbols []string, scope string) (map[string]SymbolInfo, error) {
+	return n.getSymbolInfosWithMissing180(ctx, symbols, scope, true)
+}
+
+func (n Navigator) getSymbolInfosWithMissing180(ctx context.Context, symbols []string, scope string, allowMissing bool) (map[string]SymbolInfo, error) {
 	for _, symbol := range symbols {
 		if err := n.validate(symbol, scope); err != nil {
 			return nil, err
@@ -331,6 +342,7 @@ func (n Navigator) GetSymbolInfos(ctx context.Context, symbols []string, scope s
 		ownerTypes := filterTypeName(append([]rawMatch(nil), types...), owner)
 		if member == "" {
 			if len(ownerTypes) == 0 {
+				if allowMissing { continue }
 				return nil, ErrSymbolNotFound
 			}
 			if len(ownerTypes) > 1 {
@@ -354,6 +366,7 @@ func (n Navigator) GetSymbolInfos(ctx context.Context, symbols []string, scope s
 		}
 		infos = dedupeInfos(infos)
 		if len(infos) == 0 {
+			if allowMissing { continue }
 			return nil, ErrSymbolNotFound
 		}
 		if len(infos) > 1 {

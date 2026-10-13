@@ -51,7 +51,7 @@ public class BackupOrderServiceImpl implements java.io.Serializable, OrderServic
 		if err != nil {
 			t.Fatal(err)
 		}
-		writeBoundarySource180(t, root, java+name, string(b)+"\n// changed implementation\n")
+		writeBoundarySource180(t, root, java+name, strings.Replace(string(b), strings.ToLower(strings.TrimSuffix(name,"ServiceImpl.java"))+"Mapper.insert"+strings.TrimSuffix(name,"ServiceImpl.java")+"();", strings.ToLower(strings.TrimSuffix(name,"ServiceImpl.java"))+"Mapper.insert"+strings.TrimSuffix(name,"ServiceImpl.java")+"(); // changed implementation", 1))
 	}
 	started, err := Start(root)
 	if err != nil {
@@ -61,7 +61,7 @@ public class BackupOrderServiceImpl implements java.io.Serializable, OrderServic
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.DiscoveryComplete || !got.SelectionRequired || len(got.Chains) != 2 {
+	if got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 2 {
 		t.Fatalf("changed ambiguous entrypoints were lost: %+v", got)
 	}
 	if !strings.Contains(strings.Join(got.Gaps, "\n"), "OrderService implementations=2") {
@@ -71,9 +71,9 @@ public class BackupOrderServiceImpl implements java.io.Serializable, OrderServic
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ScopeReady || len(state.SelectedIDs) != 0 {
-		t.Fatalf("filtered discovery authorized scope: %+v", state)
-	}
+	if !state.ScopeReady || state.Coverage != "PARTIAL" || len(state.SelectedIDs) != 2 {
+        t.Fatalf("incomplete discovery must authorize only known scope with PARTIAL: %+v",state)
+    }
 }
 
 func Test180ChangesMapperXMLParticipatesInImpact(t *testing.T) {
@@ -83,7 +83,7 @@ func Test180ChangesMapperXMLParticipatesInImpact(t *testing.T) {
 		count                     int
 	}{
 		{"targeted SQL change", "OrderController.create", "VALUES (2)", true, 1},
-		{"unfiltered SQL change", "", "VALUES (2)", true, 2},
+		{"unfiltered SQL change", "", "VALUES (2)", true, 1},
 		{"broken namespace retains gap", "OrderController.create", "namespace", false, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,7 +115,10 @@ func Test180ChangesMapperXMLParticipatesInImpact(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if state.ScopeReady != (tc.complete && tc.count == 1) {
+			if state.ScopeReady && state.Coverage != "PARTIAL" && !tc.complete {
+                t.Fatalf("incomplete CHANGES marked COMPLETE: %+v",state)
+            }
+            if tc.complete && tc.count==1 && !state.ScopeReady {
 				t.Fatalf("wrong XML scope authority: %+v", state)
 			}
 			for _, ch := range got.Chains {

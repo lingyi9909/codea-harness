@@ -150,26 +150,18 @@ func verifySelectionTurnBytesForRoot180(data []byte, root string, req SelectionT
 		texts = append(texts, stringValue(p["text"]))
 	}
 	actual := strings.TrimSpace(strings.Join(texts, "\n"))
-	ids := append([]string(nil), req.SelectionIDs...)
-	all := append([]string(nil), req.AllIDs...)
-	sort.Strings(ids)
-	sort.Strings(all)
-	expected := "选择 " + strings.Join(ids, ",")
-	if len(ids) > 0 && len(ids) == len(all) {
-		same := true
-		for i := range ids {
-			if ids[i] != all[i] {
-				same = false
-				break
-			}
-		}
-		if same && actual == "全部" {
-			return nil
-		}
-	}
-	if actual != expected {
-		return fmt.Errorf("HUMAN_SELECTION_REQUIRED: user reply must be %q", expected)
-	}
+    ids, err := normalizeSelectionReply180(actual,req.AllIDs)
+    if err != nil {return fmt.Errorf("HUMAN_SELECTION_REQUIRED: %w",err)}
+    expected:=append([]string(nil),req.SelectionIDs...)
+    sort.Strings(expected)
+    if len(expected)!=len(ids) {
+        return errors.New("HUMAN_SELECTION_REQUIRED: user choice differs from requested Controller IDs")
+    }
+    for i:=range ids {
+        if expected[i]!=ids[i] {
+            return errors.New("HUMAN_SELECTION_REQUIRED: user choice differs from requested Controller IDs")
+        }
+    }
 	return nil
 }
 
@@ -238,4 +230,40 @@ func currentSelectionMenu180(text string, req SelectionTurnRequest180) bool {
 	// hash or marker from an older menu in the same message.
 	return ok && strings.TrimSpace(header) == req.RunID+" options="+req.OptionsHash &&
 		strings.Contains("\n"+body+"\n", "\n"+req.MenuMarker+"\n")
+}
+
+// normalizeSelectionReply180 trusts only the literal real Host user text (never
+// model-supplied IDs) and accepts a tightly bounded selection grammar.
+// No fuzzy parsing, leading/trailing prose, synthetic turns, unknown IDs,
+// duplicates, or references to another menu are accepted.
+func normalizeSelectionReply180(raw string, allIDs []string) ([]string,error) {
+    if len(allIDs)==0 {return nil,errors.New("menu has no Controller IDs")}
+    valid:=map[string]bool{}
+    for _,id:=range allIDs {
+        if id=="" || valid[id] {return nil,errors.New("menu Controller IDs invalid")}
+        valid[id]=true
+    }
+    raw=strings.TrimSpace(raw)
+    if raw=="全部" {
+        ids:=append([]string{},allIDs...)
+        sort.Strings(ids)
+        return ids,nil
+    }
+    raw=strings.TrimSpace(strings.TrimPrefix(raw,"选择"))
+    if raw=="" {return nil,errors.New("empty Controller selection")}
+    values:=strings.Split(raw,",")
+    ids:=make([]string,0,len(values))
+    seen:=map[string]bool{}
+    for _,value:=range values {
+        id:=strings.TrimSpace(value)
+        // Only full, case-sensitive menu IDs (e.g. C3) are selectable.
+        // Comparing membership in the current menu also rejects prose.
+        if !valid[id] || seen[id] {
+            return nil,errors.New("unknown, duplicate or ambiguous Controller ID")
+        }
+        seen[id]=true
+        ids=append(ids,id)
+    }
+    sort.Strings(ids)
+    return ids,nil
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func Test180PrepareTwoEndpointsRequiresSelection(t *testing.T) {
+func Test180PrepareTwoEndpointsOneControllerAutoSelects(t *testing.T) {
 	root := copyControllerReviewFixture180(t)
 	useRealAstGrep180(t, root)
 	started, err := Start(root)
@@ -25,18 +25,18 @@ func Test180PrepareTwoEndpointsRequiresSelection(t *testing.T) {
 	if time.Since(began) > 15*time.Second {
 		t.Fatalf("prepare exceeded fixture budget: %s", time.Since(began))
 	}
-	if !got.DiscoveryComplete || !got.SelectionRequired || len(got.Chains) != 2 {
+	if !got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 1 || len(got.Chains[0].Methods) != 2 {
 		t.Fatalf("unexpected options: %+v", got)
 	}
-	if got.Chains[0].ID == got.Chains[1].ID {
-		t.Fatalf("distinct endpoints were merged: %+v", got.Chains)
-	}
+	if got.Chains[0].Methods[0].ID == got.Chains[0].Methods[1].ID {
+        t.Fatalf("distinct method subchains were merged: %+v", got.Chains)
+    }
 	if got.Hash == "" {
 		t.Fatal("missing optionsHash")
 	}
 	shared := false
-	for _, a := range got.Chains[0].Nodes {
-		for _, b := range got.Chains[1].Nodes {
+	for _, a := range got.Chains[0].Methods[0].Nodes {
+		for _, b := range got.Chains[0].Methods[1].Nodes {
 			if a.Role == "SERVICE" && b.Role == "SERVICE" && a.Path == b.Path {
 				shared = true
 			}
@@ -55,6 +55,49 @@ func Test180PrepareTwoEndpointsRequiresSelection(t *testing.T) {
 	}
 	if stored.NavigationProcesses != 5 {
 		t.Fatalf("expected bounded batch navigation at 5 ast-grep processes, got %d", stored.NavigationProcesses)
+	}
+}
+
+func Test180PrepareNaturalLanguageCurrentImplementationTarget(t *testing.T) {
+	root := copyControllerReviewFixture180(t)
+	useRealAstGrep180(t, root)
+	started, err := Start(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Prepare(context.Background(), root, started.RunID, Intent{
+		Mode:   "CURRENT_IMPLEMENTATION",
+		Target: "请检查当前实现 OrderController.create",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.DiscoveryComplete || got.SelectionRequired || len(got.Chains) != 1 {
+		t.Fatalf("natural-language current-implementation target did not resolve uniquely: %+v", got)
+	}
+	if !strings.HasPrefix(got.Chains[0].Name, "OrderController（1 个方法）") || len(got.Chains[0].Methods) != 1 || got.Chains[0].Methods[0].Name != "OrderController.create" {
+		t.Fatalf("natural-language target resolved to wrong chain: %+v", got.Chains)
+	}
+}
+
+func Test180NormalizeReviewTargetIsConservative(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "exact method", in: "OrderController.create", want: "OrderController.create"},
+		{name: "natural language", in: "请检查当前实现 OrderController.create", want: "OrderController.create"},
+		{name: "class prose", in: "review OrderController please", want: "OrderController"},
+		{name: "path preserved", in: "src/main/java/com/example/OrderController.java", want: "src/main/java/com/example/OrderController.java"},
+		{name: "ambiguous fails closed", in: "compare OrderController.create and OrderController.cancel", want: "compare OrderController.create and OrderController.cancel"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeReviewTarget180(tc.in); got != tc.want {
+				t.Fatalf("normalizeReviewTarget180(%q)=%q want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -96,9 +139,9 @@ func Test180UnknownImplementationPreventsAutoSingle(t *testing.T) {
 		t.Fatalf("missing implementation gap: %+v", got)
 	}
 	_, state, _ := loadRun(root, started.RunID)
-	if state.ScopeReady {
-		t.Fatalf("incomplete discovery marked scope ready: %+v", state)
-	}
+    if state.ScopeReady && state.Coverage != "PARTIAL" {
+        t.Fatalf("incomplete discovery wrongly marked COMPLETE: %+v",state)
+    }
 }
 
 func Test180PrepareNoEntrypointStaysIncomplete(t *testing.T) {
@@ -166,17 +209,11 @@ func Test180PrepareChangesUsesReproducibleGitBaseline(t *testing.T) {
 	useRealAstGrep180(t, root)
 	baseline := initControllerReviewGitBaseline180(t, root)
 	controller := filepath.Join(root, "src", "main", "java", "com", "example", "OrderController.java")
-	f, err := os.OpenFile(controller, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("\n// changed for Task 2 CHANGES-mode fixture\n"); err != nil {
-		_ = f.Close()
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	b, err := os.ReadFile(controller)
+    if err != nil { t.Fatal(err) }
+    updated := strings.Replace(string(b), "orderService.create();", "orderService.create(); // committed method change", 1)
+    if updated == string(b) { t.Fatal("fixture method missing") }
+    if err := os.WriteFile(controller, []byte(updated), 0600); err != nil { t.Fatal(err) }
 	started, err := Start(root)
 	if err != nil {
 		t.Fatal(err)

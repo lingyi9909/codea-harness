@@ -55,6 +55,8 @@ type reportView struct {
 	Findings         []Finding
 	PendingRisks     []string
 	Gaps             []string
+	CoverageGaps     []string
+	InformationalGaps []string
 	Intent           Intent
 	Chains           []Chain
 	SelectedIDs      []string
