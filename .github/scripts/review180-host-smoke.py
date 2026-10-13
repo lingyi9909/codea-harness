@@ -289,7 +289,8 @@ def bootstrap_project(temp, args, sdk_root, port, multi, name=None):
     (project / ".gitignore").write_text(".opencode/node_modules/\n", encoding="utf-8")
     config = {
         "provider": {"fixture": {"npm": "@ai-sdk/openai-compatible", "name": "Review180 deterministic fixture", "options": {"baseURL": f"http://127.0.0.1:{port}/v1", "apiKey": "local-fixture"}, "models": {"review180": {"name": "Review180 Host fixture", "limit": {"context": 32000, "output": 4096}}}}},
-        "permission": {"*": "deny", TOOL_NAME: "allow", "bash": "allow"},
+        "permission": {"*": "deny", TOOL_NAME: "allow"},
+        "tools": {"read": False, "glob": False, "grep": False, "list": False, "bash": False},
     }
     (project / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
     for config_dir in (project / ".opencode", Path(os.environ["REVIEW180_XDG_CONFIG"]) / "opencode"):

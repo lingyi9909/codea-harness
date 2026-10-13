@@ -105,5 +105,51 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
                 self.assertIn("REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH", text)
 
 
+    def test_strict_scope_tool_configuration_and_attempt_audit(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('"read": False, "glob": False, "grep": False, "list": False, "bash": False', source)
+        self.assertNotIn('"glob": "allow"', source)
+        ref = {"path": "src/main/java/A.java", "sha256": "a" * 64, "startLine": 1, "endLine": 3}
+        scope = {"reads": [ref]}
+        def trace(calls):
+            return {"messages": [{"parts": [
+                {"type": "tool", "tool": name, "state": {"input": args, "status": status}}
+                for name, args, status in calls]}]}
+        good = trace([("codea-review", {"action": "prepare"}, "completed"),
+                      ("codea-review", {"action": "read", "source": ref}, "completed"),
+                      ("codea-review", {"action": "finish"}, "completed")])
+        self.assertEqual(model.audit_native_review_tools(good, scope)["violations"], [])
+        glob = trace([("codea-review", {"action": "prepare"}, "completed"),
+                      ("codea-review", {"action": "read", "source": ref}, "completed"),
+                      ("glob", {"pattern": "**/*"}, "completed"),
+                      ("codea-review", {"action": "finish"}, "completed")])
+        self.assertTrue(any("forbidden tool" in v for v in
+                            model.audit_native_review_tools(glob, scope)["violations"]))
+        retry = trace([("codea-review", {"action": "prepare"}, "completed"),
+                       ("codea-review", {"action": "read", "source": ref}, "completed"),
+                       ("codea-review", {"action": "finish"}, "error"),
+                       ("codea-review", {"action": "finish"}, "completed")])
+        self.assertTrue(any("non-completed" in v for v in
+                            model.audit_native_review_tools(retry, scope)["violations"]))
+        unrelated = trace([("codea-review", {"action": "prepare"}, "completed"),
+                           ("codea-review", {"action": "read", "source": dict(ref, path="B.java")}, "completed"),
+                           ("codea-review", {"action": "finish"}, "completed")])
+        self.assertTrue(any("unauthorized source" in v for v in
+                            model.audit_native_review_tools(unrelated, scope)["violations"]))
+        incomplete = trace([("codea-review", {"action": "prepare"}, "completed"),
+                            ("codea-review", {"action": "read", "source": ref}, "completed")])
+        self.assertTrue(model.audit_native_review_tools(incomplete, scope)["violations"])
+
+    def test_native_read_tool_rejects_unscoped_access(self):
+        tool = (SCRIPT.parents[2] / ".code-harness/tools/codea-review.ts").read_text(encoding="utf-8")
+        for control in (
+            "CODEA_REVIEW_SOURCE_OUTSIDE_SCOPE", "CODEA_REVIEW_SOURCE_STALE",
+            "CODEA_REVIEW_SOURCE_SCOPE_NOT_READY", "CODEA_REVIEW_SOURCE_PATH_INVALID",
+            'action: tool.schema.enum(["prepare", "read", "finish"])',
+            "createHash", "realpath",
+        ):
+            self.assertIn(control, tool)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

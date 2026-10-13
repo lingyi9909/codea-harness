@@ -17,7 +17,7 @@ The command output above is the authoritative `review start` result. It has alre
 - `/harness-review` 没有参数时，`intent={mode:"CHANGES"}`（没有 target），自动评审**全部本次 Git 变更实际影响的 Controller**及其方法级下游调用链，不做 C1/C2/C3 人工选择。没有有效变更时保持 INCOMPLETE，不能自行改成全仓当前实现。
 - `/harness-review OrderController` 仅评审该 Controller 的受影响方法和下游；`OrderController.method` 可进一步限定方法。对于 Maven 同名 Controller，优先使用完整 Java 文件路径指定目标以消除歧义。不得因同名误合并或扩大范围。
 - 用户明确提出“当前实现”时才使用 `CURRENT_IMPLEMENTATION`。Use `CURRENT_IMPLEMENTATION` **only** when the user's request itself explicitly asks to inspect the current implementation. Never switch or retry from `CHANGES` to `CURRENT_IMPLEMENTATION` after `REVIEW_TARGET_NO_RELEVANT_CHANGES`, `NO_RELEVANT_CHANGES` or any prepare failure. CHANGES must remain fail-closed with the durable report INCOMPLETE.
-- 唯一允许的 Shell Runtime 调用是命令最开始的 `review start`。此后 `prepare` 和 `finish` 必须通过**原生** OpenCode `codea-review` 工具调用；不得通过 PowerShell、bash、脚本或伪造 Host 身份调用 Runtime。若原生工具未加载，报告 `CODEA_REVIEW_HOST_TOOL_UNAVAILABLE`，保持 INCOMPLETE。
+- 唯一允许的 Shell Runtime 调用是命令最开始的 `review start`。此后 `prepare`、授权源码 `read` 和 `finish` 必须通过**原生** OpenCode `codea-review` 工具调用；不得通过 PowerShell、bash、脚本或伪造 Host 身份调用 Runtime。若原生工具未加载，报告 `CODEA_REVIEW_HOST_TOOL_UNAVAILABLE`，保持 INCOMPLETE。
 - **不再支持普通 Review 的人工菜单、select、resume 或要求用户输入“选择 C1”**。内部 `C1` 等 ID 仅用于自动 scope 的稳定身份与报告归属，不能向用户索要选择。即使受影响 Controller 有多个，也应自动包含全部，不创建新 run。
 - Runtime 负责源码/Git 快照、optionsHash、所有子链范围及未解析项校验。Agent 不得补读 scope 外方法来掩盖归因缺口；`PARTIAL` 必须对应 `UNDETERMINED`；模型说明性 gap 不得误降级真实 `COMPLETE/BLOCKING`。
 
@@ -28,7 +28,7 @@ The command output above is the authoritative `review start` result. It has alre
 1. 使用本次 `review start` 的 exact `runId`，通过 `codea-review action=prepare` 执行 `CHANGES`；只有用户提供 Controller 时传 `intent.target`。
 2. `prepare` 的 `options.chains` 按 Controller 分组，仅供查看本次自动纳入的范围；实际源码范围以 `scope.reads` 为准，报告 finding 证据仍受 `findingReads` 方法级行范围限制。多个 Controller 也不得展示人工选择菜单或等待用户回复。
 3. 如果 `nextAction.type=KEEP_REPORT_INCOMPLETE`，说明没有有效范围或安全条件不足，显示 Runtime 具体原因，保留现有 run 的 INCOMPLETE 报告。不能伪造完成态。
-4. 仅读取 `scope.reads` 授权的源码内容用于 source-grounded finding；禁止为了扩大范围探索 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、Prompt 和无关元数据。用户指定 Controller 不允许混入其他 Controller，未指定则自动覆盖**所有已发现且受变更影响**的 Controller。
+4. 仅通过 `codea-review action=read`，传入 `scope.reads` 中完整、原样的 `path/sha256/startLine/endLine` 元组读取源码；禁止内置 `read/glob/grep/list/bash`，拒绝任何范围外读取、路径枚举及试探。禁止为了扩大范围探索 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、Prompt 和无关元数据。用户指定 Controller 不允许混入其他 Controller，未指定则自动覆盖**所有已发现且受变更影响**的 Controller。
 5. 每项 finding 必须提供 severity、problem、impact、recommendation、verification、以及实际读取过且被 Runtime 许可的 evidence。保持 `introducedByChange` 和数据库说明性 gap 的既有安全语义，不要修改业务代码。
 6. `pendingRisks` 只描述 current unresolved risk in the selected implementation。Do not add a pending risk for hypothetical future edits, future endpoint repurposing, someone could later bind sensitive SQL, or generic best-practice concerns. 不存在现实待核实风险时传 `pendingRisks=[]`。
 7. 不论是否发现问题都通过原生 `codea-review action=finish` 提交 reads、findings、pendingRisks、gaps。若模型已读取更精确 evidence ref，必须把该 ref 原样纳入 result.reads。仅 `finish` 返回 COMPLETE 后才允许宣布评审完成。

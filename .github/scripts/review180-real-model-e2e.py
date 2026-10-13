@@ -108,6 +108,54 @@ def completed_tools(exported):
     return names
 
 
+
+def audit_native_review_tools(exported, scope):
+    """Audit every model tool ATTEMPT; never hide failed finish behind retry."""
+    permitted = host.normalized("codea-review")
+    authorized = {
+        (ref["path"], ref["sha256"], ref["startLine"], ref["endLine"])
+        for ref in scope.get("reads", [])
+    }
+    entries, failures, read_refs = [], [], set()
+    for message in exported.get("messages", []):
+        for part in message.get("parts", []):
+            if part.get("type") != "tool":
+                continue
+            state = part.get("state") or {}
+            tool_name = str(part.get("tool", ""))
+            args = state.get("input") or {}
+            action = args.get("action")
+            status = state.get("status")
+            entry = {"tool": tool_name, "action": action, "status": status,
+                     "callID": part.get("callID"), "error": state.get("error")}
+            if action == "read" and host.normalized(tool_name) == permitted:
+                source = args.get("source") or {}
+                key = (source.get("path"), source.get("sha256"),
+                       source.get("startLine"), source.get("endLine"))
+                entry["source"] = source
+                if key not in authorized:
+                    failures.append("unauthorized source read: " + str(source))
+                elif status == "completed":
+                    read_refs.add(key)
+            if host.normalized(tool_name) != permitted:
+                failures.append("forbidden tool attempted: " + tool_name)
+            elif action not in {"prepare", "read", "finish"}:
+                failures.append("invalid native review action: " + str(action))
+            if status != "completed":
+                failures.append("non-completed tool attempt: " + tool_name +
+                                " action=" + str(action) + " status=" + str(status))
+            entries.append(entry)
+    acts = [e["action"] for e in entries]
+    if acts.count("prepare") != 1 or acts.count("finish") != 1 or acts.count("read") < 1:
+        failures.append("expected one prepare, scoped read(s), one finish: " + str(acts))
+    if acts and (acts[0] != "prepare" or acts[-1] != "finish"):
+        failures.append("native review tool order invalid: " + str(acts))
+    if authorized and read_refs != authorized:
+        failures.append("source reads did not cover prepared scope: " +
+                        str(sorted(authorized - read_refs)))
+    return {"schemaVersion": 1, "toolAttempts": entries, "violations": failures,
+            "authorizedReadCount": len(authorized), "verifiedReadCount": len(read_refs)}
+
 def tool_duration_ms(state):
     info = state.get("time") or {}
     start, end = info.get("start"), info.get("end")
@@ -366,12 +414,10 @@ def make_env(temp: Path, project: Path, sdk_root: Path, output_limit: int):
         "permission": {
             "*": "deny",
             "codea-review": "allow",
-            "read": "allow",
-            "glob": "allow",
-            "grep": "allow",
-            "list": "allow",
         },
     }
+    # Enforce scope at tool availability (not merely with instructions).
+    config["tools"] = {"read": False, "glob": False, "grep": False, "list": False, "bash": False}
     (project / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
     return env
 
@@ -467,7 +513,7 @@ def persist_run(evidence_dir: Path, exported, run_dir: Path, record: dict):
             shutil.copyfile(src, evidence_dir / name)
     write_json(evidence_dir / "run.json", redact(record))
     files = {}
-    for name in ("trajectory.json", "review.md", "result.json", "scope.json", "run.json"):
+    for name in ("trajectory.json", "review.md", "result.json", "scope.json", "run.json", "tool-audit.json"):
         path = evidence_dir / name
         if path.is_file():
             files[name] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
@@ -552,6 +598,14 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         }
         write_json(run_evidence / "prepare-auto-scope.json", redact(proof))
         write_json(run_evidence / "trajectory-auto-scope.json", redact(exported))
+        # Preserve all failed and forbidden attempts BEFORE any positive assertion.
+        durable_scope = {}
+        if len(run_candidates) == 1 and (run_candidates[0] / "scope.json").is_file():
+            durable_scope = json.loads((run_candidates[0] / "scope.json").read_text(encoding="utf-8"))
+        audit = audit_native_review_tools(exported, durable_scope)
+        write_json(run_evidence / "tool-audit.json", redact(audit))
+        host.require(not audit["violations"],
+                     f"{scenario_label}: tool/evidence integrity violations: {audit['violations']}")
         if first_report_text:
             (run_evidence / "review-after-auto-scope.md").write_text(first_report_text, encoding="utf-8")
         # Emit ASCII-safe diagnostic JSON on Windows runners with cp1252 stdout.\n        # Full UTF-8 evidence is still persisted in prepare-auto-scope.json.\n        print("RELEASE180_PREPARE_AUTO_SCOPE " + json.dumps(redact(proof), ensure_ascii=True), flush=True)
@@ -584,8 +638,8 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
 
         actions = host.tool_actions(exported)
         names = [host.normalized(name) for name in completed_tools(exported)]
-        if no_target:
-            host.require("bash" not in names, f"{scenario_label}: shell was used instead of the native review tool: {names}")
+        host.require(all(host.normalized(name) == host.normalized("codea-review") for name in names),
+                     f"{scenario_label}: forbidden tool execution: {names}")
         prepare_states = [state for state in host.tool_parts(exported, "prepare") if state.get("status") == "completed"]
         prepare_output = parse_tool_output(prepare_states[-1]) if prepare_states else {}
         prepare_next_action = prepare_output.get("nextAction")
@@ -608,7 +662,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
         )
         host.require("select" not in actions and "resume" not in actions,
                      f"{scenario_label}: legacy manual selection invoked: {actions}")
-        host.require("read" in names, f"{scenario}: no native source read: {names}")
+        host.require("read" in actions, f"{scenario}: no scope-constrained source read: {actions}")
 
         finish_states = [state for state in host.tool_parts(exported, "finish") if state.get("status") == "completed"]
         host.require(len(finish_states) == 1, f"{scenario}: finish count={len(finish_states)}")
@@ -693,6 +747,7 @@ def successful_run(args, scenario: str, iteration: int, multi: bool, current_imp
             "reviewConclusion": finish_runtime.get("reviewConclusion"),
             "reportPath": str(finish_runtime.get("reportPath")),
             "reportSha256": report_sha,
+            "toolAuditViolationCount": len(audit["violations"]),
             "expectedFindingsFound": expected,
             "selectedIds": scope.get("selectedIds", []),
             "timings": {

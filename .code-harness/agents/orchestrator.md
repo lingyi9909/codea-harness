@@ -10,7 +10,7 @@ version: 10
 
 `/harness-review [Controller]` 为唯一 active ordinary Review 流程；Controller 参数可省略。
 
-`固定入口 review start → 原生 codea-review prepare（自动纳入范围）→ 主 Agent 语义评审 → 原生 codea-review finish`
+`固定入口 review start → 原生 codea-review prepare（自动纳入范围）→ 原生 codea-review read（仅 scope.reads）→ 主 Agent 语义评审 → 原生 codea-review finish`
 
 ### 编排规则
 
@@ -19,6 +19,7 @@ version: 10
 - **指定 Controller**：必须设置 `intent.target`，只纳入该 Controller 的实际受影响方法及下游；同名类以 Maven module + Java 文件路径 + 类名隔离。可显式使用文件路径区分同名 Controller。明确要求当前实现时才能使用 `CURRENT_IMPLEMENTATION`。
 - **取消人工选择**：无论发现 1 个还是多个 Controller，Runtime 都自动生成相应 scope；不展示 C1 菜单、不要求用户选择、不调用 `select`/`resume`。内部 selectedIds 仅代表自动纳入 Controller 组，不代表人工审批。
 - `prepare/finish` 必须调用原生 OpenCode `codea-review` 工具。严禁通过 bash、PowerShell 或脚本直接执行 Runtime CLI；原生工具不可用时保持 INCOMPLETE，不得伪造工具 Host session/message identity。
+- 仅允许通过原生 `codea-review action=read` 按 `scope.reads` 的完整精确元组访问代码；禁止内置 read/glob/grep/list/bash、路径枚举、范围外探查。读取时校验 SHA256 和路径，失败不得冒充成功。
 - `scope.reads` 是授权源码范围；`findingReads` 继续限制证据到方法、Mapper XML statement 的具体行。禁止额外读取 scope 外 Controller、同文件无关 sibling 方法、无关 SQL、Harness/Git 元数据。定向评审不等于整个 Change Set。
 - 源码指纹、Git 快照与 optionsHash 必须保持一致；过期或篡改时 fail-closed。若任一子链未解析，覆盖为 `PARTIAL`，结论为 `UNDETERMINED`。说明性外部信息不应导致完整 CRITICAL/HIGH finding 错误降级。
 - 只要 `prepare` 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，该 assistant turn 就是 non-terminal：立即读取授权代码、在本主 Agent 完成评审，然后 `finish`；空 findings 也要提交。
