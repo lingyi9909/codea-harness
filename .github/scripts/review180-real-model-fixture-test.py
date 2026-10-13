@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 SCRIPT = Path(__file__).resolve().parent / "review180-real-model-e2e.py"
 SPEC = importlib.util.spec_from_file_location("release180_model", SCRIPT)
@@ -27,6 +29,23 @@ def git(project, *args):
 
 
 class ExactImpactedChainFixtureTest(unittest.TestCase):
+    def test_binding_rejection_driver_counts_failed_attempts_and_rejects_recovery(self):
+        rejected = {"type": "tool", "tool": "codea-review", "state": {
+            "status": "error", "input": {"action": "prepare"},
+            "error": "CODEA_REVIEW_HOST_ENTRY_REQUIRED"}}
+        def run(parts):
+            exported = {"messages": [{"parts": parts}]}
+            with tempfile.TemporaryDirectory() as directory, \
+                 patch.object(model.host, "command", side_effect=['stdout', json.dumps(exported)]), \
+                 patch.object(model.host, "session_for_run", return_value='session'):
+                model.host.run_binding_rejection_scenario(Path('opencode'), Path(directory), {},
+                    SimpleNamespace(errors=[]), 'missing-entry')
+        run([rejected])
+        for extra in [rejected, {"type": "tool", "tool": "glob", "state": {"status": "error"}},
+                      {"type": "tool", "tool": "codea-review", "state": {"status": "completed", "input": {"action": "read"}}}]:
+            with self.assertRaises(RuntimeError):
+                run([rejected, extra])
+
     def test_host_binding_audit_rejects_mismatched_or_missing_identity(self):
         entry = {"info": {"id": "user", "sessionID": "session", "role": "user"},
                  "parts": [{"type": "text", "text": '{"runId":"review-exact"}\n# Codea Harness 1.8 Review\n'}]}

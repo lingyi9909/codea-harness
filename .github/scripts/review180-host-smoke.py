@@ -576,7 +576,12 @@ def run_binding_rejection_scenario(binary, project, env, server, scenario):
     require(len(attempts) == 1 and attempts[0].get("status") == "error" and
             expected_error in str(attempts[0].get("error")),
             f"{scenario}: native Host did not reject run identity: {attempts}")
-    require(tool_actions(exported) == ["prepare"], f"{scenario}: unexpected recovery attempt")
+    # tool_actions intentionally returns only COMPLETED calls. A rejected
+    # prepare is absent from it; audit every attempt here, including failures
+    # and forbidden tools, so rejection passes but recovery cannot be hidden.
+    all_attempts = [part for message in exported.get("messages", [])
+                    for part in message.get("parts", []) if part.get("type") == "tool"]
+    require(len(all_attempts) == 1, f"{scenario}: unexpected recovery attempt: {all_attempts}")
     runs = list((project / ".code-harness" / "runs").glob("review-*"))
     require(len(runs) == (1 if scenario == "wrong-run-id" else 0), f"{scenario}: unexpected run creation")
     for run_dir in runs:
