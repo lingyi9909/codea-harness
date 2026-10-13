@@ -151,5 +151,26 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
             self.assertIn(control, tool)
 
 
+    def test_ci200_introduced_by_change_guidance(self):
+        # CI #200: real model incorrectly called an unchanged Controller
+        # authorization flaw newly introduced by changed downstream SQL.
+        root = SCRIPT.parents[2]
+        for path in (
+            ".code-harness/tools/codea-review.ts",
+            ".code-harness/commands/harness-review.md",
+            ".code-harness/agents/orchestrator.md",
+        ):
+            with self.subTest(path=path):
+                content = (root / path).read_text(encoding="utf-8")
+                self.assertIn("introducedByChange=true requires proof", content)
+                self.assertIn("introducedByChange=false", content)
+        for path in (
+            ".code-harness/commands/harness-review.md",
+            ".code-harness/agents/orchestrator.md",
+        ):
+            self.assertIn("REVIEW_FINISH_CHANGE_ATTRIBUTION_UNPROVEN",
+                          (root / path).read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

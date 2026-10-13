@@ -29,7 +29,8 @@ The command output above is the authoritative `review start` result. It has alre
 2. `prepare` 的 `options.chains` 按 Controller 分组，仅供查看本次自动纳入的范围；实际源码范围以 `scope.reads` 为准，报告 finding 证据仍受 `findingReads` 方法级行范围限制。多个 Controller 也不得展示人工选择菜单或等待用户回复。
 3. 如果 `nextAction.type=KEEP_REPORT_INCOMPLETE`，说明没有有效范围或安全条件不足，显示 Runtime 具体原因，保留现有 run 的 INCOMPLETE 报告。不能伪造完成态。
 4. 仅通过 `codea-review action=read`，传入 `scope.reads` 中完整、原样的 `path/sha256/startLine/endLine` 元组读取源码；禁止内置 `read/glob/grep/list/bash`，拒绝任何范围外读取、路径枚举及试探。禁止为了扩大范围探索 `.git/**`、`opencode.json`、`.opencode/**`、`.code-harness/**`、Prompt 和无关元数据。用户指定 Controller 不允许混入其他 Controller，未指定则自动覆盖**所有已发现且受变更影响**的 Controller。
-5. 每项 finding 必须提供 severity、problem、impact、recommendation、verification、以及实际读取过且被 Runtime 许可的 evidence。保持 `introducedByChange` 和数据库说明性 gap 的既有安全语义，不要修改业务代码。
+5. 每项 finding 必须提供 severity、problem、impact、recommendation、verification、以及实际读取过且被 Runtime 许可的 evidence。保持数据库说明性 gap 的既有安全语义，不要修改业务代码。
+   - **introducedByChange=true requires proof**：该 finding 自身对应的缺陷必须能被真实 Git changed lines 证明为本次引入；Controller/方法被 CHANGES 纳入评审，不代表其所有发现都是新引入的。未修改的 Controller 鉴权注解缺失、租户隔离缺失等历史问题，即使下游 SQL 本次修改，也必须 **introducedByChange=false**。证据不足时省略这个可选字段或明确为 false，不能猜测为 true 再靠失败重试修正。Runtime 的 REVIEW_FINISH_CHANGE_ATTRIBUTION_UNPROVEN 必须保持严格拒绝。
 6. `pendingRisks` 只描述 current unresolved risk in the selected implementation。Do not add a pending risk for hypothetical future edits, future endpoint repurposing, someone could later bind sensitive SQL, or generic best-practice concerns. 不存在现实待核实风险时传 `pendingRisks=[]`。
 7. 不论是否发现问题都通过原生 `codea-review action=finish` 提交 reads、findings、pendingRisks、gaps。若模型已读取更精确 evidence ref，必须把该 ref 原样纳入 result.reads。仅 `finish` 返回 COMPLETE 后才允许宣布评审完成。
 

@@ -25,7 +25,7 @@ version: 10
 - 只要 `prepare` 返回 scope-ready 或 `nextAction.type=READ_SCOPE_AND_FINISH_THIS_TURN`，该 assistant turn 就是 non-terminal：立即读取授权代码、在本主 Agent 完成评审，然后 `finish`；空 findings 也要提交。
 - 证据复制必须遵守 single physical source line 规则：每个 evidence.quote 只引用一行源码原文的连续片段，ref.startLine=endLine 使用该行真实行号；涉及多行逻辑时提交多个独立单行 evidence，禁止重排缩进、合并或编写伪源码。
 - 遇到 REVIEW_FINISH_EVIDENCE_QUOTE_MISMATCH 时重新读取授权行并替换 quote，不可只调整 ref 行范围、更改校验或跳过 finding。
-- finding 必须含真实 source evidence。`introducedByChange` 必须由 Runtime 与真实 Git diff 核对，不能由模型伪造。
+- finding 必须含真实 source evidence。**introducedByChange=true requires proof**：只有 finding 自身由本次真实 Git changed lines 引入，才可设为 true；Controller/子链被选中不等于所有发现为新增问题。未修改的 Controller 原有鉴权缺失、租户隔离缺失，即便关联 SQL 变更，仍标记 **introducedByChange=false**；无法证明变更归因时省略可选字段或填 false，绝不猜测 true 后重试。Runtime 的 REVIEW_FINISH_CHANGE_ATTRIBUTION_UNPROVEN 必须继续拒绝无证据的 true。
 - `result.reads` 要包含全部实际读取的 scope read ref，证据的精确 tuple（path/sha256/startLine/endLine）也必须包含；不要凭模型猜测源码字符、行号或 `optionsHash`。
 - `pendingRisks` 只记录当前实现真实的未解决风险，不记录未来假设；finish 成功且报告 path/hash 一致才能宣告完成。任何步骤失败保留本 run INCOMPLETE，不自动换 run 或修改业务代码。
 
