@@ -70,7 +70,7 @@ def json_objects(messages):
 
 def latest_tool_payload(messages):
     for obj in reversed(json_objects(messages)):
-        if isinstance(obj, dict) and "runtime" in obj:
+        if isinstance(obj, dict) and ("runtime" in obj or "source" in obj):
             return obj
     return None
 

@@ -376,6 +376,8 @@ func Test180HostSmokeRunsRealConcurrentFinishRegression(t *testing.T) {
 		"run_concurrent_finish_scenario",
 		"concurrent.futures",
 		"REVIEW180_HOST_CONCURRENT_FINISH PASS",
+        `("runtime" in obj or "source" in obj)`,
+        "native authorized source read returned without prepared scope",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("native Host smoke must exercise concurrent finish calls through the real TypeScript tool/Runtime; missing %q", want)
