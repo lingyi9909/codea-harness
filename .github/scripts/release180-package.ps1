@@ -50,11 +50,20 @@ function Add-PrimaryReview180Host([string]$ZipPath, [string]$Kind) {
             throw 'Offline native tool bundle missing. Build the pinned SDK bundle before packaging.'
         }
         Copy-Item -LiteralPath $offlineTool -Destination $primaryTool -Force
+        $legacyHostTool = Join-Path $hostRoot '.opencode/tools/codea-reviewer-submit.ts'
+        $legacyOffline = Join-Path $repoRoot '.code-harness/tools/codea-reviewer-submit.offline.ts'
+        if (-not (Test-Path $legacyHostTool -PathType Leaf) -or -not (Test-Path $legacyOffline -PathType Leaf)) {
+            throw "Offline retained submission-tool bundle or package destination missing"
+        }
+        # Preserve the pre-1.8 legacy tool behavior while eliminating runtime
+        # @opencode-ai/plugin imports. OpenCode eagerly loads every custom tool.
+        Copy-Item -LiteralPath $legacyOffline -Destination $legacyHostTool -Force
 
         $manifestPath = Join-Path $harnessRoot 'RELEASE-MANIFEST.json'
         $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
         $reviewer = $manifest.hostAgents.reviewer
         if ($null -eq $reviewer) { throw "$Kind legacy Host ownership metadata missing" }
+        $reviewer | Add-Member -NotePropertyName submissionToolSha256 -NotePropertyValue ((Get-FileHash $legacyHostTool -Algorithm SHA256).Hash.ToLowerInvariant()) -Force
         $reviewer | Add-Member -NotePropertyName primaryAgent -NotePropertyValue '.opencode/agents/orchestrator.md' -Force
         $reviewer | Add-Member -NotePropertyName primaryAgentUpgradeSource -NotePropertyValue 'host/.opencode/agents/orchestrator.md' -Force
         $reviewer | Add-Member -NotePropertyName primaryAgentSha256 -NotePropertyValue ((Get-FileHash $primaryAgent -Algorithm SHA256).Hash.ToLowerInvariant()) -Force

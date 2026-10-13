@@ -153,6 +153,14 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
         self.assertIn("run_orchestrator_unrestricted_scenario", host)
         self.assertNotIn('"tools": {"read": False', host)
         self.assertIn('"--install-zip"', host)
+        # All installed OpenCode custom tools must load offline, even legacy
+        # tools that the restricted Review agent cannot invoke.
+        pkg = (root / ".github/scripts/release180-package.ps1").read_text(encoding="utf-8")
+        workflow = (root / ".github/workflows/release-1.8.0-windows-x64.yml").read_text(encoding="utf-8")
+        self.assertIn("codea-reviewer-submit.offline.ts", pkg)
+        self.assertIn("submissionToolSha256", pkg)
+        self.assertIn("codea-reviewer-submit.offline.ts", workflow)
+        self.assertIn("REVIEW180_LEGACY_HOST_OFFLINE_BUNDLE PASS", workflow)
 
     def test_native_read_tool_rejects_unscoped_access(self):
         tool = (SCRIPT.parents[2] / ".code-harness/tools/codea-review.ts").read_text(encoding="utf-8")

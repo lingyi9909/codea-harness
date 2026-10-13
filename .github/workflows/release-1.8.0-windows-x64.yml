@@ -72,6 +72,18 @@ jobs:
           if ($body -match '(?m)^\\s*import.*@opencode-ai/plugin') { throw 'native Host bundle retained runtime SDK dependency' }
           if ($body -notmatch 'CODEA_REVIEW_RUN_ID_INVALID') { throw 'native Host bundle omitted review tool payload' }
           Write-Output "REVIEW180_OFFLINE_BUNDLE PASS sha256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+          # OpenCode loads ALL installed custom tools before it can enforce
+          # the Review agent permission allowlist. The retained 1.6.x submit
+          # tool must therefore also be SDK-free to support real offline install.
+          $legacySource = Join-Path $buildRoot 'codea-reviewer-submit.ts'
+          Copy-Item '.code-harness/tools/codea-reviewer-submit.ts' $legacySource -Force
+          $legacyOut = Join-Path (Get-Location) '.code-harness/tools/codea-reviewer-submit.offline.ts'
+          & node.exe $esbuild $legacySource --bundle --platform=node --format=esm --target=es2022 "--outfile=$legacyOut"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $legacyOut -PathType Leaf)) { throw 'legacy Host offline tool bundle failed' }
+          $legacyBody = Get-Content $legacyOut -Raw
+          if ($legacyBody -match '(?m)^\s*import.*@opencode-ai/plugin') { throw 'legacy Host bundle retained SDK import' }
+          if ($legacyBody -notmatch 'PROPOSAL_PREFLIGHT_FAILED') { throw 'legacy Host bundle omitted submission guard' }
+          Write-Output "REVIEW180_LEGACY_HOST_OFFLINE_BUNDLE PASS sha256=$((Get-FileHash $legacyOut -Algorithm SHA256).Hash.ToLowerInvariant())"
 
       - name: Build 1.8.0 official candidate package
         shell: pwsh
