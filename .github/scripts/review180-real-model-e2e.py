@@ -411,13 +411,9 @@ def make_env(temp: Path, project: Path, sdk_root: Path, output_limit: int):
                 },
             }
         },
-        "permission": {
-            "*": "deny",
-            "codea-review": "allow",
-        },
     }
-    # Enforce scope at tool availability (not merely with instructions).
-    config["tools"] = {"read": False, "glob": False, "grep": False, "list": False, "bash": False}
+    # Intentionally plain user config. Shipped Review Agent MUST enforce the
+    # tool allowlist; global permissions must NOT disable Test/Debug/Fix.
     (project / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
     return env
 
@@ -431,6 +427,7 @@ def extract_install(install_zip: Path, project: Path):
         ".code-harness/bin/ast-grep.exe",
         ".opencode/commands/harness-review.md",
         ".opencode/agents/orchestrator.md",
+        ".opencode/agents/codea-review-restricted.md",
         ".opencode/tools/codea-review.ts",
     ):
         host.require((project / rel).is_file(), f"packaged required file missing: {rel}")

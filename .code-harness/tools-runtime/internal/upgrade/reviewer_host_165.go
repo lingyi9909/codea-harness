@@ -93,6 +93,7 @@ func reviewerHostHashes165(root, version string, required bool) (map[string]stri
 	if version == "1.8.0" {
 		fields = append(fields,
 			[3]string{"primaryAgent", "primaryAgentUpgradeSource", "primaryAgentSha256"},
+			[3]string{"restrictedAgent", "restrictedAgentUpgradeSource", "restrictedAgentSha256"},
 			[3]string{"primaryTool", "primaryToolUpgradeSource", "primaryToolSha256"},
 		)
 	}
@@ -118,6 +119,7 @@ func reviewerHostFilesForVersion(version string) []string {
 	if version == "1.8.0" {
 		files = append(files,
 			".opencode/agents/orchestrator.md",
+			".opencode/agents/codea-review-restricted.md",
 			".opencode/tools/codea-review.ts",
 		)
 	}

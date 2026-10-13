@@ -11,6 +11,7 @@ import (
 
 const (
 	primaryAgent180 = ".opencode/agents/orchestrator.md"
+	restrictedAgent180 = ".opencode/agents/codea-review-restricted.md"
 	primaryTool180  = ".opencode/tools/codea-review.ts"
 )
 
@@ -31,6 +32,7 @@ func write180HostInventory(t *testing.T, root, hostRoot string) {
 		{"submissionTool", "submissionToolUpgradeSource", "submissionToolSha256"},
 		{"primaryCommand", "primaryCommandUpgradeSource", "primaryCommandSha256"},
 		{"primaryAgent", "primaryAgentUpgradeSource", "primaryAgentSha256"},
+		{"restrictedAgent", "restrictedAgentUpgradeSource", "restrictedAgentSha256"},
 		{"primaryTool", "primaryToolUpgradeSource", "primaryToolSha256"},
 	}
 	host := map[string]string{"host": "opencode", "mode": "subagent"}
@@ -85,6 +87,8 @@ func make167To180Pair(t *testing.T) (string, string) {
 			data, err = os.ReadFile(filepath.Join("..", "..", "..", "commands", "harness-review.md"))
 		case primaryAgent180:
 			data, err = os.ReadFile(filepath.Join("..", "..", "..", "agents", "orchestrator.md"))
+		case restrictedAgent180:
+			data, err = os.ReadFile(filepath.Join("..", "..", "..", "agents", "codea-review-restricted.md"))
 		case primaryTool180:
 			data, err = os.ReadFile(filepath.Join("..", "..", "..", "tools", "codea-review.ts"))
 		default:
@@ -129,7 +133,7 @@ func Test180UpgradeInstallsPrimaryReviewHostAndPreservesUnknownFiles(t *testing.
 	if !contains(result.UpdatedFiles, "history/ordinary-review-pre-1.8.md") {
 		t.Fatalf("history update evidence missing: %+v", result.UpdatedFiles)
 	}
-	for _, rel := range []string{primaryCommand167, primaryAgent180, primaryTool180} {
+	for _, rel := range []string{primaryCommand167, primaryAgent180, restrictedAgent180, primaryTool180} {
 		got, err := os.ReadFile(filepath.Join(projectRoot, filepath.FromSlash(rel)))
 		if err != nil {
 			t.Fatalf("installed Host missing %s: %v", rel, err)
@@ -156,6 +160,25 @@ func Test180UpgradeRejectsUserPrimaryToolConflictBeforeFrameworkWrite(t *testing
 	source, target := make167To180Pair(t)
 	projectRoot := filepath.Dir(target)
 	write(t, projectRoot, primaryTool180, "user-owned tool")
+	beforeFramework := snapshotRollbackTree(t, target)
+	beforeHost := snapshotRollbackTree(t, filepath.Join(projectRoot, ".opencode"))
+
+	result := Run(Options{SourceDir: source, TargetDir: target})
+	if result.Status != StatusManualActionRequired || result.RollbackPerformed {
+		t.Fatalf("conflict accepted: %+v", result)
+	}
+	if !reflect.DeepEqual(beforeFramework, snapshotRollbackTree(t, target)) ||
+		!reflect.DeepEqual(beforeHost, snapshotRollbackTree(t, filepath.Join(projectRoot, ".opencode"))) {
+		t.Fatal("Host conflict modified installation")
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("rejected upgrade consumed source: %v", err)
+	}
+}
+func Test180UpgradeRejectsUserRestrictedReviewAgentConflictBeforeFrameworkWrite(t *testing.T) {
+	source, target := make167To180Pair(t)
+	projectRoot := filepath.Dir(target)
+	write(t, projectRoot, restrictedAgent180, "user-owned elevated review agent")
 	beforeFramework := snapshotRollbackTree(t, target)
 	beforeHost := snapshotRollbackTree(t, filepath.Join(projectRoot, ".opencode"))
 

@@ -103,7 +103,7 @@ try {
         throw 'candidate manifest mismatch'
     }
     $hostManifest = $newManifest.hostAgents.reviewer
-    foreach ($field in @('primaryCommand','primaryAgent','primaryTool')) {
+    foreach ($field in @('primaryCommand','primaryAgent','restrictedAgent','primaryTool')) {
         if ([string]::IsNullOrWhiteSpace([string]$hostManifest.$field)) { throw "candidate Host metadata missing $field" }
     }
 
@@ -163,6 +163,7 @@ try {
         @($hostManifest.submissionTool,$hostManifest.submissionToolSha256),
         @($hostManifest.primaryCommand,$hostManifest.primaryCommandSha256),
         @($hostManifest.primaryAgent,$hostManifest.primaryAgentSha256),
+        @($hostManifest.restrictedAgent,$hostManifest.restrictedAgentSha256),
         @($hostManifest.primaryTool,$hostManifest.primaryToolSha256)
     )
     foreach ($pair in $hostPairs) {

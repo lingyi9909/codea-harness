@@ -107,8 +107,9 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
 
     def test_strict_scope_tool_configuration_and_attempt_audit(self):
         source = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn('"read": False, "glob": False, "grep": False, "list": False, "bash": False', source)
+        self.assertNotIn('config["tools"]', source)
         self.assertNotIn('"glob": "allow"', source)
+        self.assertIn("Shipped Review Agent MUST enforce the", source)
         ref = {"path": "src/main/java/A.java", "sha256": "a" * 64, "startLine": 1, "endLine": 3}
         scope = {"reads": [ref]}
         def trace(calls):
@@ -139,6 +140,19 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
         incomplete = trace([("codea-review", {"action": "prepare"}, "completed"),
                             ("codea-review", {"action": "read", "source": ref}, "completed")])
         self.assertTrue(model.audit_native_review_tools(incomplete, scope)["violations"])
+
+    def test_formal_package_agent_isolation_contract(self):
+        root = SCRIPT.parents[2]
+        agent = (root / ".code-harness/agents/codea-review-restricted.md").read_text(encoding="utf-8")
+        cmd = (root / ".code-harness/commands/harness-review.md").read_text(encoding="utf-8")
+        host = (root / ".github/scripts/review180-host-smoke.py").read_text(encoding="utf-8")
+        for marker in ('mode: primary', '"*": deny', '"codea-review": allow'):
+            self.assertIn(marker, agent)
+        self.assertIn("agent: codea-review-restricted", cmd)
+        self.assertIn("run_forbidden_builtin_scenario", host)
+        self.assertIn("run_orchestrator_unrestricted_scenario", host)
+        self.assertNotIn('"tools": {"read": False', host)
+        self.assertIn('"--install-zip"', host)
 
     def test_native_read_tool_rejects_unscoped_access(self):
         tool = (SCRIPT.parents[2] / ".code-harness/tools/codea-review.ts").read_text(encoding="utf-8")

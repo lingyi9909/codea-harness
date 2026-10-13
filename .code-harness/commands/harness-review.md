@@ -1,6 +1,6 @@
 ---
 description: Codea Harness 1.8 primary code review with durable report
-agent: orchestrator
+agent: codea-review-restricted
 subtask: false
 ---
 
@@ -13,6 +13,8 @@ Review target: $ARGUMENTS
 The command output above is the authoritative `review start` result. It has already created and read back the durable **INCOMPLETE** report before this model turn. Keep its `runId` and `reportPath`; never discover a run by taking the newest directory.
 
 ## 自动评审范围与原生工具边界
+
+- 本命令只在安装包交付的 `codea-review-restricted` Primary Agent 下执行，Agent 内 `permission: {"*":"deny", "codea-review":"allow"}` 是真正的工具隔离，不是模型提示词。不得转给 `orchestrator` / `task` 或请求 Bash、read、glob、grep、list、MCP 等工具。
 
 - `/harness-review` 没有参数时，`intent={mode:"CHANGES"}`（没有 target），自动评审**全部本次 Git 变更实际影响的 Controller**及其方法级下游调用链，不做 C1/C2/C3 人工选择。没有有效变更时保持 INCOMPLETE，不能自行改成全仓当前实现。
 - `/harness-review OrderController` 仅评审该 Controller 的受影响方法和下游；`OrderController.method` 可进一步限定方法。对于 Maven 同名 Controller，优先使用完整 Java 文件路径指定目标以消除歧义。不得因同名误合并或扩大范围。

@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import ProxyHandler, build_opener
 
@@ -130,8 +131,34 @@ class Provider(BaseHTTPRequestHandler):
             names = [item.get("function", {}).get("name", "") for item in tools]
             messages = body.get("messages", [])
             self.server.requests.append({"scenario": self.server.scenario, "names": names, "messages": messages})
+            if self.server.scenario == "orchestrator-permission-check":
+                for builtin in ("read", "glob", "bash"):
+                    require(builtin in names, f"unrestricted orchestrator lost {builtin}: {names}")
+                self.reply(body, content="orchestrator permissions preserved")
+                return
             if not names:
                 self.reply(body, content="Codea Harness 1.8 Host smoke")
+                return
+            # A fresh, ordinarily configured OpenCode project must rely only
+            # on the installed Review Agent restriction, never on opencode.json
+            # global tool disabling or a CI-injected permission override.
+            leaked = [name for name in names if normalized(name) != normalized(TOOL_NAME)]
+            require(not leaked, f"restricted Review exposed non-review tools: {leaked}")
+            if self.server.scenario.startswith("forbidden-builtin-"):
+                builtin = self.server.scenario.rsplit("-", 1)[-1]
+                if self.server.scenario not in self.server.forbidden_issued:
+                    self.server.forbidden_issued.add(self.server.scenario)
+                    if builtin == "read":
+                        args = {"filePath": str(self.server.project / ".opencode/agents/orchestrator.md")}
+                    elif builtin == "glob":
+                        args = {"pattern": "**/*", "path": str(self.server.project)}
+                    elif builtin == "bash":
+                        args = {"command": 'node -e "require(\'fs\').writeFileSync(\'isolation-breached.txt\',\'BREACH\')"'}
+                    else:
+                        raise RuntimeError("unexpected forbidden builtin")
+                    self.reply(body, tool_call=call(builtin, args, "forbidden_" + builtin))
+                else:
+                    self.reply(body, content="forbidden tool attempt ended")
                 return
             tool_name = next((name for name in names if normalized(name) == normalized(TOOL_NAME)), None)
             require(tool_name is not None, f"{TOOL_NAME} not advertised: {names}")
@@ -327,23 +354,28 @@ def write_fixture(project, multi):
 
 def bootstrap_project(temp, args, sdk_root, port, multi, name=None):
     project = temp / (name or ("multi" if multi else "single"))
-    agent_source = args.command_source.parent.parent / "agents" / "orchestrator.md"
-    require(agent_source.resolve().is_file(), f"orchestrator agent source missing: {agent_source}")
-    (project / ".opencode" / "tools").mkdir(parents=True)
-    (project / ".opencode" / "commands").mkdir(parents=True)
-    (project / ".opencode" / "agents").mkdir(parents=True)
-    (project / ".code-harness" / "bin").mkdir(parents=True)
-    shutil.copyfile(args.tool_source, project / ".opencode" / "tools" / "codea-review.ts")
-    shutil.copyfile(args.command_source, project / ".opencode" / "commands" / "harness-review.md")
-    shutil.copyfile(agent_source, project / ".opencode" / "agents" / "orchestrator.md")
-    shutil.copyfile(args.runtime, project / ".code-harness" / "bin" / ("codea-dcep-tools.exe" if os.name == "nt" else "codea-dcep-tools"))
-    shutil.copyfile(args.ast_grep, project / ".code-harness" / "bin" / ("ast-grep.exe" if os.name == "nt" else "ast-grep"))
+    project.mkdir(parents=True, exist_ok=True)
+    install = args.package_stage / "install.ps1"
+    require(install.is_file(), "official install package must include install.ps1")
+    outcome = command(["pwsh", "-NoProfile", "-File", str(install),
+                       "-ProjectRoot", str(project)], project, os.environ, timeout=90)
+    require("INSTALL_REVIEWER_HOST_RESOURCES PASS" in outcome,
+            f"real package installer did not install Host resources: {outcome}")
+    for rel in (".opencode/agents/orchestrator.md",
+                ".opencode/agents/codea-review-restricted.md",
+                ".opencode/commands/harness-review.md",
+                ".opencode/tools/codea-review.ts",
+                ".code-harness/bin/codea-dcep-tools.exe",
+                ".code-harness/bin/ast-grep.exe"):
+        require((project / rel).is_file(), f"official installer omitted {rel}")
+    require((project / ".opencode/agents/codea-review-restricted.md").read_text(
+        encoding="utf-8").find('"codea-review": allow') >= 0,
+        "installed Review Agent does not permit only native codea-review")
     write_fixture(project, multi)
     (project / ".gitignore").write_text(".opencode/node_modules/\n", encoding="utf-8")
     config = {
         "provider": {"fixture": {"npm": "@ai-sdk/openai-compatible", "name": "Review180 deterministic fixture", "options": {"baseURL": f"http://127.0.0.1:{port}/v1", "apiKey": "local-fixture"}, "models": {"review180": {"name": "Review180 Host fixture", "limit": {"context": 32000, "output": 4096}}}}},
-        "permission": {"*": "deny", TOOL_NAME: "allow"},
-        "tools": {"read": False, "glob": False, "grep": False, "list": False, "bash": False},
+        # No global permission/tools restrictions: verify the shipped agent.
     }
     (project / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
     for config_dir in (project / ".opencode", Path(os.environ["REVIEW180_XDG_CONFIG"]) / "opencode"):
@@ -490,6 +522,60 @@ def run_forbidden_source_scenario(binary, project, env, server):
     print(f"REVIEW180_HOST_SOURCE_SCOPE_DENIED PASS runId={runs[0].name} attempts=1", flush=True)
 
 
+def run_forbidden_builtin_scenario(binary, project, env, server, builtin):
+    """Actively inject forbidden read/glob/bash tool calls into the REAL Host.
+    Verify none executes, even under ordinary (unrestricted global) config."""
+    scenario = "forbidden-builtin-" + builtin
+    server.scenario = scenario
+    server.project = project
+    server.errors.clear()
+    argv = [str(binary), "run", "--print-logs", "--dir", str(project),
+            "--model", "fixture/review180", "--format", "json",
+            "--command", "harness-review", "OrderController"]
+    try:
+        stdout = command(argv, project, env, timeout=150)
+    except RuntimeError as exc:
+        # Rejecting an unadvertised tool can make the Host command exit with
+        # an error. That is acceptable; execution of the tool is not.
+        stdout = str(exc)
+    require(not server.errors, f"{scenario}: provider errors: {server.errors}")
+    require(scenario in server.forbidden_issued,
+            f"{scenario}: attempted forbidden tool call never reached Host")
+    # Verify the prohibited tool was never successfully dispatched.
+    session = session_for_run(stdout, binary, project, env, scenario)
+    exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
+    states = [
+        part.get("state", {}) for m in exported.get("messages", [])
+        for part in m.get("parts", [])
+        if part.get("type") == "tool" and normalized(part.get("tool", "")) == normalized(builtin)
+    ]
+    require(not any(st.get("status") == "completed" for st in states),
+            f"{scenario}: forbidden builtin executed: {states}")
+    require(not (project / "isolation-breached.txt").exists(),
+            f"{scenario}: forbidden bash command wrote a file")
+    runs = list((project / ".code-harness/runs").glob("review-*"))
+    require(len(runs) == 1 and
+            '"execution":"INCOMPLETE"' in (runs[0] / "review.md").read_text(encoding="utf-8"),
+            f"{scenario}: a forbidden tool attempt completed the report")
+    require("finish" not in tool_actions(exported),
+            f"{scenario}: forbidden builtin could bypass the native review finish")
+    print(f"REVIEW180_HOST_BUILTIN_DENIED PASS tool={builtin} "
+          f"attempts={len(states)} globalToolOverrides=none", flush=True)
+
+
+def run_orchestrator_unrestricted_scenario(binary, project, env, server):
+    server.scenario = "orchestrator-permission-check"
+    server.errors.clear()
+    stdout = command([str(binary), "run", "--agent", "orchestrator",
+                      "--dir", str(project), "--model", "fixture/review180",
+                      "--format", "json", "Verify Host tool availability."],
+                     project, env, timeout=100)
+    require(not server.errors, f"orchestrator tool permissions unexpectedly restricted: {server.errors}")
+    require("orchestrator-permission-check" in [req["scenario"] for req in server.requests],
+            "orchestrator tool list was never requested")
+    print("REVIEW180_OTHER_WORKFLOWS_UNRESTRICTED PASS tools=read,glob,bash", flush=True)
+
+
 def init_fixture_repo(project, env):
     command(["git", "init"], project, env, timeout=20)
     command(["git", "add", "."], project, env, timeout=20)
@@ -518,11 +604,12 @@ def main():
     parser.add_argument("--ast-grep", required=True, type=Path)
     parser.add_argument("--tool-source", required=True, type=Path)
     parser.add_argument("--command-source", required=True, type=Path)
+    parser.add_argument("--install-zip", required=True, type=Path)
     parser.add_argument("--sdk-root", type=Path)
     parser.add_argument("--offline", action="store_true",
                         help="No SDK preseed, npm install, or public network access")
     args = parser.parse_args()
-    for value in (args.opencode, args.runtime, args.ast_grep, args.tool_source, args.command_source):
+    for value in (args.opencode, args.runtime, args.ast_grep, args.tool_source, args.command_source, args.install_zip):
         require(value.resolve().is_file(), f"required file missing: {value}")
     require(args.offline or args.sdk_root is not None, "choose --offline or --sdk-root")
     require(not (args.offline and args.sdk_root is not None), "offline test must not preseed the SDK")
@@ -534,6 +621,7 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     server.requests, server.errors, server.scenario = [], [], "bootstrap"
     server.scope_by_run, server.read_index = {}, {}
+    server.forbidden_issued = set()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -560,6 +648,15 @@ def main():
             os.environ["REVIEW180_XDG_CONFIG"] = env["REVIEW180_XDG_CONFIG"]
             with build_opener(ProxyHandler({})).open(f"http://127.0.0.1:{server.server_port}/health", timeout=5) as health:
                 require(json.load(health) == {"ready": True}, "fixture provider not ready")
+            args.package_stage = temp / "official-install"
+            with zipfile.ZipFile(args.install_zip.resolve()) as archive:
+                archive.extractall(args.package_stage)
+            for rel, src in (
+                (".opencode/commands/harness-review.md", args.command_source),
+                (".opencode/tools/codea-review.ts", args.tool_source),
+            ):
+                require((args.package_stage / rel).read_bytes() == src.read_bytes(),
+                        f"test source mismatches actual install package: {rel}")
             version = command([str(args.opencode.resolve()), "--version"], temp, env, timeout=30).strip()
             require(version == "1.18.25", f"expected OpenCode 1.18.25, got {version}")
             for multi in (False, True):
@@ -572,7 +669,18 @@ def main():
             concurrent_project = bootstrap_project(temp, args, sdk_root, server.server_port, False, name="concurrent")
             init_fixture_repo(concurrent_project, env)
             run_concurrent_finish_scenario(args.opencode.resolve(), concurrent_project, env, server)
-            print(f"REVIEW180_NATIVE_HOST_SMOKE PASS opencode=1.18.25 deterministic=true offlineSdkless={args.offline}", flush=True)
+            for builtin in ("glob", "read", "bash"):
+                denied = bootstrap_project(temp, args, sdk_root, server.server_port,
+                                           False, name="denied-" + builtin)
+                init_fixture_repo(denied, env)
+                run_forbidden_builtin_scenario(args.opencode.resolve(), denied, env, server, builtin)
+            general = bootstrap_project(temp, args, sdk_root, server.server_port,
+                                        False, name="general-orchestrator")
+            init_fixture_repo(general, env)
+            run_orchestrator_unrestricted_scenario(args.opencode.resolve(), general, env, server)
+            print(f"REVIEW180_NATIVE_HOST_SMOKE PASS opencode=1.18.25 deterministic=true "
+                  f"offlineSdkless={args.offline} shippedAgentIsolation=true globalToolOverrides=none",
+                  flush=True)
     finally:
         server.shutdown()
         server.server_close()

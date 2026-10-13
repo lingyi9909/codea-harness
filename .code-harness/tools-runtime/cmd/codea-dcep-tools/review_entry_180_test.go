@@ -136,14 +136,18 @@ func Test180SmokeDriversUseNativeCommandPathAndDoNotScriptFinish(t *testing.T) {
 			"finish",
 			"export",
 			`"--command", "harness-review", "OrderController"`,
-			`args.command_source.parent.parent / "agents" / "orchestrator.md"`,
-			`project / ".opencode" / "agents"`,
-			`project / ".opencode" / "agents" / "orchestrator.md"`,
 		} {
 			if !strings.Contains(text, want) {
 				t.Fatalf("%s missing %q", rel, want)
 			}
 		}
+		if strings.HasSuffix(rel, "review180-host-smoke.py") {
+            for _, want := range []string{"--install-zip", "run_forbidden_builtin_scenario", "run_orchestrator_unrestricted_scenario", "codea-review-restricted.md"} {
+                if !strings.Contains(text, want) {
+                    t.Fatalf("%s missing shipped-Review-agent isolation check %q", rel, want)
+                }
+            }
+        }
 		if strings.Contains(text, `run + ["/harness-review", "OrderController"]`) {
 			t.Fatalf("%s sends /harness-review as ordinary prompt instead of native OpenCode command", rel)
 		}

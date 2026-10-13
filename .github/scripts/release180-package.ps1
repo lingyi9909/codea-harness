@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 # Reuse the accepted 1.6.7 release adapter byte-for-byte, changing only the
-# target version, then add the two 1.8 primary-review Host resources.
+# target version, then add isolated Review Agent and primary-review Host resources.
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $source = Join-Path $PSScriptRoot 'release167-package.ps1'
 $expectedBlob = '6c7797e3303924310646c29e71b5881307cd7496'
@@ -35,10 +35,13 @@ function Add-PrimaryReview180Host([string]$ZipPath, [string]$Kind) {
 
         $hostRoot = if ($Kind -eq 'install') { $stage } else { Join-Path $harnessRoot 'host' }
         $primaryAgent = Join-Path $hostRoot '.opencode/agents/orchestrator.md'
+        $restrictedAgent = Join-Path $hostRoot '.opencode/agents/codea-review-restricted.md'
         $primaryTool = Join-Path $hostRoot '.opencode/tools/codea-review.ts'
         New-Item -ItemType Directory -Force (Split-Path -Parent $primaryAgent) | Out-Null
+        New-Item -ItemType Directory -Force (Split-Path -Parent $restrictedAgent) | Out-Null
         New-Item -ItemType Directory -Force (Split-Path -Parent $primaryTool) | Out-Null
         Copy-Item -LiteralPath (Join-Path $repoRoot '.code-harness/agents/orchestrator.md') -Destination $primaryAgent -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot '.code-harness/agents/codea-review-restricted.md') -Destination $restrictedAgent -Force
         # The source uses @opencode-ai/plugin for schema construction, but the
         # delivered Host tool must load with *no* npm, SDK install, or network.
         # CI bundles the pinned plugin SDK into this standalone ESM artifact.
@@ -55,6 +58,9 @@ function Add-PrimaryReview180Host([string]$ZipPath, [string]$Kind) {
         $reviewer | Add-Member -NotePropertyName primaryAgent -NotePropertyValue '.opencode/agents/orchestrator.md' -Force
         $reviewer | Add-Member -NotePropertyName primaryAgentUpgradeSource -NotePropertyValue 'host/.opencode/agents/orchestrator.md' -Force
         $reviewer | Add-Member -NotePropertyName primaryAgentSha256 -NotePropertyValue ((Get-FileHash $primaryAgent -Algorithm SHA256).Hash.ToLowerInvariant()) -Force
+        $reviewer | Add-Member -NotePropertyName restrictedAgent -NotePropertyValue '.opencode/agents/codea-review-restricted.md' -Force
+        $reviewer | Add-Member -NotePropertyName restrictedAgentUpgradeSource -NotePropertyValue 'host/.opencode/agents/codea-review-restricted.md' -Force
+        $reviewer | Add-Member -NotePropertyName restrictedAgentSha256 -NotePropertyValue ((Get-FileHash $restrictedAgent -Algorithm SHA256).Hash.ToLowerInvariant()) -Force
         $reviewer | Add-Member -NotePropertyName primaryTool -NotePropertyValue '.opencode/tools/codea-review.ts' -Force
         $reviewer | Add-Member -NotePropertyName primaryToolUpgradeSource -NotePropertyValue 'host/.opencode/tools/codea-review.ts' -Force
         $reviewer | Add-Member -NotePropertyName primaryToolSha256 -NotePropertyValue ((Get-FileHash $primaryTool -Algorithm SHA256).Hash.ToLowerInvariant()) -Force
@@ -68,6 +74,7 @@ function Add-PrimaryReview180Host([string]$ZipPath, [string]$Kind) {
             if (-not $installer.Contains($needle)) { throw '1.8 installer Host list insertion point missing' }
             $replacement = "    '.opencode/commands/harness-review.md'," + [Environment]::NewLine +
                 "    '.opencode/agents/orchestrator.md'," + [Environment]::NewLine +
+                "    '.opencode/agents/codea-review-restricted.md'," + [Environment]::NewLine +
                 "    '.opencode/tools/codea-review.ts'"
             $installer = $installer.Replace($needle, $replacement)
             [IO.File]::WriteAllText($installerPath, $installer, [Text.UTF8Encoding]::new($false))
@@ -92,4 +99,5 @@ foreach ($kind in @('install','upgrade')) {
 
 Write-Output 'RELEASE180_PACKAGE_BUILD PASS version=1.8.0'
 Write-Output 'RELEASE180_PRIMARY_AGENT_HOST PASS path=.opencode/agents/orchestrator.md'
+Write-Output 'RELEASE180_RESTRICTED_REVIEW_AGENT PASS path=.opencode/agents/codea-review-restricted.md'
 Write-Output 'RELEASE180_PRIMARY_TOOL_HOST PASS path=.opencode/tools/codea-review.ts'

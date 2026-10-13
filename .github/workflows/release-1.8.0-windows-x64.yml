@@ -230,6 +230,7 @@ jobs:
             '--ast-grep', (Join-Path $package '.code-harness/bin/ast-grep.exe'),
             '--tool-source', (Join-Path $package '.opencode/tools/codea-review.ts'),
             '--command-source', (Join-Path $package '.opencode/commands/harness-review.md'),
+            '--install-zip', (Resolve-Path 'codea-harness-1.8.0-windows-x64-install.zip').Path,
             '--offline'
           )
           python @args
