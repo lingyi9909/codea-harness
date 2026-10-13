@@ -142,6 +142,10 @@ class Provider(BaseHTTPRequestHandler):
             run_id = match.group(1)
             payload = latest_tool_payload(messages)
 
+            if self.server.scenario == "forbidden-source" and "CODEA_REVIEW_SOURCE_OUTSIDE_SCOPE" in whole:
+                self.reply(body, content="native source scope correctly rejected")
+                return
+
             if self.server.scenario == "concurrent" and ("REVIEW_FINISH_OVERWRITE_REJECTED" in whole or '"execution": "COMPLETE"' in whole):
                 self.reply(body, content="concurrent finish race observed")
                 return
@@ -162,6 +166,12 @@ class Provider(BaseHTTPRequestHandler):
                         "ordinary Review must auto-scope all impacted Controllers; manual selection forbidden")
 
             if isinstance(scope, dict) and scope.get("reads") is not None:
+                if self.server.scenario == "forbidden-source":
+                    forged = dict(scope["reads"][0], path="src/main/java/com/example/OutsideController.java")
+                    self.reply(body, tool_call=call(tool_name, {
+                        "action": "read", "runId": run_id, "source": forged,
+                    }, "scope_denied"))
+                    return
                 if self.server.scenario == "concurrent":
                     controller_ref = next(ref for ref in scope.get("reads", []) if ref.get("path", "").endswith("OrderController.java"))
                     common = {
@@ -409,6 +419,33 @@ def run_concurrent_finish_scenario(binary, project, env, server):
     print(f"REVIEW180_HOST_CONCURRENT_FINISH PASS runId={run_dir.name} completed=1 rejected=1 uniqueRequests=2", flush=True)
 
 
+
+def run_forbidden_source_scenario(binary, project, env, server):
+    """Real packaged native Host must fail closed for an out-of-scope read."""
+    server.scenario = "forbidden-source"
+    server.errors.clear()
+    argv = [str(binary), "run", "--print-logs", "--dir", str(project),
+            "--model", "fixture/review180", "--format", "json",
+            "--command", "harness-review", "OrderController"]
+    stdout = command(argv, project, env, timeout=150)
+    require(not server.errors, f"forbidden-source: provider errors: {server.errors}")
+    session = session_for_run(stdout, binary, project, env, "forbidden-source")
+    exported = json.loads(command([str(binary), "export", session], project, env, timeout=30))
+    attempts = tool_parts(exported, "read")
+    require(len(attempts) == 1, f"expected one native out-of-scope read attempt: {attempts}")
+    require(attempts[0].get("status") in {"error", "failed"} and
+            "CODEA_REVIEW_SOURCE_OUTSIDE_SCOPE" in flatten(attempts[0]),
+            f"native read was not rejected by exact scope authority: {attempts}")
+    require("finish" not in tool_actions(exported),
+            f"forbidden-source must not complete review: {tool_actions(exported)}")
+    runs = list((project / ".code-harness" / "runs").glob("review-*"))
+    require(len(runs) == 1, "forbidden-source: expected exactly one durable run")
+    report = (runs[0] / "review.md").read_text(encoding="utf-8")
+    require('"execution":"INCOMPLETE"' in report,
+            f"forbidden-source unexpectedly completed the report: {report}")
+    print(f"REVIEW180_HOST_SOURCE_SCOPE_DENIED PASS runId={runs[0].name} attempts=1", flush=True)
+
+
 def init_fixture_repo(project, env):
     command(["git", "init"], project, env, timeout=20)
     command(["git", "add", "."], project, env, timeout=20)
@@ -484,6 +521,9 @@ def main():
                 project = bootstrap_project(temp, args, sdk_root, server.server_port, multi)
                 init_fixture_repo(project, env)
                 run_scenario(args.opencode.resolve(), project, env, server, multi)
+            forbidden_project = bootstrap_project(temp, args, sdk_root, server.server_port, False, name="forbidden-source")
+            init_fixture_repo(forbidden_project, env)
+            run_forbidden_source_scenario(args.opencode.resolve(), forbidden_project, env, server)
             concurrent_project = bootstrap_project(temp, args, sdk_root, server.server_port, False, name="concurrent")
             init_fixture_repo(concurrent_project, env)
             run_concurrent_finish_scenario(args.opencode.resolve(), concurrent_project, env, server)
