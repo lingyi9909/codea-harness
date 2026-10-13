@@ -349,7 +349,8 @@ func Test180ReviewUsesAutonomousScopeAndNeverAdvertisesSelection(t *testing.T) {
     if err!=nil {t.Fatal(err)}
     text:=string(toolData)
     for _,want:=range []string{"READ_SCOPE_AND_FINISH_THIS_TURN","KEEP_REPORT_INCOMPLETE",
-        "action: tool.schema.enum([\"prepare\", \"finish\"])", "nextAction: nextAction(runtime, scope)"} {
+        "action: tool.schema.enum([\"prepare\", \"read\", \"finish\"])", "nextAction: nextAction(runtime, scope)",
+        "CODEA_REVIEW_SOURCE_OUTSIDE_SCOPE", "CODEA_REVIEW_SOURCE_STALE"} {
         if !strings.Contains(text,want){t.Fatalf("missing mandatory automatic review contract %q",want)}
     }
     for _,forbidden:=range []string{"WAIT_FOR_REAL_USER_SELECTION", "function selectionMenuText",

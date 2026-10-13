@@ -39,7 +39,10 @@ func Test180PrimaryReviewUsesSingleStructuredTool(t *testing.T) {
 	text := string(data)
 	for _, want := range []string{
 		"prepare", "finish", "runId", "intent", "result",
-        `action: tool.schema.enum(["prepare", "finish"])`, "execFile",
+        `action: tool.schema.enum(["prepare", "read", "finish"])`, "execFile",
+        "readAuthorizedSource", "CODEA_REVIEW_SOURCE_OUTSIDE_SCOPE",
+        "CODEA_REVIEW_SOURCE_STALE", "CODEA_REVIEW_SOURCE_PATH_INVALID",
+        "realpath", "createHash",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("codea-review tool missing %q", want)

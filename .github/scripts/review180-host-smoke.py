@@ -165,6 +165,32 @@ class Provider(BaseHTTPRequestHandler):
                 require(runtime.get("selectionRequired") is False,
                         "ordinary Review must auto-scope all impacted Controllers; manual selection forbidden")
 
+
+            if isinstance(payload, dict) and isinstance(payload.get("source"), dict):
+                scoped = self.server.scope_by_run.get(run_id)
+                require(isinstance(scoped, dict),
+                        "native authorized source read returned without prepared scope")
+                source = payload["source"]
+                ref = source.get("ref", {})
+                lines = source.get("lines", [])
+                require(isinstance(lines, list) and lines,
+                        "native authorized source read returned no source lines")
+                refs = scoped["reads"]
+                index = self.server.read_index[run_id]
+                require(ref == refs[index - 1],
+                        f"native source read ref mismatch: expected {refs[index - 1]}, got {ref}")
+                if index < len(refs):
+                    self.server.read_index[run_id] = index + 1
+                    self.reply(body, tool_call=call(tool_name, {
+                        "action": "read", "runId": run_id, "source": refs[index],
+                    }, f"authorized_read_{index}"))
+                else:
+                    self.reply(body, tool_call=call(tool_name, {
+                        "action": "finish", "runId": run_id,
+                        "result": {"reads": refs, "findings": [], "pendingRisks": [], "gaps": []},
+                    }, "finish"))
+                return
+
             if isinstance(scope, dict) and scope.get("reads") is not None:
                 if self.server.scenario == "forbidden-source":
                     forged = dict(scope["reads"][0], path="src/main/java/com/example/OutsideController.java")
@@ -194,16 +220,13 @@ class Provider(BaseHTTPRequestHandler):
                         call(tool_name, {"action": "finish", "runId": run_id, "result": b}, "finish_b"),
                     ])
                     return
+                refs = scope.get("reads", [])
+                require(refs, "prepared scope must supply authorized source reads")
+                self.server.scope_by_run[run_id] = scope
+                self.server.read_index[run_id] = 1
                 self.reply(body, tool_call=call(tool_name, {
-                    "action": "finish",
-                    "runId": run_id,
-                    "result": {
-                        "reads": scope.get("reads", []),
-                        "findings": [],
-                        "pendingRisks": [],
-                        "gaps": [],
-                    },
-                }, "finish"))
+                    "action": "read", "runId": run_id, "source": refs[0],
+                }, "authorized_read_0"))
                 return
 
             if isinstance(runtime, dict) and runtime.get("execution") == "COMPLETE":
@@ -367,7 +390,8 @@ def run_scenario(binary, project, env, server, multi):
     require("prepare" in actions, f"{scenario}: model never called prepare; actions={actions}")
 
     # Both one and multiple Controllers must auto-finish in the first Host turn.
-    require(actions.count("finish")==1 and "select" not in actions and "resume" not in actions,
+    require(actions.count("finish")==1 and actions.count("read") >= 1 and
+            "select" not in actions and "resume" not in actions,
             f"{scenario}: expected autonomous prepare/finish: {actions}")
     scope=json.loads((run_dir / "scope.json").read_text(encoding="utf-8"))
     options=json.loads((run_dir / "options.json").read_text(encoding="utf-8"))["options"]
@@ -489,6 +513,7 @@ def main():
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     server.requests, server.errors, server.scenario = [], [], "bootstrap"
+    server.scope_by_run, server.read_index = {}, {}
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
