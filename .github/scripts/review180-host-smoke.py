@@ -132,6 +132,13 @@ class Provider(BaseHTTPRequestHandler):
             messages = body.get("messages", [])
             self.server.requests.append({"scenario": self.server.scenario, "names": names, "messages": messages})
             if self.server.scenario == "orchestrator-permission-check":
+                # OpenCode makes title/summary requests with NO advertised
+                # tools, even for an unrestricted agent. These requests do
+                # not exercise Agent tool permissions and must not count as
+                # evidence for or against Test/Debug/Fix compatibility.
+                if not names:
+                    self.reply(body, content="non-tool title or summary request")
+                    return
                 for builtin in ("read", "glob", "bash"):
                     require(builtin in names, f"unrestricted orchestrator lost {builtin}: {names}")
                 self.reply(body, content="orchestrator permissions preserved")
@@ -571,9 +578,14 @@ def run_orchestrator_unrestricted_scenario(binary, project, env, server):
                       "--format", "json", "Verify Host tool availability."],
                      project, env, timeout=100)
     require(not server.errors, f"orchestrator tool permissions unexpectedly restricted: {server.errors}")
-    require("orchestrator-permission-check" in [req["scenario"] for req in server.requests],
-            "orchestrator tool list was never requested")
-    print("REVIEW180_OTHER_WORKFLOWS_UNRESTRICTED PASS tools=read,glob,bash", flush=True)
+    tool_requests = [req for req in server.requests
+                     if req["scenario"] == "orchestrator-permission-check" and req["names"]]
+    require(tool_requests, "orchestrator never made a real tool-bearing model request")
+    for req in tool_requests:
+        require(all(builtin in req["names"] for builtin in ("read", "glob", "bash")),
+                f"orchestrator tool advertisement lacks normal builtins: {req['names']}")
+    print(f"REVIEW180_OTHER_WORKFLOWS_UNRESTRICTED PASS tools=read,glob,bash "
+          f"verifiedRequests={len(tool_requests)}", flush=True)
 
 
 def init_fixture_repo(project, env):

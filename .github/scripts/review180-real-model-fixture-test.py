@@ -151,6 +151,12 @@ class ExactImpactedChainFixtureTest(unittest.TestCase):
         self.assertIn("agent: codea-review-restricted", cmd)
         self.assertIn("run_forbidden_builtin_scenario", host)
         self.assertIn("run_orchestrator_unrestricted_scenario", host)
+        # The OpenCode title model always receives tools=[], which is not
+        # evidence of a restricted orchestrator. Require a real tool request.
+        self.assertIn('if self.server.scenario == "orchestrator-permission-check":', host)
+        self.assertIn('if not names:', host)
+        self.assertIn('and req["names"]', host)
+        self.assertIn('require(tool_requests,', host)
         self.assertNotIn('"tools": {"read": False', host)
         self.assertIn('"--install-zip"', host)
         # All installed OpenCode custom tools must load offline, even legacy
