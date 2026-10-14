@@ -344,7 +344,7 @@ T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 
 
 ### T2：Java 必过缺陷样本与不误报反例
 
-**将来交付**：`java-risk-checklist.md`、`report-template.md`、人工事实标签和自造/开源许可合规的 Java Spring Boot + Mapper/XML fixture。评审提示**仅包含任务及 Git 范围，不泄露预期 Finding**；真实 OpenCode 2.x Agent 自行检索、定位、判断。
+**将来交付**：单个 `SKILL.md` 内的 Java 风险规则与中文报告模板、人工事实标签和自造/开源许可合规的 Java Spring Boot + Mapper/XML fixture。评审提示**仅包含任务及 Git 范围，不泄露预期 Finding**；真实 OpenCode 2.x Agent 自行检索、定位、判断。
 
 每个 fixture 必须附：**最小业务代码/变更、预期 Finding 的确切变更文件与代码证据、触发/验证路径、干净反例、人工判定标签**。至少覆盖下表：
 
@@ -378,6 +378,8 @@ T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 
 额外复测历史 **17 个小改动文件**规模；记录端到端耗时、P50/P90、实际有效文件首轮覆盖、`read/grep/glob/shell` 调用次数、重复无效检索、已确认 Finding/误报/漏报/未解析路径、Skill 实际加载与权限拒绝轨迹、Git 前后状态以及外网连接检测结果。新增 `ask` 请求/重复授权次数、逐条和累计人工确认耗时、扣除人工确认时间后的 Agent 执行耗时，对比原生 OpenCode；确认人工审批开销不会吞噬原本的速度优势。
 
 **增加 A/B 基准：同一 Windows 机器、同一 Git Diff、同一私有 Provider/Model/模型参数、尽量相近的并发负载，分别运行 A＝OpenCode 原生快速 Review 与 B＝Codea Review 2.0；每组场景分别记录时长、工具调用、重复 `file_read/code_search`、HIGH Finding 的 TP/FP/FN、未解析路径及覆盖清单。优先比较本次 17 文件样本，按 CRUD／Service-Mapper／状态/金额三个场景拆分结果。B 相对 A 明显变慢或漏掉高风险缺陷时不能仅凭总量指标宣称改进；需给出证据和修订建议。无需安装 PR-Agent/reviewdog/Semgrep 或 OCR 来跑 T3；它们只提供设计参照。**
+
+第四轮继续保留人工 Git 授权对 Review 体验的量化：T3 应分别报告 `ask` 次数、重复授权次数、确认累计等待、Git Shell 调用量、Agent 净执行耗时和**包含人工确认的端到端总耗时**，重点与 17 文件原生 OpenCode Review 对照；不能把等待时间扣除后声称达到 P50/P90 目标。
 
 **性能目标仍为 P50 ≤ 3 分钟、P90 ≤ 5 分钟（在同一模型、同一机器、同一并发条件下测量）**；未达标必须真实写 FAIL 或列改进项，不能暗中删除高风险审查步骤凑时长。T3 的通过前提包括：T1/T2 全部通过、实际内网没有未经批准的外联或源码写入、真实模型没有“假成功”。缺失线上内网证据不能用公开模拟模型或 CI 绿色结果替代。
 
@@ -463,3 +465,22 @@ T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 
 **对三个最终问题**：①官方机制支持 Skill 加载并通过原生双重权限读取 references，但是否在用户公司 Windows 安装版正常生效须由 T1 工具轨迹证明；②架构仍为 OpenCode 2.x + 一个 Reviewer Agent + 一个 Skill（两份普通文本 references）+ 一个 Command，无其他运行组件；③**本次设计修订具备提交独立终审的条件，终审通过才进入 T1**，并不是已完成 T1 运行验收。
 
 **本轮只修改本设计文档并提交原分支；不创建 Agent/Skill/Command、插件、读取工具、运行时或实施计划。**
+
+## 13. 第四轮 FAIL 审核修订闭环及新旧方案边界
+
+| 审核项 | 最终设计选择 | T1/T3 必须出具的证据 |
+| --- | --- | --- |
+| P1-01 同目录 grep/glob 绕过 read 文件白名单 | **选择 A：一个 SKILL.md**；不再分发两份必读 references，不开放其目录 external_directory，不宣传目录内 read 白名单能阻止搜索读取 | T1-02/02a/02b/02c/02d：skill 返回完整内容；read、grep、glob 对外部未授权路径分别产生拒绝轨迹；项目内正常检索 |
+| P2-01 AGENTS.md 与代码注释恶意指令 | Skill 明确任务和信任边界，仅新增对抗 fixture 及负向测试 | T1 对事务、权限、幂等持续给出真实 Finding；危险 Shell 被原生权限拒绝；T2 必过风险样本继续通过 |
+| P2-02 Skill slash | 只以实际目标 exact V2 验证入口/加载，不承诺任何字段普遍兼容 | `/codea-review` 对应预期 Command → Reviewer → `skill(codea-review)`；没有同名 slash 冲突 |
+| P2-03 Git ask 授权性能 | 不放宽有副作用的 Shell 通配权限；优先减少重复工具调用 | T1/T3 记录确认/重复/等待/调用/Agent 净耗时及总耗时；17 文件与原生 OpenCode A/B 比较 |
+
+### 设计阶段三项明确结论
+
+**问题一：是否足够简单？** V1 只包含用户级 Agent、Command、单一 `SKILL.md`，Java 风险规则与报告格式都在 Skill 正文。与上一版相比，两份 references 和对应授权配置整体移除，不需要原生插件、Runtime 或第二套执行器。
+
+**问题二：权限承诺是否正确？** 在对照 [OpenCode read.ts](https://github.com/anomalyco/opencode/blob/3a69bae8459b1aa9b122456a55d9535b23125f33/packages/core/src/tool/plugin/read.ts)、[grep.ts](https://github.com/anomalyco/opencode/blob/3a69bae8459b1aa9b122456a55d9535b23125f33/packages/core/src/tool/plugin/grep.ts)、[glob.ts](https://github.com/anomalyco/opencode/blob/3a69bae8459b1aa9b122456a55d9535b23125f33/packages/core/src/tool/plugin/glob.ts) 后，明确：`read` 是直接文件访问控制，`grep` 返回文件匹配内容，`glob` 返回路径，`external_directory` 控制工作区外搜索根；不通过单文件 `read` 白名单推导 `grep/glob` 的逐文件隔离。权限是 OpenCode 原生的防误操作机制，**不是**操作系统级只读或机密隔离沙箱。若 exact 版环境中的外部目录默认例外、路径解析或 Agent 合并规则导致未授权目录可被读取/搜索，真实负例 FAIL，须收紧 V1 能力范围或阻断发布。
+
+**问题三：是否具备进入 T1 的前提？** 文档在设计层已给出单文件可执行路径、OpenCode 原生机制的静态依据和可验证的 T1 失败判据。**仍需独立终审认可后才开始 T1**，这不是声称 Windows 公司安装包已验证。T1 应优先打通 Command → Reviewer → Skill → Git 已提交 Diff → 简洁中文 Review 的真实闭环，严禁再为追求理论完美新增运行组件。
+
+**修订范围承诺**：本轮只修改原设计文档，不创建 Agent/Skill/Command、测试 fixture、Git 快照、插件或新执行引擎。第三轮历史章节关于 references 的旧方案以此章为准全部废止。
