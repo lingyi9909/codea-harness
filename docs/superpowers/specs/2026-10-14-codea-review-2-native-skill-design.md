@@ -64,7 +64,7 @@ OpenCode 2.x TUI（Java 项目工作目录）
 
 上面是**未来实施布局，本轮不创建文件**。最小使用要求仅有已安装的 OpenCode 2.x、公司私有模型及本机 Git。Review 不将配置复制进 `.opencode`，因而不会因为首次安装把 Java 工作区变 Dirty。后续 T2 测试 fixture 可在**公开测试仓库**中单独建文件，不向真实业务仓库注入文件。不要顺手修改全局 `opencode.json(c)` 的 `default_agent`、Build/Plan 权限或原有 Provider。
 
-**发现和冲突**（官方 V2；第三轮要求把预检移到命令启动前，详见 3.4）：
+**发现和冲突**（官方 V2；第三轮要求把预检移到命令启动前，详见 3.5）：
 - 原生 Agent：`~/.config/opencode/agents/<id>.md`；Command：`~/.config/opencode/commands/<id>.md`；Skill：`~/.config/opencode/skills/<id>/SKILL.md`。
 - 项目级同名 Command 会覆盖用户级；Skill 以精确**路径 ID** 为键，项目级 `.opencode/skills` 和显式 `skills` 路径可覆盖全局同 ID 的定义。Agent 的后加载配置可能合并/覆盖同名定义。**不默许覆盖**：若发现项目级 `codea-reviewer` / `codea-review` 同名对象，**在调用 /codea-review 之前**预检并输出冲突路径后停止；不能依赖可能已被覆盖的 Command 自检，更不能在 Prompt 中假装读取了全局定义。
 - Skill `name` 仅显示名称，实际调用 ID 是 `codea-review`。V1 不使用 references 或其他必读 supporting files；所有规则与模板包含在 SKILL.md 正文。
@@ -305,7 +305,7 @@ T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 
 - **安装**：企业认可的离线 ZIP 只含 `agents/codea-reviewer.md`、`commands/codea-review.md`、`skills/codea-review/SKILL.md`（唯一规则文件）；解压/复制到已确认的 Windows `$HOME\.config\opencode` 下对应目录，**不写 Java 项目的 `.opencode`**，不依赖网络安装包或脚本下载。不默认触碰现有 `opencode.json(c)`。
 - **预检必须早于 `/codea-review` 执行**：按 3.5 节由安装人/项目启用人核对全局与项目及父级/显式配置的同名 Command/Agent/Skill 来源；发现冲突立即停止，不依赖被覆盖的 Command 进行检查。再核对 Skill 正文完整性，以及 read/grep/glob/external_directory 的真实权限边界。首次安装采用干净 Java fixture，不向业务 Git 写配置。
 - **升级**：复制前由人工备份当前同名三类配置及 supporting files，并在发布包中附文本版本及 SHA256；先替换配置文件、重启或依 V2 的真实热重载能力验证，再跑 T1 预检，不改项目 Provider/Build/Plan 的设置。这里不设计安装器或自动升级服务。
-- **回退**：恢复用户级备份或移除本次专属三个对象及 references，重启/重新加载并切回 Build；不修改 Git 工作区、公司模型、原 Harness 1.8 或其他团队的配置。系统级 `%ProgramData%\opencode` 若存在强制策略，本设计不得覆盖，须在 T1 检查权限冲突。
+- **回退**：恢复用户级备份或移除本次专属三个对象（Agent/Command/单一 Skill），重启/重新加载并切回 Build；不修改 Git 工作区、公司模型、原 Harness 1.8 或其他团队的配置。系统级 `%ProgramData%\opencode` 若存在强制策略，本设计不得覆盖，须在 T1 检查权限冲突。
 
 ## 8. T1～T3 任务与不可降级的验收门槛（P1-01～04/P2-01～06）
 
@@ -389,7 +389,7 @@ T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 
 
 **本次交付是待评审的设计文档，不包含可运行 Skill，也不代表新技术方案已通过研发验收。** 用户确认设计后，再按照 Superpowers writing-plans 规范输出到 docs/superpowers/plans/ 的逐任务实现计划，之后才进入产品开发。
 
-## 10. 首轮审核问题修订映射及官方依据（保留历史记录）
+## 10. 首轮审核问题修订映射及官方依据（历史记录；后续变更以第 3～8、13 章为准）
 
 | 审核项 | 修订章节 | 实施前验证门槛 |
 | --- | --- | --- |
@@ -413,7 +413,7 @@ T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 
 **修订边界**：仅设计文件修改。下一步提交给独立审核，**审核通过后才另行编制 T1 实施计划**；本次不触发代码实现或发布。
 
 
-## 11. 第二轮审核问题修订映射、依据与遗留限制
+## 11. 第二轮审核问题修订映射、依据与遗留限制（历史记录）
 
 | 项目 | 设计落点 | T1～T3 核查点 |
 | --- | --- | --- |
@@ -447,24 +447,9 @@ T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 
 **本轮只修改本设计文档；不创建 Agent/Command/Skill、安装器、测试 fixture 或新 Review Runtime，不进入 T1 开发。修订后提交原设计分支，等待独立审核通过，再独立编写实施计划。**
 
 
-## 12. 第三轮审核问题关闭映射与遗留边界（历史记录；用户级 references 权限方案在第四轮已废止）
+## 12. 第三轮审核追溯记录（旧 references 方案已废止）
 
-> 本章仅作第三轮审核历史追溯。凡涉及两份 references、其目录白名单与正负测试的原结论，均已被第四轮第 3.4、7、8、13 章替代，不作为 V1 现行实施指令。
-
-| 审核项 | 修订章节 | T1/T3 真实证据 |
-| --- | --- | --- |
-| P1-01 用户级 references 的 external_directory/read | 3.3/3.4、7.1/7.2、T1-02a/02b | 两份指定 reference PASS；同目录第三文件和其他用户目录 DENY；规则资源与次序记录 |
-| P2-01 同名覆盖检查 | 3.1/3.5、7.3、T1-03 | 在执行 Command **之前**发现项目/用户/兼容目录/显式 Skill 冲突，确认实际加载来源 |
-| P2-02 ask 审查耗时 | 3.3、T1/T3 | 授权总数、重复次数、累计等待与 Git 工具调用数；不能直接放开 git 通配 |
-| P2-03 slash 配置兼容 | 3.2、T1-03 | 对目标 exact 版只用已证实的一种字段，确认唯一 Command 和 Skill 加载 |
-
-**官方机制依据**：[OpenCode V2 Permissions](https://dev.opencode.ai/v2/docs/permissions/) 说明外部目录边界与底层 `read` 的两道授权、`~`/`$HOME` 规则前缀展开、托管全局配置目录默认例外及有序 Agent 覆盖；[V2 Skills](https://dev.opencode.ai/v2/docs/skills/) 说明精确 ID、同名覆盖和版本相关元数据；[V2 Commands](https://dev.opencode.ai/v2/docs/commands/) 与 [V2 Config](https://dev.opencode.ai/v2/docs/config/) 说明命令及配置优先级。文档只声称**设计依据已核对**，不声称公司当前 exact 二进制已通过正负运行测试。
-
-**仍无法承诺**：用户机器上 Permission 资源/Windows 路径的具体匹配（必须 T1 实测），模型必然遵守 Prompt、Java 调用链穷举、Git Shell 的 OS 级不可绕过只读和无条件固定执行时间。若两份 references 的狭窄授权不能同时满足其他用户文件拒绝，T1 必须 FAIL，不得新增 Runtime/Plugin 或直接扩大到用户主目录放行。
-
-**对三个最终问题**：①官方机制支持 Skill 加载并通过原生双重权限读取 references，但是否在用户公司 Windows 安装版正常生效须由 T1 工具轨迹证明；②架构仍为 OpenCode 2.x + 一个 Reviewer Agent + 一个 Skill（两份普通文本 references）+ 一个 Command，无其他运行组件；③**本次设计修订具备提交独立终审的条件，终审通过才进入 T1**，并不是已完成 T1 运行验收。
-
-**本轮只修改本设计文档并提交原分支；不创建 Agent/Skill/Command、插件、读取工具、运行时或实施计划。**
+本章保留第三轮评审事实，不再保留已失效的 references 白名单具体配置或必读两文件验收指令。第三轮曾选择用户级 `references/` 并尝试通过 `external_directory` 与 `read` 限定两个文件，第四轮进一步发现 `grep/glob` 不逐文件检查 `read` 权限，故**正式改选方案 A：单 SKILL.md**。既有同名覆盖预检（3.5）、Git ask 授权开销记录（8/T1/T3）、exact 版本 slash 验收（3.2）继续有效；references 方案不再实施、不再作为测试通过条件。
 
 ## 13. 第四轮 FAIL 审核修订闭环及新旧方案边界
 
