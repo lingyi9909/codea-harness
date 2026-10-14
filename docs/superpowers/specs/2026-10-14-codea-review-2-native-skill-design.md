@@ -1,9 +1,9 @@
 # Codea Review 2.0｜基于 OpenCode 2.x 原生 Agent 的轻量 Java Review 方案
 
 > 日期：2026-10-14
-> 状态：**第二轮 CONDITIONAL PASS 反馈修订稿，待第三方独立复核**；尚未实施、尚未发布或完成内网验收
+> 状态：**第三轮 CONDITIONAL PASS 反馈修订稿，待独立复核**；尚未实施、尚未发布或完成内网验收
 > 目标环境：Windows 内网、OpenCode 2.x TUI、公司私有大模型、Java/Spring Boot/Maven
-> 说明：保留首轮 P1/P2 修订，增补第二轮 P1 安装/工作区一致性与 Shell 只读边界、P2 性能/真实项目验证；本次**仅更新原设计文档**，不改 Harness 1.8 或产品配置/代码。
+> 说明：保留前两轮架构及既有修订，本轮仅处理第三轮 P1 用户级 references 读取权限与 P2 配置冲突、授权耗时及 slash 兼容性；本次**仅更新原设计文档**，不改 Harness 1.8 或产品配置/代码。
 
 ## 1. 背景与确定的技术选型
 
@@ -67,9 +67,9 @@ OpenCode 2.x TUI（Java 项目工作目录）
 
 上面是**未来实施布局，本轮不创建文件**。最小使用要求仅有已安装的 OpenCode 2.x、公司私有模型及本机 Git。Review 不将配置复制进 `.opencode`，因而不会因为首次安装把 Java 工作区变 Dirty。后续 T2 测试 fixture 可在**公开测试仓库**中单独建文件，不向真实业务仓库注入文件。不要顺手修改全局 `opencode.json(c)` 的 `default_agent`、Build/Plan 权限或原有 Provider。
 
-**发现和冲突**（官方 V2）：
+**发现和冲突**（官方 V2；第三轮要求把预检移到命令启动前，详见 3.4）：
 - 原生 Agent：`~/.config/opencode/agents/<id>.md`；Command：`~/.config/opencode/commands/<id>.md`；Skill：`~/.config/opencode/skills/<id>/SKILL.md`。
-- 项目级同名 Command 会覆盖用户级；Skill 以精确**路径 ID** 为键，项目级 `.opencode/skills` 和显式 `skills` 路径可覆盖全局同 ID 的定义。Agent 的后加载配置可能合并/覆盖同名定义。**不默许覆盖**：若发现项目级 `codea-reviewer` / `codea-review` 同名对象，预检输出冲突路径并停止，要求用户在项目侧处理；不能在模型 Prompt 中假装读到了全局版本。
+- 项目级同名 Command 会覆盖用户级；Skill 以精确**路径 ID** 为键，项目级 `.opencode/skills` 和显式 `skills` 路径可覆盖全局同 ID 的定义。Agent 的后加载配置可能合并/覆盖同名定义。**不默许覆盖**：若发现项目级 `codea-reviewer` / `codea-review` 同名对象，**在调用 /codea-review 之前**预检并输出冲突路径后停止；不能依赖可能已被覆盖的 Command 自检，更不能在 Prompt 中假装读取了全局定义。
 - Skill `name` 仅显示名称，实际调用 ID 是 `codea-review`。Skill 目录可内含 references，但 OpenCode 不会自动加载 supporting files。
 - 必须在 Windows 中文、空格用户名路径和 Java 项目子目录中证明实际加载来源和 references 正确。T1 先在无项目配置的干净项目运行，再测试同名冲突 fail-closed。
 
@@ -93,7 +93,7 @@ Skill 加载失败或任何必读 references 读取失败，立即停止并报 S
 输出已覆盖/未覆盖范围、真实中高风险 Finding 和待确认风险。
 ```
 
-Skill `SKILL.md` 应有 `name: codea-review`、`description` 和 **`slash: false`**；经查 V2 官方 Skills 文档确实支持顶层 `slash: false`，并支持 `metadata.opencode/slash`，**两者不要同时写成冲突值**。T1 针对目标 **exact 2.x** 核验 `/codea-review` 实际映射的**是 Command，而非同名 Skill slash**；模型执行后工具轨迹必须有成功的 `skill(codea-review)`，然后成功读取 `references/java-risk-checklist.md` 和 `references/report-template.md`，最后才能 Git Review。静态配置正确不等于已在模型运行时成功；失败一律 T1 FAIL。
+Skill `SKILL.md` 必须含 `name: codea-review` 与 `description`。**Skill 的 slash frontmatter 最终以目标 exact 2.x 为准**：部分 V2 材料使用顶层 `slash: false`，部分版本描述通过 `metadata: { opencode/slash: "false" }` 控制入口；两者不能当作可互换承诺。T1 应检查目标安装版 Skill 注册/前端展示行为，选用且只选用该版本实测有效的一种形式。`/codea-review` 必须确认唯一映射到用户级 Command，不能被同名 Skill slash 覆盖；完整工具轨迹还必须证明 `skill(codea-review)` 加载成功并读取两份 references。没有来源确认或工具调用证据则 T1 FAIL。
 
 **禁止在 Command 模板使用 `!`+反引号 Shell 插值**：V2 官方文档确认其执行在 Agent 工具权限流程之外，会绕过后面的 Reviewer Shell 规则。`$ARGUMENTS` 只能作为待校验的用户目标文本，不能拼成任意 Shell 命令。
 
@@ -111,6 +111,15 @@ permissions:
   - { action: "*", resource: "*", effect: deny }
   - { action: read, resource: "*", effect: allow }
   - { action: read, resource: "*.env*", effect: deny }
+  # 以下仅是 V2 路径展开/规则顺序有待 Windows exact 版验证的候选配置。
+  # 工作区外 read 要同时过 external_directory 和 read 两道权限；
+  # 默认例外与自定义 Agent 权限的覆盖须在 T1 实测。
+  - { action: external_directory, resource: "$HOME/.config/opencode/*", effect: deny }
+  - { action: external_directory, resource: "$HOME/.config/opencode/skills/codea-review/references/*", effect: allow }
+  - { action: read, resource: "$HOME/.config/opencode/*", effect: deny }
+  - { action: read, resource: "$HOME/.config/opencode/skills/codea-review/references/*", effect: deny }
+  - { action: read, resource: "$HOME/.config/opencode/skills/codea-review/references/java-risk-checklist.md", effect: allow }
+  - { action: read, resource: "$HOME/.config/opencode/skills/codea-review/references/report-template.md", effect: allow }
   - { action: glob, resource: "*", effect: allow }
   - { action: grep, resource: "*", effect: allow }
   - { action: skill, resource: codea-review, effect: allow }
@@ -144,6 +153,18 @@ permissions:
 - **故障降级**：如果 T1 无法同时满足基本差异读取与危险命令阻断，不向生产发布“机器级只读”；先选择更窄的 Git 命令操作集合或显式人工批准作为有限防误操作，再复核 V1 适用性。严禁为达到绝对保障改造 Harness 式权限网关。
 
 **实际保障级别：Codea Review V1 是 OpenCode 原生权限提供的防误操作能力，不等同于操作系统级只读安全沙箱。** Tool Calling/命令 scanner 与默认全局策略必须按具体 exact 版本复验。
+
+### 3.4 第三轮 P1：用户级 references 的最小权限与加载验收
+
+**采用 V2 原生 `external_directory` + `read` 两关，不研发读取工具。** 官方 V2 Permissions 文档指出：工作区外路径先要 `external_directory` 许可，再要文件 `read` 许可；`external_directory` 资源是规范化的目录边界（通常以 `/*` 结尾），`read` 资源是具体路径。`skill(codea-review)` 加载 `SKILL.md` 本身不等于 Agent 可以调用 `read` 读取用户级 `references`。因此 3.3 的规则意图是：仅允许 `$HOME/.config/opencode/skills/codea-review/references/` 这一最小外部目录边界，且在此目录仅有两份指定文件可以被读取；其他用户文件（例如全局 `opencode.json`、`~/.ssh/config`、同目录 `secret.md`）必须 DENY。
+
+**自定义与默认权限关系**：官方 V2 的基础规则将工作区外访问默认设为 `ask`，并对 OpenCode 自身托管的全局配置目录提供内置例外；**后续全局和自定义 Agent 的有序规则可以覆盖默认例外，最后匹配者生效**。本设计 Reviewer 的 `*:* deny` 因而可能撤销此例外，不得因为系统管理目录通常可读就跳过 T1。候选 `$HOME/.../*` 规则基于 V2 对 `~` / `$HOME` 的路径前缀展开支持，但 **Windows 用户名中文或空格、路径规范化、外部目录资源究竟匹配到哪一层、glob 是否覆盖嵌套目录必须在 exact 二进制中验证**。如果目录 allow 意外允许额外文件，则不能宣称 P1 已解决；优先收紧或调整这一条原生规则，不能改成 `external_directory: * allow`、`read: $HOME/* allow`。
+
+**必需的真实工具轨迹**：从普通 Java 项目运行命令，`skill` 成功后，两份 `read` 分别 PASS；同时通过相同 Agent 的实际 `read` 请求核对对无关用户目录文件及 reference 同目录其他文件 DENY；删掉一份 reference 或显式拒绝该目录时，必须报 `SKILL_LOAD_FAILED` 并停止 Git Review。预检还应核对 `external_directory` 的最终生效规则及 `read` 的最终资源；不接受模型口头说“无法读取”。如果 exact 版内置例外已安全覆盖全部所需路径，且自定义 Agent 未覆盖，可删减多余候选规则，前提是正负样本全部满足。正常 Build/Plan Agent 的权限不作任何改动。
+
+### 3.5 第三轮 P2-01：配置同名冲突必须在运行命令前预检
+
+项目级 `.opencode/commands/codea-review.md` 可能覆盖用户级命令；此时被覆盖的全局命令根本没有机会执行冲突检测。V1 采用**安装时与进入每个业务项目时的人工静态预检**，不建插件、注册表或安装脚本：首先检查全局目标 Agent/Command/Skill 名称是否已被占用，再检查 Java 项目目录及父级配置发现链中的项目级 `.opencode/commands/codea-review.md`、`.opencode/agents/codea-reviewer.md`、`.opencode/skills/codea-review`、兼容 `.agents/skills` / `.claude/skills`、显式配置的同名 Skill；如有同 ID 对象必须停止并处理冲突。之后使用该 exact 版本实际提供的 TUI 命令列表/配置调试输出核实最终命令和 Agent 来源，并通过受控 fixture 中的 `skill` 工具轨迹核实 Skill 实际绝对路径。若该版本没有来源查询能力，必须以目录静态检查 + fixture 工具行为共同证明；无法证明则停止。T1 故意制造项目级同名 Command/Agent/Skill，确认启动前检查先于被覆盖命令运行；**不能把 Command 内部检查作为唯一保护**。
 
 ## 4. 已提交 Git 范围、Dirty Worktree 与 HEAD 证据一致性（第二轮 P1-01/P2-02/P2-03）
 
@@ -260,13 +281,13 @@ V1 Dirty 检查采用**不建快照的保守相关性判断**（`git status --po
 
 ### 7.1 环境、权限和网络预检
 
-T1 记录 Windows x64、**OpenCode exact 2.x 安装版本及来源/校验**、Git 版本、公司私有 Provider/Model（不记录 Key）、TUI Tool Calling `skill/read/glob/grep/shell` 真实调用、全局用户目录实际解析路径。不能把 OCR 测通模型等同 OpenCode 工具加载测试。
+T1 记录 Windows x64、**OpenCode exact 2.x 安装版本及来源/校验**、Git 版本、公司私有 Provider/Model（不记录 Key）、用户级 reference 的 external_directory/read 最终匹配来源与权限轨迹、TUI Tool Calling `skill/read/glob/grep/shell` 真实调用、全局用户目录实际解析路径。不能把 OCR 测通模型等同 OpenCode 工具加载测试。
 
 企业内网预检覆盖启动、Skill/Agent/Command 加载、Review、首次安装和更新期间的 DNS/连接目标；仅允许已批准公司模型端点。检查自动更新、第三方插件、遥测、公开 Web、分享和其他出站行为，要求**真实联网轨迹无违规外联**。如果用户全局配置里存在自动更新，按 exact 2.x 官方配置关闭：不要误把 V1 `autoupdate`、旧版 `update` 字段当成已验证写法；OpenCode V2 配置文档可能随具体构建变化，T1 先读取目标版 schema 与日志，再用企业批准的方式禁用。现有全局 Provider 和 Build 配置只读检查，不擅自替换。
 
 ### 7.2 原生权限保障的真实边界
 
-只在 `codea-reviewer` Agent 下追加 `permissions`，默认 `deny` 写工具、非约定 Shell、`execute`、`subagent`、外联及可见 MCP。固定形式 Git 可按 `3.3` 精确 allow，动态 Git 仅 `ask` 且审阅完整命令、严禁持久“always allow”降低防误操作。**不**把 `git diff/show *` 宽泛放开为 `allow`，不信“read only”自然语言即可保证安全；不用 `!` Command Shell 插值。
+只在 `codea-reviewer` Agent 下追加 `permissions`；依照 3.4 节仅授权两份用户级 reference，必须同时通过 external_directory/read，未授权的用户目录仍然拒绝；默认 `deny` 写工具、非约定 Shell、`execute`、`subagent`、外联及可见 MCP。固定形式 Git 可按 `3.3` 精确 allow，动态 Git 仅 `ask` 且审阅完整命令、严禁持久“always allow”降低防误操作。**不**把 `git diff/show *` 宽泛放开为 `allow`，不信“read only”自然语言即可保证安全；不用 `!` Command Shell 插值。
 
 T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 变更子命令、编辑工具及外部执行做真实工具层拒绝测试，并核对原始 Java 源文件 hash 与 Git status 未意外改变。V2 Shell scanner/权限是**文本和工具级的防误操作**，不是覆盖所有 Git 参数、环境与 Shell 构造的完整副作用静态证明。若实际 `ask` 可以访问不应该被批准的操作，不能把测试员点击“拒绝”当作自动防护通过，需进一步缩小 V1 支持的 Shell 模式或明确发布限制。
 
@@ -275,7 +296,7 @@ T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 
 ### 7.3 用户级离线安装、升级与卸载
 
 - **安装**：企业认可的离线 ZIP 只含 `agents/codea-reviewer.md`、`commands/codea-review.md`、`skills/codea-review/SKILL.md` 及两份 references；解压/复制到已确认的 Windows `$HOME\.config\opencode` 下对应目录，**不写 Java 项目的 `.opencode`**，不依赖网络安装包或脚本下载。不默认触碰现有 `opencode.json(c)`。
-- **预检**：检查目录发现、同名文件（global/project/兼容 Skills），对冲突显示路径并停止；已存在同名非 Codea 文件不得覆盖。核对原生 `/codea-review` 指向全局 Command、`skill(codea-review)` 指向全局 Skill 和正确 Reviewer primary。首次安装选择自造的**干净 Java 仓库**验收，无需把工具配置提交到业务 Git。
+- **预检必须早于 `/codea-review` 执行**：按 3.5 节由安装人/项目启用人核对全局与项目及父级/显式配置的同名 Command/Agent/Skill 来源；发现冲突立即停止，不依赖被覆盖的 Command 进行检查。再核对两份 reference 的 external_directory/read 有效权限。首次安装采用干净 Java fixture，不向业务 Git 写配置。
 - **升级**：复制前由人工备份当前同名三类配置及 supporting files，并在发布包中附文本版本及 SHA256；先替换配置文件、重启或依 V2 的真实热重载能力验证，再跑 T1 预检，不改项目 Provider/Build/Plan 的设置。这里不设计安装器或自动升级服务。
 - **回退**：恢复用户级备份或移除本次专属三个对象及 references，重启/重新加载并切回 Build；不修改 Git 工作区、公司模型、原 Harness 1.8 或其他团队的配置。系统级 `%ProgramData%\opencode` 若存在强制策略，本设计不得覆盖，须在 T1 检查权限冲突。
 
@@ -289,8 +310,10 @@ T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 
 | ID | 验收输入 | 可证实的通过条件 |
 | --- | --- | --- |
 | T1-01 | 全新 Windows Java 项目首次从离线包安装 | 配置加载自用户目录、不创建业务项目文件；`/codea-review` 解析为全局 Command，Reviewer primary 正确 |
-| T1-02 | Skill 正常/缺失/禁止加载、缺 references | 真实工具轨迹含 `skill(codea-review)` 成功且两个 reference `read` 成功；负例 `SKILL_LOAD_FAILED` 并中止 |
-| T1-03 | 项目级与用户级 Agent/Command/Skill 同名，及 `slash` 配置冲突 | 精确识别最终来源、预检阻断冲突，不以不同目录中的错误定义继续审查 |
+| T1-02 | Skill 正常/缺失/禁止加载、缺 references | 真实工具轨迹含 `skill(codea-review)` 成功和两份 reference `read` 成功；缺失/拒绝为 `SKILL_LOAD_FAILED`，不继续 Git Review |
+| T1-02a | Windows 用户级目录（含空格、中文），自定义权限与全局默认例外叠加 | 在 Java 项目中外部目录校验与两份 reference `read` 均 PASS；读取 `references/secret.md`、全局 `opencode.json`、`~/.ssh/config` 等无关用户文件必须 DENY；保存原生权限请求资源、匹配/拒绝工具轨迹 |
+| T1-02b | reference 被删除、`external_directory` 或 `read` 权限被否决、试图读其他用户目录 | 必须停止并报告确切文件/权限失败；恢复允许配置后正例可通过，Build/Plan 仍正常 |
+| T1-03 | 项目级与用户级 Agent/Command/Skill 同名，以及 `slash` 配置冲突 | **在运行被覆盖命令之前**检测冲突和最终来源；仅使用 exact V2 实测支持的一种 slash 关闭字段，确认 `/codea-review` 是目标 Command 并真实加载 Skill |
 | T1-04 | staged、unstaged 已跟踪业务文件（分别及混合） | 严格停止；不 stash/clean，不引用工作区证据 |
 | T1-05 | 与业务变更无关的 untracked（含项目级非冲突配置）、影响审查的 untracked、无法分类的 untracked | 明确无关的继续并列“未纳入”；相关/未知的停止，Git HEAD 证据始终从固定 commit 读取 |
 | T1-06 | HEAD/基线审查中改变、dirty 新增或 Git ref 更新 | 中止并显示 `INCOMPLETE/SOURCE_CHANGED`，不继续使用旧 Finding |
@@ -300,7 +323,7 @@ T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 
 | T1-10 | 动态 Git 命令及 `$ARGUMENTS` 注入、`!` Shell 插值 | 仅受控 Git 工具操作可申请授权；不执行参数注入，禁止 Command Shell 插值；拒绝被拒绝命令的替代绕过 |
 | T1-11 | 精确 OpenCode 版本、公司私有模型 Tool Calling、网络与 Build/Plan 回归 | Windows TUI 真运行，无未授权外联；Review 结束切回 Build 正常开发，既有 Plan 不变 |
 
-T1 任何真实加载失败、危险工具负测未被权限拒绝、无法可靠读取差异或违反离线边界，均判 **FAIL**，不进入 T2。注意 Shell 动态 Git 人工授权耗时须记录，避免为了“安全配置好看”导致业务使用体验不可接受。
+T1 任何真实加载失败、reference 最小权限正负测试失败、同名覆盖预检失效、危险工具负测未被权限拒绝、无法可靠读取差异或违反离线边界，均判 **FAIL**，不进入 T2。**第三轮 P2-02 必测授权开销**：每次 Review 记录 `ask` 次数（允许/拒绝）、每次确认时间、累计人工等待时间、Git Shell 实际调用次数、相同命令重复授权次数和总耗时。优先复用已查询的 Git SHA/范围信息、减少重复 Git 工具请求；如果 17 文件要十几次确认而失去性能优势，则明确体验 FAIL/阻断发布，不以放开 `git *` 或动态 `git diff/show *` 的写入危险白名单来提速。
 
 
 
@@ -337,7 +360,7 @@ T1 任何真实加载失败、危险工具负测未被权限拒绝、无法可�
 | Service/Mapper | 至少一次 Service + Mapper/XML 修改 | 按证据搜索必要 Controller 和 SQL |
 | 状态流转/幂等/资金敏感 | 至少一例有真实高风险业务路径 | 不为缩短耗时遗漏高风险论证 |
 
-额外复测历史 **17 个小改动文件**规模；记录端到端耗时、P50/P90、实际有效文件首轮覆盖、`read/grep/glob/shell` 调用次数、重复无效检索、已确认 Finding/误报/漏报/未解析路径、Skill 实际加载与权限拒绝轨迹、Git 前后状态以及外网连接检测结果。
+额外复测历史 **17 个小改动文件**规模；记录端到端耗时、P50/P90、实际有效文件首轮覆盖、`read/grep/glob/shell` 调用次数、重复无效检索、已确认 Finding/误报/漏报/未解析路径、Skill 实际加载与权限拒绝轨迹、Git 前后状态以及外网连接检测结果。新增 `ask` 请求/重复授权次数、逐条和累计人工确认耗时、扣除人工确认时间后的 Agent 执行耗时，对比原生 OpenCode；确认人工审批开销不会吞噬原本的速度优势。
 
 **增加 A/B 基准：同一 Windows 机器、同一 Git Diff、同一私有 Provider/Model/模型参数、尽量相近的并发负载，分别运行 A＝OpenCode 原生快速 Review 与 B＝Codea Review 2.0；每组场景分别记录时长、工具调用、重复 `file_read/code_search`、HIGH Finding 的 TP/FP/FN、未解析路径及覆盖清单。优先比较本次 17 文件样本，按 CRUD／Service-Mapper／状态/金额三个场景拆分结果。B 相对 A 明显变慢或漏掉高风险缺陷时不能仅凭总量指标宣称改进；需给出证据和修订建议。无需安装 PR-Agent/reviewdog/Semgrep 或 OCR 来跑 T3；它们只提供设计参照。**
 
@@ -402,6 +425,24 @@ T1 任何真实加载失败、危险工具负测未被权限拒绝、无法可�
 2. **不能保证 Prompt 100% 遵守**：模型可能漏加载 Skill、遗漏某个风险或重复检索；以工具轨迹和必过 fixture 验证，失败就标 FAIL。
 3. **不能确保所有 Dirty 相关性可判定**：无关 untracked 可以继续，但遇潜在语义影响或冲突时必须停止；不引入快照/依赖服务。
 4. **不能保证长输出全部可见**：截断、路径 NUL 丢失等必须 PARTIAL；必要时用户缩小范围。
-5. **不能承诺 V2 任意版本同样运行**：用户级配置、frontmatter 和 Shell 权限以目标 exact 构建验证；当前只是文档依据，尚未取得该企业安装包运行证据。
+5. **不能承诺 V2 任意版本同样运行**：用户级配置、`external_directory` 目录规范化、Skill slash frontmatter 和 Shell 权限都以目标 exact 构建验证；当前只是文档候选，没有该企业 Windows 安装包实际运行证据。
 
 **本轮只修改本设计文档；不创建 Agent/Command/Skill、安装器、测试 fixture 或新 Review Runtime，不进入 T1 开发。修订后提交原设计分支，等待独立审核通过，再独立编写实施计划。**
+
+
+## 12. 第三轮审核问题关闭映射与遗留边界（2026-10-14）
+
+| 审核项 | 修订章节 | T1/T3 真实证据 |
+| --- | --- | --- |
+| P1-01 用户级 references 的 external_directory/read | 3.3/3.4、7.1/7.2、T1-02a/02b | 两份指定 reference PASS；同目录第三文件和其他用户目录 DENY；规则资源与次序记录 |
+| P2-01 同名覆盖检查 | 3.1/3.5、7.3、T1-03 | 在执行 Command **之前**发现项目/用户/兼容目录/显式 Skill 冲突，确认实际加载来源 |
+| P2-02 ask 审查耗时 | 3.3、T1/T3 | 授权总数、重复次数、累计等待与 Git 工具调用数；不能直接放开 git 通配 |
+| P2-03 slash 配置兼容 | 3.2、T1-03 | 对目标 exact 版只用已证实的一种字段，确认唯一 Command 和 Skill 加载 |
+
+**官方机制依据**：[OpenCode V2 Permissions](https://dev.opencode.ai/v2/docs/permissions/) 说明外部目录边界与底层 `read` 的两道授权、`~`/`$HOME` 规则前缀展开、托管全局配置目录默认例外及有序 Agent 覆盖；[V2 Skills](https://dev.opencode.ai/v2/docs/skills/) 说明精确 ID、同名覆盖和版本相关元数据；[V2 Commands](https://dev.opencode.ai/v2/docs/commands/) 与 [V2 Config](https://dev.opencode.ai/v2/docs/config/) 说明命令及配置优先级。文档只声称**设计依据已核对**，不声称公司当前 exact 二进制已通过正负运行测试。
+
+**仍无法承诺**：用户机器上 Permission 资源/Windows 路径的具体匹配（必须 T1 实测），模型必然遵守 Prompt、Java 调用链穷举、Git Shell 的 OS 级不可绕过只读和无条件固定执行时间。若两份 references 的狭窄授权不能同时满足其他用户文件拒绝，T1 必须 FAIL，不得新增 Runtime/Plugin 或直接扩大到用户主目录放行。
+
+**对三个最终问题**：①官方机制支持 Skill 加载并通过原生双重权限读取 references，但是否在用户公司 Windows 安装版正常生效须由 T1 工具轨迹证明；②架构仍为 OpenCode 2.x + 一个 Reviewer Agent + 一个 Skill（两份普通文本 references）+ 一个 Command，无其他运行组件；③**本次设计修订具备提交独立终审的条件，终审通过才进入 T1**，并不是已完成 T1 运行验收。
+
+**本轮只修改本设计文档并提交原分支；不创建 Agent/Skill/Command、插件、读取工具、运行时或实施计划。**
