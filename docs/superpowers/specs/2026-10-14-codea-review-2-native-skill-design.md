@@ -116,6 +116,9 @@ permissions:
   - { action: skill, resource: codea-review, effect: allow }
   - { action: shell, resource: "git rev-parse --show-toplevel", effect: allow }
   - { action: shell, resource: "git rev-parse HEAD", effect: allow }
+  - { action: shell, resource: "git rev-parse --abbrev-ref HEAD", effect: allow }
+  - { action: shell, resource: "git rev-parse origin/master", effect: allow }
+  - { action: shell, resource: "git rev-parse master", effect: allow }
   - { action: shell, resource: "git status --porcelain=v1 -z --untracked-files=all", effect: allow }
   - { action: shell, resource: "git merge-base *", effect: ask }
   - { action: shell, resource: "git diff --no-ext-diff --no-textconv --name-status -z *", effect: ask }
