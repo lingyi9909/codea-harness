@@ -1,9 +1,9 @@
 # Codea Review 2.0｜基于 OpenCode 2.x 原生 Agent 的轻量 Java Review 方案
 
 > 日期：2026-10-14
-> 状态：**CONDITIONAL PASS 审核意见修订稿，待独立复核**；尚未实施、尚未发布或完成内网验收
+> 状态：**第二轮 CONDITIONAL PASS 反馈修订稿，待第三方独立复核**；尚未实施、尚未发布或完成内网验收
 > 目标环境：Windows 内网、OpenCode 2.x TUI、公司私有大模型、Java/Spring Boot/Maven
-> 说明：依据独立审核 P1-01～04 / P2-01～06 修订；本次**仅更新原设计文档**，不更改 Harness 1.8、产品 Skill/Command/Agent 或发布物。
+> 说明：保留首轮 P1/P2 修订，增补第二轮 P1 安装/工作区一致性与 Shell 只读边界、P2 性能/真实项目验证；本次**仅更新原设计文档**，不改 Harness 1.8 或产品配置/代码。
 
 ## 1. 背景与确定的技术选型
 
@@ -36,86 +36,76 @@
 
 普通需求的目标性能：变更文件数 5–20 且 diff 新增+删除行不超过 800 时，端到端 P50 ≤ 3 分钟、P90 ≤ 5 分钟；至少 10 次同模型独立测试后才能据此声称达标，当前尚未验证。
 
-## 3. 核心架构、Skill 确实加载与 Review 专用只读配置（P1-01/P1-03）
+## 3. 核心架构与用户级配置、Skill 实际加载、Reviewer 权限（第二轮 P1-01/P1-02）
 
-### 3.1 最小主链路及文件边界
-
-```text
-OpenCode 2.x TUI
-   │ 用户 /codea-review [可选 Controller]
-   ▼
-Command (.opencode/commands/codea-review.md)
-   │ 在当前主会话选择 codea-reviewer primary Agent
-   │ 必须调用原生 skill 工具并验证返回
-   ▼
-codea-review Skill (SKILL.md)
-   │ 必须按需读取 references（内容不自动加载）
-   ▼
-预检 Git / 状态 → Git Diff 快速扫描 → 风险假设验证 / 按需上下文
-   ▼
-简洁中文报告（无代码修改）
-```
-
-拟实施文件（**仅为设计路径，本轮不得创建**）：
+### 3.1 产品交付位置：默认 Windows 用户级，不写 Java 仓库
 
 ```text
-.opencode/
-  agents/codea-reviewer.md             # OpenCode V2 原生单个 primary Agent 配置，非插件/编排
-  commands/codea-review.md             # /codea-review 入口；不使用命令 Shell 插值
-  skills/codea-review/
-    SKILL.md                            # 两阶段步骤、失败停止语义
-    references/
-      java-risk-checklist.md            # 高风险规则，必须加载
-      report-template.md                # 简报格式，必须加载
-tests/fixtures/codea-review/            # 后续 T1/T2 才创建
+OpenCode 2.x TUI（Java 项目工作目录）
+  └─ /codea-review [可选 Controller]
+       └─ 用户级 commands/codea-review.md（当前会话选择 reviewer primary）
+            └─ 原生 skill 工具加载 codea-review
+                 └─ SKILL.md + 两份必读 references
+                      └─ Git Diff 快扫 → Java 风险假设 → 按需上下文 → 中文简报
 ```
 
-这是三份配置入口（Agent、Command、Skill）而非新增引擎。Review Agent 仅是官方配置的**一个 primary Agent**，不创建或调用 Subagent；旧 Harness 1.8 不参与。`/codea-review` 是独立命令，不覆盖旧 `/harness-review`。
+**默认安装目标**：OpenCode 官方 V2 全局目录 `~/.config/opencode`。在默认 Windows PowerShell 用户环境中通常为 `$HOME\.config\opencode`，例如 `C:\Users\<用户>\.config\opencode`；不可误用 `%APPDATA%\opencode`、旧版或其他产品目录。若配置了用户主目录/便携模式/系统策略，以目标 OpenCode exact 版本发现的真实路径为准，**不猜目录，也不修改 Java 项目**。
 
-### 3.2 Command 对 Skill 的显式加载协议
+```text
+~/.config/opencode/
+  agents/
+    codea-reviewer.md                 # 一个原生 primary Agent，仅影响此 agent
+  commands/
+    codea-review.md                   # /codea-review 唯一预期入口
+  skills/
+    codea-review/
+      SKILL.md                        # 两阶段步骤和失败处理
+      references/
+        java-risk-checklist.md        # 必读：Java 高风险判定
+        report-template.md            # 必读：中文简报格式
+```
 
-OpenCode V2 Command 是提交到会话的 Prompt 模板，**不会天然加载同名 Skill**。V2 的 Skill ID 来自路径，不依赖 frontmatter 名称；`references/` 中的文件也不会自动注入。
+上面是**未来实施布局，本轮不创建文件**。最小使用要求仅有已安装的 OpenCode 2.x、公司私有模型及本机 Git。Review 不将配置复制进 `.opencode`，因而不会因为首次安装把 Java 工作区变 Dirty。后续 T2 测试 fixture 可在**公开测试仓库**中单独建文件，不向真实业务仓库注入文件。不要顺手修改全局 `opencode.json(c)` 的 `default_agent`、Build/Plan 权限或原有 Provider。
 
-T1 实施时，`.opencode/commands/codea-review.md` 的**建议最小模板（设计示例，不是已创建产品文件）**：
+**发现和冲突**（官方 V2）：
+- 原生 Agent：`~/.config/opencode/agents/<id>.md`；Command：`~/.config/opencode/commands/<id>.md`；Skill：`~/.config/opencode/skills/<id>/SKILL.md`。
+- 项目级同名 Command 会覆盖用户级；Skill 以精确**路径 ID** 为键，项目级 `.opencode/skills` 和显式 `skills` 路径可覆盖全局同 ID 的定义。Agent 的后加载配置可能合并/覆盖同名定义。**不默许覆盖**：若发现项目级 `codea-reviewer` / `codea-review` 同名对象，预检输出冲突路径并停止，要求用户在项目侧处理；不能在模型 Prompt 中假装读到了全局版本。
+- Skill `name` 仅显示名称，实际调用 ID 是 `codea-review`。Skill 目录可内含 references，但 OpenCode 不会自动加载 supporting files。
+- 必须在 Windows 中文、空格用户名路径和 Java 项目子目录中证明实际加载来源和 references 正确。T1 先在无项目配置的干净项目运行，再测试同名冲突 fail-closed。
+
+### 3.2 Command 显式加载 Skill（保留首轮 P1-01，澄清 slash）
+
+Command 是 Prompt 模板，**不等于**自动执行 Skill。未来全局 `commands/codea-review.md` 的设计示例（本轮不创建）：
 
 ```markdown
 ---
-description: 使用 Java 风险规则只读审查当前分支已提交变更
+description: 只读检查当前分支已提交 Java 需求的中高风险
 agent: codea-reviewer
 ---
 
-执行 Codea 快速 Java Review。用户可选 Controller：$ARGUMENTS
-
-首个模型工具动作必须调用原生 skill 工具，skill ID 精确为 codea-review；
-只有获得成功的工具返回后，才执行后续 Git 或源码读取。
-Skill 不存在、权限拒绝、工具失败，立即停止：报告“SKILL_LOAD_FAILED”，
-不得改成通用 Review 冒充 Codea 专项审查。
-按 SKILL.md 要求读取 references/java-risk-checklist.md 和 references/report-template.md；
-任何必读文件不可读时停止并报具体缺失文件。
-必须在审查前检查 Git ref 与工作区是否干净，只审已提交差异。
-保持只读，不修改代码、不跑构建/测试、不执行外网调用；
-审查输出必须区分已检查/未检查范围和已确认/待确认风险。
-不要使用额外 Subagent。最后输出简洁中文结果。
+执行 Codea Java 快速 Review；可选 Controller 重点：$ARGUMENTS
+首个模型工具调用必须使用原生 skill 工具加载精确 ID codea-review。
+Skill 加载失败或任何必读 references 读取失败，立即停止并报 SKILL_LOAD_FAILED；
+不得回退为普通模型自述的 Java Review。
+只用已提交 Git Diff；预检阶段核查 HEAD/基线和工作区变更，
+对无关 untracked 只提示不读取，禁止混用工作区源码与提交证据。
+只读、禁外联、不运行代码/测试/构建，不使用 Subagent。
+输出已覆盖/未覆盖范围、真实中高风险 Finding 和待确认风险。
 ```
 
-**可验证的实际行为**：
-- `skill` 工具入参 ID 必须是 `codea-review`；工具返回表示加载了正确 `SKILL.md` 正文。
-- `SKILL.md` 正文明确要求先通过 OpenCode 原生 `read` 读取两个 `references/` 文件，按工具返回路径解析，不靠模型凭记忆复述；规则与报告模板为必读，其他可选背景资料才允许按需读。
-- 把 `SKILL.md` 中 `slash: false` 写在 frontmatter，避免 V2 自动注册同名 `/codea-review` Skill 入口覆盖命令；`name: codea-review`、`description` 保留作为显示信息。目录 ID 大小写精确匹配。若同名 global Skill 与项目 Skill 冲突，先核对 V2 的 ID 解析结果。
-- **可观察性不等于强制机制**：Prompt 要求调用工具，但模型可能遗漏。T1 从真实 OpenCode 会话工具轨迹核对 `skill(codea-review)` **实际成功**、随后两次 `read` 成功；只看到最终文本说“已加载”一律 FAIL。
-- T1 负向：删除或禁用 Skill / 拒绝 `skill` 权限 / 缺一份 reference；必须明确停机。若真实模型不能稳定触发加载，T1 FAIL，**不得宣称 Command 已保证加载**；先调整 Command 提示，不自建 Loader/Plugin。
-- OpenCode V2 `!` + 反引号的 **Command Shell 插值发生在 Agent 权限检查之外**。模板内严格禁止 `!` Shell 插值，也禁止把 `$ARGUMENTS` 放进任何 Shell 插值或命令字符串；Git 命令必须由受控 Agent 的工具调用执行。
-- V2 的 `agent: codea-reviewer` 会将该会话当前 Agent 切换到 reviewer；Review 后用户如要正常开发须手动切回 Build。不要修改 `default_agent`，不改变其他会话的默认 Build 配置；`subtask` 在目标 V2 中不产生隔离效果，不作为保障。
+Skill `SKILL.md` 应有 `name: codea-review`、`description` 和 **`slash: false`**；经查 V2 官方 Skills 文档确实支持顶层 `slash: false`，并支持 `metadata.opencode/slash`，**两者不要同时写成冲突值**。T1 针对目标 **exact 2.x** 核验 `/codea-review` 实际映射的**是 Command，而非同名 Skill slash**；模型执行后工具轨迹必须有成功的 `skill(codea-review)`，然后成功读取 `references/java-risk-checklist.md` 和 `references/report-template.md`，最后才能 Git Review。静态配置正确不等于已在模型运行时成功；失败一律 T1 FAIL。
 
-### 3.3 只读技术取舍：Plan vs 单个 Reviewer primary Agent
+**禁止在 Command 模板使用 `!`+反引号 Shell 插值**：V2 官方文档确认其执行在 Agent 工具权限流程之外，会绕过后面的 Reviewer Shell 规则。`$ARGUMENTS` 只能作为待校验的用户目标文本，不能拼成任意 Shell 命令。
 
-**决策：采用轻量 `codea-reviewer` primary Agent 配置。** V2 内置 Plan 默认禁止一般编辑，但 **Shell 不默认全禁**，并允许写 OpenCode Plan 文件，不符合“只读 Review”预期。只为 Review 任务创建一份原生 Agent Markdown 配置，命令显式 `agent: codea-reviewer`；不全局修改 Build / Plan 权限。
+命令 `agent: codea-reviewer` 切换**当前会话**的 primary Agent；Review 后用户可手动切回 Build。单独命令不改变其他会话的 Build/Plan，也不写 `default_agent`。不要使用 V2 无实际执行效果的 `subtask` 冒充隔离。
 
-建议的 Agent frontmatter（仅演示 V2 原生配置，不是本轮产物）：
+### 3.3 Reviewer 专用 V2 权限：固定 Git 命令允许、动态只读 Git 人工授权
+
+**选用原生 `codea-reviewer` primary Agent，不改全局 Build/Plan 配置**。以下仅是未来设计建议的核心权限形状（不是已经通过 Windows 验收的安全策略）：
 
 ```yaml
 ---
-description: 只读 Java 差异审查（Codea 专用）
+description: Java 已提交差异只读审查
 mode: primary
 permissions:
   - { action: "*", resource: "*", effect: deny }
@@ -124,58 +114,80 @@ permissions:
   - { action: glob, resource: "*", effect: allow }
   - { action: grep, resource: "*", effect: allow }
   - { action: skill, resource: codea-review, effect: allow }
-  - { action: shell, resource: "git rev-parse *", effect: allow }
-  - { action: shell, resource: "git status *", effect: allow }
-  - { action: shell, resource: "git merge-base *", effect: allow }
-  - { action: shell, resource: "git diff --no-ext-diff --no-textconv *", effect: allow }
-  - { action: shell, resource: "git show --no-ext-diff --no-textconv *", effect: allow }
+  - { action: shell, resource: "git rev-parse --show-toplevel", effect: allow }
+  - { action: shell, resource: "git rev-parse HEAD", effect: allow }
+  - { action: shell, resource: "git status --porcelain=v1 -z --untracked-files=all", effect: allow }
+  - { action: shell, resource: "git merge-base *", effect: ask }
+  - { action: shell, resource: "git diff --no-ext-diff --no-textconv --name-status -z *", effect: ask }
+  - { action: shell, resource: "git diff --no-ext-diff --no-textconv --numstat -z *", effect: ask }
+  - { action: shell, resource: "git diff --no-ext-diff --no-textconv --unified=3 *", effect: ask }
+  - { action: shell, resource: "git show --no-ext-diff --no-textconv *", effect: ask }
+  - { action: shell, resource: "*--output*", effect: deny }
+  - { action: shell, resource: "*;*", effect: deny }
+  - { action: shell, resource: "*|*", effect: deny }
+  - { action: shell, resource: "*&*", effect: deny }
+  - { action: shell, resource: "*>*", effect: deny }
+  - { action: shell, resource: "*<*", effect: deny }
+  - { action: shell, resource: "*\u0060*", effect: deny }
 ---
-只检查已经提交的 Java 需求变更。绝不编辑文件、不执行测试/构建。
-只能使用上述只读 Git 操作；不尝试权限绕过或外部工具调用。
+只读审查，不编辑、不运行测试/构建；动态 Git 命令需用户核对后授权。
 ---
 ```
 
-以上利用 V2 有序 `permissions`（**不是** V1 的 `permission` / `bash`）；最后一条匹配规则生效。默认拒绝 `edit/write/patch`、`execute`、`subagent`、`websearch/webfetch`、MCP/外部工具、外部目录访问及其他 Shell 命令；只放行实际需要的 Git 只读形式和 `skill/read/grep/glob`。保留源码路径 `read`，默认不授予外部目录读取。Git `--no-ext-diff --no-textconv` 避免外部 Diff/文本转换执行。对需人工授权的新只读命令，先经过设计审查再精确增加允许形式，**不把 `git *` 或全部 Shell 开放**。
+**特别说明**：宽泛允许 `git diff ... *` 或 `git show ... *` 是不安全的，因为可加 `--output` 或利用 Shell 管道重定向；本版不再将这些模式设为 `allow`。完整命令参数存在变化的 `merge-base/diff/show` 仅允许 `ask`，由开发人员**逐条核对确认**是否确属约定的只读命令；不允许“永远允许”模式放宽授权，不能以手动批准绕过已配置的 `deny`。如审批提示过多影响效率，T1 应实际测量并决定是否缩小 V1 支持范围，而不是直接将通配 `ask` 改为 `allow`。固定形式之外的 `git commit/checkout/clean/push/reset` 以及外部工具均被兜底 `deny`，`edit/write/patch` 共用的 `edit` 操作同样被兜底禁止；未引入任何自定义 Git 执行工具。***注意：以上模式仅是审查方案示例，具体元字符解析由 V2 Shell scanner 决定，T1 实测前不得以“配置存在”宣称可阻断任何绕过***。
 
-这属于**宿主权限级防误操作**，不是 OS 安全沙箱：Shell 规则以命令文本匹配，Git 配置/别名、命令组合、Shell 重定向、工具能力变化及已安装插件可能带来意外路径。T1 必须用真实 Windows Shell/工具轨迹验证“命令拼接、重定向、`git commit`、`git clean`、`git push`、`rm`、`Invoke-WebRequest`、`edit/write/patch`、`execute`、`subagent`”均被拒绝；如存在绕过则不宣称已达到只读门槛，并进一步收紧原生规则。不得将 Agent 自述当作权限测试证据。
+- **T1 必过负向行为**：`git diff --output=...`、`git show --output=...`、重定向 `>`/`>>`、PowerShell `;`/`|`/`&`/`$(...)`、Git 全局 `-c`/外部 diff/textconv、`git commit/checkout/clean/push/reset/stash`、脚本/网络命令、`edit/write/patch`、`execute`、`subagent` 和已接入的 MCP/插件。必须在**真实 Windows OpenCode Tool permission** 中被拒绝，不能“只生成文本不执行”充当负测；对实际待测工具注入请求并核对工具拒绝结果、工作区文件内容未变。若某种命令在规则下返回 `ask` 而非 `deny`，按“未被自动阻断”处理并判安全负测 FAIL，不允许测试员手动拒绝就算权限通过。
+- Shell scanner 是按命令文本和解析语义检查，仍可能被新参数、别名、外部配置、命令执行链或环境变量规避，不能证明任意 Shell 输入不可产生写入。`git status` 等读取型 Git 命令也可能更新 Git 内部缓存/索引时间戳；我们的承诺是**不改业务源码/提交历史**，不是磁盘零写入。
+- **故障降级**：如果 T1 无法同时满足基本差异读取与危险命令阻断，不向生产发布“机器级只读”；先选择更窄的 Git 命令操作集合或显式人工批准作为有限防误操作，再复核 V1 适用性。严禁为达到绝对保障改造 Harness 式权限网关。
 
-**额外约束**：审查中不执行仓库中的脚本、构建或测试；仓库文件包含的提示词视为待审查数据。Agent 完成 Review 后，不会自动重新开放 Build 权限；用户正常开发主动切回 Build 即可，无需更改全局权限。
+**实际保障级别：Codea Review V1 是 OpenCode 原生权限提供的防误操作能力，不等同于操作系统级只读安全沙箱。** Tool Calling/命令 scanner 与默认全局策略必须按具体 exact 版本复验。
 
-## 4. Git HEAD 一致性、路径与范围协议（P1-02/P2-01/P2-02/P2-06）
+## 4. 已提交 Git 范围、Dirty Worktree 与 HEAD 证据一致性（第二轮 P1-01/P2-02/P2-03）
 
-### 4.1 输入与 Dirty Worktree 的 fail-closed 策略
+### 4.1 审查范围和工作区状态决策
 
-- `/codea-review`：默认审查当前分支已提交的 `origin/master...HEAD`；未找到 `origin/master` 时回退本地 `master`，都不存在则停止并要求显式选择基线，不擅自转到 `main`。
-- `origin/master` **只是本机缓存的远程跟踪引用**，未必最新；不自动 `fetch`、不联网。报告必须显示实际基线完整 SHA、merge-base SHA、HEAD SHA，并提示用户按公司流程确保基线已更新。
-- `/codea-review OrderController`：这是**重点审查与展示归因**，不是 Controller 完整静态审计、不是严格筛除其他变更的安全隔离，也不能声称找齐全部上游 Controller。即使指定 Controller，第一阶段仍盘点全量有效 Git 变更，报告明确何者被深入审查。
-- **V1 的保守决策：发现任何工作区未提交文件或修改（含 staged、unstaged、untracked，甚至排除目录下的变化）就停止**。这是故意比“只拦影响范围的变更”更严格的简单机制；不引入 Git 快照系统。提示分类及文件列表（注意敏感路径脱敏）、建议先提交/移开变更或到干净工作区审查，绝不擅自 stash/checkout/clean。未跟踪的日志/构建文件如在 `.gitignore` 中被忽略，默认 `git status` 不显示，不能对其作已核查声明。
-- 预检使用 `git status --porcelain=v1 -z --untracked-files=all`，不依赖人类可读的 `git status --short`。T1 要验证其 NUL 分隔输出在 Windows OpenCode 工具链中未被截断；若未能可靠解析，必须停止并用人工可解释的保守检查替代，不能默认为干净。
-- 用于证据的 canonical 内容优先从 `git show --no-ext-diff --no-textconv HEAD:<repo-relative-path>` 读取，绝不直接把工作区当前内容当作已提交 HEAD 证据。关联源文件也优先由 HEAD 读取，必要的原生 `read` 只作辅助上下文，并在报告证据前与 HEAD 一致性核实。删除文件从 merge-base 读取，重命名前后分别从对应提交读取。
+- 默认 `/codea-review` 使用本地 `origin/master...HEAD` 的共同祖先作为已提交变更基线；不存在则尝试本地 `master`，都没有就报错，不擅自使用 `main`。`origin/master` 仅是**本地 remote-tracking ref**，可能过期，不自动联网 `fetch`；完整基线 SHA、merge-base SHA、HEAD SHA 和分支名必须在报告中提供。
+- `/codea-review OrderController` 是**定向重点审查**，并非完整 Controller 审计或严格文件白名单；首轮仍盘点本次所有有效 Diff，随后重点验证其真实上游入口。
+- Review 配置默认安装在用户级位置，**不在 Java 项目增加 `.opencode` 文件**。如果开发人员已有项目级 `.opencode` 新文件，它们可被记录为无关 untracked，并在配置冲突检测通过时继续，但绝不因此使用来源不明的同名 Skill。
 
-### 4.2 确定性范围与双向版本校验
+V1 Dirty 检查采用**不建快照的保守相关性判断**（`git status --porcelain=v1 -z --untracked-files=all`，必要时查看 `git diff --name-status` / `--cached` 的状态，不以“无提示”代表干净）：
 
-1. 记录项目根、当前分支、`HEAD` 提交 SHA、本地基线 SHA；未提交变更预检必须通过才开始。所有 Shell 由受控 Agent 调用，`$ARGUMENTS` 只能作待校验目标文本，不能插入 Shell 字符串。
-2. `git merge-base <baseline> HEAD` 得到共同祖先；`git diff --no-ext-diff --no-textconv --name-status -z <merge-base> HEAD` 获取状态与路径，`git diff --no-ext-diff --no-textconv --numstat -z <merge-base> HEAD` 统计。与 `git diff <baseline>...HEAD` 的语义相同。尽量使用 NUL 路径分隔避免中文、空格、Tab、换行、引号产生误判。
-3. `-z` 的二进制 NUL 输出在 OpenCode Shell 的文本返回中**可能不保真**：T1 用含空格、中文、重命名的 fixture 明确验证；若不能保真则失败并在实施时采用经过测试的非 NUL 安全转义解析策略，不能拆字符串靠空格匹配。
-4. 以确定的相对路径读取 `git diff --no-ext-diff --no-textconv --unified=20 <merge-base> HEAD -- <path>`；新增/删除/重命名的 old/new path 与状态要分别记录；含 `..`、绝对路径、仓库外符号链接、注入参数前缀的用户输入必须拒绝或要求人工确认。不能仅依赖扩展名猜文件安全性。
-5. **执行期间的有效性**：每一阶段开始及报告生成前重新查询 HEAD/基线 SHA 与 `git status --porcelain=v1 -z --untracked-files=all`。任何变更（包括用户中途 checkout、amend、新增未跟踪文件）立即终止为 `INCOMPLETE/SOURCE_CHANGED`，保留已发现但不宣称最终完整；不可继续消费旧 Git diff。检查之间仍有短暂竞态，因此不宣称“不可更改的快照审计”。
-6. 解析失败、路径二义性、已提交对象不可读、仓库尚未提交、空 diff、binary diff 需分别给出可操作的状态；不能把失败或没有 diff 写成“没有缺陷”。
+| 工作区情况 | 默认处理 | 如何保证证据 |
+| --- | --- | --- |
+| HEAD 中已提交的业务代码变更 | 正常审查 | 基线/HEAD SHA 与 Git object 一致 |
+| staged/unstaged **已跟踪**文件修改 | **V1 保守停止**；无需费力证明无关。严格于“仅影响范围才停止”，避免漏掉间接依赖 | 不自动 stash/checkout/reset |
+| 明确无关的 untracked（如非审查目标的临时个人笔记或非冲突 `.opencode` 配置） | 可继续；列入“未纳入的 untracked” | 不读取、不引用、不作为已提交证据 |
+| untracked 与本次修改同路径、同包业务类、相关 Mapper/配置/引用，或可能遮蔽工具同名定义 | 停止 | 不把未跟踪代码当 HEAD 内容 |
+| untracked 相关性无法判断、路径解析失败 | **停止**，并提示移动或提交后重试 | fail-closed |
+| HEAD/基线在 Review 中改变 | 立即终止 `INCOMPLETE/SOURCE_CHANGED` | 废弃旧的上下文和结果结论 |
 
-### 4.3 默认排除和保留
+**不尝试通用依赖图判断**：明确无关的 untracked 的最低条件是文件路径不处于本次有效 Diff 及其明确关联的 Java/Mapper/配置路径中，未被选中/阅读、不属于模型将检索的相关业务包，并非同名 Agent/Command/Skill。任何疑问一律停止。untracked 下有 `.gitignore` 忽略的条目无法由正常 `git status` 完整发现，报告不宣称已检查全部忽略文件；忽略目录中仍可能包含工具配置或影响语义的文件，T1 验证此边界。
 
-按**仓库相对路径**过滤根目录及任意嵌套模块的 `.opencode/**`、`.teamai/**`、`.code-harness/**`、`target/**`、`node_modules/**`、`build/**`、`dist/**`、`*.class`、`*.log`；`.git` 是内部目录，不进入 Git diff。注意配置加载目录（`.opencode/`）虽不审查其变更，但如存在未提交变更，仍须通过上述 fail-closed 预检。
+**工作区源码默认不作证据**：查找/grep 命中工作区代码后，必须从固定**起始 HEAD SHA** 的 Git 对象读取、核对同符号原文；Finding 证据只能来自确定提交；`git show <fixed-head>:<repo-relative-path>`（带 `--no-ext-diff --no-textconv`）或同等 Git blob 读取。不能从 `read` 的 Dirty 文件直接引用；若在 HEAD 对象中不存在，标为“非本次已提交证据”并停止相关风险归因。删除文件使用 merge-base 对应内容，重命名分别记录旧/新路径。
 
-必须保留 `src/**/*.java`、`**/*Mapper.xml`、`pom.xml`、`application*.yml` / `application*.yaml`、相关测试及确有业务影响的配置文件。对根目录与嵌套 Maven 子模块分别测路径模式；排除只作用于候选变更，必要上下文可只读查询，但不能把排除项作为新增 Finding 位置。报告同时列有效变更、排除项和未审项的数量。不要把 OCR 的 `rule.json` 当作 OpenCode 配置。
+### 4.2 Git 差异处理与短上下文首扫
 
-### 4.4 规模与终止
+1. 预检：Git 根、分支、`HEAD` SHA、基线 SHA、`merge-base`、`status --porcelain`；使用 `--name-status -z` 列完整改动文件和状态，使用 `--numstat -z` 汇总变更。`-z` 的 NUL 原始字节可能不能从 V2 文本 Shell 工具无损返回；T1 必须在含中文、空格、重命名文件场景下实测。无法保真则转换到经验证的安全路径解析策略，不能按空格拆路径，更不能假设无文件。
+2. **首轮使用 `git diff --no-ext-diff --no-textconv --unified=3 <merge-base> <fixed-head> -- <path>`**（可按实际体验选 `--unified=5`）。先查看每个有效文件的低上下文 Diff，再针对真实风险假设读取完整方法或用更大 `--unified`，不默认对每个文件 `--unified=20`。
+3. 采用仓库相对路径；重命名记录 old/new，删除和二进制不伪造可读正文。`--` 分隔文件路径；用户输入的 Controller 仅作经过校验的符号筛选，不进入 Git 命令。禁止 arbitrary `-c`、`--output`、外部 diff/textconv 和 Shell 插值；动态命令按第 3.3 节显式授权。
+4. **Shell 输出截断必须可发现且会改变结论**：建立状态清单和 numstat 的独立预期，逐文件核验 diff header、`@@` hunk 范围及实际返回内容，检测 OpenCode 工具输出的截断标记/行数上限、退出码、NUL/路径丢失、相互不符的文件数。文件 Diff 很长时拆成可读片段或缩小目标，不用静默截断的单次全量返回。若输出没有可信的完整性证明（例如只有部分 hunk、数据超上限、截断但无法分片恢复），该文件记为 **UNREVIEWED/截断**，执行状态 `PARTIAL`；不能靠模型记忆补齐，更不能说“全部文件已审查”。本规则仅要求识别/披露截断，**不引入截断恢复引擎或快照服务**。
+5. 阶段边界及出报告前再次核对 HEAD、基线 SHA、tracked 状态和已允许的 untracked 分类。HEAD/基线移动或出现新增相关 Dirty 修改，停止为 `INCOMPLETE/SOURCE_CHANGED`；新增明确无关 untracked 可记录并继续。检查之间可能仍发生竞态，明确没有不可更改的快照证明。
 
-超过 **25 个有效变更文件或 800 行新增+删除**：仅作高风险优先扫描，标明 `PARTIAL`，鼓励缩小需求范围或手工触发深度 Review；不得不提示就遗漏文件。HEAD/基线发生变化、Dirty 工作区或关键路径/差异读取失败时直接停止；模型推理无法确认的动态边界列为“未解析”，不伪造确定性覆盖。
+### 4.3 默认路径过滤（保留既有规则）
 
-## 5. 两阶段 Java Review 与停止条件（P2-03/P2-04/P2-06）
+按**仓库相对路径**过滤根目录和嵌套 Maven 模块的 `.opencode/**`、`.teamai/**`、`.code-harness/**`、`target/**`、`node_modules/**`、`build/**`、`dist/**`、`*.class`、`*.log`；`.git` 内部目录不进入 Git Diff。过滤只用于已提交**审查范围**，而非无条件禁止存在无关 untracked；配置冲突另按 `3.1` 检查。
+
+保留 Java、Mapper.xml、pom.xml、application*.yml/yaml、测试及其他实际影响业务的资源文件。所有路径按仓库相对路径处理，不能仅用扩展名或目录名推断符号是否可达；若关键被排除文件确实影响业务，应披露为范围限制。保留排除文件数与规则说明；不照搬 OCR 的 `rule.json`。
+
+### 4.4 规模、异常、权限失败的状态
+
+有效变更超过 **25 个文件或 800 行新增+删除**，转为重点风险抽样与 `PARTIAL`（并列未审清单）。没有 Git 基线、工具请求被拒绝、输出被截断、引用未找到、已提交内容与工作区不可消歧、HEAD/基线改变，均不可给出完整审查结论。遇权限 `ask` 未批准的动态 Git 命令，应显示范围/证据读取不足，明确停止或 `PARTIAL`；**不要尝试调用其他工具绕开授权**。
+
+## 5. 两阶段 Java Review 与停止条件（保留质量门槛，补充小 Diff 首扫）
 
 ### 5.1 第一阶段：全部有效 Diff 快速扫描
 
-- 一次性汇总全部有效文件、变更方法、Mapper SQL、配置、数据写入及跨服务边界，按 CRUD / Service-Mapper / 状态流转与资金敏感变更分组。
+- **首先用 `--unified=3` 的小上下文 Diff** 覆盖每一个有效文件，再汇总变更方法、Mapper SQL、配置、数据写入及跨服务边界，按 CRUD / Service-Mapper / 状态流转与资金敏感变更分组；出现截断或无法确认完整性时该文件标 `UNREVIEWED`，总执行状态为 `PARTIAL`。
 - **不**在第一阶段为每个文件强制做完整调用链搜索；只标记具体的待验证高风险假设。
 - 优先找可能线上故障的事务、并发、幂等、数据一致性、金额精度、权限/租户越权、危险 SQL、关键状态转移。忽略纯样式、命名及缺乏证据的泛化优化建议。
 - 所有有效 Diff 都要进入首轮范围清单；超预算/大变更必须列出没有覆盖的部分，不能静默省略。
@@ -235,56 +247,59 @@ permissions:
 ## 覆盖与限制
 - Dirty Worktree：预检已通过 / 若失败则 Review 未开始
 - 排除：.opencode、.teamai 等（数量及原因）
-- 未审/未知：...；搜索停止原因：...
+- 未审/未知：...；搜索停止原因：...；截断文件及原因：...
+- 未纳入的无关 untracked：...（不被读取、不作 Finding 证据）
 ```
 
 执行状态、覆盖范围、风险判断分离。没有确认 Finding 只能写“在实际审查范围内未发现有证据的中高风险问题”，**不能**等同零缺陷、审查完所有调用链或允许上线。`COMPLETE` 仅指计划的有效 Diff 首轮覆盖并完成风险驱动验证，**不是**全系统证明安全。用户明确要求落盘时须提示与默认只读模式冲突，需要另行切换到允许写的开发会话，由用户确认后保存；本轮 Codea Reviewer 永不执行写入。
 
-## 7. Windows 内网、安全、安装预检与回退（P1-03/P2-05）
+## 7. Windows 内网、安全边界、用户级分发与回退（第二轮 P1-01/P1-02/P2-06）
 
-### 7.1 开发环境预检
+### 7.1 环境、权限和网络预检
 
-T1 开始前记录：**OpenCode exact 2.x 版本**（官方 ZIP/CLI 构建校验）、Windows x64 版本、Git 版本、工作目录、已选的私有 `provider/model` 标识（**不记录 API Key**）、实际接入协议与内网模型地址的脱敏标识、模型是否支持稳定的工具调用、`skill/read/glob/grep/shell` 是否真正可用。
+T1 记录 Windows x64、**OpenCode exact 2.x 安装版本及来源/校验**、Git 版本、公司私有 Provider/Model（不记录 Key）、TUI Tool Calling `skill/read/glob/grep/shell` 真实调用、全局用户目录实际解析路径。不能把 OCR 测通模型等同 OpenCode 工具加载测试。
 
-预检在空白或自造 fixture 仓库里执行：一次 `skill` 加载、两次必读 reference、`git status`/`git diff`、简单模型工具调用；失败即停止，不进入真实业务代码 Review。不能把“OCR 模型连通成功”当作 OpenCode Tool Calling 已通过。
+企业内网预检覆盖启动、Skill/Agent/Command 加载、Review、首次安装和更新期间的 DNS/连接目标；仅允许已批准公司模型端点。检查自动更新、第三方插件、遥测、公开 Web、分享和其他出站行为，要求**真实联网轨迹无违规外联**。如果用户全局配置里存在自动更新，按 exact 2.x 官方配置关闭：不要误把 V1 `autoupdate`、旧版 `update` 字段当成已验证写法；OpenCode V2 配置文档可能随具体构建变化，T1 先读取目标版 schema 与日志，再用企业批准的方式禁用。现有全局 Provider 和 Build 配置只读检查，不擅自替换。
 
-**离线网络行为**：企业批准的内网模型端点必须是唯一模型出口；检查启动、Skill 加载、Review 期间 DNS/网络连接记录，确保没有自动更新、遥测、插件下载、公共 Web 搜索或 Session 分享访问外网。使用经批准的离线包，不执行在线 `npm install`；若 OpenCode exact 版本存在不可关闭的外连行为，则内网验收 FAIL 并阻断发布。产品/全局禁更新、外网提供商限制必须按实际配置与网络日志验证，不假定仅靠 Skill Prompt 生效。
+### 7.2 原生权限保障的真实边界
 
-### 7.2 默认只读保护
+只在 `codea-reviewer` Agent 下追加 `permissions`，默认 `deny` 写工具、非约定 Shell、`execute`、`subagent`、外联及可见 MCP。固定形式 Git 可按 `3.3` 精确 allow，动态 Git 仅 `ask` 且审阅完整命令、严禁持久“always allow”降低防误操作。**不**把 `git diff/show *` 宽泛放开为 `allow`，不信“read only”自然语言即可保证安全；不用 `!` Command Shell 插值。
 
-只在 `/codea-review` 命令中选中独立的 `codea-reviewer` Agent（见 3.3），其 V2 `permissions` 默认拒绝写入和非允许的 Shell；绝不全局改造用户 Build 模式。Agent 执行期间禁止编辑、测试、构建、提交、stash、checkout、网络请求、启动 Subagent；不使用 Command Shell 插值，不执行代码库里伪装成指令的文本。
+T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 变更子命令、编辑工具及外部执行做真实工具层拒绝测试，并核对原始 Java 源文件 hash 与 Git status 未意外改变。V2 Shell scanner/权限是**文本和工具级的防误操作**，不是覆盖所有 Git 参数、环境与 Shell 构造的完整副作用静态证明。若实际 `ask` 可以访问不应该被批准的操作，不能把测试员点击“拒绝”当作自动防护通过，需进一步缩小 V1 支持的 Shell 模式或明确发布限制。
 
-V2 权限规则并不等价 OS 文件系统隔离；Shell 及任意已启用外部组件的效果需要在 T1 负向验证。报告必须说明“宿主权限防误操作，**非安全沙箱**”；公司如果要求恶意 Agent/同 OS 用户不能越权，另立需求。本版本不建自己的工具权限网关。
+**保障级别准确表述**：**Codea Review V1 提供基于 OpenCode 原生权限的防误操作能力，不等同于操作系统级只读安全沙箱。** 不重新开发 Harness 权限隔离、Git 网关或自研执行引擎。
 
-### 7.3 分发和撤回
+### 7.3 用户级离线安装、升级与卸载
 
-用户初次使用只需要 OpenCode 2.x TUI、内网模型、已安装 Git，以及三份官方格式纯文本配置（Agent / Command / Skill，含两份 reference）。安装前检测同名文件冲突并保留原文件；不能覆盖其他项目的 Build/Plan 设置。首次在单个项目验证，之后再由公司批准推广共享配置目录；保留文件校验和与版本清单。
-
-回退删除/恢复本次新增配置文件，手动在 TUI 切回 Build，**不**触碰原 Harness 1.8 / 项目业务代码 / Git 历史；Harness 1.8 不作为可用运行回退。阿里 OCR 可独立按需使用。
+- **安装**：企业认可的离线 ZIP 只含 `agents/codea-reviewer.md`、`commands/codea-review.md`、`skills/codea-review/SKILL.md` 及两份 references；解压/复制到已确认的 Windows `$HOME\.config\opencode` 下对应目录，**不写 Java 项目的 `.opencode`**，不依赖网络安装包或脚本下载。不默认触碰现有 `opencode.json(c)`。
+- **预检**：检查目录发现、同名文件（global/project/兼容 Skills），对冲突显示路径并停止；已存在同名非 Codea 文件不得覆盖。核对原生 `/codea-review` 指向全局 Command、`skill(codea-review)` 指向全局 Skill 和正确 Reviewer primary。首次安装选择自造的**干净 Java 仓库**验收，无需把工具配置提交到业务 Git。
+- **升级**：复制前由人工备份当前同名三类配置及 supporting files，并在发布包中附文本版本及 SHA256；先替换配置文件、重启或依 V2 的真实热重载能力验证，再跑 T1 预检，不改项目 Provider/Build/Plan 的设置。这里不设计安装器或自动升级服务。
+- **回退**：恢复用户级备份或移除本次专属三个对象及 references，重启/重新加载并切回 Build；不修改 Git 工作区、公司模型、原 Harness 1.8 或其他团队的配置。系统级 `%ProgramData%\opencode` 若存在强制策略，本设计不得覆盖，须在 T1 检查权限冲突。
 
 ## 8. T1～T3 任务与不可降级的验收门槛（P1-01～04/P2-01～06）
 
-### T1：真正可运行的命令、Skill、Git 范围和只读闭环
 
-**将来交付**：`.opencode/agents/codea-reviewer.md`、`.opencode/commands/codea-review.md`、`.opencode/skills/codea-review/SKILL.md`、两个 references 和最小公开 Java/Git fixture。本轮不创建这些文件。
+### T1：用户级配置、真实 Skill、Git 范围和防误操作闭环
 
-真实 OpenCode 2.x TUI 的**通过条件（全部满足才能进入 T2）**：
+**未来产物**：用户级 `agents/codea-reviewer.md`、`commands/codea-review.md`、`skills/codea-review/SKILL.md` + 两份 references，离线文本 ZIP 与测试 Git fixture；**本轮不创建**。
 
-| ID | 场景 | 通过条件 |
+| ID | 验收输入 | 可证实的通过条件 |
 | --- | --- | --- |
-| T1-01 | 调用 `/codea-review` | 选择单个 reviewer primary，真实 `skill(codea-review)` 成功，随后两个 reference `read` 成功，**按真实工具轨迹验收** |
-| T1-02 | Skill 未找到、同名冲突、权限 `deny`、缺 reference | 显示失败并停止，不能用通用 Review 假装成功 |
-| T1-03 | 干净提交分支含多个 Commit | 正确得到 `origin/master...HEAD` 的 merge-base、完整 SHA、全部有效文件；不自动 fetch |
-| T1-04 | staged / unstaged / untracked 各自单独存在，以及三者混合 | 每种都阻断 Review；没有证据读取，不 stash/clean；忽略文件行为如实说明 |
-| T1-05 | 工作区干净、没有未提交修改（正例） | 可读取由 `HEAD` 定义的真实 Java 变更与关联文件并输出报告 |
-| T1-06 | 开始后 HEAD/基线更新、或新增未提交修改 | `INCOMPLETE/SOURCE_CHANGED` 并中断，不沿用旧 diff |
-| T1-07 | 重命名、删除、中文、空格路径、嵌套 Maven `target`/`.opencode` | 路径状态和排除一致；`-z` 不保真时必须 fail-closed |
-| T1-08 | `git commit/clean/checkout/push`、Shell 组合或重定向、`edit/write/patch`、`execute`、外网请求、Subagent | 真正被 reviewer 权限拒绝，Git 工作目录 hash/status 未改变；不能仅信模型说“不会执行” |
-| T1-09 | `$ARGUMENTS` 含空格、特殊字符和恶意 Shell 文本，含 Command Shell 插值检查 | 参数仅作 Controller 文本目标；命令模板无 Shell 插值、无命令注入 |
-| T1-10 | 用户正常 Build 工作流 | Review 配置不改变 Build 的正常工具权限；Review 完成后切回 Build 仍能正常开发 |
-| T1-11 | 固定 OpenCode exact 版本 / 私有 Provider / Tool Calling / 离线网络 | 版本、模型、工具记录齐全且实际工具请求成功；无未经批准的外连 |
+| T1-01 | 全新 Windows Java 项目首次从离线包安装 | 配置加载自用户目录、不创建业务项目文件；`/codea-review` 解析为全局 Command，Reviewer primary 正确 |
+| T1-02 | Skill 正常/缺失/禁止加载、缺 references | 真实工具轨迹含 `skill(codea-review)` 成功且两个 reference `read` 成功；负例 `SKILL_LOAD_FAILED` 并中止 |
+| T1-03 | 项目级与用户级 Agent/Command/Skill 同名，及 `slash` 配置冲突 | 精确识别最终来源、预检阻断冲突，不以不同目录中的错误定义继续审查 |
+| T1-04 | staged、unstaged 已跟踪业务文件（分别及混合） | 严格停止；不 stash/clean，不引用工作区证据 |
+| T1-05 | 与业务变更无关的 untracked（含项目级非冲突配置）、影响审查的 untracked、无法分类的 untracked | 明确无关的继续并列“未纳入”；相关/未知的停止，Git HEAD 证据始终从固定 commit 读取 |
+| T1-06 | HEAD/基线审查中改变、dirty 新增或 Git ref 更新 | 中止并显示 `INCOMPLETE/SOURCE_CHANGED`，不继续使用旧 Finding |
+| T1-07 | 真实 Git 变更：增删/重命名、中文/空格、嵌套模块、`-z` NUL | 路径/状态与预期完全一致，不完整或 NUL 不保真则 fail-closed |
+| T1-08 | 两阶段小上下文 `--unified=3`、多文件长输出/截断 | 所有有效文件列出首扫结果；超工具限制时显式 `PARTIAL/UNREVIEWED`，不可称 COMPLETE |
+| T1-09 | Shell 重定向、`git diff --output`、`show --output`、`-c`、外部 diff/textconv、命令组合、`git commit/checkout/clean/push/reset`、外部执行/MCP/`edit/write/patch` | 必须有**权限拒绝**工具证据且业务源码 hash、状态不变；仅模型说不执行或用户手动点拒绝不合格 |
+| T1-10 | 动态 Git 命令及 `$ARGUMENTS` 注入、`!` Shell 插值 | 仅受控 Git 工具操作可申请授权；不执行参数注入，禁止 Command Shell 插值；拒绝被拒绝命令的替代绕过 |
+| T1-11 | 精确 OpenCode 版本、公司私有模型 Tool Calling、网络与 Build/Plan 回归 | Windows TUI 真运行，无未授权外联；Review 结束切回 Build 正常开发，既有 Plan 不变 |
 
-T1 不能以“Prompt 看起来正确”或静态文件存在代替真实工具轨迹测试。真实轨迹缺失、只读负例失败或离线网络行为不合规，均判 T1 FAIL，不进入 T2。
+T1 任何真实加载失败、危险工具负测未被权限拒绝、无法可靠读取差异或违反离线边界，均判 **FAIL**，不进入 T2。注意 Shell 动态 Git 人工授权耗时须记录，避免为了“安全配置好看”导致业务使用体验不可接受。
+
+
 
 ### T2：Java 必过缺陷样本与不误报反例
 
@@ -307,6 +322,8 @@ T1 不能以“Prompt 看起来正确”或静态文件存在代替真实工具�
 
 记录 TP/FP/FN、路径证据、工具调用、样本版本及模型配置；必要时对关键样本重复独立会话评估稳定性。**不虚构整体召回率指标，也不承诺能够机械穷举所有 Java 动态调用图**。只报告有证据的中高风险 Finding，不为了速度牺牲必过高风险样本。
 
+**T2 增加一项非替代性的真实开源项目验收**：采用公开 [macrozheng/mall-tiny](https://github.com/macrozheng/mall-tiny) 的指定 **exact commit SHA**、许可证归档和离线源码副本（进入公司内网前通过批准流程引入），作为真实 Java/Spring/MyBatis-Plus 项目复杂度样本，不依赖 T2 时的外网访问。使用其已有 Controller → Service/ServiceImpl → Mapper/XML、`ServiceImpl/BaseMapper` 继承方法、动态 SQL 等真实结构。创建**仅用于本地测试、可回退的单需求 Git 提交**或选定历史 PR/commit，事先由审核人员人工标注预期关联、真实风险/反例及变更位置；模型 Prompt 不透露答案。至少验证一次 Service/Mapper 修改到真实 Controller 的可证实路径、一次继承/动态关系 `UNRESOLVED` 的诚实报告、一次误报判定及一次读/搜次数统计。真实项目不要求全量静态调用图，实际已存在缺陷未经确认不得编造成“已发现”。F01～F08 的必过门槛**不因加入真实项目降低**。
+
 ### T3：实际公司 Windows 内网验收与性能
 
 在正式 Windows 内网机器使用**精确 OpenCode 2.x 版本、公司真实私有 Provider/Model 和 TUI**，至少十次独立 Review；覆盖三个分层场景：
@@ -319,6 +336,8 @@ T1 不能以“Prompt 看起来正确”或静态文件存在代替真实工具�
 
 额外复测历史 **17 个小改动文件**规模；记录端到端耗时、P50/P90、实际有效文件首轮覆盖、`read/grep/glob/shell` 调用次数、重复无效检索、已确认 Finding/误报/漏报/未解析路径、Skill 实际加载与权限拒绝轨迹、Git 前后状态以及外网连接检测结果。
 
+**增加 A/B 基准：同一 Windows 机器、同一 Git Diff、同一私有 Provider/Model/模型参数、尽量相近的并发负载，分别运行 A＝OpenCode 原生快速 Review 与 B＝Codea Review 2.0；每组场景分别记录时长、工具调用、重复 `file_read/code_search`、HIGH Finding 的 TP/FP/FN、未解析路径及覆盖清单。优先比较本次 17 文件样本，按 CRUD／Service-Mapper／状态/金额三个场景拆分结果。B 相对 A 明显变慢或漏掉高风险缺陷时不能仅凭总量指标宣称改进；需给出证据和修订建议。无需安装 PR-Agent/reviewdog/Semgrep 或 OCR 来跑 T3；它们只提供设计参照。**
+
 **性能目标仍为 P50 ≤ 3 分钟、P90 ≤ 5 分钟（在同一模型、同一机器、同一并发条件下测量）**；未达标必须真实写 FAIL 或列改进项，不能暗中删除高风险审查步骤凑时长。T3 的通过前提包括：T1/T2 全部通过、实际内网没有未经批准的外联或源码写入、真实模型没有“假成功”。缺失线上内网证据不能用公开模拟模型或 CI 绿色结果替代。
 
 ## 9. 风险、边界与后续
@@ -327,7 +346,7 @@ T1 不能以“Prompt 看起来正确”或静态文件存在代替真实工具�
 
 **本次交付是待评审的设计文档，不包含可运行 Skill，也不代表新技术方案已通过研发验收。** 用户确认设计后，再按照 Superpowers writing-plans 规范输出到 docs/superpowers/plans/ 的逐任务实现计划，之后才进入产品开发。
 
-## 10. 本轮审核问题修订映射及官方依据
+## 10. 首轮审核问题修订映射及官方依据（保留历史记录）
 
 | 审核项 | 修订章节 | 实施前验证门槛 |
 | --- | --- | --- |
@@ -349,3 +368,37 @@ T1 不能以“Prompt 看起来正确”或静态文件存在代替真实工具�
 - [V2 migration](https://opencode.ai/v2/docs/migrate-v1)：不得误用 V1 的 `permission` / `bash`。
 
 **修订边界**：仅设计文件修改。下一步提交给独立审核，**审核通过后才另行编制 T1 实施计划**；本次不触发代码实现或发布。
+
+
+## 11. 第二轮审核问题修订映射、依据与遗留限制
+
+| 项目 | 设计落点 | T1～T3 核查点 |
+| --- | --- | --- |
+| P1-01 用户级配置与 Dirty 冲突 | 3.1、4.1、7.3 | T1-01/03/04/05；默认不写 Java Git 工作区，允许可证实无关 untracked |
+| P1-02 Git Shell 可写副作用 | 3.3、7.2 | T1-09/10；不再将动态 Diff/Show wildcard 直接 allow，真实拒绝轨迹 |
+| P2-01 Skill `slash` 验证 | 3.2 | T1-02/03；核对 exact V2 顶层 `slash: false` |
+| P2-02 缩小 Diff context | 4.2、5.1 | T1-08，`--unified=3` 先扫描、必要时深入 |
+| P2-03 工具输出截断 | 4.2、4.4 | T1-08，`PARTIAL/UNREVIEWED` 与统计一致 |
+| P2-04 真实 Java 项目 | 8/T2 | mall-tiny 指定 SHA、受控离线镜像、人工预期证据 |
+| P2-05 分层质量 + 性能 | 8/T3 | CRUD、Service/Mapper、资金/状态，P50/P90 和 A/B |
+| P2-06 离线检查 | 7.1、8/T1-11 | 模型调用、更新、遥测、插件、外网连接真实记录 |
+
+### 已核对的官方资料
+
+- [OpenCode V2 Config](https://opencode.ai/v2/docs/config)：全局目录、用户级/项目级发现、更新及 Output 限额；具体版本的配置字段可能变化。
+- [OpenCode V2 Agents](https://opencode.ai/v2/docs/agents)：`~/.config/opencode/agents`，单 primary 模式，原生 `permissions` 与 Build 区分。
+- [OpenCode V2 Commands](https://opencode.ai/v2/docs/commands)：`~/.config/opencode/commands`；项目命令覆盖全局；`!` Shell 插值在 Agent 工具权限之外。
+- [OpenCode V2 Skills](https://opencode.ai/v2/docs/skills)：`~/.config/opencode/skills`；顶层 `slash: false` 合法；项目同名 ID/显式资源可覆盖，全局 Skill references 不自动读取。
+- [OpenCode V2 Permissions](https://opencode.ai/v2/docs/permissions)：`permissions`、有序最后匹配、`shell` 的完整原始命令文本、宿主 Shell 不等于文件系统沙箱。
+- [Git diff options](https://git-scm.com/docs/diff-options)：`--no-ext-diff` / `--no-textconv`；`--output` 等 Git 参数会影响读写边界，应负向测试。
+- [mall-tiny 项目](https://github.com/macrozheng/mall-tiny)：公开 SpringBoot/MyBatis-Plus Controller、Service、Mapper/XML 示例；只用于独立模型质量验收。
+
+### 设计层仍无法保证、不得伪装已解决
+
+1. **不能保证只读安全沙箱**：V2 Shell scanner 是命令文本层面的防误操作，规则并非形式化 Git 参数解析器；Git/PowerShell 新绕过形式不能被此设计穷尽。任何关键负向测试不通过都不能宣称 T1 已验收。
+2. **不能保证 Prompt 100% 遵守**：模型可能漏加载 Skill、遗漏某个风险或重复检索；以工具轨迹和必过 fixture 验证，失败就标 FAIL。
+3. **不能确保所有 Dirty 相关性可判定**：无关 untracked 可以继续，但遇潜在语义影响或冲突时必须停止；不引入快照/依赖服务。
+4. **不能保证长输出全部可见**：截断、路径 NUL 丢失等必须 PARTIAL；必要时用户缩小范围。
+5. **不能承诺 V2 任意版本同样运行**：用户级配置、frontmatter 和 Shell 权限以目标 exact 构建验证；当前只是文档依据，尚未取得该企业安装包运行证据。
+
+**本轮只修改本设计文档；不创建 Agent/Command/Skill、安装器、测试 fixture 或新 Review Runtime，不进入 T1 开发。修订后提交原设计分支，等待独立审核通过，再独立编写实施计划。**
