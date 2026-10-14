@@ -1,9 +1,9 @@
 # Codea Review 2.0｜基于 OpenCode 2.x 原生 Agent 的轻量 Java Review 方案
 
 > 日期：2026-10-14
-> 状态：**第四轮 FAIL 审核意见定向修订稿，待独立终审**；尚未实施、尚未发布或完成内网验收
+> 状态：**第五轮 CONDITIONAL PASS 审核收口修订稿，待最终独立审核**；尚未实施、尚未发布或完成内网验收
 > 目标环境：Windows 内网、OpenCode 2.x TUI、公司私有大模型、Java/Spring Boot/Maven
-> 说明：保留既定轻量架构，本轮第四轮 P1 优先采用方案 A（合并 Skill 文件）并补充 3 项 P2 测试要求；本次**仅更新原设计文档**，不改 Harness 1.8 或产品配置/代码。
+> 说明：保留既有技术架构与审核成果；本轮仅收口 Git fsmonitor P1 及 Code-Harness 2.0 产品定位。**只更新设计文档**，不创建任何 Agent/Skill/Command，也不修改 Harness 1.8。
 
 ## 1. 背景与确定的技术选型
 
@@ -35,6 +35,33 @@
 **V1 明确不做**：全仓扫查、完整 AST 调用图、每次穷举全部受影响 Controller、方法级严格白名单、机器保证工具调用次数、独立 OCR 引擎、多代理并行、自动修复/执行测试、CI 自动评论、SHA256 正式审计证书及强权限沙箱。Review 的一个专用 primary Agent 是 V2 的原生配置，不属于多 Agent 编排，也不新建执行引擎。
 
 普通需求的目标性能：变更文件数 5–20 且 diff 新增+删除行不超过 800 时，端到端 P50 ≤ 3 分钟、P90 ≤ 5 分钟；至少 10 次同模型独立测试后才能据此声称达标，当前尚未验证。
+
+### 2.1 Code-Harness 2.0 产品定位与职责
+
+**Code-Harness 2.0 是面向公司内网的多研发场景智能辅助体系，不是代码 Review 平台。** 目标是结合 OpenCode 原生 AI Agent 执行能力与 TeamAI 企业知识、Skill 治理能力，将规则与工具组合为可交付、可独立验收的研发辅助功能；以场景落地为核心，不重建底层基础设施。
+
+| 系统 | 职责与边界 |
+| --- | --- |
+| **OpenCode 2.x** | **执行引擎**：私有模型调用、代码理解、Git、原生工具、Agent、Command、Skill 和权限；Code-Harness 不重写这些能力 |
+| **TeamAI** | **企业知识与能力管理**：内部研发规范、历史案例、知识沉淀、Skill 管理与共享，以及未来批准的 Skill 分发；Code-Harness 不另建知识/Skill 平台 |
+| **Code-Harness 2.0** | **研发场景集成**：围绕 Review、日志、MySQL、测试、API 文档等提供实际可用的工作流/模块；优先复用前两者的原生能力 |
+
+**Codea Review 2.0 是 Code-Harness 2.0 的第一个独立功能模块，并不代表 Code-Harness 整体产品。** 本 Review 技术方案即使独立审核 PASS，**不代表 Code-Harness 2.0 整体架构已设计或验收 PASS**。
+
+### 2.2 模块独立交付与未来能力边界（仅规划，不列入本次 T1～T3）
+
+| 未来能力（入口名称只是例子） | 用途与主要依赖 |
+| --- | --- |
+| `/codea-review` | **当前唯一实施范围**：Java Git Diff 业务风险 Review；OpenCode + 单一 Review Skill |
+| `/codea-troubleshoot` | 日志异常排查；经授权的日志查询能力 + OpenCode + 可选 TeamAI 历史案例 |
+| `/codea-db-query` | MySQL 数据排查；OpenCode + 企业批准的受限查询工具 |
+| `/codea-test` | 测试用例/数据/接口测试辅助；OpenCode + Skill + 现有 Dify（按需） |
+| `/codea-api-doc` | 根据 Controller/DTO 生成文档；OpenCode + 专项 Skill |
+| 企业知识与 Skill 分享 | 未来 TeamAI 按组织政策管理/分发知识和 Skill，OpenCode 负责加载执行 |
+
+**模块独立性**：Codea Review 可独立安装、启用、使用、升级和卸载；用户级 `~/.config/opencode` 仅是 OpenCode **本地能力加载路径**，不是自建 Skill 管理平台。现阶段不需要 TeamAI 接口、远程 Skill 仓库、同步服务或任何其他未开发模块；其不可用不能阻碍 Review V1。Review 只使用命名独立的 `codea-reviewer`、`/codea-review` 和单 `codea-review/SKILL.md`，不得把 Java Review 专属指令塞入全局 Build/Plan 或其他模块共用 Agent。
+
+未来联合排障可能融合日志 + MySQL + 代码 + TeamAI 知识，但**现在不创建上述新命令、不实现 TeamAI 集成、不预建跨场景编排**；待真实需求证明 OpenCode 原生能力不足时，另案评审可选组件。Code-Harness 整体架构单独立项，不能捎带扩展 Codea Review 的 T1～T3。
 
 ## 3. 核心架构与用户级配置、Skill 实际加载、Reviewer 权限（第二轮 P1-01/P1-02）
 
@@ -119,7 +146,9 @@ permissions:
   - { action: shell, resource: "git rev-parse --abbrev-ref HEAD", effect: allow }
   - { action: shell, resource: "git rev-parse origin/master", effect: allow }
   - { action: shell, resource: "git rev-parse master", effect: allow }
-  - { action: shell, resource: "git status --porcelain=v1 -z --untracked-files=all", effect: allow }
+  - { action: shell, resource: "git --version", effect: allow }
+  # 必须完整匹配此固定命令，不自动放行未防护 status 或任意 git -c *
+  - { action: shell, resource: "git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all", effect: allow }
   - { action: shell, resource: "git merge-base *", effect: ask }
   - { action: shell, resource: "git diff --no-ext-diff --no-textconv --name-status -z *", effect: ask }
   - { action: shell, resource: "git diff --no-ext-diff --no-textconv --numstat -z *", effect: ask }
@@ -137,9 +166,15 @@ permissions:
 ---
 ```
 
+**第五轮 P1：Git status 可通过 fsmonitor 隐式调用外部程序，已调整自动放行命令。** `core.fsmonitor` 为 hook 路径时，`git status` 等需要刷新 Git index 的操作可能执行外部 hook；为 `true` 时可能连接/启动内置 daemon。因此原先自动放行的 `git status --porcelain=v1 -z --untracked-files=all` **失效**，改为只允许**固定且参数完整匹配**的 `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all`。新增固定的 `git --version` 预检；绝不放行 `git -c *`、`git status *`，也不得因兼容性失败退回未防护命令。
+
+Git 官方明确：**Git 2.35.1 及更早版本可能将布尔 `core.fsmonitor=false` 理解为 hook 文件名**，因此 T1 要先检查 **Git for Windows >= 2.36**；遇旧版、未知版本或目标版不支持该语义，一律停止并报 `UNSUPPORTED_GIT_VERSION`。`-c` 只覆盖当前 Git 调用的配置，不改项目或全局设置。Git index 仍可能存在缓存更新，绝不承诺绝对磁盘零写入。
+
+**其他 Git 子命令和配置继承**：保留 `git diff/show --no-ext-diff --no-textconv` 的外部 diff/textconv 抑制和 `ask` 人工审阅；不把 `git -c` 任意键通配加入权限。核对 `git rev-parse` 等固定命令是否受外部配置/hook 影响；有 submodule、Git attributes、环境变量、其他扩展时也须实测并如实说明边界。**“命令名称看似只读”不等于“绝不执行外部程序”**。Windows OpenCode exact 版本对 Shell 命令文本、元字符及规则优先级的真实匹配是 T1 必过项，不能凭 YAML 推导已经隔离。
+
 **特别说明**：宽泛允许 `git diff ... *` 或 `git show ... *` 是不安全的，因为可加 `--output` 或利用 Shell 管道重定向；本版不再将这些模式设为 `allow`。完整命令参数存在变化的 `merge-base/diff/show` 仅允许 `ask`，由开发人员**逐条核对确认**是否确属约定的只读命令；不允许“永远允许”模式放宽授权，不能以手动批准绕过已配置的 `deny`。如审批提示过多影响效率，T1 应实际测量并决定是否缩小 V1 支持范围，而不是直接将通配 `ask` 改为 `allow`。固定形式之外的 `git commit/checkout/clean/push/reset` 以及外部工具均被兜底 `deny`，`edit/write/patch` 共用的 `edit` 操作同样被兜底禁止；未引入任何自定义 Git 执行工具。***注意：以上模式仅是审查方案示例，具体元字符解析由 V2 Shell scanner 决定，T1 实测前不得以“配置存在”宣称可阻断任何绕过***。
 
-- **T1 必过负向行为**：`git diff --output=...`、`git show --output=...`、重定向 `>`/`>>`、PowerShell `;`/`|`/`&`/`$(...)`、Git 全局 `-c`/外部 diff/textconv、`git commit/checkout/clean/push/reset/stash`、脚本/网络命令、`edit/write/patch`、`execute`、`subagent` 和已接入的 MCP/插件。必须在**真实 Windows OpenCode Tool permission** 中被拒绝，不能“只生成文本不执行”充当负测；对实际待测工具注入请求并核对工具拒绝结果、工作区文件内容未变。若某种命令在规则下返回 `ask` 而非 `deny`，按“未被自动阻断”处理并判安全负测 FAIL，不允许测试员手动拒绝就算权限通过。
+- **T1 必过负向行为**：`git diff --output=...`、`git show --output=...`、重定向 `>`/`>>`、PowerShell `;`/`|`/`&`/`$(...)`、未经批准的任意 `-c`（只有固定 fsmonitor=false status 例外）/外部 diff/textconv、`git commit/checkout/clean/push/reset/stash`、脚本/网络命令、`edit/write/patch`、`execute`、`subagent` 和已接入的 MCP/插件。必须在**真实 Windows OpenCode Tool permission** 中被拒绝，不能“只生成文本不执行”充当负测；对实际待测工具注入请求并核对工具拒绝结果、工作区文件内容未变。若某种命令在规则下返回 `ask` 而非 `deny`，按“未被自动阻断”处理并判安全负测 FAIL，不允许测试员手动拒绝就算权限通过。
 - Shell scanner 是按命令文本和解析语义检查，仍可能被新参数、别名、外部配置、命令执行链或环境变量规避，不能证明任意 Shell 输入不可产生写入。`git status` 等读取型 Git 命令也可能更新 Git 内部缓存/索引时间戳；我们的承诺是**不改业务源码/提交历史**，不是磁盘零写入。
 - **故障降级**：如果 T1 无法同时满足基本差异读取与危险命令阻断，不向生产发布“机器级只读”；先选择更窄的 Git 命令操作集合或显式人工批准作为有限防误操作，再复核 V1 适用性。严禁为达到绝对保障改造 Harness 式权限网关。
 
@@ -181,7 +216,7 @@ permissions:
 - `/codea-review OrderController` 是**定向重点审查**，并非完整 Controller 审计或严格文件白名单；首轮仍盘点本次所有有效 Diff，随后重点验证其真实上游入口。
 - Review 配置默认安装在用户级位置，**不在 Java 项目增加 `.opencode` 文件**。如果开发人员已有项目级 `.opencode` 新文件，它们可被记录为无关 untracked，并在配置冲突检测通过时继续，但绝不因此使用来源不明的同名 Skill。
 
-V1 Dirty 检查采用**不建快照的保守相关性判断**（`git status --porcelain=v1 -z --untracked-files=all`，必要时查看 `git diff --name-status` / `--cached` 的状态，不以“无提示”代表干净）：
+V1 Dirty 检查采用**不建快照的保守相关性判断**（`git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all`（须先校验 Git for Windows >=2.36），必要时查看 `git diff --name-status` / `--cached` 的状态，不以“无提示”代表干净）：
 
 | 工作区情况 | 默认处理 | 如何保证证据 |
 | --- | --- | --- |
@@ -288,15 +323,15 @@ V1 Dirty 检查采用**不建快照的保守相关性判断**（`git status --po
 
 ### 7.1 环境、权限和网络预检
 
-T1 记录 Windows x64、**OpenCode exact 2.x 安装版本及来源/校验**、Git 版本、公司私有 Provider/Model（不记录 Key）、Skill 完整加载与 external_directory/read/grep/glob 各自的实际权限轨迹、TUI Tool Calling `skill/read/glob/grep/shell` 真实调用、全局用户目录实际解析路径。不能把 OCR 测通模型等同 OpenCode 工具加载测试。
+T1 记录 Windows x64、**OpenCode exact 2.x 安装版本及来源/校验**、**Git for Windows exact 版本（最低 2.36，并需目标版实测 fsmonitor 布尔语义）**、公司私有 Provider/Model（不记录 Key）、Skill 完整加载与 external_directory/read/grep/glob 各自的实际权限轨迹、TUI Tool Calling `skill/read/glob/grep/shell` 真实调用、全局用户目录实际解析路径。不能把 OCR 测通模型等同 OpenCode 工具加载测试。
 
 企业内网预检覆盖启动、Skill/Agent/Command 加载、Review、首次安装和更新期间的 DNS/连接目标；仅允许已批准公司模型端点。检查自动更新、第三方插件、遥测、公开 Web、分享和其他出站行为，要求**真实联网轨迹无违规外联**。如果用户全局配置里存在自动更新，按 exact 2.x 官方配置关闭：不要误把 V1 `autoupdate`、旧版 `update` 字段当成已验证写法；OpenCode V2 配置文档可能随具体构建变化，T1 先读取目标版 schema 与日志，再用企业批准的方式禁用。现有全局 Provider 和 Build 配置只读检查，不擅自替换。
 
 ### 7.2 原生权限保障的真实边界
 
-只在 `codea-reviewer` Agent 下追加 `permissions`；依照 3.4 节不再放行 references 外部目录；仅允许原生 skill 加载正文、在项目工作区按需搜索，外部目录默认拒绝并实测 read/grep/glob 边界；默认 `deny` 写工具、非约定 Shell、`execute`、`subagent`、外联及可见 MCP。固定形式 Git 可按 `3.3` 精确 allow，动态 Git 仅 `ask` 且审阅完整命令、严禁持久“always allow”降低防误操作。**不**把 `git diff/show *` 宽泛放开为 `allow`，不信“read only”自然语言即可保证安全；不用 `!` Command Shell 插值。
+只在 `codea-reviewer` Agent 下追加 `permissions`；**先核对 Git for Windows 版本，只自动放行固定 `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all`，原始 `git status` 和任意 `git -c *` 均默认拒绝**；依照 3.4 节不再放行 references 外部目录；仅允许原生 skill 加载正文、在项目工作区按需搜索，外部目录默认拒绝并实测 read/grep/glob 边界；默认 `deny` 写工具、非约定 Shell、`execute`、`subagent`、外联及可见 MCP。固定形式 Git 可按 `3.3` 精确 allow，动态 Git 仅 `ask` 且审阅完整命令、严禁持久“always allow”降低防误操作。**不**把 `git diff/show *` 宽泛放开为 `allow`，不信“read only”自然语言即可保证安全；不用 `!` Command Shell 插值。
 
-T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 变更子命令、编辑工具及外部执行做真实工具层拒绝测试，并核对原始 Java 源文件 hash 与 Git status 未意外改变。V2 Shell scanner/权限是**文本和工具级的防误操作**，不是覆盖所有 Git 参数、环境与 Shell 构造的完整副作用静态证明。若实际 `ask` 可以访问不应该被批准的操作，不能把测试员点击“拒绝”当作自动防护通过，需进一步缩小 V1 支持的 Shell 模式或明确发布限制。
+T1 必须在带无害 fsmonitor hook 标记的隔离 Git 仓库验证“固定 status 正常返回但 hook 不执行”，并通过真实 Reviewer 权限 DENY 原始 status/任意非允许 `-c`；也必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 变更子命令、编辑工具及外部执行做真实工具层拒绝测试，并核对原始 Java 源文件 hash 与 Git status 未意外改变。V2 Shell scanner/权限是**文本和工具级的防误操作**，不是覆盖所有 Git 参数、环境与 Shell 构造的完整副作用静态证明。若实际 `ask` 可以访问不应该被批准的操作，不能把测试员点击“拒绝”当作自动防护通过，需进一步缩小 V1 支持的 Shell 模式或明确发布限制。
 
 **保障级别准确表述**：**Codea Review V1 提供基于 OpenCode 原生权限的防误操作能力，不等同于操作系统级只读安全沙箱。** 不重新开发 Harness 权限隔离、Git 网关或自研执行引擎。
 
@@ -328,11 +363,15 @@ T1 必须对 `--output`、重定向、命令组合、外部 diff/textconv、Git 
 | T1-06 | HEAD/基线审查中改变、dirty 新增或 Git ref 更新 | 中止并显示 `INCOMPLETE/SOURCE_CHANGED`，不继续使用旧 Finding |
 | T1-07 | 真实 Git 变更：增删/重命名、中文/空格、嵌套模块、`-z` NUL | 路径/状态与预期完全一致，不完整或 NUL 不保真则 fail-closed |
 | T1-08 | 两阶段小上下文 `--unified=3`、多文件长输出/截断 | 所有有效文件列出首扫结果；超工具限制时显式 `PARTIAL/UNREVIEWED`，不可称 COMPLETE |
+| T1-09a | 正常 Windows Git 仓库：`git --version` + 固定 `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all` | 必须先验证 Git for Windows >=2.36；状态正确覆盖 staged、unstaged、untracked，记录耗时和工具轨迹 |
+| T1-09b | 隔离仓库配置指向会创建**无害标记文件**的外部 fsmonitor hook；以及 `core.fsmonitor=true` | 在 Reviewer 外的受控测试证明原始 status 确实触发标记；Reviewer 中仅调用固定受控 status，不生成标记、不启动 fsmonitor daemon，状态仍正确，源文件和提交历史不变 |
+| T1-09c | 原始 `git status`、不允许的 `git -c core.fsmonitor=hook ...`、`git -c *`、命令追加参数/管道/重定向及异常 Git 配置 | 实际 OpenCode Shell 工具返回 **DENY**（不可仅由用户点拒绝或模型未执行代替）；同时验证固定 `git rev-parse` 等命令不触发 marker |
+| T1-09d | Git 2.35.1 及以下、无法解析版本号、Windows Shell 权限匹配异常 | `UNSUPPORTED_GIT_VERSION` / `PERMISSION_FAILURE`，不执行不安全 status，不偷偷改用旧命令 |
 | T1-09 | Shell 重定向、`git diff --output`、`show --output`、`-c`、外部 diff/textconv、命令组合、`git commit/checkout/clean/push/reset`、外部执行/MCP/`edit/write/patch` | 必须有**权限拒绝**工具证据且业务源码 hash、状态不变；仅模型说不执行或用户手动点拒绝不合格 |
 | T1-10 | 动态 Git 命令及 `$ARGUMENTS` 注入、`!` Shell 插值 | 仅受控 Git 工具操作可申请授权；不执行参数注入，禁止 Command Shell 插值；拒绝被拒绝命令的替代绕过 |
 | T1-11 | 精确 OpenCode 版本、公司私有模型 Tool Calling、网络与 Build/Plan 回归 | Windows TUI 真运行，无未授权外联；Review 结束切回 Build 正常开发，既有 Plan 不变 |
 
-T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 正负测试失败、同名覆盖预检失效、危险工具负测未被权限拒绝、无法可靠读取差异或违反离线边界，均判 **FAIL**，不进入 T2。**第三轮 P2-02 必测授权开销**：每次 Review 记录 `ask` 次数（允许/拒绝）、每次确认时间、累计人工等待时间、Git Shell 实际调用次数、相同命令重复授权次数和总耗时。优先复用已查询的 Git SHA/范围信息、减少重复 Git 工具请求；如果 17 文件要十几次确认而失去性能优势，则明确体验 FAIL/阻断发布，不以放开 `git *` 或动态 `git diff/show *` 的写入危险白名单来提速。
+T1 任何 fsmonitor hook 被意外触发、Git 版本不满足要求、固定 Shell 命令被误放宽或状态读取不完整、真实加载失败、Skill 正文或 read/grep/glob/external_directory 正负测试失败、同名覆盖预检失效、危险工具负测未被权限拒绝、无法可靠读取差异或违反离线边界，均判 **FAIL**，不进入 T2。**第三轮 P2-02 必测授权开销**：每次 Review 记录 `ask` 次数（允许/拒绝）、每次确认时间、累计人工等待时间、Git Shell 实际调用次数、相同命令重复授权次数和总耗时。优先复用已查询的 Git SHA/范围信息、减少重复 Git 工具请求；如果 17 文件要十几次确认而失去性能优势，则明确体验 FAIL/阻断发布，不以放开 `git *` 或动态 `git diff/show *` 的写入危险白名单来提速。
 
 
 
@@ -469,3 +508,28 @@ T1 任何真实加载失败、Skill 正文或 read/grep/glob/external_directory 
 **问题三：是否具备进入 T1 的前提？** 文档在设计层已给出单文件可执行路径、OpenCode 原生机制的静态依据和可验证的 T1 失败判据。**仍需独立终审认可后才开始 T1**，这不是声称 Windows 公司安装包已验证。T1 应优先打通 Command → Reviewer → Skill → Git 已提交 Diff → 简洁中文 Review 的真实闭环，严禁再为追求理论完美新增运行组件。
 
 **修订范围承诺**：本轮只修改原设计文档，不创建 Agent/Skill/Command、测试 fixture、Git 快照、插件或新执行引擎。第三轮历史章节关于 references 的旧方案以此章为准全部废止。
+
+
+## 14. 第五轮技术设计最终收口与遗留边界（2026-10-14）
+
+| 验收项 | 设计落点 | 当前决定与验证门槛 |
+| --- | --- | --- |
+| P1：`core.fsmonitor` 外部 hook | 3.3、4.1、7.1/7.2、8/T1-09a～d | 固定 `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all`；Git for Windows >=2.36；fsmonitor 标记负例、正确 Git 状态、原生命令 DENY 均需真实 T1 证据 |
+| 产品职责边界 | 2.1 | OpenCode 执行引擎；TeamAI 企业知识与 Skill 管理；Code-Harness 2.0 多研发场景集成 |
+| 模块化边界 | 2.2 | Codea Review 是首个独立模块；未来日志/MySQL/智能测试/API 文档/知识能力均属长期规划，不进入 Review V1 |
+| 架构复用 | 3、7、8 | Windows 用户级一个 Reviewer Agent、一个 Command、单 `SKILL.md`，不引入新 Runtime 或跨场景编排 |
+| Review 质量/效率 | 5、8/T2/T3 | F01～F08、mall-tiny、17 文件 A/B、P50/P90 目标及按需调用链原则均保留 |
+
+### Git 官方依据
+
+[git-config / core.fsmonitor](https://git-scm.com/docs/git-config) 明确可设置外部 hook 路径或布尔值，并警告 Git 2.35.1 及更早版本会误解析 `true/false` 路径；[git 命令 `-c`](https://git-scm.com/docs/git) 明确单次覆盖配置文件值；[git-status](https://git-scm.com/docs/git-status) 描述工作区和 index 状态扫描；[githooks / fsmonitor-watchman](https://git-scm.com/docs/githooks) 描述 hook 可能被 Git 调用；[git-diff](https://git-scm.com/docs/git-diff) 定义 `--no-ext-diff`、`--no-textconv` 可禁用相应外部 helper。**这些是方案依据，不是公司 Windows exact 版测试已经完成的证据。**
+
+### 仍存在的风险和非目标
+
+- **不是 OS 安全沙箱**：禁用 fsmonitor 不等于对其他 Git 配置、Git 可执行文件替换、系统环境劫持、子模块或 Shell 的所有副作用做形式化证明；需在实际环境判定 V1 风险是否可接受。
+- **不是零写盘**：Git 可能刷新索引/缓存，但不得修改业务源码或历史；T1 应核对源码 hash、Git 状态及是否有 hook 标记。
+- **权限和性能需真实测试**：动态 Git Diff/Show 仍逐次 `ask`，不得放开危险通配；授权等待纳入总耗时。Git 版本和 fsmonitor 拒绝负例不达标不得发布。
+- **Code-Harness 2.0 不在本轮完成**：不会提前开发 TeamAI 接口、Skill 同步服务、日志、MySQL、测试或通用 Agent Runtime。Codea Review 设计审核 PASS 不等于 Code-Harness 整体架构 PASS，也不等于 T1/T2/T3 运行验收通过。
+- **本轮只修文档**：独立审核认可后，下一步是编制 T1 最小可用闭环实施计划，不在此提交 Agent/Command/Skill 文件。
+
+**本轮最终请求**：仅审阅 Git fsmonitor 风险是否有可执行的原生处理与 T1 测试，以及 Code-Harness 产品与 Codea Review 模块定位是否正确。没有新的实质阻断即可对 Codea Review **设计**给出 PASS。
