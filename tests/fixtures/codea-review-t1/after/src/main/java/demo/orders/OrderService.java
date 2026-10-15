@@ -8,7 +8,6 @@ public final class OrderService {
     }
 
     public void charge(String requestId, String tenantId, String orderId, long cents) {
-        // T1 fixture intentionally introduces a duplicate-charge risk on retries.
         mapper.decreaseBalance(tenantId, orderId, cents);
     }
 }
