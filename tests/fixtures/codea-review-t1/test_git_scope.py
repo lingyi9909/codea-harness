@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 EXCLUDE = ":(exclude,glob)**/.*/**"
+REPORT_EXCLUDE = ":(exclude,glob)temp/**"
 
 
 def git(root, *args):
@@ -54,6 +55,7 @@ class GitScopeTest(unittest.TestCase):
         self.write("src/.teamai/config.java", "hidden unstaged\n")
         self.write("src/main/新增.java", "untracked\n")
         self.write("src/.agents/new.java", "hidden untracked\n")
+        self.write("temp/codea-review-report.md", "# previous report\n")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -65,7 +67,7 @@ class GitScopeTest(unittest.TestCase):
 
     def test_all_four_layers_filter_hidden_directories_in_git(self):
         opts = ("--no-ext-diff", "--no-textconv", "--name-status", "-z")
-        scope = ("--", ".", EXCLUDE)
+        scope = ("--", ".", EXCLUDE, REPORT_EXCLUDE)
         committed = names(git(self.root, "diff", *opts, "master...HEAD", *scope))
         staged = names(git(self.root, "diff", *opts, "--cached", "HEAD", *scope))
         unstaged = names(git(self.root, "diff", *opts, *scope))
@@ -86,9 +88,17 @@ class GitScopeTest(unittest.TestCase):
         self.assertEqual(git(self.root, "show", "HEAD:src/main/Staged.java"), b"before\n")
         self.assertEqual(git(self.root, "show", ":src/main/Staged.java"), b"staged\n")
 
+    def test_saved_report_does_not_reenter_review(self):
+        raw = git(self.root, "ls-files", "--others", "--exclude-standard", "-z")
+        self.assertIn(b"temp/codea-review-report.md", raw)
+        visible = git(self.root, "ls-files", "--others", "--exclude-standard", "-z",
+                      "--", ".", EXCLUDE, REPORT_EXCLUDE)
+        self.assertNotIn(b"temp/codea-review-report.md", visible)
+        self.assertIn("src/main/新增.java".encode(), visible)
+
     def test_nested_hidden_directory_is_excluded(self):
         result = git(self.root, "diff", "--name-only", "-z", "master...HEAD",
-                     "--", ".", EXCLUDE).decode("utf-8")
+                     "--", ".", EXCLUDE, REPORT_EXCLUDE).decode("utf-8")
         self.assertNotIn(".github", result)
         self.assertIn("src/main/Committed.java", result)
 
