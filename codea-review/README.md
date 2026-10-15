@@ -41,11 +41,11 @@ foreach ($entry in $entries) {
 
 ## 使用方式
 
-1. 在 **干净的 Git 需求分支**目录启动公司已批准的 OpenCode 2.x TUI，确认当前模型选择的是公司私有 Provider，Tool Calling 正常。
+1. 在 **允许未提交修改的 Git 需求分支**目录启动公司已批准的 OpenCode 2.x TUI，确认当前模型选择的是公司私有 Provider，Tool Calling 正常。
 2. 输入 `/codea-review`；或 `/codea-review OrderController`。
-3. 观察第一个工具调用实际为 `skill(codea-review)`；确认 Skill 返回后，Reviewer 获取本地 `origin/master`（或 `master`）与已提交 HEAD，按 Git Diff 先快扫后按需查上下文。
+3. 观察第一个工具调用实际为 `skill(codea-review)`；确认 Skill 返回后，Reviewer 获取本地 `origin/master`（或 `master`）与已提交 HEAD，还纳入 staged/unstaged/相关 untracked 工作区变更，按 Git Diff 先快扫后按需查上下文。
 4. 当 Shell 提示动态 Git Diff/Show/merge-base 请求授权时，**核对完整命令确为可信 Git 只读形式**再批准，不选择永久放行。Reviewer 不会自动执行测试或创建报告文件。
-5. 在 TUI 读取中文报告并核查风险证据。结束后手动切回 Build Agent，以免 Reviewer 的权限限制影响正常开发。
+5. 在 TUI 读取与 Harness 1.8 版式一致的完整 Markdown 报告，并核查 HEAD/INDEX/WORKTREE/UNTRACKED 证据来源。结束后手动切回 Build Agent，以免 Reviewer 的权限限制影响正常开发。
 
 示例 fixture 可在测试机器执行 `tests/fixtures/codea-review-t1/setup.ps1`，会独立生成一个包含 `master` 和 `feature/t1-risk-review` 的新 Git 仓库，不接触公司业务代码。
 
@@ -54,7 +54,8 @@ foreach ($entry in $entries) {
 - Reviewer 的权限只做**可信内网开发机上的防误操作**，不是 OS 只读沙箱。默认禁止编辑、网络、构建与 Git 写命令；动态 Git 查询 `ask`。
 - 固定 `git -c core.fsmonitor=false status ...` 是为了降低通过 fsmonitor hook 隐式执行程序的风险。Git 版本不达最低要求即应停止。对已被恶意改造的 Git/本机环境不做绝对安全保证。
 - `skill` 不会自动加载其他文件：本模块把 Java 风险清单和报告格式都写进唯一 `SKILL.md`。
-- 本地 `origin/master` 可能落后，不会联网 `fetch`。仓库有 staged/unstaged 已跟踪修改时默认停止；无关 untracked 明示排除。
+- 本地 `origin/master` 可能落后，不会联网 `fetch`。Dirty Worktree 不再阻断：同时审查 committed、staged、unstaged 和相关 untracked。所有 Git 文件清单先使用 `-- . ':(exclude,glob)**/.*/**'` 过滤根目录/嵌套隐藏目录，隐藏文件不计有效数量，工作区中途变化则标记需复核。
+- 1.8 报告五章：评审摘要、调用链与覆盖范围、风险清单、问题明细、后续处理与评审边界。仅 TUI 完整输出，不需要 1.8 Go Runtime。
 - 不能把没有 Finding 理解成“可上线”。模型可能漏报、误报，复杂动态调用只能标记未知。
 
 ## 离线升级、卸载和回退
