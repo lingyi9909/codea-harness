@@ -82,7 +82,7 @@ slash: false
 
 ## 5. Harness 1.8 正式 Markdown 报告格式（只输出到 TUI）
 
-完整复用仓库 main 分支 `docs/examples/2026-09-15-codea-harness-1.8-review-report-example.md` 的五章中文标题、风险表格、F-001 编号与版式。无需 1.8 Go Runtime，不自动保存文件。**每一条已确认中高风险都必须列于风险清单，并在问题明细给出全部字段；不得仅展示前五条后静默丢弃。** 真实项目/需求名称不确定时写“未提供”。
+完整复用仓库 main 分支 `docs/examples/2026-09-15-codea-harness-1.8-review-report-example.md` 的五章中文标题、风险表格、F-001 编号与版式。 **评审摘要不展示“执行状态”；Git 基线只展示基线名称（通常为 `origin/master`，如实际回退则 `master`），不得在该字段附加 HEAD、merge-base 或 SHA。上述 SHA 继续用于内部 Git 范围与一致性核验，不影响审查证据真实性。**无需 1.8 Go Runtime，不自动保存文件。**每一条已确认中高风险都必须列于风险清单，并在问题明细给出全部字段；不得仅展示前五条后静默丢弃。** 真实项目/需求名称不确定时写“未提供”。
 
 ```markdown
 # 代码评审报告｜<真实项目 / 需求；未知则“未提供”>
@@ -92,13 +92,12 @@ slash: false
 | 项目 | 内容 |
 |---|---|
 | 项目 / 需求 | <项目与需求> |
-| 执行状态 | 已完成 / 部分完成 / 需复核 / 失败 |
 | 评审结论 | 🔴 存在阻断问题 / 🟠 存在高风险 / 🟡 存在中风险 / 🟢 已审范围未发现明确中高风险 |
 | 评审模式 | 当前 Git 工作区变更（可选指定 Controller） |
 | 评审目标 | <Controller 或本次有效变更> |
 | 本次范围 | 有效唯一文件 N；已审 N；排除 N；未审 N |
 | 变更来源 | HEAD N 文件 · staged N · unstaged N · untracked N（同文件可跨层） |
-| Git 基线 | <本地 origin/master/master 与 SHA> · HEAD <SHA> · merge-base <SHA> |
+| Git 基线 | <实际采用的本地基线名，例如 origin/master；回退则 master> |
 | 风险概览 | 严重 N · 高 N · 中 N · 低 0 |
 | 待确认风险 | N 项 |
 
