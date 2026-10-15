@@ -7,9 +7,9 @@
 | 项目 | 内容 |
 |---|---|
 | 项目 / 需求 | T1 Fixture / 订单余额扣减调整（示例） |
-| 执行状态 | 示例，未执行真实 OpenCode TUI |
 | 评审结论 | 🔴 示例：存在阻断问题 |
 | 评审模式 | 当前 Git 工作区变更评审 |
+| Git 基线 | origin/master（示例；实际须按本地 Git 引用） |
 | 评审目标 | `OrderController.charge` |
 | 本次范围 | 演示 Service 与 Mapper XML 两个变更文件 |
 | 变更来源 | 此 fixture 示例为 HEAD 已提交；实际 staged/unstaged/untracked 需按 TUI 结果填写 |
