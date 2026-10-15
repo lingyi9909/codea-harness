@@ -27,12 +27,14 @@
 | 隐藏目录 | 根及嵌套隐藏配置目录有改动 | Git 文件清单阶段排除，隐藏目录不读正文、不计有效数 | PENDING_RETEST |
 | Java | 看报告和源码 | 能指出风险触发条件/文件位置，或明确未确认，不凑问题 | NOT_RUN |
 | 报告 | 看 TUI 输出 | 1.8 五章 Markdown、F-001 风格、严重/高/中统计及工作区证据标记齐全 | PENDING_RETEST |
+| 报告自动保存 | 分别在已有/缺少 `temp/` 的项目根目录执行 Review | 原生 write 自动创建/覆盖 `temp/codea-review-report.md`，文件完整内容与 TUI Markdown 一致；无需 Shell mkdir | PENDING_RETEST |
+| 报告目录隔离 | 保存一次报告再 Review，尝试写入其他业务文件 | temp 报告在 Git 清单阶段被排除，业务文件无改动；其他任意文件的 edit 被拒绝 | PENDING_RETEST |
 | 不写代码 | 运行前后比对 `git status` 和业务文件哈希 | 无业务代码修改，无编译/测试/提交 | NOT_RUN |
 | 失败保护 | 移走 Skill 后执行命令（隔离测试） | SKILL_LOAD_FAILED，停止审查 | NOT_RUN |
 
 ## 必要负向测试（仅在隔离 fixture 中执行）
 
-- Review 权限不得自动执行 `git commit`、`git checkout`、`git clean`、`git reset`、`git push`、网络命令或 edit/write。
+- Review 权限不得自动执行 `git commit`、`git checkout`、`git clean`、`git reset`、`git push`、网络命令或修改业务代码。**只允许原生 write 创建/覆盖项目根目录 `temp/codea-review-report.md`，其他 edit/write 均需原生权限 DENY**。
 - staged/unstaged/相关 untracked 不得触发 DIRTY_WORKTREE 阻断；隐藏目录里的 Dirty 修改也不能阻断。原始 `git status` 仍受限，固定 `-c core.fsmonitor=false status` 可执行。
 - 构建带无害 marker 的 fsmonitor hook fixture，确认原始 status 在独立对照中会触发 marker；Reviewer 执行受控 status 不得触发。整个试验必须在可信测试仓库，不在公司实际业务仓库放 hook。
 - 不允许授权具有 `--output`、重定向、管道或额外危险选项的 Git 命令。权限结果以真实工具拒绝日志为证；拒绝提示无法模拟成“PASS”。
