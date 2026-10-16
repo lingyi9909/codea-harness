@@ -79,7 +79,7 @@ class KBExtension(unittest.TestCase):
     def test_recall_limits_provenance_and_fallback_are_explicit(self):
         agent = read("agents/codea-reviewer-kb.md")
         for term in (
-            "最多两条", "teamai projects list", "[project]", "[user]",
+            "默认预算 2 次", "绝对上限 4 次", "teamai projects list", "[project]", "[user]",
             "File:", "Sources:", "Snippet:", "SCOPE_UNVERIFIED",
             "SOURCE_UNVERIFIED", "TEAMAI_FAILED",
             "继续执行", "本次仅依据代码", "代码证据",
@@ -102,6 +102,83 @@ class KBExtension(unittest.TestCase):
         self.assertIn("Copy-Item", docs)
         self.assertIn("S2-A-1", docs)
         self.assertIn("S2-B-1", docs)
+
+
+
+class KnowledgePolicyT1ToT10(unittest.TestCase):
+    """Executable *static contract* for P1 policy, NOT real TeamAI/LLM behavior.
+
+    Each corresponding functional scenario must still be run in Windows TUI.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.agent = read("agents/codea-reviewer-kb.md")
+        cls.command = read("commands/codea-review-kb.md")
+        cls.documentation = read("KB-README.md")
+
+    def _all(self, *terms):
+        for term in terms:
+            with self.subTest(term=term):
+                self.assertIn(term, self.agent)
+
+    def test_T1_non_behavior_change_skips_recall(self):
+        self._all("仅格式", "纯日志文案", "跳过")
+        self.assertIn("T1 | 仅日志文案/格式", self.documentation)
+
+    def test_T2_business_change_triggers_recall_without_bug_hypothesis(self):
+        self._all("即使尚未产生风险假设", "必须尝试", "业务状态流转")
+        self.assertIn("即使尚未发现 Bug", self.command)
+
+    def test_T3_same_business_groups_controller_service_mapper(self):
+        self._all("不按文件数、方法数或 Finding 数", "Controller.cancelOrder", "一个场景")
+        self.assertIn("业务场景分组", self.command)
+
+    def test_T4_candidates_reuse_knowledge_in_one_session(self):
+        self._all("已召回知识表", "同一业务场景中多个候选问题共用", "不允许每个 Finding 重复召回")
+        self.assertIn("不逐项重复调用", self.command)
+
+    def test_T5_multiple_scenarios_prioritize_under_four_recall_budget(self):
+        self._all("默认预算 2 次", "绝对上限 4 次", "不同独立高风险场景")
+        self.assertIn("最多 4 次", self.command)
+
+    def test_T6_generic_java_finding_needs_no_kb(self):
+        self._all("KB_NOT_NEEDED", "通用 Java", "不因 TeamAI 没命中而降级")
+        self.assertIn("通用 Java", self.command)
+
+    def test_T7_no_hit_and_failure_fall_back(self):
+        self._all("无命中", "权限拒绝", "始终降级继续基础 Review", "KB_FAILED")
+        self.assertIn("降级", self.command)
+
+    def test_T8_foreign_project_knowledge_not_adopted(self):
+        self._all("多项目激活", "无法归属时跳过专属内容", "[project]", "File:", "Sources:")
+        self.assertIn("多项目且不能明确归属", self.command)
+
+    def test_T9_conflicted_or_stale_knowledge_not_confirmed(self):
+        self._all("过期/冲突", "KB_CONFLICTED", "Source freshness:", "无 Java 证据不得成 Finding")
+        self.assertIn("过期/冲突", self.command)
+
+    def test_T10_exhausted_budget_reports_uncovered_but_reviews_code(self):
+        self._all("KB_NOT_COVERED", "不得停止代码审查", "未核验的业务场景")
+        self.assertIn("预算不足", self.command)
+
+    def test_candidate_knowledge_categories_complete(self):
+        self._all("KB_REQUIRED", "KB_USEFUL", "KB_NOT_NEEDED",
+                  "KB_SUPPORTED", "KB_CONFLICTED", "KB_NO_MATCH",
+                  "KB_NOT_REQUIRED", "KB_NOT_COVERED", "KB_FAILED")
+
+    def test_recall_candidate_cap_and_query_sanitization(self):
+        self._all("最多挑选 3 条", "3～6 个", "严禁直接拼接",
+                  "原生 Shell", "ask", "teamai projects list")
+
+    def test_p1_docs_do_not_claim_real_model_tests(self):
+        self.assertIn("待执行，不是实测", self.documentation)
+        self.assertIn("T10", self.documentation)
+        docs = (ROOT / "docs/examples/codea-review-2-1-ab-plan.md").read_text(encoding="utf-8")
+        self.assertIn("尚未执行", docs)
+        self.assertIn("应检索场景覆盖率", docs)
+        self.assertIn("知识复用率", docs)
+        self.assertIn("Finding 知识核验覆盖率", docs)
 
 
 if __name__ == "__main__":
