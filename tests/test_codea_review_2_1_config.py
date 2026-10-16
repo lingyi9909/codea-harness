@@ -82,8 +82,8 @@ class KBExtension(unittest.TestCase):
             "默认预算 2 次", "绝对上限 4 次", "teamai projects list", "[project]", "[user]",
             "File:", "Sources:", "Snippet:", "SCOPE_UNVERIFIED",
             "SOURCE_UNVERIFIED", "TEAMAI_FAILED",
-            "继续执行", "本次仅依据代码", "代码证据",
-            "不修改", "temp/codea-review-report.md",
+            "始终降级继续基础 Review", "本次仅依据代码", "代码证据",
+            "禁止修改", "temp/codea-review-report.md",
         ):
             with self.subTest(term=term):
                 self.assertIn(term, agent)
