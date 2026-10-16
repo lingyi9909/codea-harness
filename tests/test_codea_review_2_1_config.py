@@ -347,8 +347,12 @@ class KnowledgePolicyT1ToT10(unittest.TestCase):
         self.assertIn("即使尚未发现 Bug", self.command)
 
     def test_T3_same_business_groups_controller_service_mapper(self):
-        self._all("不按文件数、方法数或 Finding 数", "Controller.cancelOrder", "一个场景")
-        self.assertIn("业务场景分组", self.command)
+        # One business operation stays one scene across the call chain;
+        # avoid coupling the assertion to the command's Chinese heading.
+        self.assertIn("Controller.cancelOrder", self.agent)
+        self.assertIn("业务对象 + 业务操作 + 核心约束", self.agent)
+        self.assertIn("Controller/Service/Mapper", self.command)
+        self.assertIn("合成一组", self.command)
 
     def test_T4_candidates_reuse_knowledge_in_one_session(self):
         self._all("已召回知识表", "同一业务场景中多个候选问题共用", "不允许每个 Finding 重复召回")
