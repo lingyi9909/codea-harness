@@ -48,6 +48,80 @@ foreach ($item in $entries) {
 
 如果现有 2.0 配置位于 Java 项目的 `.opencode` 而不是用户级目录，先确认同名 Agent/Command/Skill 的**实际加载优先级**，避免 KB 入口引用了错误版本。不要靠修改原 /codea-review 来调试 2.1。重启 TUI 确认配置生效。
 
+## P0-01 / P0-02：Windows OpenCode V2 权限兼容性修复（本轮）
+
+**务必确认运行的是 OpenCode V2 而非 V1。** V2 的 Agent frontmatter 是 `permissions:` 的有序数组，命令动作叫 `shell`；V1 才采用 `permission:` / `bash`。**不要把 V1 配置覆盖进 V2，也不要用 `git *` 或 `external_directory: allow` 解决报错。**
+
+本轮**仅需要覆盖原有 KB Agent 一个文件**：`codea-review/agents/codea-reviewer-kb.md`。命令 `codea-review-kb.md` 和原版 2.0 全部冻结。请在实际使用的全局或项目级 Agent 位置更新，更新前备份：
+
+```powershell
+# 从下载并解压的仓库 ZIP 根目录运行。根据实际加载位置调整 $target。
+$source = (Resolve-Path ".\codea-review\agents\codea-reviewer-kb.md").Path
+$target = Join-Path $HOME ".config\opencode\agents\codea-reviewer-kb.md"
+if (Test-Path -LiteralPath $target) {
+  Copy-Item -LiteralPath $target -Destination ($target + ".bak-" + (Get-Date -Format "yyyyMMddHHmmss"))
+}
+Copy-Item -LiteralPath $source -Destination $target -Force
+Get-FileHash -LiteralPath $source, $target -Algorithm SHA256
+opencode --version
+opencode agent list
+```
+
+如果内网运行命令为 `opencode2` 而不是 `opencode`，使用该实际可执行文件的 `--version` / `agent list`；**以同一个 V2 TUI 进程执行复测**。如果你实际从 Java 项目 `.opencode/agents/` 加载 KB Agent，则只覆盖该位置，避免全局/项目同名文件冲突。完全关闭并重启 OpenCode TUI 后再验收。
+
+### Git 命令兼容性
+
+原本部分 Git 命令需要 `ask` 或直接拒绝，原因包括动态参数/排除 pathspec 与实际规则不一致。本轮只对固定的**只读子命令形式**授权 `allow`：
+
+```text
+git merge-base origin/master HEAD
+git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all
+git diff --no-ext-diff --no-textconv --name-status -z <merge-base> HEAD -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'
+git diff --no-ext-diff --no-textconv --name-status -z --cached HEAD -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'
+git diff --no-ext-diff --no-textconv --name-status -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'
+git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'
+git diff --no-ext-diff --no-textconv --unified=3 --cached HEAD -- '<Git 返回的安全文件路径>'
+git show --no-ext-diff --no-textconv HEAD:<Git 返回的安全文件路径>
+```
+
+其余 `git add / commit / checkout / clean / reset / push`、`teamai projects set / push / pull` 默认 **deny**。Shell 管道、分号、重定向、`--output` 等禁止；OpenCode 的 Shell 扫描/通配权限不是操作系统级隔离，企业电脑仍应使用组织策略和普通用户权限保护源码。
+
+### TeamAI 知识正文：授权真实路径，不能猜目录
+
+1. 查看 `teamai projects list` 输出，确认当前活动项目；运行正常的 `teamai recall "业务操作 核心约束"` 后，找到结果里的真实 `File:` 或 `Sources:` 路径。
+2. 确认路径确实对应当前项目或明确共享知识。必要时检查 Windows 文件权限及源文件是否存在。**不要根据 `[project]` 标签或仅依据文件名就假设它属于当前项目**。
+3. KB Reviewer 使用 OpenCode 原生 `read` 读取该**确切文件路径**时，V2 规则 `{ action: external_directory, resource: "*", effect: ask }` 要求用户授权。第一次选择 **once** 并核对请求显示的实际目录。这样未知外部目录始终不会自动放行，也不会将知识复制到 Java 项目内。
+4. 如果需要对**管理员批准且路径已核实**的固定目录减少后续确认，可以在 KB Agent 的 `external_directory: "*", ask` 规则后添加一条**实际目录**白名单（下面只是格式例子，不应直接复制占位符）：
+   ```yaml
+   # 必须替换为经过批准的真实 Windows 目录（正斜杠；以 /* 结尾）
+   - { action: external_directory, resource: "C:/APPROVED/TEAMAI_PROJECT/KNOWLEDGE/*", effect: allow }
+   ```
+   仍保留 `edit: "*", deny` 的默认拒绝和唯一固定 temp 报告例外；不可授权整个用户目录、`C:/*` 或所有外部路径。若知识源位于多个目录，必须逐一验证后分别声明。
+5. 若出现组织级 deny、外部目录拒绝或源文件无法读取，**不要通过 Shell、临时复制、移动或修改公司的安全策略绕过**；标记 TeamAI 正文不可用、只做原版 Java Review。公司管理员审核路径并授予相应权限后再重测。
+
+Git 的隐藏目录 / 根 `temp/` 过滤只作用于 **Git 业务变更文件清单**，**不阻止通过 TeamAI Recall 的真实来源路径进行知识正文读取**。
+
+### P0-03：版本与配置优先级核验
+
+在**实际运行的 Windows TUI 进程**中检查 `opencode --version` 和当前选中的 `codea-reviewer-kb` Agent。分别排查用户级 `~/.config/opencode`、项目级 `.opencode`、`OPENCODE_CONFIG` / `OPENCODE_CONFIG_DIR`（若有）、以及公司托管/组织级配置或策略。OpenCode 版本/配置来源不明确时不应宣称权限兼容性 PASS。若组织级显式禁止跨目录读取，Agent 配置不应覆盖该拒绝，需管理员审批。
+
+### P1：权限回归矩阵（真实 Windows 内网运行）
+
+| 场景 | 预期 |
+|---|---|
+| Committed Git Diff | 无权限匹配拒绝，能拿到已提交文件清单 |
+| Staged / unstaged Git Diff | 都能获取各自差异，Dirty 不阻断 |
+| Untracked | 带隐藏目录和 temp 双排除 pathspec 的 ls-files 命令成功 |
+| Hidden + temp | 不读配置目录正文，报告本身不计入待审文件 |
+| TeamAI Recall | 能召回当前项目的真实知识文件路径 |
+| 知识正文 | 对经确认的 File/Sources 路径触发一次授权后能用原生 read 阅读 |
+| 未授权外部路径 | 必须 ask 或被公司组织策略 deny，**不得自动读取** |
+| TeamAI 项目变更 | `teamai projects set/push` 禁止 |
+| Java 文件写入 | 所有业务文件 edit/write 禁止 |
+| 报告写入 | 只允许 `temp/codea-review-report.md`，TUI 五章和文件一致 |
+
+公司内网 **OpenCode V2 的实际权限判定、权限弹窗、知识正文读取及报告写入**仍是最终验收依据。仓库自带的策略模拟只能证明规则覆盖预期字符串，不能取代实际工具轨迹。
+
 ## P1 最小真实运行步骤
 
 1. 在已经正确绑定 TeamAI 项目知识的 Java Git 项目根目录，启动 OpenCode，使用与原版相同的公司私有模型。
@@ -63,7 +137,7 @@ foreach ($item in $entries) {
 
 - CLI `[project]` 标记不是当前项目 ID，多项目同时激活时若来源无法归属，不采用专属知识；`[user]` 只有明确团队共享且业务适用才采用。
 - `Snippet` 和标题是候选资料，不构成独立 Finding。知识原文无法核实或与业务现状冲突时只能待确认/跳过，不能编造文件和规范。
-- 外部目录读取仍被原生 `external_directory: deny` 限制；不会为了检索越界文件而修改配置。TeamAI Recall 可能自己写入本地检索元数据，但不修改 TeamAI 项目设置/知识正文。
+- OpenCode **V2** 使用 `permissions:` 有序列表和 `shell` 动作。KB Reviewer 对 `external_directory` 采用 **ask**：对 Recall 实际的 `File/Sources` 路径先核验项目来源，再由开发人员选择 `once` 审批正文读取；未知目录不会自动允许。拒绝、公司策略禁止或文件无法读取时降级普通 Review。TeamAI Recall 可能自行写本地检索元数据，但 Review 不修改知识正文/项目配置。
 - A/B 中可能已存在 TeamAI 自动规则/Hook；必须记录是否存在，并将结果表述为“主动 Recall 的增量收益”，而非不实的“无知识 vs 有知识”。
 
 

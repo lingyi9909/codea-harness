@@ -6,6 +6,9 @@ This does NOT prove the real Windows TUI/LLM has executed knowledge recall.
 from pathlib import Path
 import subprocess
 import unittest
+import re
+import ast
+import fnmatch
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "codea-review"
@@ -26,6 +29,34 @@ def git_blob(path):
         cwd=ROOT, check=True, capture_output=True, text=True,
     )
     return result.stdout.strip()
+
+
+def v2_permission_rules():
+    """Parse the narrow single-line V2 permission records (not a general YAML parser).
+
+    This tests ordered glob matching, not OpenCode or OS sandbox correctness.
+    """
+    front = read("agents/codea-reviewer-kb.md").split("---", 2)[1]
+    pattern = re.compile(r'^\s*- \{ action: (.+?), resource: (.+?), effect: (allow|deny|ask) \}$')
+    rules = []
+    for line in front.splitlines():
+        m = pattern.match(line)
+        if not m:
+            continue
+        action, resource, effect = m.groups()
+        action = ast.literal_eval(action) if action[:1] in ("'", '"') else action
+        resource = ast.literal_eval(resource) if resource[:1] in ("'", '"') else resource
+        rules.append((action, resource, effect))
+    return rules
+
+
+def permission_decision(action, resource):
+    """Offline approximation of V2 ordered glob rules, not a runtime guarantee."""
+    result = "ask"
+    for a, r, effect in v2_permission_rules():
+        if fnmatch.fnmatchcase(action, a) and fnmatch.fnmatchcase(resource, r):
+            result = effect
+    return result
 
 
 class FrozenReview(unittest.TestCase):
@@ -62,19 +93,74 @@ class KBExtension(unittest.TestCase):
         self.assertIn("skill", command)
         self.assertNotIn("skill(codea-review-kb)", command)
 
-    def test_teamai_permissions_are_specific_and_ask_not_wildcard_allow(self):
+    def test_v2_native_permission_syntax_and_bounded_access(self):
         agent = read("agents/codea-reviewer-kb.md")
-        self.assertIn('resource: "teamai projects list", effect: allow', agent)
-        self.assertIn("resource: 'teamai recall \"*\"', effect: ask", agent)
-        self.assertNotIn('resource: "teamai *"', agent)
-        self.assertNotIn('resource: "teamai recall *", effect: allow', agent)
-        self.assertNotIn('resource: "teamai pull", effect: allow', agent)
-        self.assertIn('resource: "*;*", effect: deny', agent)
-        self.assertIn('resource: "*|*", effect: deny', agent)
-        self.assertIn('resource: "*&*", effect: deny', agent)
-        self.assertIn('resource: "temp/codea-review-report.md", effect: allow', agent)
-        self.assertIn('resource: "*", effect: deny', agent)
-        self.assertIn('action: external_directory, resource: "*", effect: deny', agent)
+        frontmatter = agent.split("---", 2)[1]
+        self.assertIn("\npermissions:\n", frontmatter)
+        self.assertNotIn("\npermission:\n", frontmatter)
+        self.assertNotIn("action: bash", frontmatter)
+        self.assertIn('{ action: "*", resource: "*", effect: deny }', frontmatter)
+        self.assertIn('action: external_directory, resource: "*", effect: ask', frontmatter)
+        self.assertNotIn('action: external_directory, resource: "*", effect: allow', frontmatter)
+        self.assertIn('action: edit, resource: "temp/codea-review-report.md", effect: allow', frontmatter)
+        self.assertIn('action: shell, resource: "teamai projects list", effect: allow', frontmatter)
+        self.assertIn("""action: shell, resource: 'teamai recall "*"', effect: ask""", frontmatter)
+        self.assertNotIn('action: shell, resource: "git *", effect: allow', frontmatter)
+        self.assertNotIn('action: shell, resource: "teamai *", effect: allow', frontmatter)
+        self.assertEqual(permission_decision("read", "src/main/java/Service.java"), "allow")
+        self.assertEqual(permission_decision("read", "C:/TeamAI/knowledge/project-spec.md"), "allow")
+        self.assertEqual(permission_decision("external_directory", "C:/TeamAI/knowledge/*"), "ask")
+        self.assertEqual(permission_decision("read", ".env"), "deny")
+        self.assertEqual(permission_decision("edit", "src/main/java/Service.java"), "deny")
+        self.assertEqual(permission_decision("edit", "C:/TeamAI/knowledge/spec.md"), "deny")
+        self.assertEqual(permission_decision("edit", "temp/codea-review-report.md"), "allow")
+        self.assertEqual(permission_decision("shell", 'teamai recall "订单取消 状态流转规则"'), "ask")
+        self.assertEqual(permission_decision("shell", "teamai projects set other-project"), "deny")
+
+    def test_v2_git_four_layer_shell_commands_match_real_pathspecs(self):
+        pathspec = "-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
+        examples = (
+            "git --version",
+            "git rev-parse --show-toplevel",
+            "git rev-parse HEAD",
+            "git rev-parse --abbrev-ref HEAD",
+            "git rev-parse origin/master",
+            "git rev-parse master",
+            "git merge-base origin/master HEAD",
+            "git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all",
+            "git status --porcelain=v1",
+            f"git diff --no-ext-diff --no-textconv --name-status -z 1a2b3c HEAD {pathspec}",
+            f"git diff --no-ext-diff --no-textconv --name-status -z --cached HEAD {pathspec}",
+            f"git diff --no-ext-diff --no-textconv --name-status -z {pathspec}",
+            f"git diff --no-ext-diff --no-textconv --numstat -z HEAD {pathspec}",
+            f"git ls-files --others --exclude-standard -z {pathspec}",
+            "git diff --no-ext-diff --no-textconv --unified=3 HEAD -- 'src/main/java/demo/OrderService.java'",
+            "git diff --no-ext-diff --no-textconv --unified=3 --cached HEAD -- 'src/main/java/demo/OrderService.java'",
+            "git diff --no-ext-diff --no-textconv --unified=3 -- 'src/main/java/demo/OrderService.java'",
+            "git show --no-ext-diff --no-textconv HEAD:src/main/java/demo/OrderService.java",
+            "git show --no-ext-diff --no-textconv :src/main/java/demo/OrderService.java",
+        )
+        for command in examples:
+            with self.subTest(command=command):
+                self.assertEqual(permission_decision("shell", command), "allow")
+
+    def test_v2_git_write_and_shell_injection_denied(self):
+        commands = (
+            "git add -A", "git commit -am update", "git checkout master",
+            "git clean -fd", "git reset --hard HEAD", "git push origin main",
+            "git fetch --all", "git diff --no-ext-diff --no-textconv --unified=3 --output=tmp.txt",
+            "git diff --no-ext-diff --no-textconv --unified=3 HEAD ; git commit -am x",
+            "git show --no-ext-diff --no-textconv HEAD | powershell",
+            "git merge-base HEAD && git checkout main",
+            "git diff --no-ext-diff --no-textconv --unified=3 $(echo x)",
+            "git diff --no-ext-diff --no-textconv --unified=3 %TEMP%",
+            "teamai push", "teamai projects set payment",
+            'teamai recall "x"; teamai push',
+            "cmd /c mkdir temp", "powershell New-Item foo",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(permission_decision("shell", command), "deny")
 
     def test_recall_limits_provenance_and_fallback_are_explicit(self):
         agent = read("agents/codea-reviewer-kb.md")
