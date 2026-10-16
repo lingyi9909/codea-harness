@@ -9,6 +9,7 @@ import unittest
 import re
 import ast
 import fnmatch
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "codea-review"
@@ -190,6 +191,126 @@ class KBExtension(unittest.TestCase):
         self.assertIn("S2-B-1", docs)
 
 
+
+
+class ReviewCompletenessRegression(unittest.TestCase):
+    """Static prompt invariants + real Git pathspec checks.
+
+    Does NOT assert an LLM found the three historical production findings.
+    """
+
+    def test_generic_and_kb_evidence_must_be_union_not_knowledge_gate(self):
+        agent = read("agents/codea-reviewer-kb.md")
+        command = read("commands/codea-review-kb.md")
+        for clause in (
+            "G：通用风险检查轨道", "K：项目知识轨道",
+            "最终结果 = G 与 K 的有证据 Finding 并集",
+            "检索 TeamAI 前应先生成 G 的候选清单",
+            "不得因 K 无命中", "不允许把“TeamAI 没命中”",
+            "KB_REQUIRED", "KB_USEFUL", "KB_NOT_NEEDED",
+            "最终五章报告", "再次核查 G",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, agent)
+        self.assertIn("KB 分类不构成通用 G 过滤器", command)
+        self.assertIn("报告完整性闸门", command)
+
+    def test_independent_sql_scripts_are_mandatory_without_teamai(self):
+        agent = read("agents/codea-reviewer-kb.md")
+        command = read("commands/codea-review-kb.md")
+        for clause in (
+            "独立 .sql 文件作为有效 Git 变更",
+            "SQL 仅变更、没有 Java 文件",
+            "HEAD/INDEX/WORKTREE/UNTRACKED",
+            "UPDATE/DELETE", "DDL", "大小写不敏感",
+            "不在根目录", "无需 TeamAI 命中",
+            "独立 SQL/迁移脚本；无 Controller 链路",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, agent)
+        self.assertIn("即使没有 Java 文件", command)
+        self.assertIn("SQL untracked 直接 read", command)
+
+    def test_five_chapters_and_no_extra_permissions(self):
+        skill = read("skills/codea-review/SKILL.md")
+        agent = read("agents/codea-reviewer-kb.md")
+        command = read("commands/codea-review-kb.md")
+        self.assertIn("五章 Markdown", command)
+        self.assertIn("temp/codea-review-report.md", agent)
+        for clause in (
+            "## 评审摘要", "## 调用链与覆盖范围", "## 风险清单",
+            "## 问题明细", "## 后续处理与评审边界",
+        ):
+            self.assertIn(clause, skill)
+        self.assertEqual(permission_decision("shell", "git add -A"), "deny")
+        self.assertEqual(permission_decision("shell", "git push origin main"), "deny")
+        self.assertEqual(permission_decision("edit", "src/main/java/OrderService.java"), "deny")
+
+    def test_real_git_four_layers_include_standalone_sql_not_hidden_or_temp(self):
+        # This is an actual Git fixture with committed, staged, unstaged and
+        # untracked .sql changes. It verifies file INVENTORY, not model quality.
+        exclude = ":(exclude,glob)**/.*/**"
+        exclude_temp = ":(exclude,glob)temp/**"
+        scope = ("--", ".", exclude, exclude_temp)
+
+        with tempfile.TemporaryDirectory(prefix="codea-sql-") as working:
+            root = Path(working)
+            def git(*args):
+                cp = subprocess.run(
+                    ["git", *args], cwd=root, capture_output=True, check=True,
+                )
+                return cp.stdout
+
+            def write(relative, data):
+                location = root / relative
+                location.parent.mkdir(parents=True, exist_ok=True)
+                location.write_text(data, encoding="utf-8")
+
+            git("init", "-q")
+            git("config", "user.name", "Test")
+            git("config", "user.email", "test@example.invalid")
+            base_sql = "src/main/resources/db/migration/V1__base.sql"
+            committed = "src/main/resources/db/migration/V2__committed.sql"
+            staged = "src/main/resources/db/migration/V3__staged.sql"
+            untracked = "src/main/resources/db/migration/V4__untracked.sql"
+            write(base_sql, "CREATE TABLE accounts(id BIGINT PRIMARY KEY);\n")
+            git("add", "--", base_sql)
+            git("commit", "-qm", "baseline")
+            baseline = git("rev-parse", "HEAD").decode().strip()
+
+            write(committed, "ALTER TABLE accounts ADD COLUMN tenant_id BIGINT;\n")
+            git("add", "--", committed)
+            git("commit", "-qm", "committed migration")
+            write(staged, "UPDATE accounts SET tenant_id = 1;\n")
+            git("add", "--", staged)
+            write(base_sql, "CREATE TABLE accounts(id BIGINT PRIMARY KEY, amount BIGINT);\n")
+            write(untracked, "DELETE FROM accounts;\n")
+            write(".teamai/private.sql", "DELETE FROM accounts;\n")
+            write("src/.agents/private.sql", "DELETE FROM accounts;\n")
+            write("temp/audit.sql", "DELETE FROM accounts;\n")
+
+            from_base = git(
+                "diff", "--no-ext-diff", "--no-textconv",
+                "--name-status", "-z", baseline, "HEAD", *scope,
+            )
+            index = git(
+                "diff", "--no-ext-diff", "--no-textconv",
+                "--name-status", "-z", "--cached", "HEAD", *scope,
+            )
+            working_diff = git(
+                "diff", "--no-ext-diff", "--no-textconv",
+                "--name-status", "-z", *scope,
+            )
+            added = git(
+                "ls-files", "--others", "--exclude-standard", "-z", *scope,
+            )
+            expected = [committed, staged, base_sql, untracked]
+            for src, name in zip((from_base, index, working_diff, added), expected):
+                with self.subTest(layer=name):
+                    self.assertIn(name.encode("utf-8") + b"\0", src)
+                    self.assertNotIn(b"private.sql", src)
+                    self.assertNotIn(b"temp/audit.sql", src)
+            self.assertNotIn(b"temp/audit.sql", added)
 
 class KnowledgePolicyT1ToT10(unittest.TestCase):
     """Executable *static contract* for P1 policy, NOT real TeamAI/LLM behavior.

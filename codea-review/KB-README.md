@@ -18,9 +18,68 @@ codea-review/
 - B 组在 `teamai projects list` 无法确认作用域、检索失败/无命中、来源不明或规则证据不充分时，继续普通代码 Review。只有可信知识来源 + 明确 Java 变更证据 + 排除等效保护才生成知识驱动 Finding。
 - 两组都使用原有 `temp/codea-review-report.md` 文件，**后执行会覆盖前一份**；A/B 评测必须手动归档每次报告和脱敏工具轨迹。
 
+## 2026-10-16｜通用 Finding 防遗漏 + 独立 SQL 覆盖（当前版本）
+
+这次只增强 `/codea-review-kb` 的**审查完整性**，不修改 Git 取证、TeamAI Recall 机制、V2 权限和五章报告格式；**2.0 的 Agent、Command、Skill 三个冻结文件保持不变**。
+
+**通用风险独立执行，TeamAI 叠加：**
+
+```text
+Git 四层有效文件清单（包含独立 .sql）
+     ├─ G：独立通用 Java/SQL 风险检查（保留候选 Finding）
+     └─ K：按业务变更主动 Recall → 知识核验/补查
+                    ↓
+             有证据的 G ∪ K
+          （按根因去重，逐条复核）
+                    ↓
+         Harness 1.8 五章报告 + temp 保存
+```
+
+**G 检查**覆盖现有基础 Skill 八类高价值风险：幂等/重复扣减、事务一致性、金额精度、权限/租户、SQL 写操作、并发/状态、缓存/DB、边界故障。适用检查即使 TeamAI 没命中也必须完成；K 可以补充业务证据或提供真实反证，**不能因为它没有召回就删除 G 中原已确认的问题**。最终报告前重新核对所有 G 候选，删除已确认问题必须有明确代码/规范反证、不能凭知识检索缺失删掉。
+
+**独立 .sql 必审**：任何业务目录下 Git 变更的 `.sql` / `.SQL`（包括新增的 untracked 迁移文件）都必须进入**四层有效文件清单**；使用已有双排除 pathspec 过滤隐藏目录和根目录 `temp/`，复用 Git `diff` + `read`。不需要 Java Controller 或 TeamAI 命中才能审；SQL-only 变更也必须输出正常 Review 报告。
+
+**SQL 审查重点**：UPDATE/DELETE 的业务键与租户条件、无约束批量变更、重复迁移的副作用、ALTER/DROP 对现有代码和旧数据的兼容性、非空/唯一约束、执行锁与批量性能；不得仅凭缺少 WHERE 字面量或出现 ALTER 就臆断问题，需有实际变更触发、范围与反证核查。
+
+### 内网质量回归（权限回归通过后继续）
+
+| 验收 | 条件 |
+|---|---|
+| Q1 通用 Finding 防遗漏 | 同一 Java 代码快照，原版已确认的**三个真实通用 Finding** 在 KB 版分别仍能定位文件/行、条件与业务影响；差异必须逐条人工核验 |
+| Q2 知识不收窄通用检查 | 召回相关规则时，通用 G 与 KB K 均执行；无命中/拒绝时 G 仍完成 |
+| Q3 SQL-only 已提交 | Git committed 的独立 .sql 修改不被误判为无有效业务变更 |
+| Q4 SQL-only staged / unstaged / untracked | 均能在清单阶段入选；不需要 TeamAI/Controller |
+| Q5 SQL 隐藏目录 / temp | `.teamai/*.sql`、嵌套隐藏路径和根 `temp/*.sql` 不读、不计数 |
+| Q6 SQL 漏条件 | 只有当缺少关键 WHERE/租户/状态约束且没有等效保护时才报有证据 Finding |
+| Q7 合法 SQL 和 DDL | 正确限定的 UPDATE/DELETE 和经过兼容处理的 DDL 不误报 |
+| Q8 报告完整性 | 所有 G/K 合并后的真实 Finding 在风险清单与问题明细逐一对应；SQL 计入覆盖和来源；报告仍存 `temp/codea-review-report.md` |
+
+关于 Q1，**目前没有那三个真实问题的具体文本和代码位置**，本轮只提供防遗漏机制与验收入口；不能把演示用事务/幂等/租户三个示例当作用户先前的真实 Finding，也不宣称已经复现三个真实问题。独立审核需以真实内网 A、B 两份旧报告和代码快照核验。
+
+### 已有 KB 2.1 安装的升级方法（本轮必须覆盖 2 份）
+
+在 GitHub 上下载 `feature/codea-review-2-1-kb` 分支最新 ZIP，解压后从仓库根目录运行 PowerShell。若公司实际加载的是项目级 `.opencode`，将下面 `$cfg` 指向该目录：
+
+```powershell
+$src = (Resolve-Path ".\codea-review").Path
+$cfg = Join-Path $HOME ".config\opencode"
+foreach ($relative in @("agents\codea-reviewer-kb.md", "commands\codea-review-kb.md")) {
+  $from = Join-Path $src $relative
+  $target = Join-Path $cfg $relative
+  if (Test-Path -LiteralPath $target) {
+    Copy-Item -LiteralPath $target -Destination ($target + ".bak-" + (Get-Date -Format "yyyyMMddHHmmss"))
+  }
+  New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+  Copy-Item -LiteralPath $from -Destination $target -Force
+  Get-FileHash -LiteralPath $from, $target -Algorithm SHA256
+}
+```
+
+重启 OpenCode；在真实代码变更项目执行 `/codea-review-kb`，核对有效 SQL 文件、G/K 两条审查轨道与保存报告。除以上两份 KB 文件外，**不覆盖原版 2.0 文件**。
+
 ## Windows 内网离线安装（只新增两份配置）
 
-在一台能够访问 GitHub 的机器下载 **`feature/codea-review-2-1-kb`** 分支 ZIP，按公司许可的离线传输方式带入 Windows。仅复制 **新增两份**配置；不要覆盖原本已经验证可用的 2.0 三个文件。
+在一台能够访问 GitHub 的机器下载 **`feature/codea-review-2-1-kb`** 分支 ZIP，按公司许可的离线传输方式带入 Windows。**新安装**只复制两个 KB 配置；**已安装旧 2.1 的升级**须备份后同时覆盖 KB Agent 与 KB Command 两个文件。不要覆盖已经验证可用的 2.0 三个文件。
 
 在解压目录根部运行 PowerShell：
 
@@ -52,7 +111,7 @@ foreach ($item in $entries) {
 
 **务必确认运行的是 OpenCode V2 而非 V1。** V2 的 Agent frontmatter 是 `permissions:` 的有序数组，命令动作叫 `shell`；V1 才采用 `permission:` / `bash`。**不要把 V1 配置覆盖进 V2，也不要用 `git *` 或 `external_directory: allow` 解决报错。**
 
-本轮**仅需要覆盖原有 KB Agent 一个文件**：`codea-review/agents/codea-reviewer-kb.md`。命令 `codea-review-kb.md` 和原版 2.0 全部冻结。请在实际使用的全局或项目级 Agent 位置更新，更新前备份：
+2026-10-16 权限修复当轮**仅需要覆盖 KB Agent 一个文件**；当前通用 Finding/SQL 质量修复版请以本文件前面的**两文件升级说明**为准：`codea-review/agents/codea-reviewer-kb.md`。命令 `codea-review-kb.md` 和原版 2.0 全部冻结。请在实际使用的全局或项目级 Agent 位置更新，更新前备份：
 
 ```powershell
 # 从下载并解压的仓库 ZIP 根目录运行。根据实际加载位置调整 $target。
