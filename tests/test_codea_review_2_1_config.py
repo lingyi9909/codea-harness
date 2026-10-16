@@ -177,10 +177,19 @@ class KBExtension(unittest.TestCase):
 
     def test_new_command_has_no_shell_interpolation(self):
         command = read("commands/codea-review-kb.md")
+        frontmatter = command.split("---", 2)[1]
+        self.assertRegex(frontmatter, r"(?m)^agent:\s*codea-reviewer-kb\s*$")
         self.assertIn("$ARGUMENTS", command)
-        self.assertIn("绝不将其直接拼进 Shell", command)
-        self.assertIn("teamai recall", command)
-        self.assertNotIn("!\x60", command)
+        # OpenCode !`...` and shell $() are executable expansions, not prose.
+        self.assertNotRegex(command, r"!\s*`")
+        self.assertNotRegex(command, r"\$\([^\r\n)]*\$ARGUMENTS")
+        # Only inspect code-formatted Git/TeamAI commands. Prohibitive prose
+        # can mention $ARGUMENTS without creating command interpolation.
+        shell_examples = re.findall(r"`((?:git|teamai)\s+[^`\r\n]*)`", command, re.I)
+        self.assertTrue(any(x.startswith("teamai recall ") for x in shell_examples))
+        for shell_example in shell_examples:
+            with self.subTest(command=shell_example):
+                self.assertNotIn("$ARGUMENTS", shell_example)
 
     def test_a_b_docs_preserve_two_session_design_and_no_fake_results(self):
         docs = (ROOT / "docs/examples/codea-review-2-1-ab-plan.md").read_text(encoding="utf-8")
@@ -362,8 +371,20 @@ class KnowledgePolicyT1ToT10(unittest.TestCase):
         self.assertIn("多项目且不能明确归属", self.command)
 
     def test_T9_conflicted_or_stale_knowledge_not_confirmed(self):
-        self._all("过期/冲突", "KB_CONFLICTED", "Source freshness:", "无 Java 证据不得成 Finding")
-        self.assertIn("过期/冲突", self.command)
+        agent = read("agents/codea-reviewer-kb.md")
+        phase = agent.split("### 第二阶段：候选 Finding 逐项核验", 1)[1]
+        phase = phase.split("### 查询预算与失败降级", 1)[0]
+        # A conflicted project rule must remain unconfirmed, not become
+        # a knowledge-only Finding; verify the decision gate, not wording.
+        required = next(line for line in phase.splitlines() if "`KB_REQUIRED`" in line)
+        self.assertIn("冲突", required)
+        self.assertIn("待确认", required)
+        self.assertIn("KB_CONFLICTED", phase)
+        evidence = next(line for line in phase.splitlines() if line.startswith("11."))
+        for requirement in ("来源", "当前有效", "冲突", "变更", "证据", "等效保护"):
+            with self.subTest(requirement=requirement):
+                self.assertIn(requirement, evidence)
+        self.assertIn("Source freshness:", agent)
 
     def test_T10_exhausted_budget_reports_uncovered_but_reviews_code(self):
         self._all("KB_NOT_COVERED", "不得停止代码审查", "未核验的业务场景")

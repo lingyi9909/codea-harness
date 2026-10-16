@@ -1,0 +1,18 @@
+name: Codea Review 2.1 temporary regression
+on:
+  push:
+    branches:
+      - feature/codea-review-2-1-kb
+    paths:
+      - tests/test_codea_review_2_1_config.py
+      - .github/workflows/codea-review-21-temp-regression.yml
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python version
+        run: python --version
+      - name: Complete requested regression
+        run: python tests/test_codea_review_2_1_config.py
