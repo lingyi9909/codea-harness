@@ -9,7 +9,7 @@ codea-review/
 └── skills/codea-review/SKILL.md
 ```
 
-> 状态：代码与离线安装说明已提供；**尚未在公司 Windows 内网、指定 OpenCode exact 2.x 和私有模型上实测通过**。勿将仓库静态检查当作 T1 最终验收。
+> 状态：用户已确认既有 Codea Review 2.0 可在公司 Windows 内网运行；**本 hardening 分支的 Git 权限调整、SQL-only、真实模型 Finding 回归仍待公司实际版本验收**。GitHub Actions 上的 Windows Git/Python 测试不是私有模型实测。
 
 ## Windows 用户级离线安装（不修改 Java 项目）
 
