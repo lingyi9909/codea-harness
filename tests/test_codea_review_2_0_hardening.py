@@ -243,8 +243,10 @@ class PermissionsAndReport(unittest.TestCase):
         self.assertNotIn("\npermission:\n", agent)
         self.assertIn("agent: codea-reviewer", command)
         self.assertIn("codea-review", command)
-        self.assertNotIn("teamai", agent.lower())
-        self.assertNotIn("teamai", command.lower())
+        # Denying .teamai paths is a safety rule, not a knowledge integration.
+        self.assertFalse(any(action == "shell" and resource.startswith("teamai ")
+                             for action, resource, _effect in parse_v2_permissions()))
+        self.assertNotIn("teamai recall", command.lower())
 
     def test_git_read_queries_match_real_skill_parameters(self):
         scope = "-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
@@ -253,9 +255,9 @@ class PermissionsAndReport(unittest.TestCase):
             "git rev-parse HEAD", "git rev-parse --abbrev-ref HEAD",
             "git rev-parse origin/master", "git rev-parse master",
             "git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all",
-            f"git ls-files --others --exclude-standard -z {scope}",
         ]
         ask = [
+            f"git ls-files --others --exclude-standard -z {scope}",
             "git merge-base master HEAD",
             f"git diff --no-ext-diff --no-textconv --name-status -z abc HEAD {scope}",
             f"git diff --no-ext-diff --no-textconv --name-status -z --cached HEAD {scope}",
@@ -273,7 +275,8 @@ class PermissionsAndReport(unittest.TestCase):
 
     def test_ls_files_requires_exact_double_exclusion_and_no_extra_flags(self):
         valid = "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
-        self.assertEqual(permission("shell", valid), "allow")
+        # V2 wildcard syntax cannot match literal ** exactly; fail closed to ASK.
+        self.assertEqual(permission("shell", valid), "ask")
         variants = [
             "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**'",
             "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)temp/**'",

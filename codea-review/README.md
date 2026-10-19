@@ -44,14 +44,14 @@ foreach ($entry in $entries) {
 1. 在 **允许未提交修改的 Git 需求分支**目录启动公司已批准的 OpenCode 2.x TUI，确认当前模型选择的是公司私有 Provider，Tool Calling 正常。
 2. 输入 `/codea-review`；或 `/codea-review OrderController`。
 3. 观察第一个工具调用实际为 `skill(codea-review)`；确认 Skill 返回后，Reviewer 获取本地 `origin/master`（或 `master`）与已提交 HEAD，还纳入 staged/unstaged/相关 untracked 工作区变更，按 Git Diff 先快扫后按需查上下文。
-4. 固定 Git/status 与完整双排除的 ls-files 使用 OpenCode V2 精确 allow；动态 Git Diff/Show/merge-base 必须逐次 ask 核对实际 SHA、业务路径和参数；如果仍然弹出授权/拒绝，检查**实际命令、当前 Agent 来源、全局/项目/组织规则**，不能开放 `git *` 或自行绕过公司政策。Reviewer 不执行测试且不修改业务代码；完成审查后自动使用原生 write 创建/覆盖项目根目录的 `temp/codea-review-report.md`（没有 temp 时自动建目录）。
+4. 固定 Git/status 使用 OpenCode V2 精确 allow；包含 `**` 的双排除 ls-files 无法实现严格精确 allow，因此与动态 Git Diff/Show/merge-base 一样必须逐次 ask 核对实际 SHA、业务路径和参数；如果仍然弹出授权/拒绝，检查**实际命令、当前 Agent 来源、全局/项目/组织规则**，不能开放 `git *` 或自行绕过公司政策。Reviewer 不执行测试且不修改业务代码；完成审查后自动使用原生 write 创建/覆盖项目根目录的 `temp/codea-review-report.md`（没有 temp 时自动建目录）。
 5. 在 TUI 读取与 Harness 1.8 版式一致的完整 Markdown 报告，并核查 HEAD/INDEX/WORKTREE/UNTRACKED 证据来源。结束后手动切回 Build Agent，以免 Reviewer 的权限限制影响正常开发。
 
 示例 fixture 可在测试机器执行 `tests/fixtures/codea-review-t1/setup.ps1`，会独立生成一个包含 `master` 和 `feature/t1-risk-review` 的新 Git 仓库，不接触公司业务代码。
 
 ## 安全和版本边界
 
-- Reviewer 的权限只做**可信内网开发机上的防误操作**，不是 OS 只读沙箱。仅允许原生 write 写入固定的 `temp/codea-review-report.md`，其他编辑、网络、构建与 Git 写命令继续禁止；只有固定无动态参数的 Git 查询和完整双排除 ls-files 使用 `allow`，动态 diff/show/merge-base 使用 `ask`，敏感路径、越界路径和危险参数/组合命令仍执行 `deny`。请从 Java 项目 Git 根目录启动 OpenCode 以匹配相对路径。
+- Reviewer 的权限只做**可信内网开发机上的防误操作**，不是 OS 只读沙箱。仅允许原生 write 写入固定的 `temp/codea-review-report.md`，其他编辑、网络、构建与 Git 写命令继续禁止；只有固定无通配参数的 Git 查询使用 `allow`，完整双排除 ls-files 和动态 diff/show/merge-base 使用 `ask`，敏感路径、越界路径和危险参数/组合命令仍执行 `deny`。请从 Java 项目 Git 根目录启动 OpenCode 以匹配相对路径。
 - 固定 `git -c core.fsmonitor=false status ...` 是为了降低通过 fsmonitor hook 隐式执行程序的风险。Git 版本不达最低要求即应停止。对已被恶意改造的 Git/本机环境不做绝对安全保证。
 - `skill` 不会自动加载其他文件：本模块把 Java 风险清单和报告格式都写进唯一 `SKILL.md`。
 - 本地 `origin/master` 可能落后，不会联网 `fetch`。Dirty Worktree 不再阻断：同时审查 committed、staged、unstaged 和相关 untracked。所有 Git 文件清单先使用 `-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` 过滤根目录/嵌套隐藏目录及项目根目录 temp，隐藏文件不计有效数量，工作区中途变化则标记需复核。
@@ -62,7 +62,7 @@ foreach ($entry in $entries) {
 
 - **一个入口**：仍使用 `/codea-review` + 原本的 `codea-review` Skill，不加载 TeamAI、不增加 KB Agent、Runtime/MCP、报告引擎。
 - **SQL**：数据库迁移、数据修复与普通独立 `.sql`（包括 `.SQL`）在 COMMITTED、STAGED、UNSTAGED、UNTRACKED 四层均作为有效业务文件；SQL-only 和 Java+SQL 都允许正常 Review。相同脚本跨层只计一个唯一文件、保留多层取证；untracked 从实际工作区 read。脚本只核查有证据的中高风险 UPDATE/DELETE、租户约束、迁移幂等、DDL 兼容、数据一致性，不能仅凭 SQL 关键字臆断问题。
-- **权限**：保持 OpenCode **V2** 的 `permissions:` + `shell` 格式；固定 Git 查询及带完整隐藏目录/temp 双排除 pathspec 的 ls-files 精确 allow；动态 diff/show/merge-base 逐次 ask；所有 Git 写操作、`--output`、Shell 管道/分号/重定向等继续 deny。禁止 `git *` 或其它工具绕过拒绝。Java/SQL 都只读，唯一可编辑文件仍为 `temp/codea-review-report.md`。
+- **权限**：保持 OpenCode **V2** 的 `permissions:` + `shell` 格式；固定 Git 查询精确 allow；带隐藏目录/temp 双排除 pathspec 的 ls-files 以及动态 diff/show/merge-base 逐次 ask（V2 权限 glob 会把 pathspec 中的 `**` 当作通配符，不能严格精确 allow）；所有 Git 写操作、`--output`、Shell 管道/分号/重定向等继续 deny。禁止 `git *` 或其它工具绕过拒绝。Java/SQL 都只读，唯一可编辑文件仍为 `temp/codea-review-report.md`。
 - **报告**：Harness 1.8 的五章及标题、Finding 编号、TUI 输出与固定 temp 文件保留。SQL-only 仅在既有“调用链与覆盖范围”注明无 Controller 链路，不添加第六章。
 
 确定性回归可在测试环境运行 `python tests/test_codea_review_2_0_hardening.py`；**这不代表真实 OpenCode 授权或私有模型 Finding 质量已验收**。实际执行与历史三项通用 Finding 的验收表见 [2.0 hardening 验收说明](../docs/examples/codea-review-2-0-hardening-acceptance.md)。其中三项历史真实案例尚无代码快照与原报告可供本仓库复测，必须在公司内网真实执行，不准用合成样例充当历史回归。

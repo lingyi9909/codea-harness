@@ -16,7 +16,7 @@ python tests/test_codea_review_2_0_hardening.py
 
 ## PR #63 复审重点：Git 权限收敛与跨层去重
 
-**P0-01**：静态规则允许固定 Git 查询以及**完整、不可变参数**的 `git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'`；任何缺少隐藏目录/temp 排除的清单、替换 pathspec、追加 `--cached/--stage` 都不能自动 allow。动态 `merge-base/diff/show` 均为 **ask**，不是静态自动通过；`--no-index`、`--output`、路径 `../`、敏感 `.env/.teamai/.opencode` 的敏感对象与 Shell 组合显式 deny。即使静态文本规则匹配符合预期，仍须以公司 OpenCode V2 TUI 真实行为为验收。
+**P0-01**：静态规则自动允许无通配参数的固定 Git 查询。V2 的 `*` 总是通配字符，完整双排除 `ls-files` pathspec 虽必须按 Skill 原样使用，但无法严格精确 allow，因此本次将其设为 **ask**，禁止自动通过；任何缺少隐藏目录/temp 排除的清单、替换 pathspec、追加 `--cached/--stage` 都不能自动 allow。动态 `merge-base/diff/show` 均为 **ask**，不是静态自动通过；`--no-index`、`--output`、路径 `../`、敏感 `.env/.teamai/.opencode` 的敏感对象与 Shell 组合显式 deny。即使静态文本规则匹配符合预期，仍须以公司 OpenCode V2 TUI 真实行为为验收。
 
 **P1-01**：自动测试从**真实 Git `-z` 二进制输出**解析 COMMITTED/STAGED/UNSTAGED 的 `--name-status -z` 以及 UNTRACKED 的 `ls-files -z`，按最终 repo 相对路径集合去重、保留 `path -> {layers}`；重命名取 new path 为有效路径、old path 作为来源证据。本文件的 Python 解析函数只用于验收测试，不增加新的 Review Runtime。
 
