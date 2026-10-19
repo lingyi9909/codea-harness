@@ -14,6 +14,14 @@ python tests/test_codea_review_2_0_hardening.py
 
 **注意**：自动化权限模拟只是对配置文本的近似判定，不等于 OpenCode V2 TUI 权限实际行为；自动 Git fixture 只证明文件范围，不证明 LLM 找到了缺陷。
 
+## PR #63 复审重点：Git 权限收敛与跨层去重
+
+**P0-01**：静态规则允许固定 Git 查询以及**完整、不可变参数**的 `git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'`；任何缺少隐藏目录/temp 排除的清单、替换 pathspec、追加 `--cached/--stage` 都不能自动 allow。动态 `merge-base/diff/show` 均为 **ask**，不是静态自动通过；`--no-index`、`--output`、路径 `../`、敏感 `.env/.teamai/.opencode` 的敏感对象与 Shell 组合显式 deny。即使静态文本规则匹配符合预期，仍须以公司 OpenCode V2 TUI 真实行为为验收。
+
+**P1-01**：自动测试从**真实 Git `-z` 二进制输出**解析 COMMITTED/STAGED/UNSTAGED 的 `--name-status -z` 以及 UNTRACKED 的 `ls-files -z`，按最终 repo 相对路径集合去重、保留 `path -> {layers}`；重命名取 new path 为有效路径、old path 作为来源证据。本文件的 Python 解析函数只用于验收测试，不增加新的 Review Runtime。
+
+**注意**：动态 `ask` 是由用户检查并决定是否授权，并非通用 Git 命令的安全边界；额外参数即便不能自动 allow，也不能认为已由系统绝对禁止。仍须通过公司策略、已有外部目录权限和人工核对约束。
+
 ## B｜公司 Windows OpenCode 2.x 真机（P0）
 
 在公司允许的内网 Java 项目**Git 根目录**启动已批准的 OpenCode V2 和私有大模型。确认三个已安装文件来自同一新提交，记录 TUI/Agent 版本、实际权限弹窗与脱敏工具轨迹。下面各项只有实际复测后才能填写结果：

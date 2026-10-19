@@ -1,0 +1,19 @@
+name: TEMP Codea Review 2.0 strict permissions regression
+on:
+  push:
+    branches: [feature/codea-review-2-0-hardening]
+jobs:
+  regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versions
+        run: |
+          python --version
+          git --version
+      - name: Complete hardening regression
+        run: python tests/test_codea_review_2_0_hardening.py

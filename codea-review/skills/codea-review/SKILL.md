@@ -38,7 +38,7 @@ slash: false
    | UNSTAGED | `git diff --no-ext-diff --no-textconv --name-status -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` | index → 工作区 |
    | UNTRACKED | `git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` | 工作区尚未跟踪的新增文件 |
 
-   Git 命令的 `--no-ext-diff --no-textconv` 不可省略；受控 `diff/show/merge-base` 使用 Agent 的 V2 限定只读 `allow`；如果企业覆盖策略拒绝，标记未覆盖，不得通过其它命令绕过。NUL 路径和 rename 的两条路径要正确解析，含中文、空格、重命名不能用空格拆分。
+   Git 命令的 `--no-ext-diff --no-textconv` 不可省略；固定查询及带完整双排除 pathspec 的 `ls-files` 使用 Agent 的 V2 精确 `allow`；动态 `diff/show/merge-base` 使用 `ask`，必须核对 SHA/ref、参数、Git pathspec 和来自已过滤清单的业务路径后再逐次授权，若发现额外参数、越界路径、隐藏文件或组织策略拒绝，标记未覆盖，不得改用其它命令绕过。NUL 路径和 rename 的两条路径要正确解析，含中文、空格、重命名不能用空格拆分。
 5. **先对四层的文件路径执行业务筛选，再读取实际代码**：保留 Java、Mapper XML、**独立 `.sql` / `.SQL`（扩展名大小写不敏感）**、pom、测试与确有业务影响的配置；独立 SQL 不依赖 Java Controller，迁移、建表、数据修复脚本均为有效业务文件；继续排除普通的 `target/build/dist/node_modules` 等产物目录和 `*.class/*.log`。按**唯一文件路径**合并四层，不因同一文件跨层出现而重复计数；显示提交/staged/unstaged/untracked 每层文件数及排除的唯一文件数。隐藏目录和根目录 `temp/` 的文件均不计有效业务文件，也不作为 Finding 位置，更不能因为 Dirty 阻断。
 6. 如果 4 层没有任何有效业务变更（**SQL-only 也算有效变更**），输出没有可审变更的摘要，而非“代码安全”。大规模（>25 文件、>800 变更行）、路径截断/不可解析、缺少基线或重要 Git 调用被拒绝，则准确报告 `PARTIAL/FAILED` 及原因；**只有 committed 为空但 staged/unstaged/untracked 非空时仍应正常 Review**。
 

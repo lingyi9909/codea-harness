@@ -49,6 +49,48 @@ def git_inventory(root: Path, base: str) -> dict[str, bytes]:
     }
 
 
+def parsed_git_entries(layer: str, output: bytes) -> list[tuple[str, str, str | None]]:
+    """Test-only decoder of actual NUL-delimited Git inventory output.
+
+    Name-status -z: status\0path\0, or R/C status\0old\0new\0;
+    untracked ls-files -z: path\0. Canonical identity is the NEW path.
+    """
+    if not output:
+        return []
+    assert output.endswith(b"\0"), "truncated Git -z output"
+    fields = output[:-1].split(b"\0")
+    out: list[tuple[str, str, str | None]] = []
+    i = 0
+    while i < len(fields):
+        if layer == "UNTRACKED":
+            out.append(("?", fields[i].decode("utf-8", "surrogateescape"), None))
+            i += 1
+            continue
+        status = fields[i].decode("ascii")
+        assert re.fullmatch(r"(?:[ACDMUTX]|R\d{0,3}|C\d{0,3})", status), status
+        i += 1
+        if status.startswith(("R", "C")):
+            assert i + 1 < len(fields), "truncated rename/copy"
+            old = fields[i].decode("utf-8", "surrogateescape")
+            new = fields[i + 1].decode("utf-8", "surrogateescape")
+            out.append((status, new, old))
+            i += 2
+        else:
+            assert i < len(fields), "missing Git path"
+            out.append((status, fields[i].decode("utf-8", "surrogateescape"), None))
+            i += 1
+    return out
+
+
+def unique_paths_from_real_git(results: dict[str, bytes]) -> dict[str, set[str]]:
+    """Simple set-based accounting for the TEST fixture, not a Review Runtime."""
+    merged: dict[str, set[str]] = {}
+    for layer, output in results.items():
+        for _status, path, _old in parsed_git_entries(layer, output):
+            merged.setdefault(path, set()).add(layer)
+    return merged
+
+
 def parse_v2_permissions() -> list[tuple[str, str, str]]:
     front = AGENT.read_text(encoding="utf-8").split("---", 2)[1]
     rules = []
@@ -131,11 +173,35 @@ class SQLGitScope(unittest.TestCase):
 
     def test_same_sql_file_across_three_layers_is_one_effective_file(self):
         results = git_inventory(self.root, self.base)
-        for layer in ("COMMITTED", "STAGED", "UNSTAGED"):
-            self.assertIn(self.shared.encode() + b"\0", results[layer])
-        names = {self.shared, self.committed, self.staged, self.unstaged, self.untracked}
-        self.assertEqual(len(names), 5)
-        self.assertEqual(sum(self.shared.encode() + b"\0" in data for data in results.values()), 3)
+        # Parse REAL Git -z bytes, deduplicate by canonical repo-relative path,
+        # and retain all provenance layers for the overlapping SQL script.
+        actual = unique_paths_from_real_git(results)
+        expected = {
+            self.shared: {"COMMITTED", "STAGED", "UNSTAGED"},
+            self.committed: {"COMMITTED"},
+            self.staged: {"STAGED"},
+            self.unstaged: {"UNSTAGED"},
+            self.untracked: {"UNTRACKED"},
+        }
+        self.assertEqual(actual, expected)
+        self.assertEqual(len(actual), 5)
+        self.assertEqual(sum(len(v) for v in actual.values()), 7)
+        self.assertEqual(
+            len([x for x in actual if x.lower().endswith(".sql")]), 5
+        )
+
+    def test_git_rename_decodes_old_and_new_path_without_double_counting(self):
+        renamed = "src/main/resources/db/migration/V2__renamed.sql"
+        git(self.root, "mv", self.committed, renamed)
+        results = git_inventory(self.root, self.base)
+        entries = parsed_git_entries("STAGED", results["STAGED"])
+        renames = [(status, path, old) for status, path, old in entries
+                   if status.startswith("R")]
+        self.assertIn(("R100", renamed, self.committed), renames)
+        actual = unique_paths_from_real_git(results)
+        self.assertIn(renamed, actual)
+        self.assertNotIn(self.committed, [path for status, path, old in entries])
+        self.assertEqual(actual[renamed], {"STAGED"})
 
     def test_sql_only_and_mixed_java_sql(self):
         only_sql = git_inventory(self.root, self.base)
@@ -182,34 +248,86 @@ class PermissionsAndReport(unittest.TestCase):
 
     def test_git_read_queries_match_real_skill_parameters(self):
         scope = "-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
-        queries = [
+        allow = [
             "git --version", "git rev-parse --show-toplevel",
             "git rev-parse HEAD", "git rev-parse --abbrev-ref HEAD",
             "git rev-parse origin/master", "git rev-parse master",
             "git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all",
+            f"git ls-files --others --exclude-standard -z {scope}",
+        ]
+        ask = [
             "git merge-base master HEAD",
             f"git diff --no-ext-diff --no-textconv --name-status -z abc HEAD {scope}",
             f"git diff --no-ext-diff --no-textconv --name-status -z --cached HEAD {scope}",
             f"git diff --no-ext-diff --no-textconv --name-status -z {scope}",
-            f"git ls-files --others --exclude-standard -z {scope}",
             "git diff --no-ext-diff --no-textconv --unified=3 abc HEAD -- 'db/migration/V1__one.SQL'",
             "git diff --no-ext-diff --no-textconv --unified=3 --cached HEAD -- 'db/migration/V1__one.SQL'",
             "git diff --no-ext-diff --no-textconv --unified=3 -- 'db/migration/V1__one.SQL'",
             "git show --no-ext-diff --no-textconv HEAD:db/migration/V1__one.SQL",
             "git show --no-ext-diff --no-textconv :db/migration/V1__one.SQL",
         ]
-        for q in queries:
-            with self.subTest(query=q):
-                self.assertEqual(permission("shell", q), "allow")
+        for expected, commands in (("allow", allow), ("ask", ask)):
+            for command in commands:
+                with self.subTest(expected=expected, command=command):
+                    self.assertEqual(permission("shell", command), expected)
+
+    def test_ls_files_requires_exact_double_exclusion_and_no_extra_flags(self):
+        valid = "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
+        self.assertEqual(permission("shell", valid), "allow")
+        variants = [
+            "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**'",
+            "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)temp/**'",
+            valid + " --stage",
+            valid + " --cached",
+            valid.replace("-- .", "-- ../private"),
+            valid.replace("temp/**", "temp/*"),
+            valid.replace("--others", "--cached"),
+            valid.replace(" -z -- ", " -- "),
+        ]
+        for command in variants:
+            with self.subTest(command=command):
+                self.assertNotEqual(permission("shell", command), "allow")
+
+    def test_dynamic_git_options_must_never_auto_allow(self):
+        unsafe_or_extra = [
+            "git diff --no-ext-diff --no-textconv --unified=3 --stat HEAD",
+            "git diff --no-ext-diff --no-textconv --unified=3 --no-index /etc/passwd /tmp/x",
+            "git diff --no-ext-diff --no-textconv --unified=3 HEAD --output=outside.patch",
+            "git show --no-ext-diff --no-textconv --format=raw HEAD",
+            "git show --no-ext-diff --no-textconv HEAD:../../secret",
+            "git show --no-ext-diff --no-textconv HEAD:.env",
+            "git show --no-ext-diff --no-textconv HEAD:src/.teamai/private.md",
+            "git show --no-ext-diff --no-textconv :src/.opencode/settings.json",
+            "git show --no-ext-diff --no-textconv HEAD:temp/codea-review-report.md",
+            "git merge-base --octopus master dev HEAD",
+        ]
+        for command in unsafe_or_extra:
+            with self.subTest(command=command):
+                self.assertNotEqual(permission("shell", command), "allow")
+
+    def test_dangerous_git_flags_and_sensitive_paths_explicitly_denied(self):
+        denied = [
+            "git diff --no-ext-diff --no-textconv --unified=3 --no-index /tmp/a /tmp/b",
+            "git diff --no-ext-diff --no-textconv --name-status -z HEAD -- ../outside.sql",
+            "git show --no-ext-diff --no-textconv HEAD:../private.sql",
+            "git show --no-ext-diff --no-textconv HEAD:.env",
+            "git show --no-ext-diff --no-textconv HEAD:config/.env.prod",
+            "git show --no-ext-diff --no-textconv HEAD:.teamai/knowledge.md",
+            "git show --no-ext-diff --no-textconv HEAD:src/.opencode/agent.md",
+            "git show --no-ext-diff --no-textconv HEAD:temp/codea-review-report.md",
+            "git diff --no-ext-diff --no-textconv --unified=3 --output=/tmp/exfil",
+            "git diff --no-ext-diff --no-textconv --unified=3 --ext-diff HEAD",
+            "git diff --no-ext-diff --no-textconv --unified=3 --textconv HEAD",
+        ]
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(permission("shell", command), "deny")
 
     def test_writes_and_shell_composition_stay_denied(self):
         rejected = [
             "git add -A", "git commit -am x", "git reset --hard HEAD",
             "git clean -fd", "git checkout master", "git fetch origin",
             "git push origin master", "git diff --output=/tmp/exfil",
-            "git diff --no-ext-diff --no-textconv --unified=3 --output=x HEAD",
-            "git diff --no-ext-diff --no-textconv --unified=3 --ext-diff HEAD",
-            "git diff --no-ext-diff --no-textconv --unified=3 --textconv HEAD",
             "git diff --no-ext-diff --no-textconv --unified=3 HEAD; git commit -am x",
             "git show --no-ext-diff --no-textconv HEAD:db.sql | powershell",
             "git merge-base HEAD && git reset --hard HEAD",
@@ -217,9 +335,9 @@ class PermissionsAndReport(unittest.TestCase):
             "git diff --no-ext-diff --no-textconv --unified=3 %TEMP%",
             "teamai recall x",
         ]
-        for q in rejected:
-            with self.subTest(query=q):
-                self.assertEqual(permission("shell", q), "deny")
+        for command in rejected:
+            with self.subTest(command=command):
+                self.assertEqual(permission("shell", command), "deny")
         self.assertEqual(permission("edit", "src/main/java/OrderService.java"), "deny")
         self.assertEqual(permission("edit", "database/V5__migration.SQL"), "deny")
         self.assertEqual(permission("edit", "temp/codea-review-report.md"), "allow")
