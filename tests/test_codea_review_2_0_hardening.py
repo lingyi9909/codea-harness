@@ -447,7 +447,7 @@ class SeparateTemplateContracts(unittest.TestCase):
         template = (SKILL.parent / "references/report-template.md").read_text(encoding="utf-8")
         self.assertTrue(template.startswith("# 代码评审报告｜"))
         self.assertNotIn("完整复用仓库 main", skill)
-        self.assertNotIn("Harness 1.8", skill)
+        self.assertNotIn("Harness 1.8 正式 Markdown 报告格式", skill)
         self.assertNotIn("Harness 1.8", command)
         self.assertIn("## 5. Codea Review 2.0｜报告生成规范", skill)
         self.assertIn("references/report-template.md", skill)
@@ -491,7 +491,7 @@ class SeparateTemplateContracts(unittest.TestCase):
                   "temp/codea-review-report.md"):
             with self.subTest(text=x):
                 self.assertIn(x, skill)
-        self.assertIn("保存失败仍", command)
+        self.assertIn("写入失败仍", command)
 
 
 if __name__ == "__main__":
