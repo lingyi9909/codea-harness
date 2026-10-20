@@ -71,6 +71,16 @@ foreach ($entry in $entries) {
 
 已有 2.0 的企业电脑：先备份 `agents/codea-reviewer.md`、`commands/codea-review.md`、`skills/codea-review/SKILL.md` 三份配置，再将本分支这三个文件复制到**实际已加载**的用户级 `~/.config/opencode/` 或项目级 `.opencode/` 的对应目录；不可同时保留更高优先级的同名旧版本。重启 OpenCode 2.x TUI 后在 Git 根目录运行 `/codea-review`，核对 Git 四层、SQL-only、权限拒绝及五章报告。回退时恢复三份 SHA256 备份即可。
 
+## 2.0 Usability｜Git 授权与 Markdown 报告（本分支）
+
+本次仅改 Reviewer 的 V2 Shell 资源权限与 Skill 第 5 章报告排版，**没有修改 Skill 第 0–4、6 节的任何核心审查/保存规则**；原始 `commands/codea-review.md` 完全不变。
+
+**安全与体验取舍**：`shell "*": ask` 为默认；仅 `git --version`、固定 status、rev-parse、`merge-base origin/master HEAD` / `master HEAD` 以及若干无动态参数的 log/show/diff 统计形式自动 `allow`。包含 SHA、文件名、排除 pathspec（尤其 `**`）的四层 Git diff、ls-files、单文件 show 与动态 blame/grep/log **继续 ask**。理由是 V2 原生权限采用全值通配符匹配，不能在不引入复杂执行器的前提下充分验证动态参数只读性；不为减少弹窗而使用宽泛 `git diff *` / `git show *` / `git *` 自动授权。常见 `git reset/restore/clean/checkout/add/commit/push/stash/rebase/merge/pull` 直接形式 deny；Shell 组合、其他命令会按默认 ask 处理，**无法宣称能强制拒绝所有变体或绕过写法**。
+
+报告只做视觉分组：首屏文件数/HIGH/MEDIUM Markdown 卡片、已有摘要字段完整保留、调用链与文件范围表格、按真实风险等级分组的清单、按原编号独立的 Finding 详情、原后续处理表。不新增判断或 Finding。真实严重/低风险结果仍计入风险概览，空等级不输出；SQL-only 无 Controller 不补造链路。TUI 与固定 `temp/codea-review-report.md` 仍必须全文一致。
+
+排版对照：[新旧 Markdown 报告示例](../docs/examples/codea-review-2-0-usability-report-comparison.md)；**示例为虚构的占位排版，并不是实际缺陷或已验收的证据**。自动回归命令仍为 `python tests/test_codea_review_2_0_hardening.py`，包括 Git 四层确定性测试及展示结构检查。公司 Windows 私有模型实际权限匹配、Finding 非退化与 7 类报告场景继续待实测。
+
 ## 离线升级、卸载和回退
 
 在 TUI 外备份三个目标文件及其 SHA256，确认新版本与企业 OpenCode exact 版兼容后手动替换；不要覆盖冲突的其他团队同名配置。重新启动或按目标版本的热重载规则验证 `/codea-review` 和 `skill`。回退恢复三个备份文件，或仅删除由本模块安装的三个文件；不要删除整个 `~/.config/opencode`、Build/Plan 或 Provider 配置。

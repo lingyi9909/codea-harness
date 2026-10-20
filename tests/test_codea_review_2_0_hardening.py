@@ -249,32 +249,68 @@ class PermissionsAndReport(unittest.TestCase):
         self.assertFalse(any(a == "shell" and r.startswith("teamai ")
                              for a, r, _ in parse_v2_permissions()))
 
-    def test_shell_policy_is_single_uniform_ask_not_git_whitelist(self):
+    def test_shell_policy_has_safe_exact_git_allows(self):
         rules = parse_v2_permissions()
-        shell_rules = [(r, effect) for a, r, effect in rules if a == "shell"]
-        self.assertEqual(shell_rules, [("*", "ask")])
+        shell = [(r, effect) for action, r, effect in rules if action == "shell"]
+        self.assertEqual(shell[0], ("*", "ask"))
         self.assertEqual(rules[0], ("*", "*", "deny"))
-        # It is a deliberate UX tradeoff: no git-option allowlist or denylist.
-        self.assertFalse(any("git " in resource for _, resource, _ in rules))
+        self.assertNotIn(("git *", "allow"), shell)
+        for pattern, effect in shell:
+            if effect == "allow":
+                with self.subTest(pattern=pattern):
+                    self.assertTrue(pattern.startswith("git "))
+                    self.assertNotIn("*", pattern)
+                    self.assertNotIn("?", pattern)
 
-    def test_shell_queries_and_writes_all_prompt_not_auto_authorized(self):
-        scope = "-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
-        examples = (
-            "git --version", "git rev-parse HEAD",
+    def test_fixed_git_read_queries_allow(self):
+        commands = (
+            "git --version", "git status", "git status --short",
+            "git status --porcelain=v1",
             "git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all",
-            "git merge-base origin/master HEAD",
-            f"git diff --no-ext-diff --no-textconv --name-status -z abcd HEAD {scope}",
+            "git rev-parse --show-toplevel", "git rev-parse HEAD",
+            "git rev-parse --abbrev-ref HEAD",
+            "git rev-parse origin/master", "git rev-parse master",
+            "git merge-base origin/master HEAD", "git merge-base master HEAD",
+            "git log -1 --oneline",
+            "git show --no-ext-diff --no-textconv --stat HEAD",
+            "git diff --no-ext-diff --no-textconv --stat",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(permission("shell", command), "allow")
+
+    def test_dynamic_git_read_queries_and_other_shell_ask(self):
+        scope = "-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
+        commands = (
+            f"git diff --no-ext-diff --no-textconv --name-status -z abc HEAD {scope}",
+            f"git diff --no-ext-diff --no-textconv --name-status -z --cached HEAD {scope}",
+            f"git diff --no-ext-diff --no-textconv --name-status -z {scope}",
             f"git ls-files --others --exclude-standard -z {scope}",
             "git show --no-ext-diff --no-textconv HEAD:database/V2__migration.sql",
-            # These are NOT forcibly denied. The agent must not request them.
-            "git add -A", "git commit -am change", "git reset --hard HEAD",
-            "git diff --no-index ../outside/secret.sql ./safe.sql",
-            "git show HEAD:.env", "powershell -Command Remove-Item ./file",
-            "git diff HEAD | powershell", "teamai recall forbidden",
+            "git blame -L 2,40 -- src/main/java/OrderService.java",
+            "git grep -n -- tenant_id", "git log --oneline -10",
+            "git diff --no-ext-diff --no-textconv --unified=3 --output=patch.txt",
+            "git diff --no-ext-diff --no-textconv --no-index ../private ./here",
+            "git rev-parse --git-dir",
+            "git status --short; git add -A", "git show HEAD:.env",
+            "powershell -Command Remove-Item ./file", "teamai recall forbidden",
         )
-        for command in examples:
+        for command in commands:
             with self.subTest(command=command):
                 self.assertEqual(permission("shell", command), "ask")
+
+    def test_dangerous_git_write_verbs_deny(self):
+        commands = (
+            "git reset --hard HEAD", "git restore .", "git clean -fd",
+            "git checkout master", "git add -A", "git commit -am bad",
+            "git push origin main", "git stash push", "git rebase master",
+            "git merge feature", "git pull origin main",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(permission("shell", command), "deny")
+        # A non-canonical wrapper is only ASK, never misreported as forced deny.
+        self.assertEqual(permission("shell", "git -c core.hooksPath=/tmp add -A"), "ask")
 
     def test_business_read_glob_grep_allow_but_secrets_and_external_denied(self):
         for action, value in (
@@ -335,6 +371,72 @@ class PermissionsAndReport(unittest.TestCase):
         self.assertIn("原生 write", skill)
         self.assertIn("Git 基线", skill)
         self.assertIn("F-001", skill)
+
+
+class UsabilityReportPresentation(unittest.TestCase):
+    """Markdown display tests only, not actual OpenCode model validation."""
+
+    def test_report_skill_retains_review_and_save_invariants(self):
+        skill = SKILL.read_text(encoding="utf-8")
+        required = (
+            "COMMITTED", "STAGED", "UNSTAGED", "UNTRACKED",
+            ":(exclude,glob)**/.*/**", ":(exclude,glob)temp/**",
+            "SQL-only", "大小写不敏感", "git merge-base",
+            "幂等/重复扣减", "事务一致性", "金额精度", "权限/租户",
+            "并发与状态", "缓存/DB", "边界故障",
+            "temp/codea-review-report.md", "原生 write",
+        )
+        for clause in required:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, skill)
+
+    def test_five_chapter_template_groups_findings_and_keeps_metadata(self):
+        skill = SKILL.read_text(encoding="utf-8")
+        fence = chr(96) * 4
+        template = skill.split(fence + "markdown", 1)[1].split(fence, 1)[0]
+        self.assertEqual(re.findall(r"^## (.+)$", template, re.MULTILINE), [
+            "评审摘要", "调用链与覆盖范围", "风险清单",
+            "问题明细", "后续处理与评审边界",
+        ])
+        for clause in (
+            "| 📂 有效变更文件 | 🔴 HIGH | 🟡 MEDIUM |",
+            "严重 N · 高 N · 中 N · 低 N",
+            "| 分支 |", "| 审查状态 |", "| 变更来源 |",
+            "| 风险概览 |", "#### 🔴 HIGH", "#### 🟡 MEDIUM",
+            "| 编号 | 等级 | 风险类型 | 问题摘要 | 业务影响 | 建议动作 |",
+            "---\n\n### 🔴 F-001", "**问题与触发条件**",
+            "**业务影响**", "**代码位置**", "**关键证据**",
+            "**来源：**", "**修复建议**", "**验证建议**",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, template)
+
+    def test_three_finding_example_is_consistent_across_list_and_details(self):
+        path = ROOT / "docs/examples/codea-review-2-0-usability-report-comparison.md"
+        sample = path.read_text(encoding="utf-8")
+        self.assertIn("均为虚构", sample)
+        self.assertIn("不提供虚构源码", sample)
+        report = sample.split("# 代码评审报告｜演示项目（虚构样例）", 1)[1]
+        report = report.split("## 展示回归关键点", 1)[0]
+        headings = re.findall(r"^## (.+)$", report, re.MULTILINE)
+        self.assertEqual(headings, [
+            "评审摘要", "调用链与覆盖范围", "风险清单",
+            "问题明细", "后续处理与评审边界",
+        ])
+        risklist = report.split("## 风险清单", 1)[1].split("## 问题明细", 1)[0]
+        details = report.split("## 问题明细", 1)[1].split("## 后续处理", 1)[0]
+        ids = re.findall(r"^\| (F-\d{3}) \|", risklist, re.MULTILINE)
+        detail_ids = re.findall(r"^### [🔴🟡] (F-\d{3}) ", details, re.MULTILINE)
+        self.assertEqual(ids, ["F-001", "F-002", "F-003"])
+        self.assertEqual(detail_ids, ids)
+        self.assertEqual(len(re.findall(r"^### 🔴 F-", details, re.MULTILINE)), 2)
+        self.assertEqual(len(re.findall(r"^### 🟡 F-", details, re.MULTILINE)), 1)
+        chunks = re.split(r"(?=^### [🔴🟡] F-)", details, flags=re.MULTILINE)[1:]
+        for block in chunks:
+            for label in ("**问题与触发条件**", "**业务影响**", "**代码位置**",
+                          "**关键证据**", "**修复建议**", "**验证建议**"):
+                with self.subTest(label=label):
+                    self.assertIn(label, block)
 
 
 if __name__ == "__main__":
