@@ -1,4 +1,4 @@
-# Codea Review 2.0 · T1 最小可用版
+# Codea Review 2.0 · 基础能力完善（Java / Mapper XML / SQL）
 
 本目录只有三个 **OpenCode V2 运行文件**；没有 Review Runtime、插件、TeamAI 同步服务或网络安装依赖。
 
@@ -9,7 +9,7 @@ codea-review/
 └── skills/codea-review/SKILL.md
 ```
 
-> 状态：代码与离线安装说明已提供；**尚未在公司 Windows 内网、指定 OpenCode exact 2.x 和私有模型上实测通过**。勿将仓库静态检查当作 T1 最终验收。
+> 状态：用户已确认既有 Codea Review 2.0 可在公司 Windows 内网运行；**本 hardening 分支的 Git 权限调整、SQL-only、真实模型 Finding 回归仍待公司实际版本验收**。GitHub Actions 上的 Windows Git/Python 测试不是私有模型实测。
 
 ## Windows 用户级离线安装（不修改 Java 项目）
 
@@ -44,19 +44,32 @@ foreach ($entry in $entries) {
 1. 在 **允许未提交修改的 Git 需求分支**目录启动公司已批准的 OpenCode 2.x TUI，确认当前模型选择的是公司私有 Provider，Tool Calling 正常。
 2. 输入 `/codea-review`；或 `/codea-review OrderController`。
 3. 观察第一个工具调用实际为 `skill(codea-review)`；确认 Skill 返回后，Reviewer 获取本地 `origin/master`（或 `master`）与已提交 HEAD，还纳入 staged/unstaged/相关 untracked 工作区变更，按 Git Diff 先快扫后按需查上下文。
-4. 当 Shell 提示动态 Git Diff/Show/merge-base 请求授权时，**核对完整命令确为可信 Git 只读形式**再批准，不选择永久放行。Reviewer 不执行测试且不修改业务代码；完成审查后自动使用原生 write 创建/覆盖项目根目录的 `temp/codea-review-report.md`（没有 temp 时自动建目录）。
+4. **所有 Git Shell 查询统一触发 OpenCode V2 `ask`**；开发者对每条命令检查实际 SHA、业务路径和参数后决定是否授权。如果未触发 `ask` 或查询被拒，检查实际 Agent、项目/全局配置和组织策略；不引入 Git 包装服务或额外权限框架。Reviewer 不执行测试且不修改业务代码；完成审查后自动使用原生 write 创建/覆盖项目根目录的 `temp/codea-review-report.md`（没有 temp 时自动建目录）。
 5. 在 TUI 读取与 Harness 1.8 版式一致的完整 Markdown 报告，并核查 HEAD/INDEX/WORKTREE/UNTRACKED 证据来源。结束后手动切回 Build Agent，以免 Reviewer 的权限限制影响正常开发。
 
 示例 fixture 可在测试机器执行 `tests/fixtures/codea-review-t1/setup.ps1`，会独立生成一个包含 `master` 和 `feature/t1-risk-review` 的新 Git 仓库，不接触公司业务代码。
 
 ## 安全和版本边界
 
-- Reviewer 的权限只做**可信内网开发机上的防误操作**，不是 OS 只读沙箱。仅允许原生 write 写入固定的 `temp/codea-review-report.md`，其他编辑、网络、构建与 Git 写命令继续禁止；动态 Git 查询 `ask`。请从 Java 项目 Git 根目录启动 OpenCode 以匹配相对路径。
+- Reviewer 的权限仅用于**可信内网开发机上的交互授权**，不是 OS 只读沙箱。原生 read/glob/grep 允许访问项目业务代码，业务 edit/write/patch 默认拒绝，唯一原生写入例外为 `temp/codea-review-report.md`；**Shell 全部 `ask`，包含 Git 写命令也可能触发询问，不能视为被权限配置强制拒绝**。Skill 仍明确禁止主动发起 Git 写命令、构建、网络与任意 Shell 执行；用户和公司策略应拒绝此类请求。请从 Git 根目录启动 OpenCode。
 - 固定 `git -c core.fsmonitor=false status ...` 是为了降低通过 fsmonitor hook 隐式执行程序的风险。Git 版本不达最低要求即应停止。对已被恶意改造的 Git/本机环境不做绝对安全保证。
 - `skill` 不会自动加载其他文件：本模块把 Java 风险清单和报告格式都写进唯一 `SKILL.md`。
-- 本地 `origin/master` 可能落后，不会联网 `fetch`。Dirty Worktree 不再阻断：同时审查 committed、staged、unstaged 和相关 untracked。所有 Git 文件清单先使用 `-- . ':(exclude,glob)**/.*/**'` 过滤根目录/嵌套隐藏目录，隐藏文件不计有效数量，工作区中途变化则标记需复核。
+- 本地 `origin/master` 可能落后，不会联网 `fetch`。Dirty Worktree 不再阻断：同时审查 committed、staged、unstaged 和相关 untracked。所有 Git 文件清单先使用 `-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` 过滤根目录/嵌套隐藏目录及项目根目录 temp，隐藏文件不计有效数量，工作区中途变化则标记需复核。
 - 1.8 报告五章：评审摘要、调用链与覆盖范围、风险清单、问题明细、后续处理与评审边界。**TUI 完整输出 + 自动保存至项目根目录 `temp/codea-review-report.md`（有目录就用、无目录自动创建，每次覆盖）**，不需要 1.8 Go Runtime。项目 `temp/` 在 Git 清单阶段被排除，避免 Review 报告进入下一次有效变更。
 - 不能把没有 Finding 理解成“可上线”。模型可能漏报、误报，复杂动态调用只能标记未知。
+
+## 2.0 Hardening：独立 SQL 与 Git 只读权限
+
+- **一个入口**：仍使用 `/codea-review` + 原本的 `codea-review` Skill，不加载 TeamAI、不增加 KB Agent、Runtime/MCP、报告引擎。
+- **SQL**：数据库迁移、数据修复与普通独立 `.sql`（包括 `.SQL`）在 COMMITTED、STAGED、UNSTAGED、UNTRACKED 四层均作为有效业务文件；SQL-only 和 Java+SQL 都允许正常 Review。相同脚本跨层只计一个唯一文件、保留多层取证；untracked 从实际工作区 read。脚本只核查有证据的中高风险 UPDATE/DELETE、租户约束、迁移幂等、DDL 兼容、数据一致性，不能仅凭 SQL 关键字臆断问题。
+- **权限**：保持 OpenCode **V2** 的 `permissions:` + `shell` 格式，只保留简单工具级规则：默认 deny、read/glob/grep allow、external_directory deny、仅本 Skill allow、固定报告 edit allow、**全部 Shell `ask`**。不再维护 Git 命令或路径的白/黑名单；Skill 规定只读审查行为，Shell 用户授权是额外人工审批，**不能声称强制禁止 Git 写操作或危险 Shell**。不改变 Java/SQL 检查清单和固定五章报告。
+- **报告**：Harness 1.8 的五章及标题、Finding 编号、TUI 输出与固定 temp 文件保留。SQL-only 仅在既有“调用链与覆盖范围”注明无 Controller 链路，不添加第六章。
+
+确定性回归可在测试环境运行 `python tests/test_codea_review_2_0_hardening.py`；**这不代表真实 OpenCode 授权或私有模型 Finding 质量已验收**。实际执行与历史三项通用 Finding 的验收表见 [2.0 hardening 验收说明](../docs/examples/codea-review-2-0-hardening-acceptance.md)。其中三项历史真实案例尚无代码快照与原报告可供本仓库复测，必须在公司内网真实执行，不准用合成样例充当历史回归。
+
+### 升级安装（与首次安装区分）
+
+已有 2.0 的企业电脑：先备份 `agents/codea-reviewer.md`、`commands/codea-review.md`、`skills/codea-review/SKILL.md` 三份配置，再将本分支这三个文件复制到**实际已加载**的用户级 `~/.config/opencode/` 或项目级 `.opencode/` 的对应目录；不可同时保留更高优先级的同名旧版本。重启 OpenCode 2.x TUI 后在 Git 根目录运行 `/codea-review`，核对 Git 四层、SQL-only、权限拒绝及五章报告。回退时恢复三份 SHA256 备份即可。
 
 ## 离线升级、卸载和回退
 
