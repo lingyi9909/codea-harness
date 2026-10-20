@@ -236,6 +236,8 @@ class SQLGitScope(unittest.TestCase):
 
 
 class PermissionsAndReport(unittest.TestCase):
+    """Tool-level permission contracts, not an OpenCode live sandbox test."""
+
     def test_original_entry_and_v2_format(self):
         agent = AGENT.read_text(encoding="utf-8")
         command = COMMAND.read_text(encoding="utf-8")
@@ -243,108 +245,75 @@ class PermissionsAndReport(unittest.TestCase):
         self.assertNotIn("\npermission:\n", agent)
         self.assertIn("agent: codea-reviewer", command)
         self.assertIn("codea-review", command)
-        # Denying .teamai paths is a safety rule, not a knowledge integration.
-        self.assertFalse(any(action == "shell" and resource.startswith("teamai ")
-                             for action, resource, _effect in parse_v2_permissions()))
         self.assertNotIn("teamai recall", command.lower())
+        self.assertFalse(any(a == "shell" and r.startswith("teamai ")
+                             for a, r, _ in parse_v2_permissions()))
 
-    def test_git_read_queries_match_real_skill_parameters(self):
+    def test_shell_policy_is_single_uniform_ask_not_git_whitelist(self):
+        rules = parse_v2_permissions()
+        shell_rules = [(r, effect) for a, r, effect in rules if a == "shell"]
+        self.assertEqual(shell_rules, [("*", "ask")])
+        self.assertEqual(rules[0], ("*", "*", "deny"))
+        # It is a deliberate UX tradeoff: no git-option allowlist or denylist.
+        self.assertFalse(any("git " in resource for _, resource, _ in rules))
+
+    def test_shell_queries_and_writes_all_prompt_not_auto_authorized(self):
         scope = "-- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
-        allow = [
-            "git --version", "git rev-parse --show-toplevel",
-            "git rev-parse HEAD", "git rev-parse --abbrev-ref HEAD",
-            "git rev-parse origin/master", "git rev-parse master",
+        examples = (
+            "git --version", "git rev-parse HEAD",
             "git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all",
-        ]
-        ask = [
+            "git merge-base origin/master HEAD",
+            f"git diff --no-ext-diff --no-textconv --name-status -z abcd HEAD {scope}",
             f"git ls-files --others --exclude-standard -z {scope}",
-            "git merge-base master HEAD",
-            f"git diff --no-ext-diff --no-textconv --name-status -z abc HEAD {scope}",
-            f"git diff --no-ext-diff --no-textconv --name-status -z --cached HEAD {scope}",
-            f"git diff --no-ext-diff --no-textconv --name-status -z {scope}",
-            "git diff --no-ext-diff --no-textconv --unified=3 abc HEAD -- 'db/migration/V1__one.SQL'",
-            "git diff --no-ext-diff --no-textconv --unified=3 --cached HEAD -- 'db/migration/V1__one.SQL'",
-            "git diff --no-ext-diff --no-textconv --unified=3 -- 'db/migration/V1__one.SQL'",
-            "git show --no-ext-diff --no-textconv HEAD:db/migration/V1__one.SQL",
-            "git show --no-ext-diff --no-textconv :db/migration/V1__one.SQL",
-        ]
-        for expected, commands in (("allow", allow), ("ask", ask)):
-            for command in commands:
-                with self.subTest(expected=expected, command=command):
-                    self.assertEqual(permission("shell", command), expected)
-
-    def test_ls_files_requires_exact_double_exclusion_and_no_extra_flags(self):
-        valid = "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'"
-        # V2 wildcard syntax cannot match literal ** exactly; fail closed to ASK.
-        self.assertEqual(permission("shell", valid), "ask")
-        variants = [
-            "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**'",
-            "git ls-files --others --exclude-standard -z -- . ':(exclude,glob)temp/**'",
-            valid + " --stage",
-            valid + " --cached",
-            valid.replace("-- .", "-- ../private"),
-            valid.replace("temp/**", "temp/*"),
-            valid.replace("--others", "--cached"),
-            valid.replace(" -z -- ", " -- "),
-        ]
-        for command in variants:
+            "git show --no-ext-diff --no-textconv HEAD:database/V2__migration.sql",
+            # These are NOT forcibly denied. The agent must not request them.
+            "git add -A", "git commit -am change", "git reset --hard HEAD",
+            "git diff --no-index ../outside/secret.sql ./safe.sql",
+            "git show HEAD:.env", "powershell -Command Remove-Item ./file",
+            "git diff HEAD | powershell", "teamai recall forbidden",
+        )
+        for command in examples:
             with self.subTest(command=command):
-                self.assertNotEqual(permission("shell", command), "allow")
+                self.assertEqual(permission("shell", command), "ask")
 
-    def test_dynamic_git_options_must_never_auto_allow(self):
-        unsafe_or_extra = [
-            "git diff --no-ext-diff --no-textconv --unified=3 --stat HEAD",
-            "git diff --no-ext-diff --no-textconv --unified=3 --no-index /etc/passwd /tmp/x",
-            "git diff --no-ext-diff --no-textconv --unified=3 HEAD --output=outside.patch",
-            "git show --no-ext-diff --no-textconv --format=raw HEAD",
-            "git show --no-ext-diff --no-textconv HEAD:../../secret",
-            "git show --no-ext-diff --no-textconv HEAD:.env",
-            "git show --no-ext-diff --no-textconv HEAD:src/.teamai/private.md",
-            "git show --no-ext-diff --no-textconv :src/.opencode/settings.json",
-            "git show --no-ext-diff --no-textconv HEAD:temp/codea-review-report.md",
-            "git merge-base --octopus master dev HEAD",
-        ]
-        for command in unsafe_or_extra:
-            with self.subTest(command=command):
-                self.assertNotEqual(permission("shell", command), "allow")
+    def test_business_read_glob_grep_allow_but_secrets_and_external_denied(self):
+        for action, value in (
+            ("read", "src/main/java/example/OrderService.java"),
+            ("read", "db/migration/V2__change.SQL"),
+            ("glob", "**/*.java"),
+            ("grep", "Transactional"),
+            ("skill", "codea-review"),
+        ):
+            with self.subTest(action=action, value=value):
+                self.assertEqual(permission(action, value), "allow")
+        self.assertEqual(permission("read", ".env"), "deny")
+        self.assertEqual(permission("read", ".env.production"), "deny")
+        self.assertEqual(permission("external_directory", "C:/Other/private/*"), "deny")
+        self.assertEqual(permission("skill", "unrelated-skill"), "deny")
 
-    def test_dangerous_git_flags_and_sensitive_paths_explicitly_denied(self):
-        denied = [
-            "git diff --no-ext-diff --no-textconv --unified=3 --no-index /tmp/a /tmp/b",
-            "git diff --no-ext-diff --no-textconv --name-status -z HEAD -- ../outside.sql",
-            "git show --no-ext-diff --no-textconv HEAD:../private.sql",
-            "git show --no-ext-diff --no-textconv HEAD:.env",
-            "git show --no-ext-diff --no-textconv HEAD:config/.env.prod",
-            "git show --no-ext-diff --no-textconv HEAD:.teamai/knowledge.md",
-            "git show --no-ext-diff --no-textconv HEAD:src/.opencode/agent.md",
-            "git show --no-ext-diff --no-textconv HEAD:temp/codea-review-report.md",
-            "git diff --no-ext-diff --no-textconv --unified=3 --output=/tmp/exfil",
-            "git diff --no-ext-diff --no-textconv --unified=3 --ext-diff HEAD",
-            "git diff --no-ext-diff --no-textconv --unified=3 --textconv HEAD",
-        ]
-        for command in denied:
-            with self.subTest(command=command):
-                self.assertEqual(permission("shell", command), "deny")
-
-    def test_writes_and_shell_composition_stay_denied(self):
-        rejected = [
-            "git add -A", "git commit -am x", "git reset --hard HEAD",
-            "git clean -fd", "git checkout master", "git fetch origin",
-            "git push origin master", "git diff --output=/tmp/exfil",
-            "git diff --no-ext-diff --no-textconv --unified=3 HEAD; git commit -am x",
-            "git show --no-ext-diff --no-textconv HEAD:db.sql | powershell",
-            "git merge-base HEAD && git reset --hard HEAD",
-            "git show --no-ext-diff --no-textconv $(echo foo)",
-            "git diff --no-ext-diff --no-textconv --unified=3 %TEMP%",
-            "teamai recall x",
-        ]
-        for command in rejected:
-            with self.subTest(command=command):
-                self.assertEqual(permission("shell", command), "deny")
-        self.assertEqual(permission("edit", "src/main/java/OrderService.java"), "deny")
-        self.assertEqual(permission("edit", "database/V5__migration.SQL"), "deny")
+    def test_only_report_is_native_edit_exception(self):
         self.assertEqual(permission("edit", "temp/codea-review-report.md"), "allow")
-        self.assertEqual(permission("external_directory", "/other/private"), "deny")
+        for path in (
+            "src/main/java/example/OrderService.java",
+            "database/V5__migration.sql", "temp/debug.txt",
+            "temp/codea-review-report.md.bak", "src/temp/file.sql",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(permission("edit", path), "deny")
+
+    def test_skill_preserves_read_only_intent_without_claiming_enforcement(self):
+        agent = AGENT.read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+        command = COMMAND.read_text(encoding="utf-8")
+        self.assertIn("不运行构建、测试、Git 写操作", skill)
+        self.assertIn("不调用 git add、stash 或 checkout", skill)
+        self.assertIn("Shell", agent)
+        self.assertIn("ask", agent.lower())
+        self.assertIn("ask", skill.lower())
+        self.assertIn("不等于强制只读保证", command)
+        self.assertNotIn("git *", "\n".join(
+            resource for action, resource, effect in parse_v2_permissions()
+            if action == "shell" and effect == "allow"))
 
     def test_sql_scope_and_safety_requirements_in_skill(self):
         skill = SKILL.read_text(encoding="utf-8")

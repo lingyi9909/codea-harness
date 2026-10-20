@@ -10,13 +10,13 @@
 python tests/test_codea_review_2_0_hardening.py
 ```
 
-检查：四层 SQL-only 与 Java+SQL 清单，`.sql/.SQL`，已提交/staged/unstaged/untracked，跨层同名去重，隐藏目录与根 `temp/` 在**读取前排除**；Git diff/show 层次与工作区实际 SQL 正文；OpenCode V2 Agent Git allow/deny 的**离线规则模拟**；原报告路径和五章标题。请记录执行命令、Python/Git 版本、测试完整 stdout/stderr、测试环境与 HEAD SHA。
+检查：四层 SQL-only 与 Java+SQL 清单，`.sql/.SQL`，已提交/staged/unstaged/untracked，跨层同名去重，隐藏目录与根 `temp/` 在**读取前排除**；Git diff/show 层次与工作区实际 SQL 正文；OpenCode V2 Agent **工具级 Shell ask / edit deny** 的离线规则检查；原报告路径和五章标题。请记录执行命令、Python/Git 版本、测试完整 stdout/stderr、测试环境与 HEAD SHA。
 
 **注意**：自动化权限模拟只是对配置文本的近似判定，不等于 OpenCode V2 TUI 权限实际行为；自动 Git fixture 只证明文件范围，不证明 LLM 找到了缺陷。
 
 ## PR #63 复审重点：Git 权限收敛与跨层去重
 
-**P0-01**：静态规则自动允许无通配参数的固定 Git 查询。V2 的 `*` 总是通配字符，完整双排除 `ls-files` pathspec 虽必须按 Skill 原样使用，但无法严格精确 allow，因此本次将其设为 **ask**，禁止自动通过；任何缺少隐藏目录/temp 排除的清单、替换 pathspec、追加 `--cached/--stage` 都不能自动 allow。动态 `merge-base/diff/show` 均为 **ask**，不是静态自动通过；`--no-index`、`--output`、路径 `../`、敏感 `.env/.teamai/.opencode` 的敏感对象与 Shell 组合显式 deny。即使静态文本规则匹配符合预期，仍须以公司 OpenCode V2 TUI 真实行为为验收。
+**本次简化决定覆盖先前 P0-01 的细粒度方案**：不再对 Git 子命令、pathspec 或 Shell 参数维护大量 allow/deny；**所有 Shell 统一 `ask`**，OpenCode 弹窗及公司策略由用户审核。Agent 仍默认拒绝其它工具，允许原生 read/glob/grep，业务编辑默认拒绝，报告例外不变。**Shell ask 并不阻断所有 Git 写/危险命令**；Skill 明令不主动请求此类操作，不能将提示约束宣传为强制安全隔离。
 
 **P1-01**：自动测试从**真实 Git `-z` 二进制输出**解析 COMMITTED/STAGED/UNSTAGED 的 `--name-status -z` 以及 UNTRACKED 的 `ls-files -z`，按最终 repo 相对路径集合去重、保留 `path -> {layers}`；重命名取 new path 为有效路径、old path 作为来源证据。本文件的 Python 解析函数只用于验收测试，不增加新的 Review Runtime。
 
@@ -36,8 +36,8 @@ python tests/test_codea_review_2_0_hardening.py
 | W6 | Java+SQL 混合变更均计入有效范围 | PENDING | |
 | W7 | 同脚本跨多个 Git 层只计 1 个有效文件、分别标来源 | PENDING | |
 | W8 | 隐藏目录与根 temp 在清单阶段排除 | PENDING | |
-| W9 | 安全 git diff/show/merge-base/ls-files/status 不发生意外权限拒绝 | PENDING | |
-| W10 | git add/commit/checkout/reset、Shell 组合与业务 edit 仍被拒绝 | PENDING | |
+| W9 | Git diff/show/merge-base/ls-files/status 正常触发 Shell ask，经人工批准后连续执行 | PENDING | |
+| W10 | Agent **不主动请求** git add/commit/checkout/reset 或危险 Shell，业务原生 edit 仍受 deny；Shell 的 ask 不冒充强制 deny（仅隔离仓库做负测） | PENDING | |
 | W11 | TUI 与 temp/codea-review-report.md 五章完整一致 | PENDING | |
 | W12 | 有高风险 SQL 证据时能发现、合法 SQL 不因关键字误报 | PENDING | |
 
