@@ -364,13 +364,14 @@ class PermissionsAndReport(unittest.TestCase):
 
     def test_original_five_chapters_and_report_path(self):
         skill = SKILL.read_text(encoding="utf-8")
+        template = (SKILL.parent / "references/report-template.md").read_text(encoding="utf-8")
         for title in ("评审摘要", "调用链与覆盖范围", "风险清单",
                       "问题明细", "后续处理与评审边界"):
-            self.assertIn("## " + title, skill)
+            self.assertIn("## " + title, template)
         self.assertIn("temp/codea-review-report.md", skill)
         self.assertIn("原生 write", skill)
         self.assertIn("Git 基线", skill)
-        self.assertIn("F-001", skill)
+        self.assertIn("F-001", template)
 
 
 class UsabilityReportPresentation(unittest.TestCase):
@@ -391,9 +392,7 @@ class UsabilityReportPresentation(unittest.TestCase):
                 self.assertIn(clause, skill)
 
     def test_five_chapter_template_groups_findings_and_keeps_metadata(self):
-        skill = SKILL.read_text(encoding="utf-8")
-        fence = chr(96) * 4
-        template = skill.split(fence + "markdown", 1)[1].split(fence, 1)[0]
+        template = (SKILL.parent / "references/report-template.md").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"^## (.+)$", template, re.MULTILINE), [
             "评审摘要", "调用链与覆盖范围", "风险清单",
             "问题明细", "后续处理与评审边界",
@@ -437,6 +436,62 @@ class UsabilityReportPresentation(unittest.TestCase):
                           "**关键证据**", "**修复建议**", "**验证建议**"):
                 with self.subTest(label=label):
                     self.assertIn(label, block)
+
+
+class SeparateTemplateContracts(unittest.TestCase):
+    """Static distribution/loading contracts; NOT TeamAI or TUI proof."""
+
+    def test_skill_references_trusted_template_not_legacy_layout(self):
+        skill = SKILL.read_text(encoding="utf-8")
+        command = COMMAND.read_text(encoding="utf-8")
+        template = (SKILL.parent / "references/report-template.md").read_text(encoding="utf-8")
+        self.assertTrue(template.startswith("# 代码评审报告｜"))
+        self.assertNotIn("完整复用仓库 main", skill)
+        self.assertNotIn("Harness 1.8", skill)
+        self.assertNotIn("Harness 1.8", command)
+        self.assertIn("## 5. Codea Review 2.0｜报告生成规范", skill)
+        self.assertIn("references/report-template.md", skill)
+        self.assertIn("references/report-template.md", command)
+        self.assertIn("原生 `read`", skill)
+        self.assertIn("REPORT_TEMPLATE_LOAD_FAILED", skill)
+        self.assertIn("REPORT_TEMPLATE_LOAD_FAILED", command)
+        self.assertIn("不读取业务项目同名文件", skill)
+        self.assertNotIn("| 📂 有效变更文件 | 🔴 HIGH | 🟡 MEDIUM |", skill)
+        self.assertEqual(re.findall(r"^## (.+)$", template, flags=re.MULTILINE), [
+            "评审摘要", "调用链与覆盖范围", "风险清单",
+            "问题明细", "后续处理与评审边界",
+        ])
+
+    def test_template_read_does_not_expand_agent_permissions(self):
+        skill = SKILL.read_text(encoding="utf-8")
+        agent = AGENT.read_text(encoding="utf-8")
+        self.assertIn("不使用 Shell、PowerShell、脚本或 Git 命令绕过", skill)
+        self.assertIn('action: external_directory, resource: "*", effect: deny', agent)
+        self.assertNotIn('action: external_directory, resource: "*", effect: allow', agent)
+        self.assertIn('action: skill, resource: codea-review, effect: allow', agent)
+        self.assertIn('action: read, resource: "*", effect: allow', agent)
+
+    def test_entire_skill_dir_distribution_and_pending_live_read(self):
+        readme = (ROOT / "codea-review/README.md").read_text(encoding="utf-8")
+        self.assertIn("references/report-template.md", readme)
+        self.assertIn("Copy-Item -LiteralPath $from -Destination $to -Recurse", readme)
+        self.assertIn("TeamAI push/pull", readme)
+        self.assertIn("SKILL.md", readme)
+        self.assertIn("commands/codea-review.md", readme)
+        self.assertIn("PENDING", readme)
+
+    def test_first_tool_and_old_git_review_save_contracts_preserved(self):
+        skill = SKILL.read_text(encoding="utf-8")
+        command = COMMAND.read_text(encoding="utf-8")
+        self.assertIn("首次工具调用仍为 `skill(codea-review)`", skill)
+        self.assertIn("首个工具动作必须使用 OpenCode 原生 skill", command)
+        for x in ("COMMITTED", "STAGED", "UNSTAGED", "UNTRACKED", "SQL-only",
+                  ":(exclude,glob)temp/**", ":(exclude,glob)**/.*/**",
+                  "## 6. 保存正式报告（每次 Review 必做）",
+                  "temp/codea-review-report.md"):
+            with self.subTest(text=x):
+                self.assertIn(x, skill)
+        self.assertIn("保存失败仍", command)
 
 
 if __name__ == "__main__":

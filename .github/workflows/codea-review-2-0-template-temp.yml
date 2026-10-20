@@ -1,0 +1,19 @@
+name: TEMP Codea Review 2.0 standalone report template regression
+on:
+  push:
+    branches: [feature/codea-review-2-0-usability]
+jobs:
+  regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version diagnostics
+        run: |
+          python --version
+          git --version
+      - name: Review and template regression
+        run: python tests/test_codea_review_2_0_hardening.py
