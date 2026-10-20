@@ -492,6 +492,10 @@ class SeparateTemplateContracts(unittest.TestCase):
             with self.subTest(text=x):
                 self.assertIn(x, skill)
         self.assertIn("写入失败仍", command)
+        self.assertIn("模板读取失败", command)
+        self.assertIn("不生成或保存正式报告", command)
+        self.assertIn("模板读取成功后", command)
+        self.assertIn("读取规范", command)
 
 
 if __name__ == "__main__":
