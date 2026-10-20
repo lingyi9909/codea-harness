@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="demo.orders.OrderMapper">
+  <update id="decreaseBalance">
+    UPDATE account_balance
+       SET balance_cents = balance_cents - #{cents}
+     WHERE order_id = #{orderId}
+       AND tenant_id = #{tenantId}
+  </update>
+</mapper>
