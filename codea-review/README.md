@@ -48,10 +48,30 @@ foreach ($entry in $entries) {
 ## 使用方式
 
 1. 在 **允许未提交修改的 Git 需求分支**目录启动公司已批准的 OpenCode 2.x TUI，确认当前模型选择的是公司私有 Provider，Tool Calling 正常。
-2. 输入 `/codea-review`；或 `/codea-review OrderController`。
-3. 观察第一个工具调用实际为 `skill(codea-review)`；确认 Skill 返回后，Reviewer 获取本地 `origin/master`（或 `master`）与已提交 HEAD，还纳入 staged/unstaged/相关 untracked 工作区变更，按 Git Diff 先快扫后按需查上下文。
+2. 输入 `/codea-review`；或 `/codea-review OrderController`。也可使用下面的显式参数。
+3. 观察第一个工具调用实际为 `skill(codea-review)`；确认 Skill 返回并完成参数校验后，Reviewer 获取选定本地基线（默认 `origin/master`，不存在才用 `master`）与 HEAD 的 merge-base，还纳入 staged/unstaged/相关 untracked 工作区变更，按 Git Diff 先快扫后按需查上下文。
 4. Agent 中精确配置 `allow` 的固定 Git 查询自动执行；未明确允许的动态 Git 查询继续触发 OpenCode V2 `ask`，开发者核对实际 SHA、业务路径和参数后决定是否授权。如果未触发 `ask` 或查询被拒，检查实际 Agent、项目/全局配置和组织策略；不引入 Git 包装服务或额外权限框架。Reviewer 不执行测试且不修改业务代码；完成审查后自动使用原生 write 创建/覆盖项目根目录的 `temp/codea-review-report.md`（没有 temp 时自动建目录）。
 5. Review 完成后通过原生 `read` 读取**实际加载的受信任 Skill 目录**下 `references/report-template.md`，按 Codea Review 2.0 独立模板输出完整五章 Markdown；若模板未同步、读取被拒或不完整，报告 `REPORT_TEMPLATE_LOAD_FAILED`，不回退旧版样例。核查 HEAD/INDEX/WORKTREE/UNTRACKED 证据来源。结束后手动切回 Build Agent，以免 Reviewer 的权限限制影响正常开发。
+
+### Git 基线与 Controller 参数
+
+```text
+/codea-review
+/codea-review OrderController
+/codea-review --base origin/develop
+/codea-review --controller OrderController
+/codea-review --base origin/develop --controller OrderController
+/codea-review --controller OrderController --base origin/develop
+```
+
+- `--base`：选择**本地已经存在、指向 commit 的分支或 remote-tracking ref**，例如 `master`、`develop`、`origin/master`、`origin/develop`、`feature/test`。只读计算 `merge-base(base, HEAD)`，作为 COMMITTED 的起点；STAGED、UNSTAGED、UNTRACKED 不变。不 checkout/switch/fetch/pull，不要求切换当前业务分支。显式基线不存在或无共同祖先直接报错，不回退 master。本地 remote-tracking ref 可能落后，命令不联网更新。
+- `--controller`：与旧位置 Controller 简写等价，重点调查入口及必要调用链，不严格排除其他 Controller/SQL。V1 名称为 ASCII 字母或下划线开头、其后字母/数字/下划线的简单类名。无法定位时如实说明，不编造链路；仍审查其余有效变更。
+- 两个显式参数顺序任意，各只能出现一次；旧简写也可与 `--base` 组合。缺值、重复、未知选项、多余位置参数、位置 Controller 与 `--controller` 同用均报错并提示用法。V1 不支持引号、`--base=value`、任意 revision（如 `HEAD~3`、`A..B`、`:path`）或 Shell 表达式。
+- 首次工具调用仍加载 Skill；完整参数校验完成后才查询 Git。不合法参数不启动 Review、不生成或覆盖已有报告。基线字符白名单 → 完整本地 ref 校验 → commit 类型 → merge-base；仅按 Skill 的固定安全参数模板执行。新增动态 Git 查询仍 `ask`，Agent 权限完全不变。
+- 未提供 `--base` 时（无参数、旧 Controller 简写或仅 `--controller`），保持原有 `git rev-parse origin/master` / `master` 和 `git merge-base origin/master HEAD` / `master HEAD` 固定查询与原有 allow 授权体验，不追加配置、ref 格式或对象类型检查。只有显式 `--base` 才执行新增校验；`origin/develop` 等名称优先查询 `refs/remotes/origin/develop`，同名本地 `refs/heads/origin/develop` 不会遮蔽远程跟踪分支。
+- 仅在显式 `--base` 路径，为避免 Git 只读查询隐式补取对象，先通过两条只读配置查询检测 partial clone/promisor。遇到 `extensions.partialclone` 或任何含 `promisor` 的配置键（即使值为 false）均明确返回 `BASE_LOCAL_ONLY_REQUIRED` 并停止，不改配置、不 fetch、不覆盖报告；未指定基线的原有路径不受该新增检查影响。
+
+自动回归：`python tests/test_codea_review_2_0_hardening.py` 和 `python tests/fixtures/codea-review-t1/test_git_scope.py`。参数测试从 Skill 声明式契约读取规则，在真实临时 Git 仓库验证不同基线、共同祖先、完整四层、SQL-only、拒绝输入及工作区不变；测试驱动只存在于测试文件，**不作为产品 Parser 或 Runtime 安装**。这些确定性测试不证明模型会正确执行规则；公司 Windows + OpenCode 2.x + 私有模型的默认命令、旧简写、组合参数实际验收仍为 **PENDING**。
 
 示例 fixture 可在测试机器执行 `tests/fixtures/codea-review-t1/setup.ps1`，会独立生成一个包含 `master` 和 `feature/t1-risk-review` 的新 Git 仓库，不接触公司业务代码。
 
