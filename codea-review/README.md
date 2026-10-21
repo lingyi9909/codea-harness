@@ -68,7 +68,8 @@ foreach ($entry in $entries) {
 - `--controller`：与旧位置 Controller 简写等价，重点调查入口及必要调用链，不严格排除其他 Controller/SQL。V1 名称为 ASCII 字母或下划线开头、其后字母/数字/下划线的简单类名。无法定位时如实说明，不编造链路；仍审查其余有效变更。
 - 两个显式参数顺序任意，各只能出现一次；旧简写也可与 `--base` 组合。缺值、重复、未知选项、多余位置参数、位置 Controller 与 `--controller` 同用均报错并提示用法。V1 不支持引号、`--base=value`、任意 revision（如 `HEAD~3`、`A..B`、`:path`）或 Shell 表达式。
 - 首次工具调用仍加载 Skill；完整参数校验完成后才查询 Git。不合法参数不启动 Review、不生成或覆盖已有报告。基线字符白名单 → 完整本地 ref 校验 → commit 类型 → merge-base；仅按 Skill 的固定安全参数模板执行。新增动态 Git 查询仍 `ask`，Agent 权限完全不变。
-- 为避免 Git 只读查询隐式补取对象，先通过两条只读配置查询检测 partial clone/promisor。V1 遇到 `extensions.partialclone` 或任何含 `promisor` 的配置键（即使值为 false）均明确返回 `BASE_LOCAL_ONLY_REQUIRED` 并停止，不改配置、不 fetch、不覆盖报告；该保守限制同时用于默认和显式基线，普通完整仓库不受影响。
+- 未提供 `--base` 时（无参数、旧 Controller 简写或仅 `--controller`），保持原有 `git rev-parse origin/master` / `master` 和 `git merge-base origin/master HEAD` / `master HEAD` 固定查询与原有 allow 授权体验，不追加配置、ref 格式或对象类型检查。只有显式 `--base` 才执行新增校验；`origin/develop` 等名称优先查询 `refs/remotes/origin/develop`，同名本地 `refs/heads/origin/develop` 不会遮蔽远程跟踪分支。
+- 仅在显式 `--base` 路径，为避免 Git 只读查询隐式补取对象，先通过两条只读配置查询检测 partial clone/promisor。遇到 `extensions.partialclone` 或任何含 `promisor` 的配置键（即使值为 false）均明确返回 `BASE_LOCAL_ONLY_REQUIRED` 并停止，不改配置、不 fetch、不覆盖报告；未指定基线的原有路径不受该新增检查影响。
 
 自动回归：`python tests/test_codea_review_2_0_hardening.py` 和 `python tests/fixtures/codea-review-t1/test_git_scope.py`。参数测试从 Skill 声明式契约读取规则，在真实临时 Git 仓库验证不同基线、共同祖先、完整四层、SQL-only、拒绝输入及工作区不变；测试驱动只存在于测试文件，**不作为产品 Parser 或 Runtime 安装**。这些确定性测试不证明模型会正确执行规则；公司 Windows + OpenCode 2.x + 私有模型的默认命令、旧简写、组合参数实际验收仍为 **PENDING**。
 

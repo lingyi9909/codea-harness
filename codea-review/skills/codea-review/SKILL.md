@@ -35,11 +35,13 @@ slash: false
   "positional_conflict": "--controller",
   "base_forbidden": ["HEAD"],
   "base_forbidden_prefixes": ["refs/"],
-  "default_refs": [["origin/master", "refs/remotes/origin/master"], ["master", "refs/heads/master"]],
-  "ref_prefixes": ["refs/heads/", "refs/remotes/"],
+  "default_bases": ["origin/master", "master"],
+  "ref_prefixes": ["refs/remotes/", "refs/heads/"],
   "oid_pattern": "(?:[0-9a-f]{40}|[0-9a-f]{64})",
   "local_only_checks": ["partial_clone", "promisor"],
   "git": {
+    "default_resolve": ["git", "rev-parse", "{baseline}"],
+    "default_merge_base": ["git", "merge-base", "{baseline}", "HEAD"],
     "partial_clone": ["git", "config", "--get", "extensions.partialclone"],
     "promisor": ["git", "config", "--name-only", "--get-regexp", "promisor"],
     "check_ref": ["git", "check-ref-format", "{ref}"],
@@ -59,11 +61,12 @@ slash: false
 
 ## 1. Git 四层变更：清单阶段过滤隐藏目录
 
-1. 参数校验通过后，用固定只读命令 `git --version`（目标 Git for Windows ≥2.36）、`git rev-parse --show-toplevel`、`git rev-parse HEAD`、`git rev-parse --abbrev-ref HEAD` 获取仓库/HEAD。**在对象类型、merge-base 或 Diff 查询之前**，依次执行 `local_only_checks` 的两条固定只读配置查询，读取有效配置而不修改配置：仅返回码 1 表示未配置，可以继续；任一返回码 0 则以 `BASE_LOCAL_ONLY_REQUIRED` 停止，说明 partial clone/promisor 可能触发隐式 fetch，不生成或覆盖报告；其他错误或授权拒绝返回 `BASE_QUERY_FAILED`。此 V1 保守拒绝任何命中 `promisor` 的配置键（包括显式 false）和 `extensions.partialclone`，不尝试自动补取、改配置或升级 Git。该前置检测同时用于默认和显式基线，防止看似只读的对象查询在 Git ≥2.36 中隐式联网/写入对象库。普通完整仓库按以下规则选择本地基线，记录基线名、基线 commit、merge-base、HEAD 完整 SHA：
-   - **未指定 `--base`**：保留默认逻辑，先查本地 `origin/master`（精确 `refs/remotes/origin/master`），不存在再查本地 `master`（精确 `refs/heads/master`）；两者都不存在按原有基线缺失规则标记 `PARTIAL/FAILED`，不得把 committed 为空与缺少基线混淆。
-   - **显式 `--base`**：仅使用第 0.1 节已校验名称；依次查 `refs/heads/<base>`、`refs/remotes/<base>`，同名均存在时本地分支优先，记录实际完整 ref。每个候选先按 `check_ref` 模板调用 `git check-ref-format`，再按 `resolve` 模板验证本地完整 ref。仅 `resolve` 返回码 1 表示不存在，可继续下一个候选；其他查询错误直接停止。显式候选全不存在返回 `BASE_NOT_FOUND`，**不能悄悄回退 master**。不接受仅存在的标签或 revision。
-   - **验证 commit 与计算 merge-base**：`resolve` 输出必须全串匹配 `oid_pattern`；按 `type` 模板读取对象类型，必须成功且为 `commit`；按 `merge_base` 模板执行 `git merge-base <validated-oid> HEAD`，用已校验完整 OID 与当前 `HEAD` 计算共同祖先，输出再次全串匹配 `oid_pattern`。此 SHA 才是后续 COMMITTED 的 `<merge-base>`。对象不是 commit 返回 `BASE_INVALID`；无共同祖先返回 `BASE_NO_MERGE_BASE`；查询拒绝/失败、输出异常返回 `BASE_QUERY_FAILED`，不改用其他基线。
-   - **固定参数安全边界**：新增基线查询只允许第 0.1 节六个 argv 模板，将 `{ref}` 替换为固定前缀与白名单名称，将 `{oid}` 替换为已验证 OID，不添加额外参数、Shell 前后缀、管道或控制符。原生 Shell 接收命令文本时，仅将该模板的安全 token 用单个空格连接（这些 token 不含空白或 Shell 元字符，Windows 也无引号/转义需求），不得由模型自由拼接用户原文。工具不能安全保真传递时返回 `BASE_QUERY_FAILED`，不尝试执行。以上新增命令仍按原有 `ask` 审阅完整命令后授权，**不扩展 Agent allow/ask/deny**；原有固定安全查询仍按既有权限处理。
+1. 参数校验通过后，用固定只读命令 `git --version`（目标 Git for Windows ≥2.36）、`git rev-parse --show-toplevel`、`git rev-parse HEAD`、`git rev-parse --abbrev-ref HEAD` 获取仓库/HEAD。**先按是否显式提供 `--base` 分流**，记录基线名、基线 commit、merge-base、HEAD 完整 SHA：
+   - **未指定 `--base`**（无参数、旧 Controller 简写及仅 `--controller`）：完整沿用原有固定查询路径。先执行 `git rev-parse origin/master`，不存在再执行 `git rev-parse master`；选定后只执行对应的 `git merge-base origin/master HEAD` 或 `git merge-base master HEAD`。这两类命令对应 `default_resolve`、`default_merge_base` 模板，`{baseline}` **只能取固定 `default_bases` 中的名称，不能取用户输入**。固定查询按现有 `allow` 执行；不增加配置查询、`check-ref-format`、`cat-file` 或以 OID 替换基线的动态 merge-base，不引入新增基线检测及其授权弹窗。输出 SHA 只在内存中校验，不为此追加查询。两者都不存在按原有基线缺失规则标记 `PARTIAL/FAILED`，不得把 committed 为空与缺少基线混淆。
+   - **仅显式 `--base` 的本地对象前置检查**：在该路径的对象类型、merge-base 或 Diff 查询之前，依次执行 `local_only_checks` 两条固定只读配置查询，读取有效配置而不修改配置：仅返回码 1 表示未配置，可以继续；任一返回码 0 则以 `BASE_LOCAL_ONLY_REQUIRED` 停止，说明 partial clone/promisor 可能触发隐式 fetch，不生成或覆盖报告；其他错误或授权拒绝返回 `BASE_QUERY_FAILED`。此显式基线路径保守拒绝任何命中 `promisor` 的配置键（包括 false）和 `extensions.partialclone`，不尝试自动补取、改配置或升级 Git。**不得将此前置检查套用到未指定 `--base` 的旧路径。**
+   - **显式 `--base` 的 ref 选择**：仅使用第 0.1 节已校验名称；依次查 `refs/remotes/<base>`、`refs/heads/<base>`。对于 `origin/develop`、`upstream/develop` 等名称，**远程跟踪 ref 优先于同名本地分支**，不能被 `refs/heads/origin/develop` 等遮蔽；普通 `develop` 没有对应远程跟踪 ref 时仍使用本地分支。记录实际完整 ref。每个候选先按 `check_ref` 模板调用 `git check-ref-format`，再按 `resolve` 模板验证本地完整 ref。仅 `resolve` 返回码 1 表示不存在，可继续下一个候选；其他查询错误直接停止。显式候选全不存在返回 `BASE_NOT_FOUND`，**不能悄悄回退 master**。不接受仅存在的标签或 revision。
+   - **仅显式 `--base` 验证 commit 与计算 merge-base**：`resolve` 输出必须全串匹配 `oid_pattern`；按 `type` 模板读取对象类型，必须成功且为 `commit`；按 `merge_base` 模板执行 `git merge-base <validated-oid> HEAD`，用已校验完整 OID 与当前 `HEAD` 计算共同祖先，输出再次全串匹配 `oid_pattern`。此 SHA 才是后续 COMMITTED 的 `<merge-base>`。对象不是 commit 返回 `BASE_INVALID`；无共同祖先返回 `BASE_NO_MERGE_BASE`；查询拒绝/失败、输出异常返回 `BASE_QUERY_FAILED`，不改用其他基线。
+   - **固定参数安全边界**：显式基线新增查询只允许第 0.1 节的 `partial_clone`、`promisor`、`check_ref`、`resolve`、`type`、`merge_base` 六个 argv 模板，将 `{ref}` 替换为固定前缀与白名单名称，将 `{oid}` 替换为已验证 OID，不添加额外参数、Shell 前后缀、管道或控制符。原生 Shell 接收命令文本时，仅将该模板的安全 token 用单个空格连接（这些 token 不含空白或 Shell 元字符，Windows 也无引号/转义需求），不得由模型自由拼接用户原文。工具不能安全保真传递时返回 `BASE_QUERY_FAILED`，不尝试执行。以上显式基线新增命令仍按原有 `ask` 审阅完整命令后授权，**不扩展 Agent allow/ask/deny**；未指定基线的固定查询保持原有 `allow` 路径。
    - 显式基线任何失败均说明原因及正确用法，停止 Review、不生成或覆盖报告。整个基线选择仅做必要只读查询，**不执行 checkout、switch、fetch、pull，不修改当前 Git 分支或工作区**。后续仍完整处理四层，禁止用单次 `git diff <base> HEAD` 替代。
 2. `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all` 只用于观察工作区与前后变化，**任何 staged、unstaged、untracked、隐藏目录 Dirty 都不应触发停止**。若此命令返回不可解析的 NUL 文本，以四层 Git 清单核验并标出不确定，不可当作干净。
 3. **必须在四层 Git 文件清单命令中直接使用以下 Git pathspec**，使根及所有嵌套以 `.` 开头的目录在清单返回前排除：

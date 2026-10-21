@@ -553,15 +553,28 @@ class CommandParameters(unittest.TestCase):
     def select(self, root, raw):
         base, controller = self.parse(raw)
         c = self.contract
+        if base is None:
+            for baseline in c["default_bases"]:
+                result = self.query(root, "default_resolve", baseline=baseline)
+                if result.returncode:
+                    continue
+                if not re.fullmatch(c["oid_pattern"], result.stdout.decode().strip()):
+                    raise ValueError("BASE_QUERY_FAILED")
+                merged = self.query(root, "default_merge_base", baseline=baseline)
+                if merged.returncode == 1:
+                    raise ValueError("BASE_NO_MERGE_BASE")
+                if merged.returncode or not re.fullmatch(
+                        c["oid_pattern"], merged.stdout.decode().strip()):
+                    raise ValueError("BASE_QUERY_FAILED")
+                return baseline, merged.stdout.decode().strip(), controller
+            raise ValueError("BASE_NOT_FOUND")
         for name in c["local_only_checks"]:
             result = self.query(root, name)
             if result.returncode == 0:
                 raise ValueError("BASE_LOCAL_ONLY_REQUIRED")
             if result.returncode != 1:
                 raise ValueError("BASE_QUERY_FAILED")
-        candidates = ([(base, [prefix + base for prefix in c["ref_prefixes"]])]
-                      if base is not None else
-                      [(name, [ref]) for name, ref in c["default_refs"]])
+        candidates = [(base, [prefix + base for prefix in c["ref_prefixes"]])]
         for candidate, refs in candidates:
             for ref in refs:
                 if self.query(root, "check_ref", ref=ref).returncode:
@@ -646,12 +659,68 @@ class CommandParameters(unittest.TestCase):
 
     def test_T01_default_remote_precedence_and_local_fallback(self):
         root = self.repo()
-        # A local branch named origin/master must not shadow the remote default.
-        git(root, "branch", "origin/master", self.develop)
         self.assertEqual(self.select(root, "")[:2], ("master", self.master))
         git(root, "update-ref", "refs/remotes/origin/master", self.develop)
         self.assertEqual(self.select(root, "OrderController"),
                          ("origin/master", self.develop, "OrderController"))
+
+    def test_default_queries_keep_original_allow_path(self):
+        root = self.repo()
+        for raw in ("", "OrderController", "--controller OrderController"):
+            with self.subTest(raw=raw):
+                self.calls.clear()
+                self.assertEqual(self.select(root, raw)[:2], ("master", self.master))
+                self.assertEqual(self.calls, [
+                    ("git", "rev-parse", "origin/master"),
+                    ("git", "rev-parse", "master"),
+                    ("git", "merge-base", "master", "HEAD"),
+                ])
+                self.assertTrue(all(permission("shell", " ".join(call)) == "allow"
+                                    for call in self.calls))
+        git(root, "update-ref", "refs/remotes/origin/master", self.develop)
+        self.calls.clear()
+        self.assertEqual(self.select(root, "")[:2], ("origin/master", self.develop))
+        self.assertEqual(self.calls, [
+            ("git", "rev-parse", "origin/master"),
+            ("git", "merge-base", "origin/master", "HEAD"),
+        ])
+
+    def test_default_queries_skip_explicit_base_preflight(self):
+        for key, value in [("extensions.partialclone", "origin"),
+                           ("remote.origin.promisor", "true"),
+                           ("remote.origin.promisor", "false")]:
+            root = self.repo()
+            git(root, "config", key, value)
+            # Complete fixture objects: no implicit fetch is needed. New
+            # --base-specific checks must not block the established workflow.
+            for raw in ("", "OrderController", "--controller OrderController"):
+                with self.subTest(key=key, value=value, raw=raw):
+                    self.calls.clear()
+                    self.assertEqual(self.select(root, raw)[:2], ("master", self.master))
+                    self.assertFalse(any(call[1] in ("config", "check-ref-format", "cat-file")
+                                         for call in self.calls))
+                    self.assertTrue(all(permission("shell", " ".join(call)) == "allow"
+                                        for call in self.calls))
+
+    def test_explicit_remote_tracking_ref_precedes_same_named_local_branch(self):
+        root = self.repo()
+        remote_tip = git(root, "rev-parse", "refs/remotes/origin/develop").decode().strip()
+        for base in ("origin/develop", "upstream/develop"):
+            git(root, "update-ref", "refs/remotes/" + base, remote_tip)
+            git(root, "branch", base, self.master)
+            with self.subTest(base=base):
+                before = self.snapshot(root)
+                self.calls.clear()
+                selected, merge_base, controller = self.select(
+                    root, "--base " + base + " --controller OrderController")
+                self.assertEqual((selected, merge_base, controller),
+                                 (base, self.develop, "OrderController"))
+                paths = {p for _, p, _ in parsed_git_entries(
+                    "COMMITTED", git_inventory(root, merge_base)["COMMITTED"])}
+                self.assertEqual(paths, {"db/order.sql"})
+                self.assertTrue(any("refs/remotes/" + base in call for call in self.calls))
+                self.assertFalse(any("refs/heads/" + base in call for call in self.calls))
+                self.assertEqual(self.snapshot(root), before)
 
     def test_T03_T05_T10_T11_real_different_bases_four_layers_sql_only(self):
         root = self.repo()
@@ -779,7 +848,7 @@ class CommandParameters(unittest.TestCase):
                 root = self.repo()
                 git(root, "config", key, value)
                 with self.assertRaisesRegex(ValueError, "BASE_LOCAL_ONLY_REQUIRED"):
-                    self.select(root, "")
+                    self.select(root, "--base develop")
                 self.assertFalse(any(call[1] in ("cat-file", "merge-base")
                                      for call in self.calls))
 
