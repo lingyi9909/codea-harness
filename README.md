@@ -2,6 +2,12 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
+## Codea Review 2.0 原生命令参数
+
+`/codea-review` 和 `/codea-review OrderController` 保持兼容；新增 `/codea-review --base origin/develop`、`/codea-review --controller OrderController` 及 `/codea-review --base origin/develop --controller OrderController`，两个显式参数顺序可互换。
+
+`--base` 仅选择本地已存在的分支/remote-tracking ref，以其与 HEAD 的 merge-base 审查已提交修改；未指定仍优先 `origin/master`，不存在再用 `master`。暂存、未暂存、新增业务文件仍全部纳入。基线错误明确失败，不切换分支、不联网更新。`--controller` 与旧简写等价，仅指定重点入口；非法或重复参数不会启动 Review 或覆盖报告。用法和边界见 [Codea Review 2.0](codea-review/README.md#git-基线与-controller-参数)，安装与已有权限配置不变。
+
 ## 1.6.7 Review 使用入口
 
 升级后重启 OpenCode，开启主会话，输入 `/harness-review OrderController` 或 `/harness-review OrderController.method`。命令会先创建真实 runId；多调用链必须等待你选择；最终由 Runtime 生成同 run 的 `review.md`。普通文本分析不代表正式 Review 已完成。

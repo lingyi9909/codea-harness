@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import ast
 import fnmatch
+import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -496,6 +498,299 @@ class SeparateTemplateContracts(unittest.TestCase):
         self.assertIn("不生成或保存正式报告", command)
         self.assertIn("模板读取成功后", command)
         self.assertIn("读取规范", command)
+
+
+class CommandParameters(unittest.TestCase):
+    """Execute the Skill's declarative contract, not a shipped parser/Runtime.
+
+    This deterministic test driver cannot certify an LLM's tool use. Real
+    OpenCode/private-model parsing, first-tool ordering and saving remain live QA.
+    """
+
+    def setUp(self):
+        match = re.search(r"```json\n(\{\n  \"contract\": \"codea-review-arguments-v1\".*?\n\})\n```",
+                          SKILL.read_text(encoding="utf-8"), re.S)
+        self.assertIsNotNone(match, "Skill must define the executable argument contract")
+        self.contract = json.loads(match.group(1))
+        self.calls = []
+        self.git_env = os.environ.copy()
+
+    def parse(self, raw):
+        c = self.contract
+        if not re.fullmatch(c["input_pattern"], raw):
+            raise ValueError("ARGUMENT_ERROR")
+        values, positionals = {}, []
+        tokens = raw.split()
+        i = 0
+        while i < len(tokens):
+            token = tokens[i]
+            if token.startswith("-"):
+                if token not in c["options"] or token in values:
+                    raise ValueError("ARGUMENT_ERROR")
+                i += 1
+                if i == len(tokens) or not re.fullmatch(c["options"][token], tokens[i]):
+                    raise ValueError("ARGUMENT_ERROR")
+                values[token] = tokens[i]
+            else:
+                positionals.append(token)
+            i += 1
+        if (len(positionals) > c["max_positionals"] or
+                (positionals and c["positional_conflict"] in values) or
+                any(not re.fullmatch(c["options"][c["positional_option"]], p)
+                    for p in positionals)):
+            raise ValueError("ARGUMENT_ERROR")
+        base = values.get("--base")
+        if base and (base in c["base_forbidden"] or
+                     any(base.startswith(p) for p in c["base_forbidden_prefixes"])):
+            raise ValueError("BASE_INVALID")
+        return base, values.get("--controller", positionals[0] if positionals else None)
+
+    def query(self, root, name, **values):
+        argv = [part.format(**values) for part in self.contract["git"][name]]
+        self.calls.append(tuple(argv))
+        return subprocess.run(argv, cwd=root, capture_output=True, env=self.git_env)
+
+    def select(self, root, raw):
+        base, controller = self.parse(raw)
+        c = self.contract
+        for name in c["local_only_checks"]:
+            result = self.query(root, name)
+            if result.returncode == 0:
+                raise ValueError("BASE_LOCAL_ONLY_REQUIRED")
+            if result.returncode != 1:
+                raise ValueError("BASE_QUERY_FAILED")
+        candidates = ([(base, [prefix + base for prefix in c["ref_prefixes"]])]
+                      if base is not None else
+                      [(name, [ref]) for name, ref in c["default_refs"]])
+        for candidate, refs in candidates:
+            for ref in refs:
+                if self.query(root, "check_ref", ref=ref).returncode:
+                    raise ValueError("BASE_INVALID")
+                result = self.query(root, "resolve", ref=ref)
+                if result.returncode == 1:
+                    continue
+                if result.returncode:
+                    raise ValueError("BASE_QUERY_FAILED")
+                oid = result.stdout.decode().strip()
+                if not re.fullmatch(c["oid_pattern"], oid):
+                    raise ValueError("BASE_QUERY_FAILED")
+                kind = self.query(root, "type", oid=oid)
+                if kind.returncode:
+                    raise ValueError("BASE_QUERY_FAILED")
+                if kind.stdout.strip() != b"commit":
+                    raise ValueError("BASE_INVALID")
+                merged = self.query(root, "merge_base", oid=oid)
+                if merged.returncode == 1:
+                    raise ValueError("BASE_NO_MERGE_BASE")
+                if merged.returncode:
+                    raise ValueError("BASE_QUERY_FAILED")
+                merge_base = merged.stdout.decode().strip()
+                if not re.fullmatch(c["oid_pattern"], merge_base):
+                    raise ValueError("BASE_QUERY_FAILED")
+                return candidate, merge_base, controller
+        raise ValueError("BASE_NOT_FOUND")
+
+    def repo(self):
+        temp = tempfile.TemporaryDirectory(prefix="codea params 中文 ")
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        git(root, "init", "-q", "-b", "master")
+        git(root, "config", "user.name", "Parameter Test")
+        git(root, "config", "user.email", "test@example.invalid")
+        write(root, "db/working.SQL", "SELECT 1;\n")
+        git(root, "add", ".")
+        git(root, "commit", "-qm", "master baseline")
+        self.master = git(root, "rev-parse", "HEAD").decode().strip()
+        write(root, "db/develop.sql", "SELECT 2;\n")
+        git(root, "add", ".")
+        git(root, "commit", "-qm", "develop baseline")
+        self.develop = git(root, "rev-parse", "HEAD").decode().strip()
+        git(root, "branch", "develop")
+        git(root, "update-ref", "refs/remotes/origin/develop", self.develop)
+        git(root, "switch", "-qc", "feature/order")
+        git(root, "update-ref", "refs/heads/master", self.master)
+        write(root, "db/order.sql", "SELECT 3;\n")
+        git(root, "add", ".")
+        git(root, "commit", "-qm", "feature SQL")
+        # Advance develop elsewhere: comparing directly with its tip is wrong.
+        tree = git(root, "rev-parse", "master^{tree}").decode().strip()
+        divergent = git(root, "commit-tree", tree, "-p", self.develop,
+                        "-m", "divergent develop tip").decode().strip()
+        git(root, "update-ref", "refs/remotes/origin/develop", divergent)
+        write(root, "db/staged.sql", "SELECT 4;\n")
+        git(root, "add", "db/staged.sql")
+        write(root, "db/working.SQL", "SELECT 5;\n")
+        write(root, "db/untracked.sql", "SELECT 6;\n")
+        write(root, "temp/codea-review-report.md", "existing report\n")
+        write(root, ".hidden/ignored.sql", "SELECT 7;\n")
+        return root
+
+    def snapshot(self, root):
+        return (git(root, "symbolic-ref", "HEAD"), git(root, "rev-parse", "HEAD"),
+                git(root, "-c", "core.fsmonitor=false", "status", "--porcelain=v1", "-z",
+                    "--untracked-files=all"),
+                {p.relative_to(root).as_posix(): p.read_bytes()
+                 for p in root.rglob("*") if p.is_file() and ".git" not in p.relative_to(root).parts},
+                (root / ".git/index").read_bytes())
+
+    def test_T01_T02_T04_T06_compatible_forms_and_order(self):
+        for raw, expected in [
+            ("", (None, None)), ("OrderController", (None, "OrderController")),
+            ("--controller OrderController", (None, "OrderController")),
+            ("--base origin/develop", ("origin/develop", None)),
+            ("--base origin/develop --controller OrderController", ("origin/develop", "OrderController")),
+            ("--controller OrderController --base origin/develop", ("origin/develop", "OrderController")),
+            ("OrderController --base develop", ("develop", "OrderController"))]:
+            with self.subTest(raw=raw):
+                self.assertEqual(self.parse(raw), expected)
+
+    def test_T01_default_remote_precedence_and_local_fallback(self):
+        root = self.repo()
+        # A local branch named origin/master must not shadow the remote default.
+        git(root, "branch", "origin/master", self.develop)
+        self.assertEqual(self.select(root, "")[:2], ("master", self.master))
+        git(root, "update-ref", "refs/remotes/origin/master", self.develop)
+        self.assertEqual(self.select(root, "OrderController"),
+                         ("origin/master", self.develop, "OrderController"))
+
+    def test_T03_T05_T10_T11_real_different_bases_four_layers_sql_only(self):
+        root = self.repo()
+        before = self.snapshot(root)
+        for raw, expected_base, expected_paths, controller in [
+            ("", self.master, {"db/develop.sql", "db/order.sql"}, None),
+            ("--base origin/develop", self.develop, {"db/order.sql"}, None),
+            ("--base origin/develop --controller OrderController", self.develop,
+             {"db/order.sql"}, "OrderController")]:
+            with self.subTest(raw=raw):
+                selected, merge_base, actual_controller = self.select(root, raw)
+                self.assertEqual(merge_base, expected_base)
+                self.assertEqual(actual_controller, controller)
+                results = git_inventory(root, merge_base)
+                paths = {layer: {p for _, p, _ in parsed_git_entries(layer, data)}
+                         for layer, data in results.items()}
+                self.assertEqual(paths, {"COMMITTED": expected_paths,
+                                        "STAGED": {"db/staged.sql"},
+                                        "UNSTAGED": {"db/working.SQL"},
+                                        "UNTRACKED": {"db/untracked.sql"}})
+                patch = git(root, "diff", "--no-ext-diff", "--no-textconv", merge_base,
+                            "HEAD", *SCOPE).decode()
+                self.assertIn("db/order.sql", patch)
+                self.assertEqual("db/develop.sql" in patch, merge_base == self.master)
+                print("PARAM_BASE_EVIDENCE", selected, merge_base, paths)
+        self.assertEqual(self.snapshot(root), before)
+
+    def test_T07_missing_ref_does_not_fallback_or_overwrite(self):
+        root = self.repo()
+        before = self.snapshot(root)
+        with self.assertRaisesRegex(ValueError, "BASE_NOT_FOUND"):
+            self.select(root, "--base origin/missing")
+        self.assertFalse(any("refs/heads/master" in call for call in self.calls))
+        self.assertEqual(self.snapshot(root), before)
+
+    def test_T08_invalid_arguments_stop_before_git(self):
+        for raw in ["--base", "--controller", "--base --controller OrderController",
+                    "--base master --base develop", "--controller A --controller B",
+                    "--unknown x", "OrderController Extra", "OrderController --controller Other",
+                    "--base=master", "--controller a.b", "--controller -OrderController"]:
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                self.select(Path("unused"), raw)
+        self.assertEqual(self.calls, [])
+
+    def test_T09_injection_and_revision_rejected_without_execution(self):
+        for base in ["master;touch sentinel", "master&whoami", "$(touch sentinel)",
+                     "`id`", "master|id", "master>sentinel", "master<file", "master%PATH%",
+                     "master!PATH!", "master\nwhoami", "master\rwhoami", "master\x00",
+                     "--help", "-x", "HEAD", "HEAD~3", "A..B", ":path", "master:path",
+                     "master^{commit}", "@{1}", "refs/tags/v1", "refs/heads/master",
+                     "'master'", '"master"', "master\\path", "master*", "master?"]:
+            with self.subTest(base=base), self.assertRaises(ValueError):
+                self.select(Path("unused"), "--base " + base)
+        self.assertEqual(self.calls, [])
+
+    def test_T09_git_ref_format_and_tag_only_rejected(self):
+        root = self.repo()
+        git(root, "tag", "tag-only")
+        for base in ["feature/../x", "feature//x", "feature/x.lock", "master.", "tag-only"]:
+            with self.subTest(base=base), self.assertRaises(ValueError):
+                self.select(root, "--base " + base)
+        self.assertFalse(any(call[1] == "merge-base" for call in self.calls))
+
+    def test_valid_slash_branch_and_non_commit_ref(self):
+        root = self.repo()
+        selected, merge_base, _ = self.select(root, "--base feature/order")
+        self.assertEqual(selected, "feature/order")
+        layers = git_inventory(root, merge_base)
+        self.assertEqual(layers["COMMITTED"], b"")
+        self.assertTrue(all(layers[layer] for layer in ("STAGED", "UNSTAGED", "UNTRACKED")))
+        blob = git(root, "rev-parse", "HEAD:db/order.sql").decode().strip()
+        git(root, "update-ref", "refs/remotes/origin/blob", blob)
+        with self.assertRaisesRegex(ValueError, "BASE_INVALID"):
+            self.select(root, "--base origin/blob")
+
+    def test_unrelated_history_is_explicit_failure(self):
+        root = self.repo()
+        tree = git(root, "rev-parse", "HEAD^{tree}").decode().strip()
+        orphan = git(root, "commit-tree", tree, "-m", "unrelated").decode().strip()
+        git(root, "update-ref", "refs/remotes/origin/unrelated", orphan)
+        with self.assertRaisesRegex(ValueError, "BASE_NO_MERGE_BASE"):
+            self.select(root, "--base origin/unrelated")
+
+    def test_default_baseline_missing_preserves_explicit_failure(self):
+        root = self.repo()
+        git(root, "update-ref", "-d", "refs/heads/master")
+        with self.assertRaisesRegex(ValueError, "BASE_NOT_FOUND"):
+            self.select(root, "")
+
+    def test_T12_new_dynamic_queries_still_ask(self):
+        root = self.repo()
+        self.select(root, "--base origin/develop")
+        for call in self.calls:
+            with self.subTest(command=call):
+                self.assertEqual(permission("shell", " ".join(call)), "ask")
+
+    def test_promisor_missing_object_never_fetches_or_writes_git(self):
+        source = self.repo()
+        write(source, "db/remote-only.sql", "SELECT 999;\n")
+        git(source, "add", ".")
+        git(source, "commit", "-qm", "object available only at promisor remote")
+        absent = git(source, "rev-parse", "HEAD").decode().strip()
+        root = self.repo()
+        git(root, "remote", "add", "cache", str(source))
+        git(root, "config", "remote.cache.promisor", "true")
+        # Deliberately dangling local tracking ref: rev-parse resolves it without
+        # reading the object, whereas an unguarded cat-file implicitly fetches.
+        ref = root / ".git/refs/remotes/origin/develop"
+        ref.write_text(absent + "\n")
+        trace = source / ".git/query-trace.log"
+        self.git_env["GIT_TRACE"] = str(trace)
+        before = {p.relative_to(root / ".git").as_posix(): p.read_bytes()
+                  for p in (root / ".git").rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(ValueError, "BASE_LOCAL_ONLY_REQUIRED"):
+            self.select(root, "--base origin/develop")
+        after = {p.relative_to(root / ".git").as_posix(): p.read_bytes()
+                 for p in (root / ".git").rglob("*") if p.is_file()}
+        self.assertEqual(after, before)
+        self.assertNotIn(" fetch ", trace.read_text())
+
+    def test_partialclone_extension_and_false_promisor_conservatively_rejected(self):
+        for key, value in [("extensions.partialclone", "origin"),
+                           ("remote.origin.promisor", "false")]:
+            with self.subTest(key=key):
+                root = self.repo()
+                git(root, "config", key, value)
+                with self.assertRaisesRegex(ValueError, "BASE_LOCAL_ONLY_REQUIRED"):
+                    self.select(root, "")
+                self.assertFalse(any(call[1] in ("cat-file", "merge-base")
+                                     for call in self.calls))
+
+    def test_config_query_failure_stops_without_object_queries(self):
+        root = self.repo()
+        # Real Git config parsing failure, not a mocked subprocess result.
+        with (root / ".git/config").open("a") as stream:
+            stream.write("\n[invalid\n")
+        with self.assertRaisesRegex(ValueError, "BASE_QUERY_FAILED"):
+            self.select(root, "--base develop")
+        self.assertEqual(len(self.calls), 1)
 
 
 if __name__ == "__main__":

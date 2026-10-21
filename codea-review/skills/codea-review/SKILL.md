@@ -18,9 +18,53 @@ slash: false
 - 在处理 Git 文件清单时**先排除任意层级以点开头的隐藏目录，再读取有效业务源码正文**。不得先读取后忽略。
 - `COMPLETE` 仅表示有效 Diff 首轮覆盖与必要风险核验完成；`PARTIAL` 表示有未读或截断文件；`需复核` 表示审查过程中代码变化；这些状态均不代表保证无缺陷。
 
+## 0.1 参数解析与校验（Skill 加载之后、Git Review 之前）
+
+`$ARGUMENTS` 是不可信的原始文本。**首次工具调用仍为 `skill(codea-review)`**；加载成功后先完整解析所有参数，再执行第 1 节。以下声明式契约是本 Skill 的参数规则与固定 Git argv 模板，供原生 Agent 执行及测试使用，**不是需要安装或运行的 Parser/脚本/Runtime**：
+
+```json
+{
+  "contract": "codea-review-arguments-v1",
+  "input_pattern": "[A-Za-z0-9_./ \\t-]*",
+  "options": {
+    "--base": "(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._/-]*",
+    "--controller": "[A-Za-z_][A-Za-z0-9_]*"
+  },
+  "max_positionals": 1,
+  "positional_option": "--controller",
+  "positional_conflict": "--controller",
+  "base_forbidden": ["HEAD"],
+  "base_forbidden_prefixes": ["refs/"],
+  "default_refs": [["origin/master", "refs/remotes/origin/master"], ["master", "refs/heads/master"]],
+  "ref_prefixes": ["refs/heads/", "refs/remotes/"],
+  "oid_pattern": "(?:[0-9a-f]{40}|[0-9a-f]{64})",
+  "local_only_checks": ["partial_clone", "promisor"],
+  "git": {
+    "partial_clone": ["git", "config", "--get", "extensions.partialclone"],
+    "promisor": ["git", "config", "--name-only", "--get-regexp", "promisor"],
+    "check_ref": ["git", "check-ref-format", "{ref}"],
+    "resolve": ["git", "rev-parse", "--verify", "--quiet", "--end-of-options", "{ref}"],
+    "type": ["git", "cat-file", "-t", "{oid}"],
+    "merge_base": ["git", "merge-base", "{oid}", "HEAD"]
+  }
+}
+```
+
+解析步骤（按顺序，不能遇到第一个有效参数就开始 Review）：
+
+1. 对原始全文应用 `input_pattern` **全串匹配**，仅允许其中列出的 ASCII 字符、空格和 Tab；再按空格/Tab 分词，不进行 Shell 分词、引号解包、变量展开或命令替换。换行、回车、NUL、引号、反引号、`$`、`;`、`&`、`|`、重定向、`%`、`!`、反斜杠、通配符等一律拒绝。
+2. 从左到右消费全部 token。以 `-` 起始的 token 必须是 `options` 中的精确键；每个选项至多出现一次，紧随其后的一个 token 必须全串匹配该选项的正则。其余 token 是位置参数，最多一个、匹配 Controller 正则；位置 Controller 与 `--controller` 互斥。无参数得到空基线/空 Controller；单位置参数为旧 Controller 简写。`--base` 可以与旧简写组合，两个显式参数顺序任意。不支持 `--base=value`、`--`、多 Controller 或其他选项。
+3. Controller V1 接受 ASCII Java 简单类名（字母/下划线开头，后续字母/数字/下划线），仅作为业务入口检索词，**永远不放入 Git argv、Shell、报告路径**。基线还需排除 `base_forbidden`、`base_forbidden_prefixes` 和所有 `..`；不接受 `HEAD~3`、`A..B`、`:path`、SHA、标签或任意 revision/pathspec 表达式。形似 SHA 的名称也只能作为真实分支名查询，不能直接当作提交。
+4. 参数错误输出 `ARGUMENT_ERROR: <具体原因>` 与正确用法 `/codea-review [ControllerName] [--base <branch-or-remote-ref>]` 或 `/codea-review [--base <branch-or-remote-ref>] [--controller <ControllerName>]`，立即停止；不猜测、不执行 Git、不读报告模板、不 write、不覆盖旧报告。
+
 ## 1. Git 四层变更：清单阶段过滤隐藏目录
 
-1. 用固定只读命令 `git --version`（目标 Git for Windows ≥2.36）、`git rev-parse --show-toplevel`、`git rev-parse HEAD`、`git rev-parse --abbrev-ref HEAD` 获取仓库/HEAD。默认选本地 `origin/master`，没有则 `master`；不联网 fetch。授权执行 `git merge-base <baseline-ref> HEAD`，记录基线、merge-base、HEAD 完整 SHA。
+1. 参数校验通过后，用固定只读命令 `git --version`（目标 Git for Windows ≥2.36）、`git rev-parse --show-toplevel`、`git rev-parse HEAD`、`git rev-parse --abbrev-ref HEAD` 获取仓库/HEAD。**在对象类型、merge-base 或 Diff 查询之前**，依次执行 `local_only_checks` 的两条固定只读配置查询，读取有效配置而不修改配置：仅返回码 1 表示未配置，可以继续；任一返回码 0 则以 `BASE_LOCAL_ONLY_REQUIRED` 停止，说明 partial clone/promisor 可能触发隐式 fetch，不生成或覆盖报告；其他错误或授权拒绝返回 `BASE_QUERY_FAILED`。此 V1 保守拒绝任何命中 `promisor` 的配置键（包括显式 false）和 `extensions.partialclone`，不尝试自动补取、改配置或升级 Git。该前置检测同时用于默认和显式基线，防止看似只读的对象查询在 Git ≥2.36 中隐式联网/写入对象库。普通完整仓库按以下规则选择本地基线，记录基线名、基线 commit、merge-base、HEAD 完整 SHA：
+   - **未指定 `--base`**：保留默认逻辑，先查本地 `origin/master`（精确 `refs/remotes/origin/master`），不存在再查本地 `master`（精确 `refs/heads/master`）；两者都不存在按原有基线缺失规则标记 `PARTIAL/FAILED`，不得把 committed 为空与缺少基线混淆。
+   - **显式 `--base`**：仅使用第 0.1 节已校验名称；依次查 `refs/heads/<base>`、`refs/remotes/<base>`，同名均存在时本地分支优先，记录实际完整 ref。每个候选先按 `check_ref` 模板调用 `git check-ref-format`，再按 `resolve` 模板验证本地完整 ref。仅 `resolve` 返回码 1 表示不存在，可继续下一个候选；其他查询错误直接停止。显式候选全不存在返回 `BASE_NOT_FOUND`，**不能悄悄回退 master**。不接受仅存在的标签或 revision。
+   - **验证 commit 与计算 merge-base**：`resolve` 输出必须全串匹配 `oid_pattern`；按 `type` 模板读取对象类型，必须成功且为 `commit`；按 `merge_base` 模板执行 `git merge-base <validated-oid> HEAD`，用已校验完整 OID 与当前 `HEAD` 计算共同祖先，输出再次全串匹配 `oid_pattern`。此 SHA 才是后续 COMMITTED 的 `<merge-base>`。对象不是 commit 返回 `BASE_INVALID`；无共同祖先返回 `BASE_NO_MERGE_BASE`；查询拒绝/失败、输出异常返回 `BASE_QUERY_FAILED`，不改用其他基线。
+   - **固定参数安全边界**：新增基线查询只允许第 0.1 节六个 argv 模板，将 `{ref}` 替换为固定前缀与白名单名称，将 `{oid}` 替换为已验证 OID，不添加额外参数、Shell 前后缀、管道或控制符。原生 Shell 接收命令文本时，仅将该模板的安全 token 用单个空格连接（这些 token 不含空白或 Shell 元字符，Windows 也无引号/转义需求），不得由模型自由拼接用户原文。工具不能安全保真传递时返回 `BASE_QUERY_FAILED`，不尝试执行。以上新增命令仍按原有 `ask` 审阅完整命令后授权，**不扩展 Agent allow/ask/deny**；原有固定安全查询仍按既有权限处理。
+   - 显式基线任何失败均说明原因及正确用法，停止 Review、不生成或覆盖报告。整个基线选择仅做必要只读查询，**不执行 checkout、switch、fetch、pull，不修改当前 Git 分支或工作区**。后续仍完整处理四层，禁止用单次 `git diff <base> HEAD` 替代。
 2. `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=all` 只用于观察工作区与前后变化，**任何 staged、unstaged、untracked、隐藏目录 Dirty 都不应触发停止**。若此命令返回不可解析的 NUL 文本，以四层 Git 清单核验并标出不确定，不可当作干净。
 3. **必须在四层 Git 文件清单命令中直接使用以下 Git pathspec**，使根及所有嵌套以 `.` 开头的目录在清单返回前排除：
 
@@ -33,7 +77,7 @@ slash: false
 
    | 层 | 文件清单命令 | 来源含义 |
    |---|---|---|
-   | COMMITTED | `git diff --no-ext-diff --no-textconv --name-status -z <merge-base> HEAD -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` | 相比 master 基线已提交 |
+   | COMMITTED | `git diff --no-ext-diff --no-textconv --name-status -z <merge-base> HEAD -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` | 相比选定基线的 merge-base 已提交 |
    | STAGED | `git diff --no-ext-diff --no-textconv --name-status -z --cached HEAD -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` | HEAD → index |
    | UNSTAGED | `git diff --no-ext-diff --no-textconv --name-status -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` | index → 工作区 |
    | UNTRACKED | `git ls-files --others --exclude-standard -z -- . ':(exclude,glob)**/.*/**' ':(exclude,glob)temp/**'` | 工作区尚未跟踪的新增文件 |
@@ -60,7 +104,7 @@ slash: false
 每次扩展上下文前先明确需要回答的业务问题：入口是否已幂等？事务代理真正生效吗？Mapper SQL 是否限制租户？共享 Service 是否存在其他入口？针对必要的 Java Controller/Service/ServiceImpl/Mapper/XML 目标路径以及有效独立 SQL 脚本使用 read、grep、glob；若仅有 SQL 脚本，无需强制寻找 Controller 调用链。只检索**业务目录**，不要搜索或读取隐藏配置目录内容。
 
 - 路径可能包含多实例、AOP、自调用、RPC/MQ、反射及动态 SQL；只能说明已证实的 Controller→Service→Mapper 关系，不能谎称机器证明全部链路。
-- `/codea-review OrderController` 仅作为重点入口，不等于严格文件审计或其他 Controller 被穷举。
+- `/codea-review --controller OrderController` 与旧版 `/codea-review OrderController` 等价，仅作为重点入口，不等于严格文件审计或其他 Controller 被穷举；可与 `--base` 组合。优先调查该 Controller → Service → Mapper → SQL，不严格排除其他 Controller 或独立 SQL 的有效变更。不把 Controller 名拼入 Git Shell 命令。若无法定位该入口，明确报告“无法定位 Controller：<名称>”，不编造调用链；其余有效变更仍按原有四层和风险规则审查。
 - 遇到工作区中途修改：在**保存报告前**重读 Git status/HEAD，确认哪些业务文件受影响并标记 `⚠️ 工作区发生变化，结论需复核，建议重新执行 /codea-review`；这**不是起始 Dirty 的失败**，不要把旧的证据当成最新。
 - 风险已确定、有效保护已找到、继续搜查不再有收益时停止扩展；不要为了速度隐藏已见的高风险。
 
