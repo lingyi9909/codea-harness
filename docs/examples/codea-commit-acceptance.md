@@ -1,11 +1,13 @@
 # Codea Commit 1.0 验收记录
 
-状态：**Draft / 待用户打包后内网验收，不可据此发布。** 2026-10-21，用户明确当前无法提供内网入口，先交付实现与本地证据，再由用户带入内网验证。PENDING 不表示通过。
+状态：**OPEN SECURITY BLOCKER / Draft，暂停安装、分发、合并发布。** 2026-10-21 审核更正：原设计和实现遗漏模型前参数 Shell 执行边界。已在公开上游真实宿主复现；仅靠 Command/Skill 提示词无法根治。可发现资源已同时撤下，保留 `.txt` 评审草稿；这仅为停用措施。
+
+必须先完成 [原生参数前置校验与 S01—S08 验收](codea-commit-command-security.md)，再恢复安装和 C01—C16。公司 exact 版本无法访问，不宣称功能修复或内网通过。原离线验收包已撤回；旧版不得继续安装。
 
 ## 基线与兼容性调查（Task 1）
 
 - 开发起点：`58426663c69adc9bbd426d6a540767274ff9cf9a`（main）；已重读该基线的设计、任务书与现有 Review 资源。设计参考的 `8ba491e` 并非本次开发起点。
-- 本地：macOS / zsh；Git `2.39.5 (Apple Git-154)`；Python `3.9.6`。当前无 OpenCode / TeamAI 可执行文件与公司配置，无法在公司宿主验证。
+- 本地：macOS / zsh；Git `2.39.5 (Apple Git-154)`；Python `3.9.6`。公司 OpenCode/TeamAI 与配置仍不可访问；审核后在隔离测试目录新增上游 `opencode-ai@1.2.27`，仅复现安全边界，不是产品依赖。
 - 仓库事实：现有 Review README 记录 OpenCode V2 与 TeamAI push/pull 整个 Skill 目录；历史 Runtime CI 固定的 `opencode-ai@1.18.25` **不是公司 exact 版本证据**。
 - 上游公开 [Command](https://opencode.ai/docs/commands/) 与 [Skill](https://opencode.ai/docs/skills/) 文档核对日期：2026-10-21；支持目录、agent 与原生 skill 概念。公司兼容性仍以以下真实记录为准，不新增适配 Runtime。
 - 负责人：本地实现/fixture 为本 PR 执行代理；内网执行由用户后续安排，具体姓名 PENDING。未指定的人名不代填。
@@ -29,14 +31,14 @@
 
 若 actual exact 版缺少 agent 路由或原生 Skill，应暂停内网试用，附具体差异与最小资源适配建议；不能把缺能力当作加 Runtime/权限框架的理由。
 
-## 产品资源 SHA256
+## 已撤下草稿 SHA256（不安装）
 
-以下值针对 UTF-8 源文件原始字节；不要用会转换换行的方式复制。发布/适配后重新记录两份 hash 与分支 commit SHA，不以相同模块名判断版本。
+以下值仅标识已撤下草稿原始字节，不表示允许安装。宿主修正验收通过、恢复产品文件后必须重新记录来源与 hash。
 
 | 资源 | SHA256 |
 |---|---|
-| `codea-commit/commands/codea-commit.md` | `2d7c11a51741c54d8215c6917b35d9682e487cf2ba7ebf71d9eb3768a908f34b` |
-| `codea-commit/skills/codea-commit/SKILL.md` | `079885453fc017075736566ece6e8543ecc9435bfea3013f54c5cf5968d2066b` |
+| `codea-commit/blocked/codea-commit.md.txt` | `2d7c11a51741c54d8215c6917b35d9682e487cf2ba7ebf71d9eb3768a908f34b` |
+| `codea-commit/blocked/SKILL.md.txt` | `079885453fc017075736566ece6e8543ecc9435bfea3013f54c5cf5968d2066b` |
 
 ## 本地证据（不是产品真机 PASS）
 
@@ -47,9 +49,12 @@
 | Commit fixture 初始缺失 | 8 个 missing setup.py 错误 | 验收工具未实现的基线，不是模型 RED |
 | C02 正确/错误普通 Git 对照 | PASS | 未提交时缺 HEAD 报错；只提交 index 通过；错误 add 后明确指出 shared.txt 和 other.txt；真实 blob 对照 A=1/B=0，工作区 B=1 |
 | Commit fixture 最终自检 | PASS，macOS 11/11（约 17 秒；Windows 执行时两项 POSIX 专属检查会跳过） | `python3 tests/fixtures/codea-commit/test_fixtures.py`；每次创建新临时仓库 |
-| 文件复制/升级/回退/卸载自检 | PASS，4 个步骤 | 独立临时配置目录，仅文件级结果，不证明 OpenCode 实际加载 |
+| 历史文件复制/升级/回退/卸载自检（已被安全阻塞取代） | 历史 PASS，4 个步骤；不再用于安装 | 独立临时配置目录，仅文件级结果，不证明 OpenCode 实际加载 |
 | 最终全套 Python 回归及 Review 差异 | PASS，40/40；Review fixture 4/4 | 精确记录命令与结果；原生 Review 入口真机仍 PENDING |
-| Command/Skill 真实模型运行 | PENDING | 无公司宿主；没有用脚本解析 Skill 来冒充模型执行 |
+| Command/Skill 正常提交真实模型运行 | PENDING | 无公司宿主；新增安全探针使用实际上游宿主但故意让模型不可用，不是功能验收 |
+| 原生前处理安全复现（原入口） | FAIL，已复现漏洞 | 上游 1.2.27；原入口写 sentinel 后才报模型不存在；非空参数拒绝缺失 |
+| 原生暂停分发检查（两资源已撤下） | PASS，3/3（含四个不安全负对照） | `test_command_preprocessing.py`，仅证明入口撤下，功能依然 BLOCKED |
+| 公司原生参数校验 S01—S08 | PENDING / 发布阻塞 | 完成前不恢复可发现文件，不进行业务试用 |
 | Windows fixture 自检 | PENDING | 本地 macOS 结果不能替代 Windows |
 
 ### C02 合成普通 Git 实测收据
@@ -63,13 +68,13 @@
 
 两次消息均为人工对照 `fix(fixture): 仅提交 A 变更`；错误对照的消息与实际内容不符，不能因消息看似正确就宣称通过。验证器还新增保护快照测试：更改 hooksPath 时旧验证器错误地 PASS，新测试先失败，再加入 local config/hooks 对比后通过。独立评审发现可执行位和目录符号链接漏报；两个新负对照先复现 FAIL，再补齐工作区模式/链接快照，不跟随链接访问目标。
 
-独立评审检查了全部五个 Review Focus，产品资源无 Critical/Important 发现；上述 oracle 漏报按验收影响升级处理，两项回归均先失败再通过。评审未执行 OpenCode/Windows/TeamAI/私有模型，也没有把 Codex 应用规则当作产品通过。
+上一轮独立评审检查了五个 Review Focus，当时未发现产品 Critical/Important；该结论未覆盖模型前参数处理，已被本轮安全阻塞推翻。上述 oracle 漏报按验收影响升级处理，两项回归均先失败再通过。评审未执行 OpenCode/Windows/TeamAI/私有模型，也没有把 Codex 应用规则当作产品通过。
 
 文件级生命周期自检使用临时目录复制真实两份资源并比对 SHA，模拟备份/替换/恢复/仅卸载本模块，额外 Review/Agent/Provider 哨兵 bytes 保持。未执行 PowerShell 或 OpenCode，不能回填下方真机流程为 PASS。
 
 ## 功能矩阵（每项产品验收均待内网填写）
 
-所有场景只用新建临时仓库。数据构造、正确/错误对照及手动扰动步骤见 [fixture README](../../tests/fixtures/codea-commit/README.md)。本地普通 Git 对照不回填此表为 PASS。
+**先解除 S01—S08 参数安全阻塞。以下功能场景目前不执行安装/业务试用，均 PENDING。** 所有场景只用新建临时仓库。数据构造、正确/错误对照及手动扰动步骤见 [fixture README](../../tests/fixtures/codea-commit/README.md)。本地普通 Git 对照不回填此表为 PASS。
 
 | ID | 观察要点/必需结果 | 状态 | 执行人 / 环境 / 工具轨迹 / 实际 SHA / 残留状态 |
 |---|---|---|---|
@@ -85,7 +90,7 @@
 | C10 | hook 改消息/改 index/HEAD 已变或返回丢失：真实 SHA/消息，异常标需复核，无回滚 | PENDING | 各子项分别填写；post-hook exit 1 不等于 commit 失败 |
 | C11 | detached、merge/rebase/cherry-pick/revert/冲突停止，原状态保持 | PENDING | 各子项分别填写 |
 | C12 | Diff 后他进程改 HEAD/分支/index，停止重新分析，不沿用旧说明 | PENDING | 保留扰动前后及恢复模型后的三组状态 |
-| C13 | 非 Git、缺 Command/Skill、工具 deny、非空或注入参数停止，无降级 | PENDING | 各子项分别填写 |
+| C13 | 非 Git、缺 Command/Skill、工具 deny；非空/注入参数必须在宿主展开前停止 | PENDING / 前置阻塞已复现 | 先完成 S01—S08，不以模型拒绝作为证据 |
 | C14 | 正常隐藏配置可选；临时报告不自动加入，已暂存时先问 | PENDING | 待填写 |
 | C15 | 截断补读、binary/LFS/gitlink 不编造、linked worktree 正确定位 | PENDING | 各子项分别填写，合成 binary 不代替 LFS/gitlink |
 | C16 | 再调用不重复/空提交，剩余内容重新判断 | PENDING | C01 干净与 C02 有残留分别填写 |
@@ -129,7 +134,7 @@
 | 备份→升级→回退 | 两资源恢复原 hash；备份位于扫描目录外 | PENDING |
 | 卸载与 TeamAI 再同步 | 仅本模块移除；原有资源/业务文件保持 | PENDING |
 | /codea-review 真机回归 | 原入口、Reviewer 权限、模型、Review 流程不变 | PENDING |
-| PR 差异检查 | 仅本模块、fixture/测试、验收文档及根 README 一条链接；codea-review、.code-harness、.github 无差异 | PASS（本地静态差异） |
+| PR 差异检查 | 本模块停用/草稿、fixture/测试、安全验收与设计/任务书更正、根 README 链接；codea-review、.code-harness、.github 无差异 | PASS（停用后的静态差异检查） |
 
 每次执行记录建议：场景/重复号；人员与时间；环境表版本；资源 SHA；调用输入；首个工具/加载来源；权限框与业务确认；原 HEAD/branch/index tree；实际 commit SHA、父提交、完整消息和 tree；剩余状态；oracle 输出；人工结论与 PENDING 原因。实际记录留内网，PR 仅写脱敏结论。
 

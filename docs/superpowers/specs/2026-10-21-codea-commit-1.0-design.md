@@ -1,4 +1,6 @@
 # Codea Commit 1.0 设计方案
+
+> **2026-10-21 审核更正：BLOCKED，暂停安装与分发。** 原设计遗漏了 OpenCode 在模型前展开参数并执行 Shell 的边界，提示词拒绝非空参数不足以阻止执行；没有占位符也可能 fallback 追加参数，Skill 也可能自动注册为命令。以下原方案暂不能用于安装/发布。必须先完成 [宿主原生前置校验及 S01—S08 验收](../../examples/codea-commit-command-security.md)，再恢复 Command/Skill 和后续功能验收。不新增 Runtime/MCP/插件/Agent，不改 Reviewer/模型/Review 流程。
 日期：2026-10-21
 交付性质：供研发评审和实施的设计稿，尚未开发或安装。
 
@@ -26,7 +28,7 @@
 
     /codea-commit
 
-首版无参数，不支持自由文本参数、--push、--amend、--all、--split 或路径参数。带参数时用中文返回“当前版本仅支持 /codea-commit”，在执行 Git 操作前停止。命令参数只作为待校验文本，不执行其中的指令或 Shell 内容。
+首版无参数，不支持自由文本参数、--push、--amend、--all、--split 或路径参数。带参数必须在宿主原生分发入口、模板展开/参数追加/Shell 扫描之前确定性返回“当前版本仅支持 /codea-commit”并停止；仅在提示词中拒绝无效。命令参数只作为待校验文本，不执行其中的指令或 Shell 内容。
 
 首版完成：
 1. 一次调用创建一个新本地 commit。

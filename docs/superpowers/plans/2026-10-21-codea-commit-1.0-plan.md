@@ -1,5 +1,7 @@
 # Codea Commit 1.0 开发流程与研发任务书
 
+> **2026-10-21 审核更正：BLOCKED，暂停安装与分发。** 原设计遗漏了 OpenCode 在模型前展开参数并执行 Shell 的边界，提示词拒绝非空参数不足以阻止执行；没有占位符也可能 fallback 追加参数，Skill 也可能自动注册为命令。以下原方案暂不能用于安装/发布。必须先完成 [宿主原生前置校验及 S01—S08 验收](../../examples/codea-commit-command-security.md)，再恢复 Command/Skill 和后续功能验收。不新增 Runtime/MCP/插件/Agent，不改 Reviewer/模型/Review 流程。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 > 本次由用户交给研发团队实施；上面的执行技能说明仅适用于采用对应技能的 AI 研发代理，不要求人类研发安装技能。
 
@@ -43,6 +45,7 @@
 - Produces：验收表中的版本信息、Build Agent ID、Command 路由结果、Skill 安装/加载来源、分发方式和权限现状。
 
 - [ ] 记录研发起点 SHA；参考设计的 main 为 8ba491e20a488fc3d83c6277f805b61dac932c86，若主线已更新，重新查看相关文件再开始。
+- [ ] **先完成 S01—S08 原生参数前置校验门槛**：核对 actual exact 版参数替换/fallback/Shell/模型的执行顺序，在所有可到达命令入口拒绝非空参数；无可靠能力时保持 BLOCKED，不恢复 Command/Skill 分发。
 - [ ] 记录 Windows、OpenCode exact 版本、Git、实际 Shell、私有模型标识及 TeamAI 版本。不能仅记录“OpenCode 2.x”。
 - [ ] 核验现有 Build ID 是否为 build，原生 skill 工具是否可用；Command 指定 Build 后，是否保留足够的会话任务上下文。结论只影响无暂存场景的范围判断，不允许靠猜测补上下文。
 - [ ] 核对只读 Git、明确路径 add、commit、系统临时文件写入在现有策略下的行为，记录是否有原生权限框。不以本功能为理由全局放开 Shell。

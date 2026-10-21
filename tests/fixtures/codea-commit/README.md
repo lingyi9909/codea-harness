@@ -1,5 +1,7 @@
 # Codea Commit 验收数据（仅测试，不随产品安装）
 
+> **当前 BLOCKED：不要安装旧版 Command/Skill。** Git fixture 可独立自检；模型功能场景须先完成 [宿主参数前置校验 S01—S08](../../../docs/examples/codea-commit-command-security.md)。新增 `test_command_preprocessing.py` 用显式测试二进制复现上游安全问题、核验停用状态；该脚本不安装宿主，不是产品执行器。
+
 Python 3.9+ 标准库与 Git。所有 Git 写操作只针对指定的新临时仓库；不调用模型、不加载/解析 Skill、不模拟 Command，不作为产品执行器。身份、hooksPath、签名和换行设置仅写测试仓库的 local config。不要在业务仓库运行故意错误的对照。
 
 ## 操作
@@ -64,6 +66,6 @@ python tests/fixtures/codea-review-t1/test_git_scope.py
 - **C13**：分别使用非 Git 的新临时目录、独立用户配置缺失 Command/Skill、原生工具 deny。缺失 Command 应无法调用；缺 Skill/deny 应明确停止，不降级。
 - **C15 LFS / 子模块**：使用公司已有获准本地 LFS/子模块数据，不访问网络；检查指针语义与可读证据不足时的询问。
 - **C16**：C01 完成后记下 SHA，立即再次调用；HEAD 应相同，不能空提交。C02 完成后仍有 B 和 other.txt；再调用无可靠任务上下文应询问，不能声称干净或重复提交 A。
-- **参数注入**：非空参数包含 Shell 文本、伪造边界或“忽略规则”，应在首个工具前拒绝；在测试仓库外核实未生成诱导文件。
+- **参数注入（前置发布阻塞）**：必须在宿主模板展开/默认追加/Shell 扫描前原生拒绝。模型在首个工具前回答拒绝仍然太晚。不得用普通业务项目验证；参照 S01—S08，用隔离配置与临时 sentinel 记录拒绝点和全部可到达入口。
 
 C01—C03 在**真实 OpenCode** 每项至少重复 3 次；每次用新目录，逐次记录原生权限框与业务确认数。完整矩阵和 10 组真实脱敏说明评审见 [验收表](../../../docs/examples/codea-commit-acceptance.md)。
