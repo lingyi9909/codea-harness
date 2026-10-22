@@ -1,0 +1,30 @@
+{
+  "commit": "1f4d07a4a519185955ae8ab2ea3607805509e386",
+  "files": [
+    {
+      "name": "command",
+      "blob_sha": "a029fb8adeffbed8194be614af4ca793635c540a",
+      "url": "https://github.com/anomalyco/opencode/blob/v2.0.27/packages/core/src/config/plugin/command.ts"
+    },
+    {
+      "name": "common-command",
+      "blob_sha": "8cf1b06bcfbb9a704dd8f2964bfa4c78a081c037",
+      "url": "https://github.com/anomalyco/opencode/blob/v2.0.27/packages/core/src/command.ts"
+    },
+    {
+      "name": "command-schema",
+      "blob_sha": "01c1e0a47ac49bdae2cd7df562860c37cfaf96cd",
+      "url": "https://github.com/anomalyco/opencode/blob/v2.0.27/packages/schema/src/config/command.ts"
+    },
+    {
+      "name": "skill-file",
+      "blob_sha": "95782512b9fcdeb8a09d3c147671e78c7758abb5",
+      "url": "https://github.com/anomalyco/opencode/blob/1f4d07a4a519185955ae8ab2ea3607805509e386/packages/core/src/config/plugin/skill-file.ts"
+    },
+    {
+      "name": "skill-loader",
+      "blob_sha": "1338cab3400b81b42102807d3c80c7e40b07c5b6",
+      "url": "https://github.com/anomalyco/opencode/blob/1f4d07a4a519185955ae8ab2ea3607805509e386/packages/core/src/config/plugin/skill.ts"
+    }
+  ]
+}

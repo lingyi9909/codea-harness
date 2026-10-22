@@ -1,0 +1,23 @@
+{
+  "user_reported_tui_version": "v2.0.27",
+  "company_build_source": "PENDING",
+  "reference_source": {
+    "repository": "https://github.com/anomalyco/opencode",
+    "tag": "v2.0.27",
+    "commit": "1f4d07a4a519185955ae8ab2ea3607805509e386"
+  },
+  "reference_binary": {
+    "package": "@opencode/cli-darwin-arm64",
+    "version": "2.0.27",
+    "platform": "darwin-arm64",
+    "tarball": "https://registry.npmjs.org/@opencode/cli-darwin-arm64/-/cli-darwin-arm64-2.0.27.tgz",
+    "npm_integrity": "sha512-0BAaNYZE5QKve/7EFw9gyTQpkyOdff7Lj8Eul6FwK1vDnkj+yiVt/gdmJZl0PVoexl+6ZhjB7vuUPgSXrRATtA==",
+    "npm_integrity_check": "PASS",
+    "tarball_sha256": "3800a8d4b7c19a26a8d9441bc9c25d03368e661f6dbad54d1d80ecd77034916b",
+    "binary_sha256": "7fa5c8659e57cae76b1da4f45edbc583aef93aae917246a0b3abb1ac1b3fb93c"
+  },
+  "status": "BLOCKED: nonempty arguments reach native shell before model",
+  "company_windows_tui_acceptance": "PENDING",
+  "host_change": "MINIMUM_CHANGE_PROPOSAL_ONLY - no V2 patch applied",
+  "restored_install_entry": false
+}

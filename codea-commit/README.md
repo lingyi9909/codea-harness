@@ -1,44 +1,32 @@
-# Codea Commit 1.0（原生修复补丁已开发，待公司适配）
+# Codea Commit 1.0（目标 TUI v2.0.27，参数安全核验未通过）
 
-审核发现原 Command 的参数可能在模型拒绝之前进入 OpenCode 的 Shell 展开。这是原设计遗漏和实现共同的阻塞项。**不能通过补充提示词、删除参数占位符或修改工具权限修复。已新增 [现有 OpenCode 原生补丁及回归](host-patches/README.md)，不再仅提供停用措施。公司适配/验收前仍不可安装、合并发布，也不要先在业务仓库尝试带参数命令。**
+目标为公司现有 **OpenCode TUI v2.0.27**。公开同版本真实宿主核验 **6 PASS / 5 FAIL**：Command/Skill 可以加载，但非空参数仍能在模型之前执行 Shell。当前不恢复可发现的提交入口，也不合并发布。公司构建、Windows、实际 TUI、私有模型与 TeamAI 验收仍 PENDING。
 
-## 当前交付状态
+请先读 [2.0.27 专项核对、独立探针及安装回退说明](compatibility/v2.0.27/README.md)，固定版本、发行包摘要与真实响应分别见该目录的 `SOURCE.json`、`SOURCE-FILES.json`、`RESULTS.json`。
 
-可自动发现的 Command 和 Skill 已同时撤下，保留两份不可加载的评审草稿：
+## 本轮交付
 
-| 评审草稿（不安装） | 未来目标（原生前置校验通过后才恢复） |
-|---|---|
-| `blocked/codea-commit.md.txt` | `~/.config/opencode/commands/codea-commit.md` |
-| `blocked/SKILL.md.txt` | `~/.config/opencode/skills/codea-commit/SKILL.md` |
+- `compatibility/v2.0.27/candidates/codea-commit.md.txt`：V2 候选 Command，继续路由现有 Build，明确以 `{"id":"codea-commit"}` 加载原生 Skill。
+- `compatibility/v2.0.27/candidates/SKILL.md.txt`：既有提交规则草稿，正文保持不变。
+- `tests/fixtures/codea-commit/probe_v2.py`：显式指定现有二进制，在新临时配置启动独立真实 V2 服务；不替换宿主、不操作业务 Git、不使用模型凭据。
+- 独立 Git fixture、真实测试结果、备份/卸载说明和现有宿主最小改动建议。
 
-**不要重命名、复制到 OpenCode 扫描目录，或经 TeamAI 发布这两份草稿。** 某些原生版本会把 Skill 自动注册为同名命令，仅删除 Command、继续同步 Skill 仍会留下入口。`.txt` 隔离是暂时停用措施，不是功能修复。
+候选保持 `.txt`，没有安装到扫描目录。**公司目标构建通过 S01—S08 并复审后，才按专项说明恢复两个目标文件**，随后继续 C01—C16、关键路径三次重复和中文说明评审。本轮并未完成 V2 宿主修复，也没有提供已验收的可安装包。
 
-原离线验收包已经撤回。新版只提供 BLOCKED 评审资料包，不提供可安装包。源码、fixture 与文档不新增 Runtime、MCP、插件、新 Agent 或权限配置；Reviewer、模型与 Review 流程保持原样。
+## 所需宿主边界
 
-## 已核实的根因
+`codea-commit` 的非空原始参数必须在原生命令公共入口调用命令定义前拒绝，空/仅空白才沿原路径继续；实际 TUI/CLI/API 要展示中文用法错误并结束等待。提示词拒绝、删除参数占位符、代码围栏和 Agent 工具 deny 均不足以阻止这个版本的前处理执行。
 
-在独立临时目录运行真实上游 OpenCode `1.2.27`（macOS arm64），禁用模型凭据、设置不存在的模型和 `permission: deny`。输入仅写临时标记的 Shell 参数，原入口在返回模型不存在之前已写出标记。移除占位符、代码围栏与 Skill 自动命令的四个负对照也复现。
+[专项说明](compatibility/v2.0.27/README.md) 给出固定源码位置和最小改动范围。若公司版已有等价前置能力，先验证现有能力；否则由现有宿主维护流程适配，不要求直接替换公司版本。本模块不新增 Runtime、MCP、插件、Agent，也不改 Reviewer、Build 权限、模型、Provider 或 Review 流程。
 
-上游 [Command 文档](https://dev.opencode.ai/v2/docs/commands/) 说明参数先展开、随后执行 Shell；无占位符时仍会追加参数。[固定版本源码](https://github.com/anomalyco/opencode/blob/v1.2.27/packages/opencode/src/session/prompt.ts#L1755-L1803) 显示执行早于模型和 Agent 工具权限；[Skill 命令注册](https://github.com/anomalyco/opencode/blob/v1.2.27/packages/opencode/src/command/index.ts#L126-L139) 解释只撤 Command 的遗漏。
+## 保留的功能设计
 
-这是公开上游版本的真实安全复现，**不是公司 exact 版本、Windows、TeamAI 或产品正常提交路径验收**。原 55 项本地 Git/fixture 回归不覆盖 Command 前处理，不能证明此边界安全。
+单一无参数入口、现有 Build、一次本地 commit：优先提交 index，保留同文件未暂存 hunk；无暂存且任务归属明确才仅 add 明确路径，否则询问；中文说明仅来自完整暂存 Diff；保留 hooks/签名，提交后读取真实 SHA、父提交、完整消息、内容和剩余状态；不 push、amend 或改历史。
 
-## 解除阻塞的最小要求
+这些提示规则不承担宿主 Shell 前处理的隔离职责。现有 Git/Review 回归 55/55 通过不等于真实模型正常提交或参数安全已验收。完整规则与矩阵见 [验收记录](../docs/examples/codea-commit-acceptance.md)。
 
-公司现有 OpenCode 必须在原生 Command 分发入口、模板替换/参数追加/Shell 扫描**之前**，对 `codea-commit` 的原始参数做确定性校验：空或仅空白才继续；任何非空参数立即返回“当前版本仅支持 /codea-commit”，不进入 Shell、模型、Skill、hooks 或 Git。
+## 旧资源和历史补丁
 
-先核对公司 exact 版本是否已有这个能力；没有则由宿主维护方做最小原生修正。不引入本模块 Runtime、MCP、插件或新 Agent，不修改 Reviewer 权限、默认模型或其他命令的语义。后置模型校验与 `command.execute.before` 不能代替真正的前置校验；已核查的版本中后者也晚于 Shell 执行。
+`blocked/` 保留原评审草稿；`host-patches/` 保留早期上游 **1.2.27** 研究补丁和测试，不适用于 **2.x**，不作为本目标修复。旧可安装离线包已撤回。
 
-参考上游 `1.2.27` 的原生修正已开发并运行真实源码服务/CLI 回归；公司源码未提供，不能声称已修复公司版本。公司 exact 版本修正及证据通过前，不恢复可发现文件或安装指令。恢复后仍需验证空参数正常加载现有 Build 的 `skill(codea-commit)`，再按原计划做全部提交边界与说明质量验收。详细门槛、证据和复现命令见 [安全阻塞说明](../docs/examples/codea-commit-command-security.md) 与 [验收记录](../docs/examples/codea-commit-acceptance.md)。
-
-## 若已安装旧版
-
-停止调用 `/codea-commit`；关闭/暂停 OpenCode，核对实际生效来源。只将本模块的 Command 和整个 `skills/codea-commit/` 移到扫描目录之外的备份位置；检查用户级、项目级、兼容 Skill 目录和同名 JSON 配置，避免另一来源重新暴露入口。通过公司原有管理流程暂停本模块 TeamAI 同步。不删除整个 commands、skills 或配置目录，不修改 Review/模型/权限。
-
-重新启动/按 exact 版刷新，核查命令列表中没有任何来源的 `codea-commit`。不要直接在旧入口上试注入参数来确认停用；先用命令发现/配置诊断确认来源，再在隔离测试用户和临时项目进行安全探针。回退到旧版资源不能修复本问题。
-
-## 保留的功能设计（尚未解除阻塞）
-
-原设计仍是单一无参数入口、现有 Build、一次本地 commit：优先提交 index，保留同文件未暂存 hunk；无暂存且任务归属明确才仅 add 明确路径，否则询问；中文说明仅来自完整暂存 Diff；保留 hooks/签名，提交后读取真实 SHA、父提交、完整消息、内容和剩余状态；不 push、amend 或改历史。
-
-这些草稿规则不承担宿主 Shell 前处理的隔离职责。正常功能目前不可用，C01—C16、关键路径三次重复、十组真实脱敏说明评审以及公司安装/回退/分发仍 PENDING，须先解除参数安全阻塞。
+若已安装旧资源，先暂停本模块调用与同步，将本模块单个 Command 和 Skill 目录移至扫描目录外的备份，检查实际同名来源并按专项说明回退。不删除整个 commands/skills 或 OpenCode 配置，不改其他能力，也不要在业务仓库试注入参数。

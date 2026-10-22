@@ -2,7 +2,7 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
-原生本地提交模块：[/codea-commit（原生修复补丁已开发，待公司适配）](codea-commit/README.md)。
+原生本地提交模块：[/codea-commit（目标 TUI v2.0.27，参数安全核验未通过）](codea-commit/compatibility/v2.0.27/README.md)。
 
 ## Codea Review 2.0 原生命令参数
 
