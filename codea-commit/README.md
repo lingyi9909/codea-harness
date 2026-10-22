@@ -1,6 +1,6 @@
-# Codea Commit 1.0（BLOCKED，暂停安装与分发）
+# Codea Commit 1.0（原生修复补丁已开发，待公司适配）
 
-审核发现原 Command 的参数可能在模型拒绝之前进入 OpenCode 的 Shell 展开。这是原设计遗漏和实现共同的阻塞项。**不能通过补充提示词、删除参数占位符或修改工具权限修复。当前不可安装、不可合并发布，也不要先在业务仓库尝试带参数命令。**
+审核发现原 Command 的参数可能在模型拒绝之前进入 OpenCode 的 Shell 展开。这是原设计遗漏和实现共同的阻塞项。**不能通过补充提示词、删除参数占位符或修改工具权限修复。已新增 [现有 OpenCode 原生补丁及回归](host-patches/README.md)，不再仅提供停用措施。公司适配/验收前仍不可安装、合并发布，也不要先在业务仓库尝试带参数命令。**
 
 ## 当前交付状态
 
@@ -29,7 +29,7 @@
 
 先核对公司 exact 版本是否已有这个能力；没有则由宿主维护方做最小原生修正。不引入本模块 Runtime、MCP、插件或新 Agent，不修改 Reviewer 权限、默认模型或其他命令的语义。后置模型校验与 `command.execute.before` 不能代替真正的前置校验；已核查的版本中后者也晚于 Shell 执行。
 
-原生修正和 exact 版本证据通过前，不恢复可发现文件或安装指令。恢复后仍需验证空参数正常加载现有 Build 的 `skill(codea-commit)`，再按原计划做全部提交边界与说明质量验收。详细门槛、证据和复现命令见 [安全阻塞说明](../docs/examples/codea-commit-command-security.md) 与 [验收记录](../docs/examples/codea-commit-acceptance.md)。
+参考上游 `1.2.27` 的原生修正已开发并运行真实源码服务/CLI 回归；公司源码未提供，不能声称已修复公司版本。公司 exact 版本修正及证据通过前，不恢复可发现文件或安装指令。恢复后仍需验证空参数正常加载现有 Build 的 `skill(codea-commit)`，再按原计划做全部提交边界与说明质量验收。详细门槛、证据和复现命令见 [安全阻塞说明](../docs/examples/codea-commit-command-security.md) 与 [验收记录](../docs/examples/codea-commit-acceptance.md)。
 
 ## 若已安装旧版
 

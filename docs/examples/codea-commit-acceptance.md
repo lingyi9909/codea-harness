@@ -1,8 +1,8 @@
 # Codea Commit 1.0 验收记录
 
-状态：**OPEN SECURITY BLOCKER / Draft，暂停安装、分发、合并发布。** 2026-10-21 审核更正：原设计和实现遗漏模型前参数 Shell 执行边界。已在公开上游真实宿主复现；仅靠 Command/Skill 提示词无法根治。可发现资源已同时撤下，保留 `.txt` 评审草稿；这仅为停用措施。
+状态：**原生修复补丁已开发验证 / Draft，公司适配与验收 PENDING；适配前暂停安装、分发、合并发布。** 2026-10-21 审核更正：原设计和实现遗漏模型前参数 Shell 执行边界。已在公开上游真实宿主复现；仅靠 Command/Skill 提示词无法根治。可发现资源已同时撤下，保留 `.txt` 评审草稿；这仅为停用措施。
 
-必须先完成 [原生参数前置校验与 S01—S08 验收](codea-commit-command-security.md)，再恢复安装和 C01—C16。公司 exact 版本无法访问，不宣称功能修复或内网通过。原离线验收包已撤回；旧版不得继续安装。
+必须先完成 [原生参数前置校验与 S01—S08 验收](codea-commit-command-security.md)，再恢复安装和 C01—C16。参考 `1.2.27` 的真实源码前置拦截已实现并测试，见 [原生补丁](../../codea-commit/host-patches/README.md)。公司 exact 版本无法访问，不宣称公司版本已修复或内网通过。原离线验收包已撤回；旧版不得继续安装。
 
 ## 基线与兼容性调查（Task 1）
 
@@ -71,6 +71,26 @@
 上一轮独立评审检查了五个 Review Focus，当时未发现产品 Critical/Important；该结论未覆盖模型前参数处理，已被本轮安全阻塞推翻。上述 oracle 漏报按验收影响升级处理，两项回归均先失败再通过。评审未执行 OpenCode/Windows/TeamAI/私有模型，也没有把 Codex 应用规则当作产品通过。
 
 文件级生命周期自检使用临时目录复制真实两份资源并比对 SHA，模拟备份/替换/恢复/仅卸载本模块，额外 Review/Agent/Provider 哨兵 bytes 保持。未执行 PowerShell 或 OpenCode，不能回填下方真机流程为 PASS。
+
+## 2026-10-22 原生修复执行记录
+
+参考基线 `anomalyco/opencode` commit `4ee426ba549131c4903a71dfb6259200467aca81`（tag `v1.2.27`）；Bun `1.3.10`，macOS arm64。仅在独立源码目录开发，未写入公司或用户已安装宿主，不携带新 Runtime/构建依赖。
+
+| 检查 | 实际结果 | 证据/边界 |
+|---|---|---|
+| 原生源码修复前安全回归 | 3 PASS / 6 FAIL | 四类模板入口实际写出 sentinel，HTTP/早于 registry 断言失败；证明缺少前置拦截 |
+| 既有 UI 错误事件补充回归 | 先失败再通过 | 拦截后还须通过既有事件给出中文提示，保留 busy/retry 状态 |
+| 原生源码针对性回归 | 13/13 PASS | 真实 SessionPrompt、Server 和 CLI 子进程，不模拟解析器 |
+| CLI 事件通道不可用 | 先失败再通过 | 真实 CLI + 原生 HTTP；只屏蔽事件通道，确保仍输出中文并非零退出 |
+| 原生 typecheck | PASS | `bun run typecheck` |
+| 原生完整包回归 | 1326 PASS / 8 SKIP / 0 FAIL | 首次既有 tool.registry singular 用例 30s 超时；单独 90s 复测 3/3 PASS，再全套重跑 |
+| 未修发行二进制对照 | FAIL（预期） | `test_native_argument_guard.py` 在原始 1.2.27 上无法原生拒绝；不是停用测试 |
+| 已安装草稿的修后源码服务/CLI | 5/5 PASS | 非空中文 400、不写 sentinel、不进模型；空白进入 Build/模型选择；CLI 可见提示并非零退出；其他命令保持 |
+| CLI busy/retry 边界 | 2/2 PASS（已包含在 13 项专项中） | 真实服务+子进程；目标目录明确，非零及时退出、原任务状态不变。评审曾推断监听挂起，真实回归未复现；全局入口 finally 的 process.exit 已负责退出，未添加多余生产改动 |
+| 补丁 apply/reverse 与内容对照 | PASS | 在固定基线导出的干净临时树应用，逐文件 bytes 与测试源码一致 |
+| 公司 OpenCode / Windows / 私有模型 / TeamAI | PENDING | 参考源码测试不可替代公司适配与验收 |
+
+当前产品仍只定义 Command+Skill；新增的是对**现有宿主**的源码维护补丁与测试资料，不是另一个运行时。只有宿主团队应用/适配并完成 S01—S08 后才恢复两份安装资源，随后执行原有正常提交和说明质量验收。
 
 ## 功能矩阵（每项产品验收均待内网填写）
 

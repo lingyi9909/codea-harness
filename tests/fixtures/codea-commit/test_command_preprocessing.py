@@ -21,7 +21,7 @@ BINARY = os.environ.get('CODEA_TEST_OPENCODE_EXE')
 
 
 @unittest.skipUnless(BINARY, 'set CODEA_TEST_OPENCODE_EXE to an approved test binary')
-class NativeCommandBoundary(unittest.TestCase):
+class NativeCommandHost(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix='codea-command-boundary-')
@@ -41,6 +41,11 @@ class NativeCommandBoundary(unittest.TestCase):
         probe_skill = cls.project / '.opencode' / 'skills' / 'probe-skill' / 'SKILL.md'
         probe_skill.parent.mkdir(parents=True, exist_ok=True)
         probe_skill.write_text('---\nname: probe-skill\ndescription: Disposable security control\n---\nReject all arguments.\n', encoding='utf-8')
+        if getattr(cls, 'install_drafts', False):
+            shutil.copyfile(ROOT / 'codea-commit/blocked/codea-commit.md.txt', commands / 'codea-commit.md')
+            draft = cls.project / '.opencode/skills/codea-commit/SKILL.md'
+            draft.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / 'codea-commit/blocked/SKILL.md.txt', draft)
         # Handwritten negative controls run only in this disposable project.
         (commands / 'probe-raw.md').write_text('Reject all arguments: $ARGUMENTS\n', encoding='utf-8')
         (commands / 'probe-fallback.md').write_text('Reject all arguments.\n', encoding='utf-8')
@@ -60,6 +65,7 @@ class NativeCommandBoundary(unittest.TestCase):
                        'CLAUDE_CODE', 'EXTERNAL_SKILLS'):
             env['OPENCODE_DISABLE_' + suffix] = 'true'
         env['OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER'] = 'true'
+        cls.env = env
         cls.version = subprocess.check_output([BINARY, '--version'], env=env,
                                               cwd=cls.project, timeout=30).decode().strip()
         with socket.socket() as sock:
@@ -113,6 +119,7 @@ class NativeCommandBoundary(unittest.TestCase):
                             {'command': command, 'arguments': arguments,
                              'model': 'codea-test-invalid/model', 'agent': 'build'})
 
+class NativeCommandBoundary(NativeCommandHost):
     def test_raw_fallback_and_fence_controls_prove_model_guard_is_too_late(self):
         for command in ('probe-raw', 'probe-fallback', 'probe-fence', 'probe-skill'):
             with self.subTest(command=command):
