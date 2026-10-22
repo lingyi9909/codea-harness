@@ -1,6 +1,6 @@
 # Codea Commit 验收数据（仅测试，不随产品安装）
 
-> **当前目标 TUI v2.0.27：真实参数核验未通过，尚不恢复提交入口。** 先读 [2.0.27 核验包](../../../codea-commit/compatibility/v2.0.27/README.md)，使用 `probe_v2.py`。它使用真实 V2 `/api/*` 合约，不能用下面的 V1 `test_command_preprocessing.py` 或 `test_native_argument_guard.py` 结果代替。Git fixture 可独立自检；模型功能场景仍须先完成 [S01—S08](../../../docs/examples/codea-commit-command-security.md)。
+> **当前目标 TUI v2.0.27：原生修复已完成，测试资源仅向安全核验通过的现有宿主安装。** 先读 [2.0.27 核验包](../../../codea-commit/compatibility/v2.0.27/README.md)，使用 `probe_v2.py`。它使用真实 V2 `/api/*` 合约，不能用下面的 V1 `test_command_preprocessing.py` 或 `test_native_argument_guard.py` 结果代替。Git fixture 可独立自检；模型功能场景仍须先完成 [S01—S08](../../../docs/examples/codea-commit-command-security.md)。
 
 Python 3.9+ 标准库与 Git。所有 Git 写操作只针对指定的新临时仓库；不调用模型、不加载/解析 Skill、不模拟 Command，不作为产品执行器。身份、hooksPath、签名和换行设置仅写测试仓库的 local config。不要在业务仓库运行故意错误的对照。
 

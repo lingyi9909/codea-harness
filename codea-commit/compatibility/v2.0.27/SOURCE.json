@@ -16,8 +16,10 @@
     "tarball_sha256": "3800a8d4b7c19a26a8d9441bc9c25d03368e661f6dbad54d1d80ecd77034916b",
     "binary_sha256": "7fa5c8659e57cae76b1da4f45edbc583aef93aae917246a0b3abb1ac1b3fb93c"
   },
-  "status": "BLOCKED: nonempty arguments reach native shell before model",
+  "status": "REFERENCE_NATIVE_FIX_IMPLEMENTED_AND_TESTED; company installation PENDING",
   "company_windows_tui_acceptance": "PENDING",
-  "host_change": "MINIMUM_CHANGE_PROPOSAL_ONLY - no V2 patch applied",
-  "restored_install_entry": false
+  "host_change": "3 native production files + 2 native regression test files; no public API contract change",
+  "restored_install_entry": "test payload only; install into existing host only after boundary verification passes",
+  "patch_sha256": "eb1d9c43a0fd3891321e9ed3ef02da392e5f7aacc1ea7ab2d280d7be06412427",
+  "patched_host_kind": "native patched source CLI; Bun 1.4.2; build macros version2.0.27/channel local; test launcher not shipped"
 }

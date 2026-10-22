@@ -1,23 +1,25 @@
-# Codea Commit 1.0（目标 TUI v2.0.27，参数安全核验未通过）
+# Codea Commit 1.0（目标 TUI v2.0.27，原生修复已开发）
 
-目标为公司现有 **OpenCode TUI v2.0.27**。公开同版本真实宿主核验 **6 PASS / 5 FAIL**：Command/Skill 可以加载，但非空参数仍能在模型之前执行 Shell。当前不恢复可发现的提交入口，也不合并发布。公司构建、Windows、实际 TUI、私有模型与 TeamAI 验收仍 PENDING。
+目标为公司现有 **OpenCode TUI v2.0.27**。已完成同版本原生修复：新增安全回归 **17/17 PASS**，真实源码CLI服务探针 **11/11 PASS**，未修改2.0.27客户端可显示中文拒绝错误并非零退出。未修公开发行包的 **6 PASS / 5 FAIL** 保留为对照。测试资源已恢复在隔离的 `payload/`，仅供前置拦截通过的现有宿主安装；不自动启用或合并发布。公司构建、Windows、实际 TUI、私有模型与 TeamAI 验收仍 PENDING。
 
-请先读 [2.0.27 专项核对、独立探针及安装回退说明](compatibility/v2.0.27/README.md)，固定版本、发行包摘要与真实响应分别见该目录的 `SOURCE.json`、`SOURCE-FILES.json`、`RESULTS.json`。
+请先读 [2.0.27 专项核对、独立探针及安装回退说明](compatibility/v2.0.27/README.md)，固定版本、补丁、摘要与修前/修后结果见该目录的 `SOURCE.json`、`VALIDATION.json`、`RESULTS.json`、`PATCHED-RESULTS.json`。
 
 ## 本轮交付
 
 - `compatibility/v2.0.27/candidates/codea-commit.md.txt`：V2 候选 Command，继续路由现有 Build，明确以 `{"id":"codea-commit"}` 加载原生 Skill。
 - `compatibility/v2.0.27/candidates/SKILL.md.txt`：既有提交规则草稿，正文保持不变。
 - `tests/fixtures/codea-commit/probe_v2.py`：显式指定现有二进制，在新临时配置启动独立真实 V2 服务；不替换宿主、不操作业务 Git、不使用模型凭据。
-- 独立 Git fixture、真实测试结果、备份/卸载说明和现有宿主最小改动建议。
+- `payload/`：可条件安装的两份测试资源，内容与真实探针加载的候选一致。
+- `opencode-v2.0.27-codea-commit.patch`：已实施并验证的现有宿主最小补丁，仅三个生产文件及两个原生测试文件。
+- 独立 Git fixture、真实测试结果、备份/卸载说明。
 
-候选保持 `.txt`，没有安装到扫描目录。**公司目标构建通过 S01—S08 并复审后，才按专项说明恢复两个目标文件**，随后继续 C01—C16、关键路径三次重复和中文说明评审。本轮并未完成 V2 宿主修复，也没有提供已验收的可安装包。
+候选 `.txt` 保留用于探针，`payload/` 提供正式扩展名测试资源，均不放在实际扫描根下。**公司目标构建通过 S01—S08 并复审后，才按专项说明安装两个目标文件**，随后继续 C01—C16、关键路径三次重复和中文说明评审。V2 参考源码修复已完成，公司环境仍未验收。
 
 ## 所需宿主边界
 
 `codea-commit` 的非空原始参数必须在原生命令公共入口调用命令定义前拒绝，空/仅空白才沿原路径继续；实际 TUI/CLI/API 要展示中文用法错误并结束等待。提示词拒绝、删除参数占位符、代码围栏和 Agent 工具 deny 均不足以阻止这个版本的前处理执行。
 
-[专项说明](compatibility/v2.0.27/README.md) 给出固定源码位置和最小改动范围。若公司版已有等价前置能力，先验证现有能力；否则由现有宿主维护流程适配，不要求直接替换公司版本。本模块不新增 Runtime、MCP、插件、Agent，也不改 Reviewer、Build 权限、模型、Provider 或 Review 流程。
+[专项说明](compatibility/v2.0.27/README.md) 给出固定源码位置、实际补丁和验证结果。若公司版已有等价前置能力，先验证现有能力；否则由现有宿主维护流程适配，不要求直接替换公司版本。本模块不新增 Runtime、MCP、插件、Agent，也不改 Reviewer、Build 权限、模型、Provider 或 Review 流程。
 
 ## 保留的功能设计
 

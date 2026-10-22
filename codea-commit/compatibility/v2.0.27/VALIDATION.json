@@ -1,0 +1,67 @@
+{
+  "native_new_security_tests": {
+    "PASS": 17,
+    "FAIL": 0
+  },
+  "native_api_probe": {
+    "PASS": 11,
+    "FAIL": 0
+  },
+  "core_typecheck": "PASS",
+  "server_typecheck": "PASS",
+  "server_full": {
+    "PASS": 86,
+    "SKIP": 1,
+    "FAIL": 0
+  },
+  "core_full_canonical": {
+    "PASS": 6605,
+    "SKIP": 43,
+    "FAIL": 8,
+    "failure_names": [
+      {
+        "file": "test/tool-execute.test.ts",
+        "test": "execute rejects filesystem fetches"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > legacy: conditional substitutions respect once"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > legacy: conditional substitutions respect always"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > native: conditional substitutions respect once"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > native: conditional substitutions respect always"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool compound syntax approval compatibility > bash legacy equivalent: printf %s \"$(probe() case value in value) printf hello;; esac; probe)\""
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool compound syntax approval compatibility > bash native: printf %s \"$(probe() case value in value) printf hello;; esac; probe)\""
+      },
+      {
+        "file": "test/shell-scan/compound-parity.test.ts",
+        "test": "real-shell compound syntax > bash: printf '%s' \"$(probe() case value in value) scan_probe;; *) scan_other;; esac; probe)\""
+      }
+    ],
+    "all_failures_reproduced_on_unmodified_source": true
+  },
+  "root_check": "NOT_PASS: Astro site tooling attempts user Library/Preferences write denied by sandbox; affected Core/Server typechecks PASS",
+  "codea_regression": {
+    "PASS": 55,
+    "FAIL": 0
+  },
+  "company_build": "PENDING",
+  "windows": "PENDING",
+  "actual_tui_interaction": "PENDING",
+  "teamai": "PENDING",
+  "normal_private_model_commit": "PENDING"
+}
