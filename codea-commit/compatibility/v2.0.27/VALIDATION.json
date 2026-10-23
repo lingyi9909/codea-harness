@@ -56,12 +56,27 @@
   },
   "root_check": "NOT_PASS: Astro site tooling attempts user Library/Preferences write denied by sandbox; affected Core/Server typechecks PASS",
   "codea_regression": {
-    "PASS": 55,
-    "FAIL": 0
+    "PASS": 61,
+    "FAIL": 0,
+    "scope": "2026-10-23 fixture oracle17 + Review40 + Review Git4; no model interaction"
   },
   "company_build": "PENDING",
   "windows": "PENDING",
   "actual_tui_interaction": "PENDING",
   "teamai": "PENDING",
-  "normal_private_model_commit": "PENDING"
+  "normal_private_model_commit": "PENDING",
+  "previous_native_results": "unchanged native patch; earlier full-suite/typecheck results retained, not rerun for prompt-only revision",
+  "current_resource_api_probe": {
+    "report": "PREVIEW-RESULTS.json",
+    "PASS": 11,
+    "FAIL": 0
+  },
+  "preview_prompt_simulation": {
+    "cases": 13,
+    "finding": "no Critical/Important in read-only instruction simulation",
+    "is_internal_acceptance": false
+  },
+  "preview_confirmation_tui": "PENDING",
+  "question_unavailable_chat_fallback": "PENDING",
+  "theme_dark_light": "PENDING"
 }

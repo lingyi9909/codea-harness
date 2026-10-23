@@ -21,5 +21,13 @@
   "host_change": "3 native production files + 2 native regression test files; no public API contract change",
   "restored_install_entry": "test payload only; install into existing host only after boundary verification passes",
   "patch_sha256": "eb1d9c43a0fd3891321e9ed3ef02da392e5f7aacc1ea7ab2d280d7be06412427",
-  "patched_host_kind": "native patched source CLI; Bun 1.4.2; build macros version2.0.27/channel local; test launcher not shipped"
+  "patched_host_kind": "native patched source CLI; Bun 1.4.2; build macros version2.0.27/channel local; test launcher not shipped",
+  "preview_confirmation_revision": "2026-10-23",
+  "preview_confirmation_tui_model": "PENDING",
+  "current_resources_report": "PREVIEW-RESULTS.json",
+  "previous_resources_report": "PATCHED-RESULTS.json (historical before preview confirmation)",
+  "resource_sha256": {
+    "command": "47bf1291954cb3ad03ed12d551384bfd80a7bd8fe153ed9fd032d886278be55a",
+    "skill": "0dddcad45b0aa395b2d2583df0e59bafa510855a99d0b10dae77d7a37e8a643c"
+  }
 }

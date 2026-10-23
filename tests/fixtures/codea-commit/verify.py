@@ -94,6 +94,19 @@ def protection(repo):
     return {'config': encoded(config), 'hooks': hooks}
 
 
+def index_tree(repo):
+    entries = {}
+    for row in git(repo, 'ls-files', '--stage', '-z').stdout.split(b'\0'):
+        if row:
+            meta, path = row.split(b'\t', 1)
+            mode, oid, stage = meta.split()
+            if stage != b'0':
+                raise ValueError('checkpoint cannot contain an unmerged index')
+            entries[os.fsdecode(path)] = {'mode': mode.decode(),
+                'kind': 'commit' if mode == b'160000' else 'blob', 'oid': oid.decode()}
+    return entries
+
+
 def snapshot(repo):
     return {'head': head(repo), 'branch': branch(repo),
             'index': encoded(git(repo, 'ls-files', '--stage', '-z').stdout),
@@ -133,17 +146,15 @@ def verify(repo, manifest):
             if parents != ([before['head']] if before['head'] else []):
                 errors.append('parents: expected exactly the original HEAD (or root commit)')
             errors += compare_maps('commit tree', data['commit_tree'], tree(repo, 'HEAD'))
+            if 'confirmed_message' in data:
+                actual = git(repo, 'log', '-1', '--format=%B').stdout.decode('utf-8')
+                if actual.rstrip('\n') != data['confirmed_message'].rstrip('\n'):
+                    errors.append('commit message differs from confirmed full text')
         if git(repo, 'ls-files', '--unmerged', '-z').stdout:
             errors.append('index contains conflicts')
         # Compare full index content even if the commit itself was incorrect.
-        entries = {}
-        for row in git(repo, 'ls-files', '--stage', '-z').stdout.split(b'\0'):
-            if row:
-                meta, path = row.split(b'\t', 1)
-                mode, oid, stage = meta.split()
-                entries[os.fsdecode(path)] = {'mode': mode.decode(),
-                    'kind': 'commit' if mode == b'160000' else 'blob', 'oid': oid.decode()}
-        errors += compare_maps('index', data['commit_tree'], entries)
+        if not git(repo, 'ls-files', '--unmerged', '-z').stdout:
+            errors += compare_maps('index', data['commit_tree'], index_tree(repo))
         if current['operation'] != before['operation']:
             errors.append('operation state differs')
     errors += compare_maps('worktree', data['worktree'], current['worktree'])

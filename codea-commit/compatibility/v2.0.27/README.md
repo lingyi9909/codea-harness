@@ -4,6 +4,14 @@
 
 未修改的公开 2.0.27 仍有参数执行问题。测试资源仅用于**已经应用等价前置拦截且通过探针的现有宿主**，不能直接复制到未经修复的公司安装。包内不含替换二进制、Runtime、MCP、插件或 Agent，也不含旧 1.2.27 补丁。
 
+## 本次交互更新：预览后明确确认
+
+两份 payload 已按 2026-10-23 用户方案更新，与 candidates 同步：真实 index 预览、全文说明、三项选择“确认提交 / 修改说明 / 取消”。原生 question 缺失/被禁用/失败时聊天提问并结束执行等待，关闭/取消不再询问并终止本轮。新消息要重新确认，目标/HEAD/index 变化要重新完整预览；取消保留原有和新准备的暂存。
+
+仅更新现有 Command/Skill 文件，安装位置、两项目标备份及卸载步骤不变。下面宿主补丁保持原 SHA，不因为增加确认而解除安全安装门禁。轻量版没有自定义文件树/左右分栏/固定操作面板，不使用 working/turn Diff 冒充 index。
+
+当前资源的加载/参数探针见 `PREVIEW-RESULTS.json`；`PATCHED-RESULTS.json` 是上次资源的历史记录，不能当作新版交互已通过。实际 question 可用/不可用、私有模型确认、Windows/TUI/主题与 TeamAI 均 **PENDING**，具体验收步骤见 `PREVIEW-ACCEPTANCE.md`。
+
 ## 版本和实际结果
 
 | 验证 | 结果 |
@@ -18,9 +26,9 @@
 | Server 全套 | **86 PASS / 1 SKIP / 0 FAIL** |
 | Core 正式测试入口全套 | **6605 PASS / 43 SKIP / 8 FAIL**；8项均在未修改源码失败文件对照中复现，未宣称全绿 |
 | 根级 `bun run check` | 未通过；网站Astro尝试写用户`Library/Preferences`被沙箱拒绝，未为此扩大权限 |
-| 既有 Codea Git/Review 回归 | **55/55 PASS** |
+| 当前 Codea Git/Review 回归（2026-10-23） | **61/61 PASS**（fixture17 + Review40 + Review Git4） |
 
-本次运行平台为macOS arm64，Bun1.4.2。源码进程测试使用上游原生CLI入口及Solid preload，构建宏version为2.0.27、channel为local；临时启动脚本只用于测试，不交付、不替换公司环境，不声称已完成发行二进制构建/签名。详情见 `SOURCE.json`、`VALIDATION.json`；未修/修后原始结果分别见 `RESULTS.json`、`PATCHED-RESULTS.json`。
+本次运行平台为macOS arm64，Bun1.4.2。源码进程测试使用上游原生CLI入口及Solid preload，构建宏version为2.0.27、channel为local；临时启动脚本只用于测试，不交付、不替换公司环境，不声称已完成发行二进制构建/签名。详情见 `SOURCE.json`、`VALIDATION.json`；未修/首次修后原始结果分别见 `RESULTS.json`、`PATCHED-RESULTS.json`；当前预览版资源重新核验见 `PREVIEW-RESULTS.json`（11/11），不证明模型交互。
 
 Core剩余失败涉及本机旧Bash的进程替换/复合语法，以及Bun文件fetch错误文案断言；逐项名称和基线对照已记录，未改这些无关功能。空/仅空白检查只验证进入既有提示路径；真实模型加载Skill、中文说明质量、正常提交、公司权限、Windows/TUI/TeamAI不能由这些结果替代。
 
@@ -82,7 +90,7 @@ POSIX：`python3 tests/fixtures/codea-commit/probe_v2.py --opencode /absolute/pa
 2. 以`opencode debug paths config`确认真实全局路径。默认通常为`~/.config/opencode`，Windows通常为`$HOME\.config\opencode`，不硬编码`%APPDATA%`。仅安装 `<真实config>\commands\codea-commit.md` 与 `<真实config>\skills\codea-commit\SKILL.md`。项目级仅用于测试仓库`.opencode/commands/codea-commit.md`和`.opencode/skills/codea-commit/SKILL.md`；两种范围选一种。检查同名JSON、项目、兼容Skill与TeamAI显式来源是否覆盖目标。
 3. 在所有扫描目录之外新建唯一备份目录，如`$env:TEMP\codea-commit-backup-<GUID>`。记录原两个目标是否存在、绝对路径与SHA256；复制原Command和**单个完整**`skills/codea-commit/`目录，核对备份摘要后才移出原目标。不存在也记入记录；不改整个commands/skills，不覆盖`opencode.json(c)`。
 4. 确认目标不存在后，将`payload/commands/codea-commit.md`复制为Command目标，将`payload/skills/codea-commit/`复制为单个Skill目录。保存新安装摘要。任一步失败立即停止，从备份恢复已改的单个目标，不继续试用。不复制整个测试包到配置目录。
-5. 在新独立样例仓库启动现有TUI，核对实际来源/摘要、Build路由、首工具`skill({"id":"codea-commit"})`、权限提示、中文说明和真实提交结果。C01—C03每项三次。TeamAI分发能力仍PENDING：分别核对Skill与Command实际落盘路径/摘要，不猜同步命令。
+5. 在新独立样例仓库启动现有TUI，核对实际来源/摘要、Build路由、首工具`skill({"id":"codea-commit"})`、完整预览、明确确认/取消/修改说明、权限提示、中文说明和真实提交结果。C01—C03每项三次。TeamAI分发能力仍PENDING：分别核对Skill与Command实际落盘路径/摘要，不猜同步命令。
 6. 卸载/回退：关闭测试会话、暂停本模块同步；对照安装摘要，已被更新的先备份。只移走本次Command与单个Skill目录，再恢复原两个目标；原来不存在则保持不存在。重启核对入口消失或恢复原定义。不卸载OpenCode，不删除整个配置目录或其他能力。
 
 ## 独立Git样例
@@ -93,7 +101,7 @@ POSIX：`python3 tests/fixtures/codea-commit/probe_v2.py --opencode /absolute/pa
 python .\tests\fixtures\codea-commit\test_fixtures.py
 $caseRoot = Join-Path $env:TEMP ('codea-C02-' + [guid]::NewGuid().ToString('N'))
 python .\tests\fixtures\codea-commit\setup.py C02 $caseRoot
-# 安全验收通过后，在输出repo根的TUI输入 /codea-commit
+# 安全验收通过后，在输出repo根的TUI输入 /codea-commit；核对完整预览并明确确认后再检查结果
 # manifest位于仓库外，不交给模型，不用普通Git手工提交冒充产品验收
 python .\tests\fixtures\codea-commit\verify.py ($caseRoot + '.manifest.json') $caseRoot
 ```

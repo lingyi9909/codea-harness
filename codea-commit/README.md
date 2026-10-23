@@ -2,12 +2,18 @@
 
 目标为公司现有 **OpenCode TUI v2.0.27**。已完成同版本原生修复：新增安全回归 **17/17 PASS**，真实源码CLI服务探针 **11/11 PASS**，未修改2.0.27客户端可显示中文拒绝错误并非零退出。未修公开发行包的 **6 PASS / 5 FAIL** 保留为对照。测试资源已恢复在隔离的 `payload/`，仅供前置拦截通过的现有宿主安装；不自动启用或合并发布。公司构建、Windows、实际 TUI、私有模型与 TeamAI 验收仍 PENDING。
 
-请先读 [2.0.27 专项核对、独立探针及安装回退说明](compatibility/v2.0.27/README.md)，固定版本、补丁、摘要与修前/修后结果见该目录的 `SOURCE.json`、`VALIDATION.json`、`RESULTS.json`、`PATCHED-RESULTS.json`。
+请先读 [2.0.27 专项核对、独立探针及安装回退说明](compatibility/v2.0.27/README.md)，固定版本、补丁、摘要与修前/修后结果见该目录的 `SOURCE.json`、`VALIDATION.json`、`RESULTS.json`、`PATCHED-RESULTS.json`、`PREVIEW-RESULTS.json`。
+
+## 2026-10-23：提交前预览与确认
+
+输入 `/codea-commit` 后，按“概览 → 文件清单 → 分文件真实暂存 Diff → 完整说明”展示，再等待“确认提交 / 修改说明 / 取消”。原生 question 不可用时聊天提问并结束执行；修改说明要重新展示全文和确认。分支、HEAD 或 index 改变使旧确认失效。取消保留原有和本次准备的暂存，不撤销现场。只显示聊天中的 Markdown Diff，不提供示意图中的增强面板。
+
+这些交互规则已更新于两份资源；真实公司模型/TUI 的确认轨迹仍 PENDING，不能用 API 加载或提示词模拟代替。
 
 ## 本轮交付
 
 - `compatibility/v2.0.27/candidates/codea-commit.md.txt`：V2 候选 Command，继续路由现有 Build，明确以 `{"id":"codea-commit"}` 加载原生 Skill。
-- `compatibility/v2.0.27/candidates/SKILL.md.txt`：既有提交规则草稿，正文保持不变。
+- `compatibility/v2.0.27/candidates/SKILL.md.txt`：提交预览、显式确认、状态失效与提交后核验规则，与 payload 字节一致。
 - `tests/fixtures/codea-commit/probe_v2.py`：显式指定现有二进制，在新临时配置启动独立真实 V2 服务；不替换宿主、不操作业务 Git、不使用模型凭据。
 - `payload/`：可条件安装的两份测试资源，内容与真实探针加载的候选一致。
 - `opencode-v2.0.27-codea-commit.patch`：已实施并验证的现有宿主最小补丁，仅三个生产文件及两个原生测试文件。
@@ -23,9 +29,9 @@
 
 ## 保留的功能设计
 
-单一无参数入口、现有 Build、一次本地 commit：优先提交 index，保留同文件未暂存 hunk；无暂存且任务归属明确才仅 add 明确路径，否则询问；中文说明仅来自完整暂存 Diff；保留 hooks/签名，提交后读取真实 SHA、父提交、完整消息、内容和剩余状态；不 push、amend 或改历史。
+单一无参数入口、现有 Build、一次本地 commit：先预览 index 并等待明确确认，保留同文件未暂存 hunk；无暂存且任务归属明确才仅 add 明确路径，否则询问；中文说明仅来自完整暂存 Diff；保留 hooks/签名，提交后读取真实 SHA、父提交、完整消息、内容和剩余状态；不 push、amend 或改历史。
 
-这些提示规则不承担宿主 Shell 前处理的隔离职责。现有 Git/Review 回归 55/55 通过不等于真实模型正常提交或参数安全已验收。完整规则与矩阵见 [验收记录](../docs/examples/codea-commit-acceptance.md)。
+这些提示规则不承担宿主 Shell 前处理的隔离职责。当前 Git/Review 回归 61/61 通过不等于真实模型正常提交或参数安全已验收。完整规则与矩阵见 [验收记录](../docs/examples/codea-commit-acceptance.md)。
 
 ## 旧资源和历史补丁
 

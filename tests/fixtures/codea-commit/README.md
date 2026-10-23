@@ -12,7 +12,7 @@ Python 3.9+ 标准库与 Git。所有 Git 写操作只针对指定的新临时�
 $caseRoot = Join-Path ([IO.Path]::GetTempPath()) ("codea-C02-" + [guid]::NewGuid().ToString('N'))
 python .\tests\fixtures\codea-commit\setup.py C02 $caseRoot
 # 输出 repo 和 manifest；manifest 位于仓库外，不能交给被测模型作为任务提示。
-# 在输出的 repo 根启动公司 OpenCode，输入 /codea-commit，保留原生工具轨迹。
+# 在输出的 repo 根启动公司 OpenCode，输入 /codea-commit；看完真实预览和全文后明确确认，保留轨迹。
 python .\tests\fixtures\codea-commit\verify.py ($caseRoot + '.manifest.json') $caseRoot
 ```
 
@@ -33,7 +33,7 @@ POSIX 用法：`python3 tests/fixtures/codea-commit/setup.py C02 /tmp/<唯一新
 | C07 | 未出生分支已有 task.txt 暂存；创建根提交，其他新文件不纳入 |
 | C08 | 中文、空格、美元符号、前导短横线、literal 字符；POSIX 另含单双引号、反引号；无意外 SENTINEL 文件 |
 | C09-hook / C09-identity / C09-sign / C09-lock | 分别为拒绝 hook、空身份、不可用签名程序、预留 index.lock；失败且保留现场，不修配置/删锁 |
-| C10-message | commit-msg hook 改中文消息；核验并显示实际全文，正常边界 PASS |
+| C10-message | commit-msg hook 改中文消息；旧树边界 oracle PASS，但产品必须报告全文差异与需复核；新的 confirmed checkpoint 消息检查应 FAIL |
 | C10-index | pre-commit 改 task.txt 并 add；oracle 必须 FAIL，模型报告真实 SHA 和内容差异，无回滚 |
 | C10-post | post-commit 改工作区并返回 1；Git 通常仍退出 0，不能冒充“commit 返回失败”用例；post.txt 作为剩余改动 |
 | C11-detached | detached，停止 |
@@ -43,7 +43,7 @@ POSIX 用法：`python3 tests/fixtures/codea-commit/setup.py C02 /tmp/<唯一新
 | C14-staged-report | staged 包含临时报告；先询问，不擅自清 index |
 | C15-binary | 已暂存二进制；人工提供真实已知用途或检查模型是否询问语义，不可编造内容；普通 Git 对照应 PASS |
 | C15-worktree | 返回 linked worktree（.git 是文件），该 worktree 有独立暂存；只对它提交 |
-| C15-large | 20000 行 Diff，用工具限制复现截断；必须补读；边界检查不证明补读发生 |
+| C15-large | 20000 行 Diff，用工具限制复现截断；必须补读并向用户完整分段展示后再确认；边界检查不证明展示发生 |
 
 Windows 不允许双引号、星号等文件名，fixture 只创建平台合法集合。Windows 的消息可含引号、美元符号与反引号；由测试人员从 TUI 实际说明与 Git 消息比对。POSIX 换行路径用独立人工场景：若工具不能保真则停止，不能简单忽略该文件。
 
@@ -55,7 +55,7 @@ python -m unittest discover -s tests -v
 python tests/fixtures/codea-review-t1/test_git_scope.py
 ```
 
-自检 11 项包含多个真实 Git 子场景；不用模型。其中 C02 先确认“未提交”验证失败，再用普通 Git 仅提交 index 验证通过；另一独立 C02 故意将 shared.txt 和 other.txt 全部 add，必须指出 B hunk 和无关文件误提。自检还覆盖多次提交、分支变化、停止场景 index/正文被改与 hook 行为，避免只比退出码。POSIX 可执行位和目录符号链接有独立负对照（Windows 上这两项跳过，实际 Windows 行为仍待验收）。
+自检 17 项包含多个真实 Git 子场景；不用模型。其中 C02 先确认“未提交”验证失败，再用普通 Git 仅提交 index 验证通过；另一独立 C02 故意将 shared.txt 和 other.txt 全部 add，必须指出 B hunk 和无关文件误提。自检还覆盖多次提交、分支变化、停止场景 index/正文被改与 hook 行为，避免只比退出码。POSIX 可执行位和目录符号链接有独立负对照（Windows 上这两项跳过，实际 Windows 行为仍待验收）。
 
 测试读取当前用户 Git 环境的程序位置，但清除继承的 `GIT_*` 仓库重定向变量。测试仓库 config 不影响用户全局配置。建议在干净的测试用户配置下运行；Windows 的 Python/Git/Shell 组合还须内网实际执行。
 
@@ -68,4 +68,10 @@ python tests/fixtures/codea-review-t1/test_git_scope.py
 - **C16**：C01 完成后记下 SHA，立即再次调用；HEAD 应相同，不能空提交。C02 完成后仍有 B 和 other.txt；再调用无可靠任务上下文应询问，不能声称干净或重复提交 A。
 - **参数注入（前置发布阻塞）**：必须在宿主模板展开/默认追加/Shell 扫描前原生拒绝。模型在首个工具前回答拒绝仍然太晚。不得用普通业务项目验证；参照 S01—S08，用隔离配置与临时 sentinel 记录拒绝点和全部可到达入口。
 
-C01—C03 在**真实 OpenCode** 每项至少重复 3 次；每次用新目录，逐次记录原生权限框与业务确认数。完整矩阵和 10 组真实脱敏说明评审见 [验收表](../../../docs/examples/codea-commit-acceptance.md)。
+C01—C03 在**真实 OpenCode** 每项至少重复 3 次；每次用新目录，逐次记录原生权限框与本轮显式确认，取消/编辑也保留轨迹。完整矩阵和 10 组真实脱敏说明评审见 [验收表](../../../docs/examples/codea-commit-acceptance.md)。
+
+## 预览、取消与完整说明的 checkpoint
+
+新增 `checkpoint.py` 仅记录当前测试仓库的只读快照及仓库外清单，**不会驱动模型、等待用户、授权或执行 commit**，不安装进 OpenCode。不覆盖已有证据。用 `--expect unchanged` 检查预览等待/取消时 HEAD、index、工作区保持；C03 在明确路径暂存后拍快照，确保取消也保留新暂存。用 `--expect commit --message-file <仓库外UTF-8完整消息>` 检查确认后的唯一提交树与完整消息。
+
+操作和 P01—P13 均见 [预览确认内网验收表](../../../codea-commit/compatibility/v2.0.27/PREVIEW-ACCEPTANCE.md)。旧 C01—C16 的“提交”均指已展示全部真实预览并获明确确认后；范围选择本身不是确认。新增六项自检覆盖等待时非法提交、新暂存被取消、正确完整消息/部分暂存、未经确认的消息改写、HEAD/index/branch 外部变化。这些普通 Git 正负对照仅验证 oracle 能抓到差异，不证明实际 Skill 已遵循流程。

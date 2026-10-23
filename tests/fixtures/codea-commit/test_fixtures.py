@@ -1,5 +1,6 @@
 """Tests of the fixture oracle, never a substitute for OpenCode acceptance."""
 import importlib.util
+import sys
 import pathlib
 import os
 import subprocess
@@ -34,6 +35,78 @@ class FixtureOracle(unittest.TestCase):
         msg = self.root / '消息.txt'
         msg.write_text('fix(fixture): 保留暂存边界\n', encoding='utf-8')
         return self.git(repo, 'commit', '-F', str(msg), check=False)
+
+    def checkpoint(self, repo, expectation, message=None):
+        manifest = self.root / ('checkpoint-' + str(len(list(self.root.glob('checkpoint-*')))) + '.json')
+        command = [sys.executable, str(HERE / 'checkpoint.py'), str(repo), str(manifest),
+                   '--expect', expectation]
+        if message is not None:
+            msg = self.root / 'confirmed-message.txt'
+            msg.write_text(message, encoding='utf-8')
+            command += ['--message-file', str(msg)]
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(0, result.returncode, result.stderr.decode())
+        return manifest
+
+    def test_checkpoint_subdirectory_cannot_write_inside_actual_worktree(self):
+        repo, _ = self.create('C02')
+        subdir = repo / 'nested'
+        subdir.mkdir()
+        bad = repo / 'should-not-exist.json'
+        result = subprocess.run([sys.executable, str(HERE / 'checkpoint.py'),
+                                 str(subdir), str(bad), '--expect', 'unchanged'],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertNotEqual(0, result.returncode)
+        self.assertFalse(bad.exists())
+        good = self.root / 'external-checkpoint.json'
+        result = subprocess.run([sys.executable, str(HERE / 'checkpoint.py'),
+                                 str(subdir), str(good), '--expect', 'unchanged'],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(0, result.returncode, result.stderr.decode())
+        self.assertEqual([], self.verify.verify(repo, good))
+
+    def test_pending_or_cancelled_preview_rejects_any_commit(self):
+        repo, _ = self.create('C02')
+        manifest = self.checkpoint(repo, 'unchanged')
+        self.assertEqual([], self.verify.verify(repo, manifest))
+        self.commit(repo)
+        self.assertIn('head changed', '\n'.join(self.verify.verify(repo, manifest)))
+
+    def test_cancel_preserves_newly_prepared_staging(self):
+        repo, _ = self.create('C03')
+        self.git(repo, '--literal-pathspecs', 'add', '--', 'task.txt', 'new.txt', 'delete.txt')
+        manifest = self.checkpoint(repo, 'unchanged')
+        self.assertEqual([], self.verify.verify(repo, manifest))
+        self.git(repo, 'reset', '--', 'task.txt')  # Deliberately wrong cancellation control.
+        self.assertIn('index changed', '\n'.join(self.verify.verify(repo, manifest)))
+
+    def test_confirmed_checkpoint_checks_full_message_and_partial_index(self):
+        repo, _ = self.create('C02')
+        message = 'fix(fixture): 只提交暂存内容\n\n保留工作区 B 的变化。\n'
+        manifest = self.checkpoint(repo, 'commit', message)
+        self.assertIn('expected one new commit', '\n'.join(self.verify.verify(repo, manifest)))
+        self.git(repo, 'commit', '-F', str(self.root / 'confirmed-message.txt'))
+        self.assertEqual([], self.verify.verify(repo, manifest))
+
+    def test_unconfirmed_message_change_is_detected(self):
+        repo, _ = self.create('C01')
+        manifest = self.checkpoint(repo, 'commit', 'fix(fixture): 用户确认的说明\n')
+        self.commit(repo)  # Deliberately commits a different title.
+        self.assertIn('message differs', '\n'.join(self.verify.verify(repo, manifest)))
+
+    def test_preview_checkpoint_detects_stale_index_head_or_branch(self):
+        for change in ('index', 'head', 'branch'):
+            with self.subTest(change=change):
+                repo, _ = self.setup.create('C01', self.root / change)
+                manifest = self.checkpoint(repo, 'unchanged')
+                if change == 'index':
+                    (repo / 'task.txt').write_text('outside change\n')
+                    self.git(repo, 'add', '--', 'task.txt')
+                elif change == 'head':
+                    self.commit(repo)
+                else:
+                    self.git(repo, 'switch', '-c', 'outside-branch')
+                self.assertTrue(self.verify.verify(repo, manifest))
 
     def test_partial_staging_requires_commit_then_accepts_only_A(self):
         repo, manifest = self.create('C02')
