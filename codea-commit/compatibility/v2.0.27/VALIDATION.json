@@ -56,9 +56,9 @@
   },
   "root_check": "NOT_PASS: Astro site tooling attempts user Library/Preferences write denied by sandbox; affected Core/Server typechecks PASS",
   "codea_regression": {
-    "PASS": 61,
+    "PASS": 63,
     "FAIL": 0,
-    "scope": "2026-10-23 fixture oracle17 + Review40 + Review Git4; no model interaction"
+    "scope": "2026-10-23 fixture oracle19 + Review40 + Review Git4; no model interaction"
   },
   "company_build": "PENDING",
   "windows": "PENDING",
@@ -67,9 +67,10 @@
   "normal_private_model_commit": "PENDING",
   "previous_native_results": "unchanged native patch; earlier full-suite/typecheck results retained, not rerun for prompt-only revision",
   "current_resource_api_probe": {
-    "report": "PREVIEW-RESULTS.json",
-    "PASS": 11,
-    "FAIL": 0
+    "report": "TEMPLATE-CLEANUP-RESULTS.json",
+    "PASS": 12,
+    "FAIL": 0,
+    "scope": "11 existing native API checks plus temporary companion file installation/non-registration; no model read"
   },
   "preview_prompt_simulation": {
     "cases": 13,
@@ -78,5 +79,22 @@
   },
   "preview_confirmation_tui": "PENDING",
   "question_unavailable_chat_fallback": "PENDING",
-  "theme_dark_light": "PENDING"
+  "theme_dark_light": "PENDING",
+  "message_cleanup": {
+    "git": "2.39.5 (Apple Git-154)",
+    "modes": [
+      "default",
+      "strip",
+      "strip with core.commentChar=;",
+      "whitespace with core.commentChar=;"
+    ],
+    "old_commit_F": "4 failing subcases observed before fix",
+    "explicit_verbatim": "4 passing subcases; raw commit-body bytes and oracle verified",
+    "implicit_strip_negative_control": "PASS: oracle detects changed message",
+    "config_and_hooks": "preserved by snapshot verification",
+    "product_model_execution": "PENDING"
+  },
+  "template_cleanup_prompt_review": "read-only independent GREEN simulation, no P1/P2; not actual OpenCode/inner-network acceptance",
+  "actual_model_template_read": "PENDING",
+  "teamai_companion_template_distribution": "PENDING"
 }

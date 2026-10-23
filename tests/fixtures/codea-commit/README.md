@@ -55,7 +55,7 @@ python -m unittest discover -s tests -v
 python tests/fixtures/codea-review-t1/test_git_scope.py
 ```
 
-自检 17 项包含多个真实 Git 子场景；不用模型。其中 C02 先确认“未提交”验证失败，再用普通 Git 仅提交 index 验证通过；另一独立 C02 故意将 shared.txt 和 other.txt 全部 add，必须指出 B hunk 和无关文件误提。自检还覆盖多次提交、分支变化、停止场景 index/正文被改与 hook 行为，避免只比退出码。POSIX 可执行位和目录符号链接有独立负对照（Windows 上这两项跳过，实际 Windows 行为仍待验收）。
+自检 19 项包含多个真实 Git 子场景；不用模型。其中 C02 先确认“未提交”验证失败，再用普通 Git 仅提交 index 验证通过；另一独立 C02 故意将 shared.txt 和 other.txt 全部 add，必须指出 B hunk 和无关文件误提。自检还覆盖多次提交、分支变化、停止场景 index/正文被改与 hook 行为，避免只比退出码。POSIX 可执行位和目录符号链接有独立负对照（Windows 上这两项跳过，实际 Windows 行为仍待验收）。
 
 测试读取当前用户 Git 环境的程序位置，但清除继承的 `GIT_*` 仓库重定向变量。测试仓库 config 不影响用户全局配置。建议在干净的测试用户配置下运行；Windows 的 Python/Git/Shell 组合还须内网实际执行。
 
@@ -75,3 +75,9 @@ C01—C03 在**真实 OpenCode** 每项至少重复 3 次；每次用新目录�
 新增 `checkpoint.py` 仅记录当前测试仓库的只读快照及仓库外清单，**不会驱动模型、等待用户、授权或执行 commit**，不安装进 OpenCode。不覆盖已有证据。用 `--expect unchanged` 检查预览等待/取消时 HEAD、index、工作区保持；C03 在明确路径暂存后拍快照，确保取消也保留新暂存。用 `--expect commit --message-file <仓库外UTF-8完整消息>` 检查确认后的唯一提交树与完整消息。
 
 操作和 P01—P13 均见 [预览确认内网验收表](../../../codea-commit/compatibility/v2.0.27/PREVIEW-ACCEPTANCE.md)。旧 C01—C16 的“提交”均指已展示全部真实预览并获明确确认后；范围选择本身不是确认。新增六项自检覆盖等待时非法提交、新暂存被取消、正确完整消息/部分暂存、未经确认的消息改写、HEAD/index/branch 外部变化。这些普通 Git 正负对照仅验证 oracle 能抓到差异，不证明实际 Skill 已遵循流程。
+
+## 消息清理与独立展示模板
+
+P2修正使用本次 `--cleanup=verbatim`，不写Git配置。真实临时Git对照覆盖默认、strip、strip+自定义`;`、whitespace，消息同时含`#`/`;`行及行尾空白；另保留无flag清理的必失败负对照。详见 [消息清理记录](../../../codea-commit/compatibility/v2.0.27/MESSAGE-CLEANUP.md)。19项fixture自检包含这些测试，但不证明模型实际执行流程。
+
+probe_v2会将`candidates/templates/commit-preview.md.txt`写入临时Skill目录，记录三个文件摘要并检查模板仅为配套文件、不注册新Skill。加载/参数探针现在12项；模板是否由真实模型按原生Base directory读到、权限拒绝/缺失时是否停止仍须P15内网轨迹，不能用临时文件落盘检查代替。

@@ -68,10 +68,14 @@ def probe(binary, resources):
         config = base / 'config'
         command = (resources / 'codea-commit.md.txt').read_bytes()
         skill = (resources / 'SKILL.md.txt').read_bytes()
+        preview_template = (resources / 'templates/commit-preview.md.txt').read_bytes()
         (config / 'commands').mkdir()
         (config / 'commands/codea-commit.md').write_bytes(command)
         (config / 'skills/codea-commit').mkdir(parents=True)
         (config / 'skills/codea-commit/SKILL.md').write_bytes(skill)
+        template_path = config / 'skills/codea-commit/templates/commit-preview.md'
+        template_path.parent.mkdir()
+        template_path.write_bytes(preview_template)
         (config / 'skills/codea-only-skill-control').mkdir()
         (config / 'skills/codea-only-skill-control/SKILL.md').write_text(
             '---\nname: codea-only-skill-control\ndescription: Disposable discovery control\n---\nNo actions.\n',
@@ -79,7 +83,7 @@ def probe(binary, resources):
         (config / 'opencode.json').write_text(json.dumps({
             'permissions': [{'action': '*', 'resource': '*', 'effect': 'deny'}]}), encoding='utf-8')
         report['resource_sha256'] = {name: hashlib.sha256(data).hexdigest()
-                                     for name, data in [('command', command), ('skill', skill)]}
+                                     for name, data in [('command', command), ('skill', skill), ('preview_template', preview_template)]}
         with socket.socket() as reservation:
             reservation.bind(('127.0.0.1', 0))
             port = reservation.getsockname()[1]
@@ -134,6 +138,11 @@ def probe(binary, resources):
                 record('skill_complete_body_and_source',
                        selected.get('content', '').strip() == expected_body and
                        Path(selected.get('path', '.')).resolve() == (config / 'skills/codea-commit/SKILL.md').resolve())
+                record('preview_template_installed_as_companion',
+                       template_path.read_bytes() == preview_template and
+                       template_path.parent.parent == Path(selected.get('path', '.')).resolve().parent and
+                       not any(Path(item.get('path', '.')).resolve() == template_path for item in skills),
+                       scope='temporary file installation; model template read is PENDING')
                 record('skill_not_an_automatic_command', not any(
                     item.get('name') == 'codea-only-skill-control' for item in commands) and any(
                     item.get('id') == 'codea-only-skill-control' for item in skills))

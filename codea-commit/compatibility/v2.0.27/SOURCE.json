@@ -24,10 +24,13 @@
   "patched_host_kind": "native patched source CLI; Bun 1.4.2; build macros version2.0.27/channel local; test launcher not shipped",
   "preview_confirmation_revision": "2026-10-23",
   "preview_confirmation_tui_model": "PENDING",
-  "current_resources_report": "PREVIEW-RESULTS.json",
-  "previous_resources_report": "PATCHED-RESULTS.json (historical before preview confirmation)",
+  "current_resources_report": "TEMPLATE-CLEANUP-RESULTS.json",
+  "previous_resources_report": "PREVIEW-RESULTS.json and PATCHED-RESULTS.json (historical resources)",
   "resource_sha256": {
-    "command": "47bf1291954cb3ad03ed12d551384bfd80a7bd8fe153ed9fd032d886278be55a",
-    "skill": "0dddcad45b0aa395b2d2583df0e59bafa510855a99d0b10dae77d7a37e8a643c"
-  }
+    "command": "aee8ca119686f9942e6877370537e3f18f662e7233dfcdd55be5ea306fe82753",
+    "skill": "1355bbeafc402adcb85891bbed8b64c630b173723c9873341cd8b8cf8769c6a9",
+    "preview_template": "882e85744a5c6c45145c5faa72bd37ea03910018b7eb0162264539d1dd0c4cd5"
+  },
+  "display_template": "skills/codea-commit/templates/commit-preview.md (within the existing Skill directory, no additional entry)",
+  "message_cleanup": "explicit --cleanup=verbatim for this commit only, subject to project rules; no config changes"
 }

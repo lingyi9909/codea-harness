@@ -35,6 +35,11 @@
       "name": "question-schema",
       "blob_sha": "61dedfaa3700822c801d9ae3722aa3853ebf3896",
       "url": "https://github.com/anomalyco/opencode/blob/1f4d07a4a519185955ae8ab2ea3607805509e386/packages/schema/src/question.ts"
+    },
+    {
+      "name": "skill-resource-base-and-files",
+      "blob_sha": "493d1aa2923c111ce84f8c51786c4158bad9edc1",
+      "url": "https://github.com/anomalyco/opencode/blob/1f4d07a4a519185955ae8ab2ea3607805509e386/packages/core/src/skill.ts"
     }
   ]
 }

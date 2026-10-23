@@ -21,3 +21,15 @@
 本地复测：fixture 17/17、Review 40/40、Review Git 4/4；更新资源实际源码服务 API 11/11；独立只读压力模拟 13 场景符合规范。旧原生完整套件结果保留历史边界（Core 8 FAIL 已基线复现，root check 未通过），本次未修改宿主补丁，也未重复运行该大套件。
 
 最终审阅：测试 checkpoint 的子目录路径问题已用真实 worktree root 修复；新负/正对照先 RED 后 GREEN，fixture 最终 17/17，独立复核关闭 Important。所有模型/TUI 确认验收继续 PENDING。
+
+
+## 复审修正与模板分离
+
+用户复审提出P2：Git清理可改变已确认全文；同时要求展示格式独立模板。沿用当前分支完成，不增加宿主/Runtime/Agent。
+
+- [x] 在新临时C01对默认/strip/自定义注释字符/whitespace观察旧-F全文不一致RED；保留负对照。
+- [x] 改用本次--cleanup=verbatim，项目规则禁止或Git不支持则预览前停止，hooks/签名保留；四组原始commit bytes及确认checkpoint一致GREEN。
+- [x] 展示拆到Skill内templates/commit-preview.md；Command首工具不变，Skill显式读取原生Base directory下模板，失败即停；候选副本同步。
+- [x] 全部Codea回归63/63、当前资源/模板隔离探针12/12与独立审阅完成；更新测试包生成和现有Draft PR交付，不合并。
+
+公司真实模板读取、消息模式兼容与TUI/TeamAI仍PENDING，见P14/P15；Git自检及临时模板落盘不代替真实模型工具轨迹。

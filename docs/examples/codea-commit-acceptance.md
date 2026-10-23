@@ -1,5 +1,9 @@
 # Codea Commit 1.0 验收记录
 
+## 2026-10-23 复审修正：模板与消息清理
+
+展示版式移至当前Skill内`templates/commit-preview.md`，必须按原生Skill基目录完整读取后才允许add/commit。分发为Command文件+完整Skill目录，实际三个产品文件，模板不是额外入口。P2已用本次`--cleanup=verbatim -F`修正，不改配置、不绕hooks/签名；项目禁止该模式时停止。真实Git四组旧方式先失败、新方式保留全文通过，负对照保留。详情见 [消息清理记录](../../codea-commit/compatibility/v2.0.27/MESSAGE-CLEANUP.md)。新增P14/P15均 **PENDING**，公司模型/TUI未验收。下文分日期的旧结果保留历史。
+
 ## 2026-10-23：预览与确认交互修订
 
 新流程为真实 index 概览/文件清单/全部分文件 Diff/完整说明 → 原生 question 三选（缺失时聊天询问并结束执行）→ 本轮明确确认 → 复核 → 一次提交。修改说明重新确认，HEAD/index/branch 改变重新完整预览，取消保留原有和新准备的暂存。详见 [P01—P13 内网验收步骤](../../codea-commit/compatibility/v2.0.27/PREVIEW-ACCEPTANCE.md)，全部内网结果 **PENDING**。不交付增强面板，不改变参数安全门禁。
@@ -102,7 +106,7 @@
 | 补丁 apply/reverse 与内容对照 | PASS | 在固定基线导出的干净临时树应用，逐文件 bytes 与测试源码一致 |
 | 公司 OpenCode / Windows / 私有模型 / TeamAI | PENDING | 参考源码测试不可替代公司适配与验收 |
 
-当前产品仍只定义 Command+Skill；新增的是对**现有宿主**的源码维护补丁与测试资料，不是另一个运行时。只有宿主团队应用/适配并完成 S01—S08 后才恢复两份安装资源，随后执行原有正常提交和说明质量验收。
+当前产品仍只定义 Command+Skill；新增的是对**现有宿主**的源码维护补丁与测试资料，不是另一个运行时。只有宿主团队应用/适配并完成 S01—S08 后才恢复Command/完整Skill目录，随后执行原有正常提交和说明质量验收。
 
 ## 功能矩阵（每项产品验收均待内网填写）
 
@@ -160,7 +164,7 @@
 
 | 流程 | 必须留存的证据 | 状态 |
 |---|---|---|
-| 首次安装→刷新/重启→调用 | 两份源/目标 hash、Build ID、首个 skill 工具及实际路径 | PENDING |
+| 首次安装→刷新/重启→调用 | 三个文件源/目标 hash（含模板）、Build ID、首个 skill 工具及实际路径 | PENDING |
 | 只同步 Skill / 旧 Command 新 Skill | 识别入口缺失/版本不配，不误报新版已加载 | PENDING |
 | 项目/JSON/兼容目录同名覆盖 | 查明实际来源，停止误装，不猜优先级 | PENDING |
 | 备份→升级→回退 | 两资源恢复原 hash；备份位于扫描目录外 | PENDING |

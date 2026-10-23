@@ -71,7 +71,7 @@ Command frontmatter 指定 agent: build；不固定 model，不覆盖公司 Prov
 
 源码目录不直接等于安装位置。统一使用用户级安装，首版不自动向业务仓库写入 .opencode 配置。安装前检查项目级同名资源、同名 JSON Command 配置和全局资源，发现冲突先解释实际加载来源，避免静默覆盖。
 
-TeamAI 同步整个 codea-commit Skill 目录；Command 是否支持原生同步以现有内网能力为准，未支持时通过现有配置包或一次性离线复制分发，不要求修改 TeamAI CLI。README 必须分别列出 Command 和 Skill 的来源版本或 SHA256，不能以“Skill 同步成功”代替“入口已安装”。
+TeamAI 同步整个 codea-commit Skill 目录；Command 是否支持原生同步以现有内网能力为准，未支持时通过现有配置包或一次性离线复制分发，不要求修改 TeamAI CLI。README 必须分别列出 Command、Skill 和配套模板的来源版本或 SHA256，不能以“Skill 同步成功”代替“入口已安装”。
 
 升级时备份两个资源，只替换本模块拥有的资源；回退恢复备份。卸载只删除本模块的 Command 和 Skill，不删整个 OpenCode 配置目录。
 
@@ -153,7 +153,7 @@ TeamAI 同步整个 codea-commit Skill 目录；Command 是否支持原生同步
 - 自动暂存模式还要确认 index 实际只包含选定内容，并检查是否把变化后的工作区版本意外带入。
 - 范围和说明明确后，按当前 Skill 展示概览、文件清单、全部真实暂存 Diff 和完整说明，等待本轮明确确认。原生 question 不可用时聊天提问并结束执行等待。修改说明必须重新展示全文和确认；状态改变需完整重新预览。调用本身不授权 commit，原生权限询问另按原策略生效。取消保留原有和新准备的暂存。
 - 提交命令只提交当前 index；不用 -a，不带文件路径，不用 --only、--include 或 --amend。
-- 推荐将完整消息写入本次唯一的系统临时 UTF-8 无 BOM 文件，再执行 git commit -F <消息文件>。不把正文拼成可执行 Shell，不向业务目录写消息文件。
+- 推荐将完整消息写入本次唯一的系统临时 UTF-8 无 BOM 文件，再执行 git commit --cleanup=verbatim -F <消息文件>。不把正文拼成可执行 Shell，不向业务目录写消息文件。
 - 文件路径按实际 Shell 正确引用；中文、空格、引号、美元符号、反引号和换行不能改变命令语义。无法保真处理的路径先停止，不能靠加宽权限解决。
 - 保留 hooks 与签名，不用 --no-verify、--no-gpg-sign、--allow-empty 或改写配置。
 - 本 Skill 不主动构建、跑测试或修复 hook 失败。既有 hooks 可能执行测试或格式化，应如实区分。

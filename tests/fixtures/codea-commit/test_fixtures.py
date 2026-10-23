@@ -31,10 +31,10 @@ class FixtureOracle(unittest.TestCase):
         repo, manifest = self.setup.create(case, self.root / case)
         return repo, manifest
 
-    def commit(self, repo):
+    def commit(self, repo, message='fix(fixture): 保留暂存边界\n'):
         msg = self.root / '消息.txt'
-        msg.write_text('fix(fixture): 保留暂存边界\n', encoding='utf-8')
-        return self.git(repo, 'commit', '-F', str(msg), check=False)
+        msg.write_text(message, encoding='utf-8')
+        return self.git(repo, 'commit', '--cleanup=verbatim', '-F', str(msg), check=False)
 
     def checkpoint(self, repo, expectation, message=None):
         manifest = self.root / ('checkpoint-' + str(len(list(self.root.glob('checkpoint-*')))) + '.json')
@@ -85,8 +85,37 @@ class FixtureOracle(unittest.TestCase):
         message = 'fix(fixture): 只提交暂存内容\n\n保留工作区 B 的变化。\n'
         manifest = self.checkpoint(repo, 'commit', message)
         self.assertIn('expected one new commit', '\n'.join(self.verify.verify(repo, manifest)))
-        self.git(repo, 'commit', '-F', str(self.root / 'confirmed-message.txt'))
+        self.git(repo, 'commit', '--cleanup=verbatim', '-F', str(self.root / 'confirmed-message.txt'))
         self.assertEqual([], self.verify.verify(repo, manifest))
+
+    def test_confirmed_text_survives_git_cleanup_and_comment_settings(self):
+        message = ('fix(fixture): 展示并确认说明\n\n'
+                   '# 保留的业务说明\n; 自定义注释字符也是正文\n正文尾部有空格  \n')
+        for name, cleanup, comment in [('default', None, None), ('strip', 'strip', None),
+                                       ('custom-comment', 'strip', ';'),
+                                       ('whitespace', 'whitespace', ';')]:
+            with self.subTest(cleanup=name):
+                repo, _ = self.setup.create('C01', self.root / name)
+                if cleanup:
+                    self.git(repo, 'config', '--local', 'commit.cleanup', cleanup)
+                if comment:
+                    self.git(repo, 'config', '--local', 'core.commentChar', comment)
+                manifest = self.checkpoint(repo, 'commit', message)
+                self.assertEqual(0, self.commit(repo, message).returncode)
+                self.assertEqual([], self.verify.verify(repo, manifest))
+                # Assert the raw commit body too, independently of the oracle.
+                raw = self.git(repo, 'cat-file', 'commit', 'HEAD').stdout.split(b'\n\n', 1)[1]
+                self.assertEqual(message.encode('utf-8'), raw)
+
+    def test_implicit_cleanup_negative_control_changes_confirmed_message(self):
+        repo, _ = self.create('C01')
+        self.git(repo, 'config', '--local', 'commit.cleanup', 'strip')
+        message = 'fix(fixture): 清理负对照\n\n# 必须保留的正文\n行尾空白  \n'
+        manifest = self.checkpoint(repo, 'commit', message)
+        self.git(repo, 'commit', '-F', str(self.root / 'confirmed-message.txt'))
+        self.assertIn('message differs', '\n'.join(self.verify.verify(repo, manifest)))
+        raw = self.git(repo, 'cat-file', 'commit', 'HEAD').stdout.split(b'\n\n', 1)[1]
+        self.assertEqual('fix(fixture): 清理负对照\n\n行尾空白\n'.encode('utf-8'), raw)
 
     def test_unconfirmed_message_change_is_detected(self):
         repo, _ = self.create('C01')

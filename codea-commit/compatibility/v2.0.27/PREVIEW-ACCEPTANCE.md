@@ -1,6 +1,6 @@
 # 提交预览与确认：内网验收步骤
 
-本表针对 2026-10-23 更新的 Command/Skill。前置条件：目标现有宿主先通过参数前置校验探针与 S01—S08；旧补丁/版本门禁不因确认交互改变。真实公司 Build、模型、权限不修改。全部场景当前 **PENDING**；本地 Git 对照与提示词模拟不能替代本表。
+本表针对 2026-10-23 更新的 Command/Skill。前置条件：目标现有宿主先通过参数前置校验探针与 S01—S08；旧补丁/版本门禁不因确认交互改变。真实公司 Build、模型、权限不修改。含模板与消息清理修订，全部场景当前 **PENDING**；本地 Git 对照与提示词模拟不能替代本表。
 
 每项使用新的独立 fixture 仓库，manifest/消息/轨迹留仓库外，不交给模型。C01—C03 至少各三次。记录完整 TUI 轨迹和实际 Git 结果；不能只截成功文案。真实敏感源码/配置不上传，PR 仅附脱敏结论和内网记录位置。
 
@@ -18,7 +18,9 @@
 | P10 | C01 rename/delete、C07 根提交、C15-binary、已有本地 LFS/gitlink、模式变更：真实路径/对象/模式/统计，无伪文本或远程取数；证据不足时等待。 | PENDING |
 | P11 | C09 hook/签名/身份/锁失败、原生权限拒绝、工具超时：查询真实 HEAD，不重试。C10 消息或 index 被 hook 改写需报告实际 SHA、全文和具体差异“已产生提交，需复核”。 | PENDING |
 | P12 | 现有主题深/浅色、中文长路径、代码围栏字符、大文件分段：+/- 与行号可读，无内容丢失。轻量版无增强面板承诺。 | PENDING |
-| P13 | TeamAI 核对分别分发 Command 和完整单个 Skill 目录，来源与摘要正确；备份/更新/回退只动本模块；Reviewer/模型/原生权限不变。 | PENDING |
+| P13 | TeamAI 核对分别分发 Command 和完整单个 Skill 目录（包括templates/commit-preview.md），来源与摘要正确；备份/更新/回退只动本模块；Reviewer/模型/原生权限不变。 | PENDING |
+| P14 | 使用默认、strip、strip+自定义注释字符（如;）、whitespace的新临时仓库；确认含#和;正文及行尾空格的全文，真实工具应使用--cleanup=verbatim，实际全文一致，配置不改。项目禁止原文模式或Git不支持则在预览前停止。 | PENDING |
+| P15 | 核对Skill读取原生Base directory下templates/commit-preview.md；缺失/权限拒绝/截断未补全应TEMPLATE_LOAD_FAILED，不add/commit。模板不是新Skill或Command；调整模板格式后实际生效，数据仍为本轮Git。 | PENDING |
 
 ## 独立验证样例（测试人员操作，非产品执行器）
 
@@ -47,4 +49,4 @@ python .\tests\fixtures\codea-commit\verify.py $confirmed $caseRoot
 
 消息比对只忽略终止换行，标题/正文其余原文必须一致。此验证器也核对唯一父提交、全树/模式、index、原始工作区、local config/hooks；消息被 hook 改写应 FAIL，但产品应如实显示“需复核”。它不能证明用户确实看完/确认、是否逐 hunk 展示、中文语义或工具交互正确；这些必须用 TUI 真实轨迹人工验收。
 
-每次记录：执行人/时间、Windows/Git/Shell、TUI+服务端完整版本及来源、Command/Skill 摘要、原生 Skill 首工具、预览编号/worktree/branch/HEAD/tree/全文消息、question/聊天答复、权限次数、真实 SHA/父提交/tree/全文、剩余改动及验证器输出。P07 的原清单会因外部扰动失败，须另记扰动后基线，不能把预期差异误判产品错误。
+每次记录：执行人/时间、Windows/Git/Shell、TUI+服务端完整版本及来源、Command/Skill/模板三个文件摘要、原生 Skill 首工具、预览编号/worktree/branch/HEAD/tree/全文消息、question/聊天答复、权限次数、真实 SHA/父提交/tree/全文、剩余改动及验证器输出。P07 的原清单会因外部扰动失败，须另记扰动后基线，不能把预期差异误判产品错误。
