@@ -1,5 +1,11 @@
 # Codea Commit 1.0 开发流程与研发任务书
 
+> 2026-10-23：预览确认交互由 [修订实施记录](2026-10-23-codea-commit-preview-confirmation.md) 与当前 v2.0.27 Skill 替代；本文保留原开发任务背景，不恢复历史 blocked 入口。
+
+> **2026-10-22 研发补充：** 已提供 [现有 OpenCode 原生拦截补丁](../../../codea-commit/host-patches/README.md) 与真实源码/HTTP/CLI 回归，不新增 Runtime/插件/Agent。公司维护方应用或适配并验收前，以下暂停安装门槛继续有效。
+
+> **2026-10-21 审核更正：BLOCKED，暂停安装与分发。** 原设计遗漏了 OpenCode 在模型前展开参数并执行 Shell 的边界，提示词拒绝非空参数不足以阻止执行；没有占位符也可能 fallback 追加参数，Skill 也可能自动注册为命令。以下原方案暂不能用于安装/发布。必须先完成 [宿主原生前置校验及 S01—S08 验收](../../examples/codea-commit-command-security.md)，再恢复 Command/Skill 和后续功能验收。不新增 Runtime/MCP/插件/Agent，不改 Reviewer/模型/Review 流程。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 > 本次由用户交给研发团队实施；上面的执行技能说明仅适用于采用对应技能的 AI 研发代理，不要求人类研发安装技能。
 
@@ -43,6 +49,7 @@
 - Produces：验收表中的版本信息、Build Agent ID、Command 路由结果、Skill 安装/加载来源、分发方式和权限现状。
 
 - [ ] 记录研发起点 SHA；参考设计的 main 为 8ba491e20a488fc3d83c6277f805b61dac932c86，若主线已更新，重新查看相关文件再开始。
+- [ ] **先完成 S01—S08 原生参数前置校验门槛**：核对 actual exact 版参数替换/fallback/Shell/模型的执行顺序，在所有可到达命令入口拒绝非空参数；无可靠能力时保持 BLOCKED，不恢复 Command/Skill 分发。
 - [ ] 记录 Windows、OpenCode exact 版本、Git、实际 Shell、私有模型标识及 TeamAI 版本。不能仅记录“OpenCode 2.x”。
 - [ ] 核验现有 Build ID 是否为 build，原生 skill 工具是否可用；Command 指定 Build 后，是否保留足够的会话任务上下文。结论只影响无暂存场景的范围判断，不允许靠猜测补上下文。
 - [ ] 核对只读 Git、明确路径 add、commit、系统临时文件写入在现有策略下的行为，记录是否有原生权限框。不以本功能为理由全局放开 Shell。
@@ -91,10 +98,10 @@
 - [ ] 编写 Skill 的环境与范围章节，完整落实设计 5.1/5.2；重点处理 staged 优先、无可靠上下文询问、同文件部分暂存和 untracked 正文。
 - [ ] 用 C01—C07、C13 运行真实 OpenCode；每次用验证器检查真实 Git 结果。发现错误只修对应提示或配置，不复制出新的运行时。
 - [ ] 编写说明章节：type/scope/中文标题/必要正文、项目规范优先、不得描述未暂存变化或虚构测试。
-- [ ] 编写暂存和提交章节：明确 literal 路径、完整读取 Diff、提交前再次核对、UTF-8 临时消息文件、git commit -F、不带路径或 -a。
+- [ ] 编写暂存和提交章节：明确 literal 路径、完整读取 Diff、提交前再次核对、UTF-8 临时消息文件、git commit --cleanup=verbatim -F、不带路径或 -a。
 - [ ] 编写失败和事后核验章节：保留 hooks/签名、识别 HEAD 实际变化、核验真实消息与内容、不自动回滚或修代码。
 - [ ] 执行 C08—C12、C14—C16；逐项保存工具轨迹和实际 Git 结果。C12 在读取 Diff 与准备提交之间由测试人员修改状态，确认不会拿旧内容提交。
-- [ ] 在 Build 上确认正常场景无需再次输入长提示词或例行“是否提交”；范围不明时只询问缺少的信息。
+- [ ] 在 Build 上核对正常场景先展示完整预览并等待一次明确提交确认；范围不明时先询问缺少的信息，不能把选择范围当作提交确认。
 - [ ] 对两个产品资源做精简检查：Command 不复制 Skill 全文，Skill 不增加不必要参数、报告模板或额外依赖。
 - [ ] 用人工选择的真实脱敏 Diff 检查标题和正文质量；即使 Git 边界通过，说明不准确仍须修订再验。
 
