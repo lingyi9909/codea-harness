@@ -30,8 +30,10 @@ fix(fixture): 展示并确认说明
 | strip + core.commentChar=; | ;行及行尾空白被清理，FAIL | 全文原文保留，PASS |
 | whitespace + core.commentChar=; | 行尾空白被清理，FAIL | 全文原文保留，PASS |
 
-先用旧提交方式运行同一四组测试观察到4个子场景FAIL，再仅改变本次提交参数观察全部PASS。另有独立无flag strip负对照，必须触发 `commit message differs from confirmed full text`；不是把旧问题从验证器里忽略。默认的终止换行呈现差异契约保持，其余正文和空白均不得静默清理。
+先用旧提交方式运行同一四组测试观察到4个子场景FAIL，再仅改变本次提交参数观察全部PASS。另有独立无flag strip负对照，必须触发 `commit message differs from confirmed full text`；不是把旧问题从验证器里忽略。验收器后来改为读取原始commit对象，因此不需要容忍Git log的展示换行；实际正文的任何CR/LF、尾空白及末尾空行均精确比对。
 
 运行：`python3 tests/fixtures/codea-commit/test_fixtures.py`。相关方法为 `test_confirmed_text_survives_git_cleanup_and_comment_settings` 与 `test_implicit_cleanup_negative_control_changes_confirmed_message`；同套件保留hook拒绝/改写、签名失败和部分暂存对照。
 
 这些是Git行为与验证器对照，不证明真实模型调用了该参数。公司Windows/Git版本、项目消息规则兼容、模型工具调用及TUI展示仍PENDING，见P14/P15内网验收。
+
+2026-10-23后续复审仅修正验收器的CRLF读取/fixture写入策略，产品verbatim规则保持；新增字节样例见CRLF-RESULTS.json，Windows实机仍PENDING。

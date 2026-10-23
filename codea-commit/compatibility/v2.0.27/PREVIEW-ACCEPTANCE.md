@@ -19,7 +19,7 @@
 | P11 | C09 hook/签名/身份/锁失败、原生权限拒绝、工具超时：查询真实 HEAD，不重试。C10 消息或 index 被 hook 改写需报告实际 SHA、全文和具体差异“已产生提交，需复核”。 | PENDING |
 | P12 | 现有主题深/浅色、中文长路径、代码围栏字符、大文件分段：+/- 与行号可读，无内容丢失。轻量版无增强面板承诺。 | PENDING |
 | P13 | TeamAI 核对分别分发 Command 和完整单个 Skill 目录（包括templates/commit-preview.md），来源与摘要正确；备份/更新/回退只动本模块；Reviewer/模型/原生权限不变。 | PENDING |
-| P14 | 使用默认、strip、strip+自定义注释字符（如;）、whitespace的新临时仓库；确认含#和;正文及行尾空格的全文，真实工具应使用--cleanup=verbatim，实际全文一致，配置不改。项目禁止原文模式或Git不支持则在预览前停止。 | PENDING |
+| P14 | 使用默认、strip、strip+自定义注释字符（如;）、whitespace的新临时仓库，并分别检查明确LF/CRLF消息；确认含#和;正文及行尾空格的全文，真实工具应使用--cleanup=verbatim，实际全文一致，配置不改。项目禁止原文模式或Git不支持则在预览前停止。 | PENDING |
 | P15 | 核对Skill读取原生Base directory下templates/commit-preview.md；缺失/权限拒绝/截断未补全应TEMPLATE_LOAD_FAILED，不add/commit。模板不是新Skill或Command；调整模板格式后实际生效，数据仍为本轮Git。 | PENDING |
 
 ## 独立验证样例（测试人员操作，非产品执行器）
@@ -47,6 +47,6 @@ python .\tests\fixtures\codea-commit\checkpoint.py $caseRoot $confirmed --expect
 python .\tests\fixtures\codea-commit\verify.py $confirmed $caseRoot
 ```
 
-消息比对只忽略终止换行，标题/正文其余原文必须一致。此验证器也核对唯一父提交、全树/模式、index、原始工作区、local config/hooks；消息被 hook 改写应 FAIL，但产品应如实显示“需复核”。它不能证明用户确实看完/确认、是否逐 hunk 展示、中文语义或工具交互正确；这些必须用 TUI 真实轨迹人工验收。
+验收器直接比对Git对象原始正文与确认消息UTF-8字节，CRLF/LF/混合换行、终止空行和行尾空格均精确保留，不忽略实际差异；Git log的展示换行不参与比对。此验证器也核对唯一父提交、全树/模式、index、原始工作区、local config/hooks；消息被 hook 改写应 FAIL，但产品应如实显示“需复核”。它不能证明用户确实看完/确认、是否逐 hunk 展示、中文语义或工具交互正确；这些必须用 TUI 真实轨迹人工验收。
 
 每次记录：执行人/时间、Windows/Git/Shell、TUI+服务端完整版本及来源、Command/Skill/模板三个文件摘要、原生 Skill 首工具、预览编号/worktree/branch/HEAD/tree/全文消息、question/聊天答复、权限次数、真实 SHA/父提交/tree/全文、剩余改动及验证器输出。P07 的原清单会因外部扰动失败，须另记扰动后基线，不能把预期差异误判产品错误。

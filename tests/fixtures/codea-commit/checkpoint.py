@@ -19,7 +19,7 @@ def record(repo, manifest, expectation, message_file=None):
             'outcome': 'stop' if expectation == 'unchanged' else 'commit',
             'before': before, 'commit_tree': index_tree(repo), 'worktree': before['worktree']}
     if expectation == 'commit':
-        data['confirmed_message'] = Path(message_file).read_text(encoding='utf-8')
+        data['confirmed_message'] = Path(message_file).read_bytes().decode('utf-8', errors='strict')
     # Never overwrite prior evidence, and never write into the repository.
     with manifest.open('x', encoding='utf-8') as stream:
         json.dump(data, stream, ensure_ascii=True, indent=2)

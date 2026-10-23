@@ -33,3 +33,11 @@
 - [x] 全部Codea回归63/63、当前资源/模板隔离探针12/12与独立审阅完成；更新测试包生成和现有Draft PR交付，不合并。
 
 公司真实模板读取、消息模式兼容与TUI/TeamAI仍PENDING，见P14/P15；Git自检及临时模板落盘不代替真实模型工具轨迹。
+
+
+## 后续复审：CRLF验收器修正（仅测试）
+
+- [x] 重现正确CRLF被旧oracle误判，以及旧rstrip漏检真实末尾空行删除；旧代码四子场景RED。
+- [x] checkpoint严格UTF-8解码原始bytes；消息helper明确写UTF-8 bytes；verify比较cat-file原始正文，不做归一化。
+- [x] 七个换行/正文正负子场景GREEN，fixture21+Review40+Review Git4=65 PASS；独立只读审查无P1/P2。
+- [x] 更新测试文档、证据与包生成流程，并在现有Draft PR交付；产品文件/补丁/探针不变，未重跑相同API，Windows实机PENDING。

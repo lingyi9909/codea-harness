@@ -1,5 +1,9 @@
 # Codea Commit 1.0 验收记录
 
+## 2026-10-23 后续复审：CRLF验收误报
+
+仅测试/验收工具更新：确认文本按原始UTF-8字节读取，fixture明确写字节，实际消息从Git commit对象读取后精确比较；不进行换行或空白归一化。新增七个正负子场景先RED后GREEN，本地回归65/65（fixture21、Review40、Review Git4）。原产品三个文件和原生补丁未变，未重复API探针；此前12/12属于相同产品资源的历史验证。CRLF样例来自macOS构造字节，真实Windows/公司模型/TUI/TeamAI仍PENDING。详见 [CRLF证据](../../codea-commit/compatibility/v2.0.27/CRLF-RESULTS.json)。
+
 ## 2026-10-23 复审修正：模板与消息清理
 
 展示版式移至当前Skill内`templates/commit-preview.md`，必须按原生Skill基目录完整读取后才允许add/commit。分发为Command文件+完整Skill目录，实际三个产品文件，模板不是额外入口。P2已用本次`--cleanup=verbatim -F`修正，不改配置、不绕hooks/签名；项目禁止该模式时停止。真实Git四组旧方式先失败、新方式保留全文通过，负对照保留。详情见 [消息清理记录](../../codea-commit/compatibility/v2.0.27/MESSAGE-CLEANUP.md)。新增P14/P15均 **PENDING**，公司模型/TUI未验收。下文分日期的旧结果保留历史。

@@ -32,7 +32,7 @@
 
 单一无参数入口、现有 Build、一次本地 commit：先预览 index 并等待明确确认，保留同文件未暂存 hunk；无暂存且任务归属明确才仅 add 明确路径，否则询问；中文说明仅来自完整暂存 Diff；保留 hooks/签名，提交后读取真实 SHA、父提交、完整消息、内容和剩余状态；不 push、amend 或改历史。
 
-这些提示规则不承担宿主 Shell 前处理的隔离职责。当前 Git/Review 回归 63/63 通过不等于真实模型正常提交或参数安全已验收。完整规则与矩阵见 [验收记录](../docs/examples/codea-commit-acceptance.md)。
+这些提示规则不承担宿主 Shell 前处理的隔离职责。当前 Git/Review 回归 65/65 通过不等于真实模型正常提交或参数安全已验收。完整规则与矩阵见 [验收记录](../docs/examples/codea-commit-acceptance.md)。
 
 ## 旧资源和历史补丁
 

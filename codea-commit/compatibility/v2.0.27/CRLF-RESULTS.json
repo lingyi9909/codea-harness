@@ -1,0 +1,30 @@
+{
+  "baseline": "323ec77fd5f813ed24233a216f8a4dc196504de6",
+  "scope": "real temporary Git on macOS; CRLF bytes explicitly written, not a Windows machine run",
+  "git_version": "git version 2.39.5 (Apple Git-154)",
+  "input_message_base64": "Zml4KGZpeHR1cmUpOiDnoa7orqRDUkxG5Y6f5paHDQoNCiMg5L+d55WZ5Lia5Yqh6K+05piODQrmraPmloflsL7pg6jmnInnqbrmoLwgIA0K",
+  "checkpoint_message_base64": "Zml4KGZpeHR1cmUpOiDnoa7orqRDUkxG5Y6f5paHDQoNCiMg5L+d55WZ5Lia5Yqh6K+05piODQrmraPmloflsL7pg6jmnInnqbrmoLwgIA0K",
+  "actual_commit_body_base64": "Zml4KGZpeHR1cmUpOiDnoa7orqRDUkxG5Y6f5paHDQoNCiMg5L+d55WZ5Lia5Yqh6K+05piODQrmraPmloflsL7pg6jmnInnqbrmoLwgIA0K",
+  "actual_body_matches_input": true,
+  "checkpoint_preserves_CRLF": true,
+  "oracle_errors": [],
+  "tool_sha256": {
+    "checkpoint.py": "66094051cfbc68b4a51dfabb65b1b8f98bc432a4961de60931ff42884f3b9d6e",
+    "verify.py": "f264785461faa99bd56f31fc003a48e63641e027d46bdf0f7022a6289c49d6d8",
+    "test_fixtures.py": "ebc82b51208a0a2ed334f2add18b4f9db2c664fac770f317a5da8f34e063033a"
+  },
+  "fixture_added_positive_cases": [
+    "CRLF",
+    "mixed CRLF/LF",
+    "no terminal newline",
+    "multiple terminal blank lines"
+  ],
+  "fixture_added_negative_cases": [
+    "CRLF changed to LF",
+    "body changed",
+    "terminal blank line removed"
+  ],
+  "actual_windows": "PENDING",
+  "company_model_tui_teamai": "PENDING",
+  "product_resources": "unchanged; no new native API probe run for this test-only revision"
+}

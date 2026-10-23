@@ -55,7 +55,7 @@ python -m unittest discover -s tests -v
 python tests/fixtures/codea-review-t1/test_git_scope.py
 ```
 
-自检 19 项包含多个真实 Git 子场景；不用模型。其中 C02 先确认“未提交”验证失败，再用普通 Git 仅提交 index 验证通过；另一独立 C02 故意将 shared.txt 和 other.txt 全部 add，必须指出 B hunk 和无关文件误提。自检还覆盖多次提交、分支变化、停止场景 index/正文被改与 hook 行为，避免只比退出码。POSIX 可执行位和目录符号链接有独立负对照（Windows 上这两项跳过，实际 Windows 行为仍待验收）。
+自检 21 项包含多个真实 Git 子场景；不用模型。其中 C02 先确认“未提交”验证失败，再用普通 Git 仅提交 index 验证通过；另一独立 C02 故意将 shared.txt 和 other.txt 全部 add，必须指出 B hunk 和无关文件误提。自检还覆盖多次提交、分支变化、停止场景 index/正文被改与 hook 行为，避免只比退出码。POSIX 可执行位和目录符号链接有独立负对照（Windows 上这两项跳过，实际 Windows 行为仍待验收）。
 
 测试读取当前用户 Git 环境的程序位置，但清除继承的 `GIT_*` 仓库重定向变量。测试仓库 config 不影响用户全局配置。建议在干净的测试用户配置下运行；Windows 的 Python/Git/Shell 组合还须内网实际执行。
 
@@ -78,6 +78,14 @@ C01—C03 在**真实 OpenCode** 每项至少重复 3 次；每次用新目录�
 
 ## 消息清理与独立展示模板
 
-P2修正使用本次 `--cleanup=verbatim`，不写Git配置。真实临时Git对照覆盖默认、strip、strip+自定义`;`、whitespace，消息同时含`#`/`;`行及行尾空白；另保留无flag清理的必失败负对照。详见 [消息清理记录](../../../codea-commit/compatibility/v2.0.27/MESSAGE-CLEANUP.md)。19项fixture自检包含这些测试，但不证明模型实际执行流程。
+P2修正使用本次 `--cleanup=verbatim`，不写Git配置。真实临时Git对照覆盖默认、strip、strip+自定义`;`、whitespace，消息同时含`#`/`;`行及行尾空白；另保留无flag清理的必失败负对照。详见 [消息清理记录](../../../codea-commit/compatibility/v2.0.27/MESSAGE-CLEANUP.md)。21项fixture自检包含这些测试，但不证明模型实际执行流程。
 
 probe_v2会将`candidates/templates/commit-preview.md.txt`写入临时Skill目录，记录三个文件摘要并检查模板仅为配套文件、不注册新Skill。加载/参数探针现在12项；模板是否由真实模型按原生Base directory读到、权限拒绝/缺失时是否停止仍须P15内网轨迹，不能用临时文件落盘检查代替。
+
+## CRLF 与原始消息字节
+
+checkpoint用`read_bytes().decode('utf-8', errors='strict')`保存确认消息，不进行通用换行转换。fixture的消息文件明确`write_bytes(message.encode('utf-8'))`，因此LF样例在Windows也不会隐式改成CRLF；专门的CRLF/混合换行样例显式给出原始序列，不依赖系统默认。
+
+verify读取`git cat-file commit HEAD`的实际原始正文，逐字节比较确认消息，不使用`git log`展示输出、不调用rstrip。原文中的每个CR/LF、行尾空格和实际末尾空行都要保留；没有终止换行的verbatim正文也按原文比较，不自行补LF。旧版manifest若已在记录时丢失CR，无法恢复，应在新的测试仓库重新记录，不能手工改历史证据来冒充通过。
+
+新增两项自检包含七个子场景：CRLF/混合换行/无终止换行/多个末尾空行的成功对照，以及CRLF转LF/正文被改/末尾空行被删的失败对照。此前#、自定义注释字符、行尾空白及无flag strip负对照仍保留。CRLF成功样例的原始消息、确认文本和commit-body见 [CRLF证据](../../../codea-commit/compatibility/v2.0.27/CRLF-RESULTS.json)。本地构造CRLF不等于Windows实机验收。

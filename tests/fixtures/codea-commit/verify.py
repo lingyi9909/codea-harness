@@ -147,8 +147,9 @@ def verify(repo, manifest):
                 errors.append('parents: expected exactly the original HEAD (or root commit)')
             errors += compare_maps('commit tree', data['commit_tree'], tree(repo, 'HEAD'))
             if 'confirmed_message' in data:
-                actual = git(repo, 'log', '-1', '--format=%B').stdout.decode('utf-8')
-                if actual.rstrip('\n') != data['confirmed_message'].rstrip('\n'):
+                # Read the actual object body, avoiding log's presentation newline.
+                actual = git(repo, 'cat-file', 'commit', 'HEAD').stdout.split(b'\n\n', 1)[1]
+                if actual != data['confirmed_message'].encode('utf-8'):
                     errors.append('commit message differs from confirmed full text')
         if git(repo, 'ls-files', '--unmerged', '-z').stdout:
             errors.append('index contains conflicts')

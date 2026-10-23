@@ -4,7 +4,15 @@
 
 未修改的公开 2.0.27 仍有参数执行问题。测试资源仅用于**已经应用等价前置拦截且通过探针的现有宿主**，不能直接复制到未经修复的公司安装。包内不含替换二进制、Runtime、MCP、插件或 Agent，也不含旧 1.2.27 补丁。
 
-## 本轮复审修正：独立模板与确认全文保真
+## 最新复审修正：验收器保留原始换行
+
+本次仅修测试/验收工具，Command、Skill、展示模板、原生补丁和探针代码均未改。checkpoint按bytes读取后严格UTF-8解码，保留CRLF/LF/混合换行；fixture消息明确写UTF-8字节，避免Windows默认文本换行转换。verify改读`git cat-file commit HEAD`原始正文并逐字节比较，既不把Git log的附加展示换行当成正文，也不再用rstrip吞掉真实末尾空行。
+
+新增七个子场景：CRLF、混合换行、无终止换行、多末尾空行的正确提交应通过；CRLF改LF、正文改变、真实末尾空行被删应失败。先观察旧工具四个子场景RED，修后通过；保留消息清理矩阵和strip负对照。独立CRLF样例的输入/checkpoint/真实commit-body Base64见 `CRLF-RESULTS.json`。
+
+本地回归 **65/65 PASS**（fixture21 + Review40 + Review Git4）。这是macOS构造原始字节对照，不冒充Windows执行。资源未变，本轮不重跑API；此前相同产品资源的12/12探针记录保留，不计作新运行。Windows/公司模型/TUI/TeamAI继续PENDING。
+
+## 前次复审修正：独立模板与确认全文保真
 
 展示格式已拆到 `payload/skills/codea-commit/templates/commit-preview.md`。Command仍加载同一个Skill；Skill从原生返回的基目录读取模板，未完整读到就停止，不 add/commit。模板仅组织聊天Markdown，不是新入口/网页/执行器，不需要修改宿主。改变格式只改该模板；流程和安全约束继续放在SKILL.md。
 
@@ -44,7 +52,7 @@ Command/Skill payload 已按 2026-10-23 用户方案更新，与 candidates 同�
 | Server 全套 | **86 PASS / 1 SKIP / 0 FAIL** |
 | Core 正式测试入口全套 | **6605 PASS / 43 SKIP / 8 FAIL**；8项均在未修改源码失败文件对照中复现，未宣称全绿 |
 | 根级 `bun run check` | 未通过；网站Astro尝试写用户`Library/Preferences`被沙箱拒绝，未为此扩大权限 |
-| 当前 Codea Git/Review 回归（2026-10-23） | **63/63 PASS**（fixture19 + Review40 + Review Git4） |
+| 当前 Codea Git/Review 回归（2026-10-23） | **65/65 PASS**（fixture21 + Review40 + Review Git4） |
 
 本次运行平台为macOS arm64，Bun1.4.2。源码进程测试使用上游原生CLI入口及Solid preload，构建宏version为2.0.27、channel为local；临时启动脚本只用于测试，不交付、不替换公司环境，不声称已完成发行二进制构建/签名。详情见 `SOURCE.json`、`VALIDATION.json`；未修/首次修后原始结果分别见 `RESULTS.json`、`PATCHED-RESULTS.json`；当前模板版资源重新核验见 `TEMPLATE-CLEANUP-RESULTS.json`（12/12，包含模板落盘/非入口检查），不证明模型读取或交互。
 

@@ -56,9 +56,9 @@
   },
   "root_check": "NOT_PASS: Astro site tooling attempts user Library/Preferences write denied by sandbox; affected Core/Server typechecks PASS",
   "codea_regression": {
-    "PASS": 63,
+    "PASS": 65,
     "FAIL": 0,
-    "scope": "2026-10-23 fixture oracle19 + Review40 + Review Git4; no model interaction"
+    "scope": "2026-10-23 fixture oracle21 + Review40 + Review Git4 on macOS; Windows PENDING"
   },
   "company_build": "PENDING",
   "windows": "PENDING",
@@ -70,7 +70,8 @@
     "report": "TEMPLATE-CLEANUP-RESULTS.json",
     "PASS": 12,
     "FAIL": 0,
-    "scope": "11 existing native API checks plus temporary companion file installation/non-registration; no model read"
+    "scope": "11 existing native API checks plus temporary companion file installation/non-registration; no model read",
+    "this_revision": "NOT_RERUN: Command/Skill/template/probe unchanged from 323ec77; prior 12/12 result retained, not counted as new run"
   },
   "preview_prompt_simulation": {
     "cases": 13,
@@ -96,5 +97,14 @@
   },
   "template_cleanup_prompt_review": "read-only independent GREEN simulation, no P1/P2; not actual OpenCode/inner-network acceptance",
   "actual_model_template_read": "PENDING",
-  "teamai_companion_template_distribution": "PENDING"
+  "teamai_companion_template_distribution": "PENDING",
+  "crlf_oracle": {
+    "report": "CRLF-RESULTS.json",
+    "red": "four subcases fail on old oracle before fix",
+    "green": "seven new positive/negative subcases pass after fix",
+    "policy": "strict UTF-8 decode without universal-newline translation; compare raw commit body bytes exactly, no whitespace/newline normalization",
+    "fixture_message_write": "explicit UTF-8 bytes on all platforms",
+    "windows": "PENDING: CRLF and mixed bytes constructed and tested on macOS",
+    "review": "independent read-only review found no P1/P2; did not rerun tests"
+  }
 }

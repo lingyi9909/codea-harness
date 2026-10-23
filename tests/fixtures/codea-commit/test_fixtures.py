@@ -1,5 +1,6 @@
 """Tests of the fixture oracle, never a substitute for OpenCode acceptance."""
 import importlib.util
+import json
 import sys
 import pathlib
 import os
@@ -33,7 +34,7 @@ class FixtureOracle(unittest.TestCase):
 
     def commit(self, repo, message='fix(fixture): 保留暂存边界\n'):
         msg = self.root / '消息.txt'
-        msg.write_text(message, encoding='utf-8')
+        msg.write_bytes(message.encode('utf-8'))
         return self.git(repo, 'commit', '--cleanup=verbatim', '-F', str(msg), check=False)
 
     def checkpoint(self, repo, expectation, message=None):
@@ -42,7 +43,7 @@ class FixtureOracle(unittest.TestCase):
                    '--expect', expectation]
         if message is not None:
             msg = self.root / 'confirmed-message.txt'
-            msg.write_text(message, encoding='utf-8')
+            msg.write_bytes(message.encode('utf-8'))
             command += ['--message-file', str(msg)]
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertEqual(0, result.returncode, result.stderr.decode())
@@ -106,6 +107,50 @@ class FixtureOracle(unittest.TestCase):
                 # Assert the raw commit body too, independently of the oracle.
                 raw = self.git(repo, 'cat-file', 'commit', 'HEAD').stdout.split(b'\n\n', 1)[1]
                 self.assertEqual(message.encode('utf-8'), raw)
+
+    def test_confirmed_message_preserves_crlf_mixed_and_terminal_newlines(self):
+        cases = [
+            ('crlf', 'fix(fixture): 保留换行\r\n\r\n# 业务正文\r\n; 正文\r\n尾空格  \r\n',
+             'fix(fixture): 保留换行\r\n\r\n# 业务正文\r\n; 正文\r\n尾空格  \r\n'),
+            ('mixed', 'fix(fixture): 混合换行\r\n\n# 业务正文\r\n尾空格  \n',
+             'fix(fixture): 混合换行\r\n\n# 业务正文\r\n尾空格  \n'),
+            ('no-terminator', 'fix(fixture): 没有末尾换行', 'fix(fixture): 没有末尾换行'),
+            ('terminal-blank-lines', 'fix(fixture): 保留末尾空行\n\n正文\n\n\n',
+             'fix(fixture): 保留末尾空行\n\n正文\n\n\n'),
+        ]
+        for name, message, expected_body in cases:
+            with self.subTest(newlines=name):
+                repo, _ = self.setup.create('C01', self.root / name)
+                msg = self.root / (name + '-message.txt')
+                msg.write_bytes(message.encode('utf-8'))
+                manifest = self.root / (name + '-checkpoint.json')
+                module('checkpoint').record(repo, manifest, 'commit', msg)
+                self.git(repo, 'commit', '--cleanup=verbatim', '-F', str(msg))
+                raw = self.git(repo, 'cat-file', 'commit', 'HEAD').stdout.split(b'\n\n', 1)[1]
+                self.assertEqual(expected_body.encode('utf-8'), raw)
+                self.assertEqual([], self.verify.verify(repo, manifest))
+                confirmed = json.loads(manifest.read_text(encoding='utf-8'))['confirmed_message']
+                self.assertEqual(msg.read_bytes(), confirmed.encode('utf-8'))
+
+    def test_oracle_rejects_changed_body_or_nonpermitted_newlines(self):
+        cases = [
+            ('crlf-to-lf', 'fix(fixture): 保留正文\r\n\r\n# 原文\r\n尾空格  \r\n',
+             'fix(fixture): 保留正文\n\n# 原文\n尾空格  \n'),
+            ('body-changed', 'fix(fixture): 保留正文\r\n\r\n# 原文\r\n尾空格  \r\n',
+             'fix(fixture): 保留正文\r\n\r\n# 被修改\r\n尾空格  \r\n'),
+            ('terminal-blank-line-removed', 'fix(fixture): 保留空行\n\n正文\n\n',
+             'fix(fixture): 保留空行\n\n正文\n'),
+        ]
+        for name, confirmed, changed in cases:
+            with self.subTest(change=name):
+                repo, _ = self.setup.create('C01', self.root / name)
+                msg = self.root / (name + '-message.txt')
+                msg.write_bytes(confirmed.encode('utf-8'))
+                manifest = self.root / (name + '-checkpoint.json')
+                module('checkpoint').record(repo, manifest, 'commit', msg)
+                msg.write_bytes(changed.encode('utf-8'))
+                self.git(repo, 'commit', '--cleanup=verbatim', '-F', str(msg))
+                self.assertIn('message differs', '\n'.join(self.verify.verify(repo, manifest)))
 
     def test_implicit_cleanup_negative_control_changes_confirmed_message(self):
         repo, _ = self.create('C01')
