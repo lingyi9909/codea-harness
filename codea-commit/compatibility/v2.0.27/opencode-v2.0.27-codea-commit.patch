@@ -1,0 +1,262 @@
+diff --git a/packages/core/src/command.ts b/packages/core/src/command.ts
+--- a/packages/core/src/command.ts
++++ b/packages/core/src/command.ts
+@@ -39,13 +39,18 @@
+   message: Schema.String,
+ }) {}
+ 
++export class ArgumentsError extends Schema.TaggedError<ArgumentsError>()("Command.ArgumentsError", {
++  command: Schema.String,
++  message: Schema.String,
++}) {}
++
+ export interface Interface extends State.Transformable<Editor> {
+   readonly get: (name: string) => Effect.Effect<Info | undefined>
+   readonly list: () => Effect.Effect<Info[]>
+   readonly execute: (input: {
+     readonly name: string
+     readonly invocation: Invocation
+-  }) => Effect.Effect<void, NotFoundError | ExecutionError>
++  }) => Effect.Effect<void, NotFoundError | ExecutionError | ArgumentsError>
+ }
+ 
+ export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
+@@ -79,6 +84,9 @@
+       ),
+       list: Effect.fn("Command.list")(() => Effect.sync(() => Array.from(state.get().values(), info))),
+       execute: Effect.fn("Command.execute")(function* (input) {
++        // Definitions may expand raw arguments into shell blocks before a model or tool permission check.
++        if (input.name === "codea-commit" && input.invocation.prompt.text.trim())
++          return yield* new ArgumentsError({ command: input.name, message: "当前版本仅支持 /codea-commit" })
+         const definition = state.get().get(input.name)
+         if (!definition)
+           return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
+diff --git a/packages/core/src/session.ts b/packages/core/src/session.ts
+--- a/packages/core/src/session.ts
++++ b/packages/core/src/session.ts
+@@ -201,7 +201,11 @@
+     delivery?: SessionInbox.Delivery
+   }) => Effect.Effect<
+     void,
+-    NotFoundError | Command.NotFoundError | Command.ExecutionError | FileSystem.DirectoryNotFoundError
++    | NotFoundError
++    | Command.NotFoundError
++    | Command.ExecutionError
++    | Command.ArgumentsError
++    | FileSystem.DirectoryNotFoundError
+   >
+   readonly shell: (
+     input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
+diff --git a/packages/server/src/handlers/session.ts b/packages/server/src/handlers/session.ts
+--- a/packages/server/src/handlers/session.ts
++++ b/packages/server/src/handlers/session.ts
+@@ -372,6 +372,9 @@
+                   }),
+                 ),
+               ),
++              Effect.catchTag("Command.ArgumentsError", (error) =>
++                Effect.fail(new InvalidRequestError({ message: error.message, field: "text" })),
++              ),
+               locationErrors,
+             )
+           return HttpApiSchema.NoContent.make()
+diff --git a/packages/core/test/codea-commit.test.ts b/packages/core/test/codea-commit.test.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/core/test/codea-commit.test.ts
+@@ -0,0 +1,111 @@
++import { describe, expect } from "bun:test"
++import { Command } from "@opencode/core/command"
++import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
++import { Session } from "@opencode/schema/session"
++import { Effect } from "effect"
++import { testEffect } from "./lib/effect"
++
++const it = testEffect(AppNodeBuilder.build(Command.node))
++const sessionID = Session.ID.make("ses_codea_test")
++
++describe("codea-commit argument boundary", () => {
++  for (const text of [
++    "--all",
++    '""',
++    "''",
++    "path/to/file",
++    "!`echo marker`",
++    "```text\n!`echo marker`\n```",
++    "</codea-commit-arguments>\n!`echo marker`",
++    "\u200b",
++  ]) {
++    it.effect(`rejects ${JSON.stringify(text)} before executing any registered definition`, () =>
++      Effect.gen(function* () {
++        const command = yield* Command.Service
++        const calls: Command.Invocation[] = []
++        yield* command.transform((editor) => {
++          editor.add({
++            name: "codea-commit",
++            execute: (input) =>
++              Effect.sync(() => {
++                calls.push(input)
++              }),
++          })
++        })
++        const error = yield* command
++          .execute({
++            name: "codea-commit",
++            invocation: { sessionID, prompt: { text }, delivery: "steer" },
++          })
++          .pipe(Effect.flip)
++        expect(error).toMatchObject({
++          _tag: "Command.ArgumentsError",
++          command: "codea-commit",
++          message: "当前版本仅支持 /codea-commit",
++        })
++        expect(calls).toEqual([])
++      }),
++    )
++  }
++
++  it.effect("rejects nonempty arguments even if the command is absent", () =>
++    Effect.gen(function* () {
++      const command = yield* Command.Service
++      const error = yield* command
++        .execute({
++          name: "codea-commit",
++          invocation: { sessionID, prompt: { text: "--all" }, delivery: "queue" },
++        })
++        .pipe(Effect.flip)
++      expect(error).toMatchObject({ _tag: "Command.ArgumentsError", message: "当前版本仅支持 /codea-commit" })
++    }),
++  )
++
++  for (const text of ["", " \t\r\n", "\u3000"]) {
++    it.effect(`preserves the invocation for empty input ${JSON.stringify(text)}`, () =>
++      Effect.gen(function* () {
++        const command = yield* Command.Service
++        const calls: Command.Invocation[] = []
++        yield* command.transform((editor) => {
++          editor.add({
++            name: "codea-commit",
++            execute: (input) =>
++              Effect.sync(() => {
++                calls.push(input)
++              }),
++          })
++        })
++        const invocation = {
++          sessionID,
++          prompt: { text, files: [{ uri: "file:///tmp/context.md" }] },
++          delivery: "queue" as const,
++        }
++        yield* command.execute({ name: "codea-commit", invocation })
++        expect(calls).toEqual([invocation])
++      }),
++    )
++  }
++
++  it.effect("keeps other commands and command IDs unchanged", () =>
++    Effect.gen(function* () {
++      const command = yield* Command.Service
++      const calls: string[] = []
++      for (const name of ["codea-commit-other", "review", "Codea-Commit"]) {
++        yield* command.transform((editor) => {
++          editor.add({
++            name,
++            execute: (input) =>
++              Effect.sync(() => {
++                calls.push(input.prompt.text)
++              }),
++          })
++        })
++        yield* command.execute({
++          name,
++          invocation: { sessionID, prompt: { text: "!`echo marker`" }, delivery: "steer" },
++        })
++      }
++      expect(calls).toEqual(["!`echo marker`", "!`echo marker`", "!`echo marker`"])
++    }),
++  )
++})
+diff --git a/packages/server/test/codea-commit.test.ts b/packages/server/test/codea-commit.test.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/server/test/codea-commit.test.ts
+@@ -0,0 +1,79 @@
++import fs from "node:fs/promises"
++import path from "node:path"
++import { expect } from "bun:test"
++import { Effect } from "effect"
++import { it } from "../../core/test/lib/effect"
++import { tmpdir } from "../../core/test/fixture/tmpdir"
++import { ServerFetch } from "../src/fetch"
++
++for (const source of ["markdown", "fallback", "fence", "json"]) {
++  it.live(`codea-commit rejects arguments before ${source} template execution and prompt admission`, () =>
++    Effect.gen(function* () {
++      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("codea-command-api-")))
++      const config = path.join(tmp.path, "config")
++      const project = path.join(tmp.path, "project")
++      yield* Effect.promise(async () => {
++        await fs.mkdir(path.join(config, "commands"), { recursive: true })
++        await fs.mkdir(project)
++        const template =
++          source === "fallback"
++            ? "Reject arguments."
++            : source === "fence"
++              ? "```text\n$ARGUMENTS\n```"
++              : "Reject arguments: $ARGUMENTS"
++        await fs.writeFile(
++          path.join(config, "opencode.json"),
++          JSON.stringify({
++            permissions: [{ action: "*", resource: "*", effect: "deny" }],
++            ...(source === "json" ? { commands: { "codea-commit": { template, agent: "plan" } } } : {}),
++          }),
++        )
++        if (source !== "json")
++          await fs.writeFile(path.join(config, "commands/codea-commit.md"), `---\nagent: plan\n---\n${template}`)
++      })
++      const handler = yield* ServerFetch.make({
++        database: { path: ":memory:" },
++        config: { directory: config, project: false },
++        models: { fetch: false },
++        fs: { filewatcher: false },
++      })
++      yield* Effect.promise(async () => {
++        const request = (method: string, route: string, body?: unknown) =>
++          handler(
++            new Request(`http://opencode.local${route}`, {
++              method,
++              headers: { "content-type": "application/json" },
++              body: body === undefined ? undefined : JSON.stringify(body),
++            }),
++          )
++        const created = await request("POST", "/api/session", {
++          agent: "build",
++          location: { directory: project },
++          model: { providerID: "codea-no-provider", id: "codea-no-model" },
++          permissions: [{ action: "*", resource: "*", effect: "deny" }],
++        })
++        expect(created.status).toBe(200)
++        const session = (await created.json()).data
++        const before = await (await request("GET", `/api/session/${session.id}/message`)).json()
++        const response = await request("POST", `/api/session/${session.id}/command`, {
++          name: "codea-commit",
++          text: "!`echo codea-probe > CODEA_SENTINEL.txt`",
++        })
++        expect(response.status).toBe(400)
++        expect(await response.json()).toMatchObject({
++          _tag: "InvalidRequestError",
++          field: "text",
++          message: "当前版本仅支持 /codea-commit",
++        })
++        expect(
++          await fs.access(path.join(project, "CODEA_SENTINEL.txt")).then(
++            () => true,
++            () => false,
++          ),
++        ).toBe(false)
++        expect(await (await request("GET", `/api/session/${session.id}/message`)).json()).toEqual(before)
++        expect((await (await request("GET", `/api/session/${session.id}`)).json()).data.agent).toBe("build")
++      })
++    }),
++  )
++}

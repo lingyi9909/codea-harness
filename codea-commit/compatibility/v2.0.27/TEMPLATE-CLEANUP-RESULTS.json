@@ -1,0 +1,108 @@
+{
+  "target": "2.0.27",
+  "scope": "isolated native HTTP API; no actual model or commit",
+  "checks": [
+    {
+      "name": "server_version",
+      "result": "PASS",
+      "version": "2.0.27"
+    },
+    {
+      "name": "command_discovered",
+      "result": "PASS"
+    },
+    {
+      "name": "skill_complete_body_and_source",
+      "result": "PASS"
+    },
+    {
+      "name": "preview_template_installed_as_companion",
+      "result": "PASS",
+      "scope": "temporary file installation; model template read is PENDING"
+    },
+    {
+      "name": "skill_not_an_automatic_command",
+      "result": "PASS"
+    },
+    {
+      "name": "ordinary_argument",
+      "result": "PASS",
+      "http_status": 400,
+      "response": "{\"_tag\":\"InvalidRequestError\",\"message\":\"当前版本仅支持 /codea-commit\",\"field\":\"text\"}",
+      "sentinel_written": false,
+      "durable_user_prompt": false,
+      "observed_errors": []
+    },
+    {
+      "name": "shell_argument",
+      "result": "PASS",
+      "http_status": 400,
+      "response": "{\"_tag\":\"InvalidRequestError\",\"message\":\"当前版本仅支持 /codea-commit\",\"field\":\"text\"}",
+      "sentinel_written": false,
+      "durable_user_prompt": false,
+      "observed_errors": []
+    },
+    {
+      "name": "fenced_shell_argument",
+      "result": "PASS",
+      "http_status": 400,
+      "response": "{\"_tag\":\"InvalidRequestError\",\"message\":\"当前版本仅支持 /codea-commit\",\"field\":\"text\"}",
+      "sentinel_written": false,
+      "durable_user_prompt": false,
+      "observed_errors": []
+    },
+    {
+      "name": "forged_boundary_argument",
+      "result": "PASS",
+      "http_status": 400,
+      "response": "{\"_tag\":\"InvalidRequestError\",\"message\":\"当前版本仅支持 /codea-commit\",\"field\":\"text\"}",
+      "sentinel_written": false,
+      "durable_user_prompt": false,
+      "observed_errors": []
+    },
+    {
+      "name": "quoted_empty_argument",
+      "result": "PASS",
+      "http_status": 400,
+      "response": "{\"_tag\":\"InvalidRequestError\",\"message\":\"当前版本仅支持 /codea-commit\",\"field\":\"text\"}",
+      "sentinel_written": false,
+      "durable_user_prompt": false,
+      "observed_errors": []
+    },
+    {
+      "name": "empty_input",
+      "result": "PASS",
+      "http_status": 204,
+      "command_prompt_persisted": true
+    },
+    {
+      "name": "whitespace_input",
+      "result": "PASS",
+      "http_status": 204,
+      "command_prompt_persisted": true
+    }
+  ],
+  "tui": "PENDING",
+  "company_build": "PENDING",
+  "windows": "PENDING",
+  "teamai": "PENDING",
+  "functional_commit": "PENDING",
+  "version_output": "opencode v2.0.27",
+  "resource_sha256": {
+    "command": "aee8ca119686f9942e6877370537e3f18f662e7233dfcdd55be5ea306fe82753",
+    "skill": "1355bbeafc402adcb85891bbed8b64c630b173723c9873341cd8b8cf8769c6a9",
+    "preview_template": "882e85744a5c6c45145c5faa72bd37ea03910018b7eb0162264539d1dd0c4cd5"
+  },
+  "summary": {
+    "PASS": 12,
+    "FAIL": 0
+  },
+  "no_argument_contract": "API_CHECKS_PASS_TUI_PENDING",
+  "test_launcher_sha256": "06cc2a8ba1755a54fad53156ba7a1ca99eef9731e9aa0cc098fd7e4842f263e9",
+  "host_kind": "native patched source CLI; Bun 1.4.2; build macros version2.0.27/channel local; test launcher not shipped",
+  "source_commit": "1f4d07a4a519185955ae8ab2ea3607805509e386",
+  "patch_sha256": "eb1d9c43a0fd3891321e9ed3ef02da392e5f7aacc1ea7ab2d280d7be06412427",
+  "checked_at": "2026-10-23",
+  "preview_confirmation_interaction": "PENDING: no model/question/commit",
+  "model_template_read": "PENDING: template installation/readability here is checked only by the test process"
+}

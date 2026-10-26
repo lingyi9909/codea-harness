@@ -1,0 +1,42 @@
+{
+  "scope": "real Git only in fresh temporary C02; not actual OpenCode/model/TUI execution",
+  "git": "git version 2.39.5 (Apple Git-154)",
+  "checks": [
+    {
+      "name": "readonly_status_preserves_raw_index",
+      "result": "PASS"
+    },
+    {
+      "name": "captured_tree_diff_matches_real_cached_diff",
+      "result": "PASS"
+    },
+    {
+      "name": "external_add_changes_live_tree",
+      "result": "PASS"
+    },
+    {
+      "name": "immutable_preview_stays_same_during_external_index_change",
+      "result": "PASS"
+    },
+    {
+      "name": "live_cached_diff_differs_and_requires_new_preview",
+      "result": "PASS"
+    },
+    {
+      "name": "empty_tree_resolves_with_current_object_format",
+      "result": "PASS"
+    },
+    {
+      "name": "root_preview_matches_captured_index_files",
+      "result": "PASS"
+    }
+  ],
+  "summary": {
+    "PASS": 7,
+    "FAIL": 0
+  },
+  "head": "77a86258d70a4be649c64e5f0a98824ba9f345d3",
+  "captured_index_tree": "ec2f66a739f62acab60c840e49df97a16242483f",
+  "changed_index_tree": "4e548df49f219cb9397a1b6f879df4b364973be2",
+  "captured_diff_sha256": "50affcfe3d5faff7a6e28a5b74bd975e79a27c3ba177005cbf08bf3ada0516c0"
+}

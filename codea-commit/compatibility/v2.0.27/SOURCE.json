@@ -1,0 +1,37 @@
+{
+  "user_reported_tui_version": "v2.0.27",
+  "company_build_source": "PENDING",
+  "reference_source": {
+    "repository": "https://github.com/anomalyco/opencode",
+    "tag": "v2.0.27",
+    "commit": "1f4d07a4a519185955ae8ab2ea3607805509e386"
+  },
+  "reference_binary": {
+    "package": "@opencode/cli-darwin-arm64",
+    "version": "2.0.27",
+    "platform": "darwin-arm64",
+    "tarball": "https://registry.npmjs.org/@opencode/cli-darwin-arm64/-/cli-darwin-arm64-2.0.27.tgz",
+    "npm_integrity": "sha512-0BAaNYZE5QKve/7EFw9gyTQpkyOdff7Lj8Eul6FwK1vDnkj+yiVt/gdmJZl0PVoexl+6ZhjB7vuUPgSXrRATtA==",
+    "npm_integrity_check": "PASS",
+    "tarball_sha256": "3800a8d4b7c19a26a8d9441bc9c25d03368e661f6dbad54d1d80ecd77034916b",
+    "binary_sha256": "7fa5c8659e57cae76b1da4f45edbc583aef93aae917246a0b3abb1ac1b3fb93c"
+  },
+  "status": "REFERENCE_NATIVE_FIX_IMPLEMENTED_AND_TESTED; company installation PENDING",
+  "company_windows_tui_acceptance": "PENDING",
+  "host_change": "3 native production files + 2 native regression test files; no public API contract change",
+  "restored_install_entry": "test payload only; install into existing host only after boundary verification passes",
+  "patch_sha256": "eb1d9c43a0fd3891321e9ed3ef02da392e5f7aacc1ea7ab2d280d7be06412427",
+  "patched_host_kind": "native patched source CLI; Bun 1.4.2; build macros version2.0.27/channel local; test launcher not shipped",
+  "preview_confirmation_revision": "2026-10-26",
+  "preview_confirmation_tui_model": "PENDING",
+  "current_resources_report": "NATIVE-DIFF-RESULTS.json",
+  "previous_resources_report": "TEMPLATE-CLEANUP-RESULTS.json, PREVIEW-RESULTS.json and PATCHED-RESULTS.json (historical resources)",
+  "resource_sha256": {
+    "command": "8d6e49a5cf89de3735663ac7a33b63f573869306c20f94278738248aea81ed11",
+    "skill": "b793fe6a588d8c0ac9798925a8cca0d8feb6eacfbfe007aa0b6b1b3634df0d8c",
+    "preview_template": "8b92596c060f3aa897e70179f07c8b54cff602a2665f9d27530318daa9fb46cd"
+  },
+  "display_template": "skills/codea-commit/templates/commit-preview.md (within the existing Skill directory, no additional entry)",
+  "message_cleanup": "explicit --cleanup=verbatim for this commit only, subject to project rules; no config changes",
+  "presentation": "Existing OpenCode Diff/tool output plus concise confirmation template; no custom UI source changes. Native working/branch/committed/turn are not index evidence."
+}

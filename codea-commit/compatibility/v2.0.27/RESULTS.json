@@ -1,0 +1,121 @@
+{
+  "target": "2.0.27",
+  "binary_sha256": "7fa5c8659e57cae76b1da4f45edbc583aef93aae917246a0b3abb1ac1b3fb93c",
+  "scope": "isolated native HTTP API; no actual model or commit",
+  "checks": [
+    {
+      "name": "server_version",
+      "result": "PASS",
+      "version": "2.0.27"
+    },
+    {
+      "name": "command_discovered",
+      "result": "PASS"
+    },
+    {
+      "name": "skill_complete_body_and_source",
+      "result": "PASS"
+    },
+    {
+      "name": "skill_not_an_automatic_command",
+      "result": "PASS"
+    },
+    {
+      "name": "ordinary_argument",
+      "result": "FAIL",
+      "http_status": 204,
+      "response": "",
+      "sentinel_written": false,
+      "durable_user_prompt": true,
+      "observed_errors": [
+        {
+          "type": "provider.no-route",
+          "message": "Model unavailable: codea-no-provider/codea-no-model"
+        }
+      ]
+    },
+    {
+      "name": "shell_argument",
+      "result": "FAIL",
+      "http_status": 204,
+      "response": "",
+      "sentinel_written": true,
+      "durable_user_prompt": true,
+      "observed_errors": [
+        {
+          "type": "provider.no-route",
+          "message": "Model unavailable: codea-no-provider/codea-no-model"
+        }
+      ]
+    },
+    {
+      "name": "fenced_shell_argument",
+      "result": "FAIL",
+      "http_status": 204,
+      "response": "",
+      "sentinel_written": true,
+      "durable_user_prompt": true,
+      "observed_errors": [
+        {
+          "type": "provider.no-route",
+          "message": "Model unavailable: codea-no-provider/codea-no-model"
+        }
+      ]
+    },
+    {
+      "name": "forged_boundary_argument",
+      "result": "FAIL",
+      "http_status": 204,
+      "response": "",
+      "sentinel_written": true,
+      "durable_user_prompt": true,
+      "observed_errors": [
+        {
+          "type": "provider.no-route",
+          "message": "Model unavailable: codea-no-provider/codea-no-model"
+        }
+      ]
+    },
+    {
+      "name": "quoted_empty_argument",
+      "result": "FAIL",
+      "http_status": 204,
+      "response": "",
+      "sentinel_written": false,
+      "durable_user_prompt": true,
+      "observed_errors": [
+        {
+          "type": "provider.no-route",
+          "message": "Model unavailable: codea-no-provider/codea-no-model"
+        }
+      ]
+    },
+    {
+      "name": "empty_input",
+      "result": "PASS",
+      "http_status": 204,
+      "command_prompt_persisted": true
+    },
+    {
+      "name": "whitespace_input",
+      "result": "PASS",
+      "http_status": 204,
+      "command_prompt_persisted": true
+    }
+  ],
+  "tui": "PENDING",
+  "company_build": "PENDING",
+  "windows": "PENDING",
+  "teamai": "PENDING",
+  "functional_commit": "PENDING",
+  "version_output": "opencode v2.0.27",
+  "resource_sha256": {
+    "command": "09254fccb6550aea1dd48456486602a301bfc555fc5461c19d46cd8cf82c3844",
+    "skill": "079885453fc017075736566ece6e8543ecc9435bfea3013f54c5cf5968d2066b"
+  },
+  "summary": {
+    "PASS": 6,
+    "FAIL": 5
+  },
+  "no_argument_contract": "FAIL"
+}

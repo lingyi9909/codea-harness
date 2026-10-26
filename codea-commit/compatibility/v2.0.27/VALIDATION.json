@@ -1,0 +1,130 @@
+{
+  "native_new_security_tests": {
+    "PASS": 17,
+    "FAIL": 0
+  },
+  "native_api_probe": {
+    "PASS": 11,
+    "FAIL": 0
+  },
+  "core_typecheck": "PASS",
+  "server_typecheck": "PASS",
+  "server_full": {
+    "PASS": 86,
+    "SKIP": 1,
+    "FAIL": 0
+  },
+  "core_full_canonical": {
+    "PASS": 6605,
+    "SKIP": 43,
+    "FAIL": 8,
+    "failure_names": [
+      {
+        "file": "test/tool-execute.test.ts",
+        "test": "execute rejects filesystem fetches"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > legacy: conditional substitutions respect once"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > legacy: conditional substitutions respect always"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > native: conditional substitutions respect once"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool conditional process substitution > native: conditional substitutions respect always"
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool compound syntax approval compatibility > bash legacy equivalent: printf %s \"$(probe() case value in value) printf hello;; esac; probe)\""
+      },
+      {
+        "file": "test/tool-shell.test.ts",
+        "test": "ShellTool compound syntax approval compatibility > bash native: printf %s \"$(probe() case value in value) printf hello;; esac; probe)\""
+      },
+      {
+        "file": "test/shell-scan/compound-parity.test.ts",
+        "test": "real-shell compound syntax > bash: printf '%s' \"$(probe() case value in value) scan_probe;; *) scan_other;; esac; probe)\""
+      }
+    ],
+    "all_failures_reproduced_on_unmodified_source": true
+  },
+  "root_check": "NOT_PASS: Astro site tooling attempts user Library/Preferences write denied by sandbox; affected Core/Server typechecks PASS",
+  "codea_regression": {
+    "PASS": 65,
+    "FAIL": 0,
+    "scope": "2026-10-26 fixture oracle21 + Review40 + Review Git4 on macOS; Windows PENDING"
+  },
+  "company_build": "PENDING",
+  "windows": "PENDING",
+  "actual_tui_interaction": "PENDING",
+  "teamai": "PENDING",
+  "normal_private_model_commit": "PENDING",
+  "previous_native_results": "unchanged native patch; earlier full-suite/typecheck results retained, not rerun for prompt-only revision",
+  "current_resource_api_probe": {
+    "report": "NATIVE-DIFF-RESULTS.json",
+    "PASS": 12,
+    "FAIL": 0,
+    "scope": "2026-10-26: 11 existing native API checks plus temporary companion file installation/non-registration; no model read or UI demonstration",
+    "this_revision": "RERUN on final resource hashes; opencode v2.0.27 patched source CLI, Bun 1.4.2"
+  },
+  "preview_prompt_simulation": {
+    "cases": 13,
+    "finding": "no Critical/Important in read-only instruction simulation",
+    "is_internal_acceptance": false
+  },
+  "preview_confirmation_tui": "PENDING",
+  "question_unavailable_chat_fallback": "PENDING",
+  "theme_dark_light": "PENDING",
+  "message_cleanup": {
+    "git": "2.39.5 (Apple Git-154)",
+    "modes": [
+      "default",
+      "strip",
+      "strip with core.commentChar=;",
+      "whitespace with core.commentChar=;"
+    ],
+    "old_commit_F": "4 failing subcases observed before fix",
+    "explicit_verbatim": "4 passing subcases; raw commit-body bytes and oracle verified",
+    "implicit_strip_negative_control": "PASS: oracle detects changed message",
+    "config_and_hooks": "preserved by snapshot verification",
+    "product_model_execution": "PENDING"
+  },
+  "template_cleanup_prompt_review": "read-only independent GREEN simulation, no P1/P2; not actual OpenCode/inner-network acceptance",
+  "actual_model_template_read": "PENDING",
+  "teamai_companion_template_distribution": "PENDING",
+  "crlf_oracle": {
+    "report": "CRLF-RESULTS.json",
+    "red": "four subcases fail on old oracle before fix",
+    "green": "seven new positive/negative subcases pass after fix",
+    "policy": "strict UTF-8 decode without universal-newline translation; compare raw commit body bytes exactly, no whitespace/newline normalization",
+    "fixture_message_write": "explicit UTF-8 bytes on all platforms",
+    "windows": "PENDING: CRLF and mixed bytes constructed and tested on macOS",
+    "review": "independent read-only review found no P1/P2; did not rerun tests"
+  },
+  "presentation_revision": {
+    "date": "2026-10-26",
+    "mode": "existing native Diff/tool output + concise confirmation 1.1",
+    "new_host_ui_changes": 0,
+    "native_index_viewer_available": false,
+    "final_index_evidence": "immutable captured HEAD/empty tree to captured real index tree; same objects for all chunks/stats; live baseline rechecked before question and commit",
+    "initial_readonly_display": "all candidate groups before add/write-tree/commit",
+    "company_tui_demo": "PENDING"
+  },
+  "native_diff_snapshot_git": {
+    "report": "NATIVE-DIFF-SNAPSHOT.json",
+    "PASS": 7,
+    "FAIL": 0,
+    "scope": "fresh C02 Git-only fixture; raw index preserved by readonly status; captured tree Diff matches cached; external index disturbance leaves immutable evidence unchanged and changes live tree; empty-tree baseline verified. No product/model execution."
+  },
+  "native_diff_prompt_review": {
+    "report": "NATIVE-DIFF-REVIEW.md",
+    "result": "final readonly review: no remaining P1/P2 after two rounds of corrections",
+    "scope": "text/source-based pressure simulation; not actual model/TUI acceptance"
+  }
+}
