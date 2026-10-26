@@ -2,9 +2,19 @@
 
 目标为公司现有 **OpenCode TUI v2.0.27**。已完成同版本原生修复：新增安全回归 **17/17 PASS**，真实源码CLI服务探针 **11/11 PASS**，未修改2.0.27客户端可显示中文拒绝错误并非零退出。未修公开发行包的 **6 PASS / 5 FAIL** 保留为对照。测试资源已恢复在隔离的 `payload/`，仅供前置拦截通过的现有宿主安装；不自动启用或合并发布。公司构建、Windows、实际 TUI、私有模型与 TeamAI 验收仍 PENDING。
 
-请先读 [2.0.27 专项核对、独立探针及安装回退说明](compatibility/v2.0.27/README.md)，固定版本、补丁、摘要与修前/修后结果见该目录的 `SOURCE.json`、`VALIDATION.json`、`RESULTS.json`、`PATCHED-RESULTS.json`、`TEMPLATE-CLEANUP-RESULTS.json`（当前）及 `PREVIEW-RESULTS.json`（历史）。
+请先读 [2.0.27 专项核对、独立探针及安装回退说明](compatibility/v2.0.27/README.md)，固定版本、补丁、摘要与修前/修后结果见该目录的 `SOURCE.json`、`VALIDATION.json`、`RESULTS.json`、`PATCHED-RESULTS.json`、`NATIVE-DIFF-RESULTS.json`（当前）及 `TEMPLATE-CLEANUP-RESULTS.json`、`PREVIEW-RESULTS.json`（历史）。
 
-## 2026-10-23：提交前预览与确认
+## 2026-10-26：沿用原生 Diff，改用简洁确认模板
+
+按用户最新选择，不实现附件 HTML 或定制 TUI 面板，不新增界面源码、浏览器、Runtime、MCP、插件或 Agent。先在现有 OpenCode 中只读展示已暂存、未暂存、新文件的真实候选变更，范围不明时在展示后再询问；尚未展示完整不得 add。范围明确后仅准备明确路径，最终真实 HEAD → index Diff 展示完整，才用简洁模板显示范围、完整说明、保留改动及三项确认。已有 index 完整展示且基线未变时可复用，不重复铺陈同一份 Diff。
+
+原生 Diff 浏览保留现有外观与能力。公开 v2.0.27 的 working/branch/committed/turn 没有 index 模式：工作区/会话视图仅辅助浏览，**最终提交证据必须为捕获的真实 index tree 与 HEAD/空树的完整 Diff**，以同一对不可变对象读取所有分段/统计，并在发确认前核对当前基线。`git diff --cached` 用于初始边界核对，不能读取A后绑定后来变化的tree B。只读查询用`--no-optional-locks`避免刷新写index。通过现有工具/显示能力完整呈现。Skill 不能注入一个不存在的 index 面板或强制左右切换；本轮不新增此能力。部分暂存只确认 index 内的 hunk。
+
+模板仍在 `skills/codea-commit/templates/commit-preview.md`，内容改成简洁版，不使用附件模板；安装文件名与范围不变。完整 worktree/branch/HEAD/tree/消息绑定、再次确认、取消保留暂存、verbatim、hooks/签名和一次提交核验均保留。**既有参数前处理安全补丁未变**；不新增界面改动不等于解除该安装前置条件。
+
+本轮Git/Review回归 **65/65 PASS**，最终三文件资源隔离API探针 **12/12 PASS**，独立临时Git快照对照 **7/7 PASS**（单独计数，不是模型验收）。只读审阅修正快照绑定与只读查询后未发现剩余P1/P2，见 `NATIVE-DIFF-REVIEW.md`。当前资源探针见 `NATIVE-DIFF-RESULTS.json`；`TEMPLATE-CLEANUP-RESULTS.json`、`PREVIEW-RESULTS.json`、`PATCHED-RESULTS.json` 为历史资源。实际公司 TUI/私有模型的 Diff 可见性与确认流程仍 PENDING，API 加载和只读提示词推演不能代替演示验收。
+
+## 2026-10-23 历史：提交前预览与确认
 
 输入 `/codea-commit` 后，按“概览 → 文件清单 → 分文件真实暂存 Diff → 完整说明”展示，再等待“确认提交 / 修改说明 / 取消”。原生 question 不可用时聊天提问并结束执行；修改说明要重新展示全文和确认。分支、HEAD 或 index 改变使旧确认失效。取消保留原有和本次准备的暂存，不撤销现场。只显示聊天中的 Markdown Diff，不提供示意图中的增强面板。
 

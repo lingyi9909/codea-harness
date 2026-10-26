@@ -89,3 +89,7 @@ checkpoint用`read_bytes().decode('utf-8', errors='strict')`保存确认消息�
 verify读取`git cat-file commit HEAD`的实际原始正文，逐字节比较确认消息，不使用`git log`展示输出、不调用rstrip。原文中的每个CR/LF、行尾空格和实际末尾空行都要保留；没有终止换行的verbatim正文也按原文比较，不自行补LF。旧版manifest若已在记录时丢失CR，无法恢复，应在新的测试仓库重新记录，不能手工改历史证据来冒充通过。
 
 新增两项自检包含七个子场景：CRLF/混合换行/无终止换行/多个末尾空行的成功对照，以及CRLF转LF/正文被改/末尾空行被删的失败对照。此前#、自定义注释字符、行尾空白及无flag strip负对照仍保留。CRLF成功样例的原始消息、确认文本和commit-body见 [CRLF证据](../../../codea-commit/compatibility/v2.0.27/CRLF-RESULTS.json)。本地构造CRLF不等于Windows实机验收。
+
+## 2026-10-26 当前展示资源
+
+用户选择现有原生Diff/工具输出加简洁确认模板1.1，不增加宿主界面源码。当前三文件加载/来源/参数探针见 `codea-commit/compatibility/v2.0.27/NATIVE-DIFF-RESULTS.json`（12/12，不运行模型）；真实Git快照方法对照7项单独记录于 `NATIVE-DIFF-SNAPSHOT.json`。Codea回归仍21+40+4。模型是否先展示完整候选再add、最终index完整Diff后才确认，须按P01—P15取实际轨迹；不由上述自检替代。

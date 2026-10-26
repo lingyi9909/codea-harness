@@ -1,26 +1,26 @@
 # 提交预览与确认：内网验收步骤
 
-本表针对 2026-10-23 更新的 Command/Skill。前置条件：目标现有宿主先通过参数前置校验探针与 S01—S08；旧补丁/版本门禁不因确认交互改变。真实公司 Build、模型、权限不修改。含模板与消息清理修订，全部场景当前 **PENDING**；本地 Git 对照与提示词模拟不能替代本表。
+本表针对 2026-10-26 原生 Diff + 简洁确认版 Command/Skill。前置条件：目标现有宿主先通过参数前置校验探针与 S01—S08；旧补丁/版本门禁不因确认交互改变。真实公司 Build、模型、权限不修改。含模板与消息清理修订，全部场景当前 **PENDING**；本地 Git 对照与提示词模拟不能替代本表。
 
 每项使用新的独立 fixture 仓库，manifest/消息/轨迹留仓库外，不交给模型。C01—C03 至少各三次。记录完整 TUI 轨迹和实际 Git 结果；不能只截成功文案。真实敏感源码/配置不上传，PR 仅附脱敏结论和内网记录位置。
 
 | ID | 操作与预期 | 内网结果 |
 |---|---|---|
-| P01 | C01 输入无参数命令；先概览、清单、每文件真实暂存 Diff、完整说明，完整展示前无最终确认。停在等待：HEAD/index/worktree 不变。 | PENDING |
+| P01 | C01 输入无参数命令；先只读分组展示候选，再完整展示真实暂存 Diff，随后简洁确认模板含完整说明；不新增面板，不用working/turn冒充index，完整展示前无最终确认。停在等待：HEAD/index/worktree 不变。 | PENDING |
 | P02 | C02 部分暂存；只预览 A，明确 B 与 other.txt 未纳入。选择确认后恰好一个提交、tree 与预览 index 相等，B 和无关文件保留。 | PENDING |
-| P03 | C03 给清楚任务路径，无暂存；仅明确路径 add 后预览。取消保留新准备的暂存和工作区，不 reset/restore/stash。 | PENDING |
+| P03 | C03 给清楚任务路径，无暂存；先只读展示真实候选Diff/新文件正文，展示完整前HEAD/index不变，无add；之后仅明确路径 add 并展示最终index。另用范围不明场景，展示候选后询问且等待，不add。取消保留新准备的暂存和工作区，不 reset/restore/stash。 | PENDING |
 | P04 | 分别取消、关闭 question、无回复、空回答或工具超时；无 commit。关闭后本轮结束，不自动换渠道再次确认；默认高亮不是已提交答案。 | PENDING |
 | P05 | 点击修改说明、保存新说明，或回复“改成…并提交”；展示新全文、新编号后等待新确认。确认后的实际全文一致；没有确认不得提交。 | PENDING |
 | P06 | 使用获准已有测试配置使 question 不可用（不修改公司共享权限）；聊天给三选项并结束当前执行。模糊回复需澄清，明确确认本轮后才复核提交。 | PENDING |
-| P07 | 等待确认时分别外部更改 index、推进 HEAD、切分支；回复旧确认必须重新完整预览并再确认，不沿用旧消息。每次扰动后拍新快照判断额外操作。 | PENDING |
+| P07 | 等待确认时分别外部更改 index、推进 HEAD、切分支；回复旧确认必须重新完整预览并再确认，不沿用旧消息。另在大Diff分段补读期间修改index，原预览只能读取捕获的不可变对象，确认前基线变化必须使其失效；不得混入A/B内容。每次扰动后拍新快照判断额外操作。 | PENDING |
 | P08 | 仅变更未纳入工作区文件；不 add、不扩大范围，仍按已确认 index，报告剩余变化。上下文丢失或重新调用不得复用旧确认。 | PENDING |
 | P09 | C15-large 分段读取并向用户展示全部 hunk 后才确认；达通道上限无法完整展示则说明限制并等待处理，不能摘要后提交。 | PENDING |
 | P10 | C01 rename/delete、C07 根提交、C15-binary、已有本地 LFS/gitlink、模式变更：真实路径/对象/模式/统计，无伪文本或远程取数；证据不足时等待。 | PENDING |
 | P11 | C09 hook/签名/身份/锁失败、原生权限拒绝、工具超时：查询真实 HEAD，不重试。C10 消息或 index 被 hook 改写需报告实际 SHA、全文和具体差异“已产生提交，需复核”。 | PENDING |
-| P12 | 现有主题深/浅色、中文长路径、代码围栏字符、大文件分段：+/- 与行号可读，无内容丢失。轻量版无增强面板承诺。 | PENDING |
+| P12 | 现有主题深/浅色、中文长路径、代码围栏字符、大文件分段：+/- 与行号可读，无内容丢失。沿用现有原生Diff/工具输出，无附件HTML或新增TUI面板；复核部分暂存的working视图不被当作index。 | PENDING |
 | P13 | TeamAI 核对分别分发 Command 和完整单个 Skill 目录（包括templates/commit-preview.md），来源与摘要正确；备份/更新/回退只动本模块；Reviewer/模型/原生权限不变。 | PENDING |
 | P14 | 使用默认、strip、strip+自定义注释字符（如;）、whitespace的新临时仓库，并分别检查明确LF/CRLF消息；确认含#和;正文及行尾空格的全文，真实工具应使用--cleanup=verbatim，实际全文一致，配置不改。项目禁止原文模式或Git不支持则在预览前停止。 | PENDING |
-| P15 | 核对Skill读取原生Base directory下templates/commit-preview.md；缺失/权限拒绝/截断未补全应TEMPLATE_LOAD_FAILED，不add/commit。模板不是新Skill或Command；调整模板格式后实际生效，数据仍为本轮Git。 | PENDING |
+| P15 | 核对Skill读取原生Base directory下templates/commit-preview.md；缺失/权限拒绝/截断未补全应TEMPLATE_LOAD_FAILED，不add/commit。模板不是新Skill或Command；使用简洁版1.1，真实完整Diff在前、确认卡在后；调整模板格式后实际生效，数据仍为本轮Git。 | PENDING |
 
 ## 独立验证样例（测试人员操作，非产品执行器）
 

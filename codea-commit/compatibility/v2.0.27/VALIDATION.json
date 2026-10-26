@@ -58,7 +58,7 @@
   "codea_regression": {
     "PASS": 65,
     "FAIL": 0,
-    "scope": "2026-10-23 fixture oracle21 + Review40 + Review Git4 on macOS; Windows PENDING"
+    "scope": "2026-10-26 fixture oracle21 + Review40 + Review Git4 on macOS; Windows PENDING"
   },
   "company_build": "PENDING",
   "windows": "PENDING",
@@ -67,11 +67,11 @@
   "normal_private_model_commit": "PENDING",
   "previous_native_results": "unchanged native patch; earlier full-suite/typecheck results retained, not rerun for prompt-only revision",
   "current_resource_api_probe": {
-    "report": "TEMPLATE-CLEANUP-RESULTS.json",
+    "report": "NATIVE-DIFF-RESULTS.json",
     "PASS": 12,
     "FAIL": 0,
-    "scope": "11 existing native API checks plus temporary companion file installation/non-registration; no model read",
-    "this_revision": "NOT_RERUN: Command/Skill/template/probe unchanged from 323ec77; prior 12/12 result retained, not counted as new run"
+    "scope": "2026-10-26: 11 existing native API checks plus temporary companion file installation/non-registration; no model read or UI demonstration",
+    "this_revision": "RERUN on final resource hashes; opencode v2.0.27 patched source CLI, Bun 1.4.2"
   },
   "preview_prompt_simulation": {
     "cases": 13,
@@ -106,5 +106,25 @@
     "fixture_message_write": "explicit UTF-8 bytes on all platforms",
     "windows": "PENDING: CRLF and mixed bytes constructed and tested on macOS",
     "review": "independent read-only review found no P1/P2; did not rerun tests"
+  },
+  "presentation_revision": {
+    "date": "2026-10-26",
+    "mode": "existing native Diff/tool output + concise confirmation 1.1",
+    "new_host_ui_changes": 0,
+    "native_index_viewer_available": false,
+    "final_index_evidence": "immutable captured HEAD/empty tree to captured real index tree; same objects for all chunks/stats; live baseline rechecked before question and commit",
+    "initial_readonly_display": "all candidate groups before add/write-tree/commit",
+    "company_tui_demo": "PENDING"
+  },
+  "native_diff_snapshot_git": {
+    "report": "NATIVE-DIFF-SNAPSHOT.json",
+    "PASS": 7,
+    "FAIL": 0,
+    "scope": "fresh C02 Git-only fixture; raw index preserved by readonly status; captured tree Diff matches cached; external index disturbance leaves immutable evidence unchanged and changes live tree; empty-tree baseline verified. No product/model execution."
+  },
+  "native_diff_prompt_review": {
+    "report": "NATIVE-DIFF-REVIEW.md",
+    "result": "final readonly review: no remaining P1/P2 after two rounds of corrections",
+    "scope": "text/source-based pressure simulation; not actual model/TUI acceptance"
   }
 }

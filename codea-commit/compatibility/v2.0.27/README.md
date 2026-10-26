@@ -4,15 +4,25 @@
 
 未修改的公开 2.0.27 仍有参数执行问题。测试资源仅用于**已经应用等价前置拦截且通过探针的现有宿主**，不能直接复制到未经修复的公司安装。包内不含替换二进制、Runtime、MCP、插件或 Agent，也不含旧 1.2.27 补丁。
 
-## 最新复审修正：验收器保留原始换行
+## 2026-10-26：沿用原生 Diff，改用简洁确认模板
 
-本次仅修测试/验收工具，Command、Skill、展示模板、原生补丁和探针代码均未改。checkpoint按bytes读取后严格UTF-8解码，保留CRLF/LF/混合换行；fixture消息明确写UTF-8字节，避免Windows默认文本换行转换。verify改读`git cat-file commit HEAD`原始正文并逐字节比较，既不把Git log的附加展示换行当成正文，也不再用rstrip吞掉真实末尾空行。
+按用户最新选择，不实现附件 HTML 或定制 TUI 面板，不新增界面源码、浏览器、Runtime、MCP、插件或 Agent。先在现有 OpenCode 中只读展示已暂存、未暂存、新文件的真实候选变更，范围不明时在展示后再询问；尚未展示完整不得 add。范围明确后仅准备明确路径，最终真实 HEAD → index Diff 展示完整，才用简洁模板显示范围、完整说明、保留改动及三项确认。已有 index 完整展示且基线未变时可复用，不重复铺陈同一份 Diff。
+
+原生 Diff 浏览保留现有外观与能力。公开 v2.0.27 的 working/branch/committed/turn 没有 index 模式：工作区/会话视图仅辅助浏览，**最终提交证据必须为捕获的真实 index tree 与 HEAD/空树的完整 Diff**，以同一对不可变对象读取所有分段/统计，并在发确认前核对当前基线。`git diff --cached` 用于初始边界核对，不能读取A后绑定后来变化的tree B。只读查询用`--no-optional-locks`避免刷新写index。通过现有工具/显示能力完整呈现。Skill 不能注入一个不存在的 index 面板或强制左右切换；本轮不新增此能力。部分暂存只确认 index 内的 hunk。
+
+模板仍在 `skills/codea-commit/templates/commit-preview.md`，内容改成简洁版，不使用附件模板；安装文件名与范围不变。完整 worktree/branch/HEAD/tree/消息绑定、再次确认、取消保留暂存、verbatim、hooks/签名和一次提交核验均保留。**既有参数前处理安全补丁未变**；不新增界面改动不等于解除该安装前置条件。
+
+本轮Git/Review回归 **65/65 PASS**，最终三文件资源隔离API探针 **12/12 PASS**，独立临时Git快照对照 **7/7 PASS**（单独计数，不是模型验收）。只读审阅修正快照绑定与只读查询后未发现剩余P1/P2，见 `NATIVE-DIFF-REVIEW.md`。当前资源探针见 `NATIVE-DIFF-RESULTS.json`；`TEMPLATE-CLEANUP-RESULTS.json`、`PREVIEW-RESULTS.json`、`PATCHED-RESULTS.json` 为历史资源。实际公司 TUI/私有模型的 Diff 可见性与确认流程仍 PENDING，API 加载和只读提示词推演不能代替演示验收。
+
+## 2026-10-23 历史复审修正：验收器保留原始换行
+
+该轮仅修测试/验收工具，Command、Skill、展示模板、原生补丁和探针代码均未改。checkpoint按bytes读取后严格UTF-8解码，保留CRLF/LF/混合换行；fixture消息明确写UTF-8字节，避免Windows默认文本换行转换。verify改读`git cat-file commit HEAD`原始正文并逐字节比较，既不把Git log的附加展示换行当成正文，也不再用rstrip吞掉真实末尾空行。
 
 新增七个子场景：CRLF、混合换行、无终止换行、多末尾空行的正确提交应通过；CRLF改LF、正文改变、真实末尾空行被删应失败。先观察旧工具四个子场景RED，修后通过；保留消息清理矩阵和strip负对照。独立CRLF样例的输入/checkpoint/真实commit-body Base64见 `CRLF-RESULTS.json`。
 
 本地回归 **65/65 PASS**（fixture21 + Review40 + Review Git4）。这是macOS构造原始字节对照，不冒充Windows执行。资源未变，本轮不重跑API；此前相同产品资源的12/12探针记录保留，不计作新运行。Windows/公司模型/TUI/TeamAI继续PENDING。
 
-## 前次复审修正：独立模板与确认全文保真
+## 2026-10-23 历史复审修正：独立模板与确认全文保真
 
 展示格式已拆到 `payload/skills/codea-commit/templates/commit-preview.md`。Command仍加载同一个Skill；Skill从原生返回的基目录读取模板，未完整读到就停止，不 add/commit。模板仅组织聊天Markdown，不是新入口/网页/执行器，不需要修改宿主。改变格式只改该模板；流程和安全约束继续放在SKILL.md。
 
@@ -28,7 +38,7 @@ skills/codea-commit/templates/commit-preview.md
 
 P2消息清理已改为一次性的 `git commit --cleanup=verbatim -F <消息文件>`；默认/strip、自定义注释字符不再静默清理用户确认的正文与空白。不修改任何Git配置，不绕hooks/签名；项目明确不允许原文模式或Git不支持时，在预览确认前停止说明冲突，不回退默认清理。细节与真实Git对照见 `MESSAGE-CLEANUP.md`。
 
-本轮当前资源/模板探针见 `TEMPLATE-CLEANUP-RESULTS.json`；`PREVIEW-RESULTS.json`和`PATCHED-RESULTS.json`均为此前资源历史，不替代本轮交互验收。原生Skill只列出配套文件，不自动把模板正文交给模型，所以必须保留显式读取步骤；实际模型读取仍PENDING。
+该轮资源/模板探针见 `TEMPLATE-CLEANUP-RESULTS.json`；`PREVIEW-RESULTS.json`和`PATCHED-RESULTS.json`均为此前资源历史，不替代本轮交互验收。原生Skill只列出配套文件，不自动把模板正文交给模型，所以必须保留显式读取步骤；实际模型读取仍PENDING。
 
 ## 已有交互：预览后明确确认
 
@@ -36,7 +46,7 @@ Command/Skill payload 已按 2026-10-23 用户方案更新，与 candidates 同�
 
 更新现有 Command/Skill 和Skill内模板；安装位置、两项目标（Command文件/完整Skill目录）的备份及卸载范围不变。下面宿主补丁保持原 SHA，不因为增加确认而解除安全安装门禁。轻量版没有自定义文件树/左右分栏/固定操作面板，不使用 working/turn Diff 冒充 index。
 
-当前资源的加载/参数与模板落盘探针见 `TEMPLATE-CLEANUP-RESULTS.json`；之前的探针结果只保留历史，不能当作新版交互已通过。实际 question 可用/不可用、私有模型确认、Windows/TUI/主题与 TeamAI 均 **PENDING**，具体验收步骤见 `PREVIEW-ACCEPTANCE.md`。
+当前资源的加载/参数与模板落盘探针见 `NATIVE-DIFF-RESULTS.json`；之前的探针结果只保留历史，不能当作新版交互已通过。实际 question 可用/不可用、私有模型确认、Windows/TUI/主题与 TeamAI 均 **PENDING**，具体验收步骤见 `PREVIEW-ACCEPTANCE.md`。
 
 ## 版本和实际结果
 
@@ -52,9 +62,9 @@ Command/Skill payload 已按 2026-10-23 用户方案更新，与 candidates 同�
 | Server 全套 | **86 PASS / 1 SKIP / 0 FAIL** |
 | Core 正式测试入口全套 | **6605 PASS / 43 SKIP / 8 FAIL**；8项均在未修改源码失败文件对照中复现，未宣称全绿 |
 | 根级 `bun run check` | 未通过；网站Astro尝试写用户`Library/Preferences`被沙箱拒绝，未为此扩大权限 |
-| 当前 Codea Git/Review 回归（2026-10-23） | **65/65 PASS**（fixture21 + Review40 + Review Git4） |
+| 当前 Codea Git/Review 回归（2026-10-26） | **65/65 PASS**（fixture21 + Review40 + Review Git4） |
 
-本次运行平台为macOS arm64，Bun1.4.2。源码进程测试使用上游原生CLI入口及Solid preload，构建宏version为2.0.27、channel为local；临时启动脚本只用于测试，不交付、不替换公司环境，不声称已完成发行二进制构建/签名。详情见 `SOURCE.json`、`VALIDATION.json`；未修/首次修后原始结果分别见 `RESULTS.json`、`PATCHED-RESULTS.json`；当前模板版资源重新核验见 `TEMPLATE-CLEANUP-RESULTS.json`（12/12，包含模板落盘/非入口检查），不证明模型读取或交互。
+本次运行平台为macOS arm64，Bun1.4.2。源码进程测试使用上游原生CLI入口及Solid preload，构建宏version为2.0.27、channel为local；临时启动脚本只用于测试，不交付、不替换公司环境，不声称已完成发行二进制构建/签名。详情见 `SOURCE.json`、`VALIDATION.json`；未修/首次修后原始结果分别见 `RESULTS.json`、`PATCHED-RESULTS.json`；当前模板版资源重新核验见 `NATIVE-DIFF-RESULTS.json`（12/12，包含模板落盘/非入口检查），不证明模型读取或交互。
 
 Core剩余失败涉及本机旧Bash的进程替换/复合语法，以及Bun文件fetch错误文案断言；逐项名称和基线对照已记录，未改这些无关功能。空/仅空白检查只验证进入既有提示路径；真实模型加载Skill、中文说明质量、正常提交、公司权限、Windows/TUI/TeamAI不能由这些结果替代。
 

@@ -1,5 +1,11 @@
 # Codea Commit 1.0 验收记录
 
+## 2026-10-26：展示方式收敛
+
+按用户最新选择撤销附件面板方案，复用现有原生 Diff/工具输出，确认模板换成简洁版1.1。先只读完整展示候选再决定范围，无暂存时也不得在展示前add。最终真实HEAD→index全部展示后再询问确认；working/turn不代表index，不承诺Skill注入专用面板。本轮只改Command/Skill/模板、候选副本与记录，既有宿主参数补丁和Review不变。
+
+当前资源API探针见 [NATIVE-DIFF-RESULTS.json](../../codea-commit/compatibility/v2.0.27/NATIVE-DIFF-RESULTS.json)，只证明资源发现/全文来源、参数前置拦截和模板落盘，不运行模型或产品提交。65项Git/Review回归与提示词只读推演也不代表实际公司TUI。P01—P15继续 **PENDING**，安装/备份/回退仍为一个Command文件与一个完整Skill目录。
+
 ## 2026-10-23 后续复审：CRLF验收误报
 
 仅测试/验收工具更新：确认文本按原始UTF-8字节读取，fixture明确写字节，实际消息从Git commit对象读取后精确比较；不进行换行或空白归一化。新增七个正负子场景先RED后GREEN，本地回归65/65（fixture21、Review40、Review Git4）。原产品三个文件和原生补丁未变，未重复API探针；此前12/12属于相同产品资源的历史验证。CRLF样例来自macOS构造字节，真实Windows/公司模型/TUI/TeamAI仍PENDING。详见 [CRLF证据](../../codea-commit/compatibility/v2.0.27/CRLF-RESULTS.json)。

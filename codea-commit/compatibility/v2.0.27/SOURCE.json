@@ -22,15 +22,16 @@
   "restored_install_entry": "test payload only; install into existing host only after boundary verification passes",
   "patch_sha256": "eb1d9c43a0fd3891321e9ed3ef02da392e5f7aacc1ea7ab2d280d7be06412427",
   "patched_host_kind": "native patched source CLI; Bun 1.4.2; build macros version2.0.27/channel local; test launcher not shipped",
-  "preview_confirmation_revision": "2026-10-23",
+  "preview_confirmation_revision": "2026-10-26",
   "preview_confirmation_tui_model": "PENDING",
-  "current_resources_report": "TEMPLATE-CLEANUP-RESULTS.json",
-  "previous_resources_report": "PREVIEW-RESULTS.json and PATCHED-RESULTS.json (historical resources)",
+  "current_resources_report": "NATIVE-DIFF-RESULTS.json",
+  "previous_resources_report": "TEMPLATE-CLEANUP-RESULTS.json, PREVIEW-RESULTS.json and PATCHED-RESULTS.json (historical resources)",
   "resource_sha256": {
-    "command": "aee8ca119686f9942e6877370537e3f18f662e7233dfcdd55be5ea306fe82753",
-    "skill": "1355bbeafc402adcb85891bbed8b64c630b173723c9873341cd8b8cf8769c6a9",
-    "preview_template": "882e85744a5c6c45145c5faa72bd37ea03910018b7eb0162264539d1dd0c4cd5"
+    "command": "8d6e49a5cf89de3735663ac7a33b63f573869306c20f94278738248aea81ed11",
+    "skill": "b793fe6a588d8c0ac9798925a8cca0d8feb6eacfbfe007aa0b6b1b3634df0d8c",
+    "preview_template": "8b92596c060f3aa897e70179f07c8b54cff602a2665f9d27530318daa9fb46cd"
   },
   "display_template": "skills/codea-commit/templates/commit-preview.md (within the existing Skill directory, no additional entry)",
-  "message_cleanup": "explicit --cleanup=verbatim for this commit only, subject to project rules; no config changes"
+  "message_cleanup": "explicit --cleanup=verbatim for this commit only, subject to project rules; no config changes",
+  "presentation": "Existing OpenCode Diff/tool output plus concise confirmation template; no custom UI source changes. Native working/branch/committed/turn are not index evidence."
 }
