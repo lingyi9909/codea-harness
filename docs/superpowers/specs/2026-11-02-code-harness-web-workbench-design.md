@@ -1,6 +1,6 @@
 # Code Harness 场景化 Web 工作台设计
 
-日期：2026-11-02｜版本：评审稿 0.2（含页面效果图）｜目标：Windows 本地单用户先验证，成熟后迁移服务器
+日期：2026-11-02｜版本：研发交付版 1.0（MySQL、接口、表结构与任务）｜目标：Windows 本地单用户先验证，成熟后迁移服务器
 
 页面预览：[工作台](assets/2026-11-02-web-workbench/workbench.jpg) · [执行过程](assets/2026-11-02-web-workbench/execution.jpg) · [工具授权](assets/2026-11-02-web-workbench/permission.jpg) · [报告与追问](assets/2026-11-02-web-workbench/report.jpg)。四张效果图已嵌入第 7.3 节；[离线交互预览](assets/2026-11-02-web-workbench/preview.html)下载后可用浏览器打开。
 
@@ -8,7 +8,9 @@
 
 在现有 `lingyi9909/codea-harness` 仓库内新增独立的 `web-workbench/` 模块，复用 `codea-review/` 的 OpenCode 2.x 原生 Agent、Command、Skill 和报告模板。网页提供场景输入、执行进展、报告和追问；Harness 管理业务任务；OpenCode 继续负责模型与工具执行。
 
-用户已明确：沿用现有 Code Harness；先在自己的 Windows 电脑运行，成熟后放服务器；代码使用 Git。尚未明确 GitHub/GitLab 等代码托管平台，因此首期不依赖 PR 接口。以下技术选型、阶段范围和容量数值是本稿建议，尚不是已通过实机验收的能力。
+用户已明确：沿用现有 Code Harness；先在自己的 Windows 电脑运行，成熟后放服务器；代码使用 Git；页面方向已确认；后端数据库使用 MySQL。首期不依赖 PR 平台。本文及配套文档固定研发规格，尚不代表通过实机验收。
+
+**研发交付入口：** [后端/接口/表字典](2026-11-02-code-harness-web-backend-design.md) · [25 个 HTTP 接口 OpenAPI](contracts/2026-11-02-code-harness-web-v1.openapi.yaml) · [14 张 MySQL 表 DDL](database/2026-11-02-code-harness-web-mysql-v1.sql) · [14 个研发 Task 与验收](../plans/2026-11-02-code-harness-web-workbench.md)。与本文件、效果图一起交给研发。
 
 ### 1.1 已检查的现状
 
@@ -66,7 +68,7 @@ PR 查询/评论、自动 fetch/pull、远程 Git URL 克隆、自动改码、�
 flowchart TB
   Browser[浏览器：场景表单、历史、报告、追问]
   Harness[Harness 本机服务：任务、权限交互、事件、归档]
-  DB[(SQLite：任务与事件)]
+  DB[(MySQL 8.4：任务与事件)]
   Files[任务目录：固定代码副本与报告]
   Git[Git Provider：本地只读取源与副本准备]
   Adapter[OpenCode Adapter：版本与接口适配]
@@ -107,7 +109,7 @@ codea-harness/
 │   ├── packages/contracts/           # 业务请求、事件、报告元数据
 │   ├── packages/opencode-adapter/    # 固定版本客户端与恢复逻辑
 │   ├── packages/git-provider/        # 本地 Git 与固定代码副本
-│   ├── packages/storage/             # SQLite 与事务
+│   ├── packages/storage/             # MySQL 8.4 与事务
 │   ├── scenarios/code-review/        # 字段、执行绑定、成果定义
 │   ├── scripts/windows/              # 启动、诊断、构建与卸载说明
 │   └── tests/                        # 契约、集成与 Windows 实机验收
@@ -122,17 +124,19 @@ codea-harness/
 
 ```text
 Workbench/
-├── config/                          # 仓库登记、执行服务连接；不放明文密钥
-├── workbench.sqlite
+├── config/                          # 执行服务连接/可信根；仓库登记存 MySQL
+├── diagnostics/                     # 脱敏诊断；业务与迁移版本数据在 MySQL
 ├── tasks/<taskId>/repo/              # 独立 Git 副本
 ├── tasks/<taskId>/runs/<runId>/      # 本轮报告与证据
 ├── assets/<digest>/                 # 被选能力的版本副本或摘要
 └── logs/                            # 脱敏诊断、轮转
 ```
 
-开发环境使用公司允许的 Node.js LTS 和现有 OpenCode。锁定实际 Node、OpenCode、客户端依赖与 SQLite 驱动版本，Windows 干净机器验证后再发布。首个开发包可以依赖已安装 Node；面向使用者的本地试用包应包含已验证运行依赖，或在启动前一次性清楚列出缺项，不能运行时静默下载安装。
+开发环境使用 Node.js 22 LTS、MySQL 8.4 和现有 OpenCode。锁定实际 Node 补丁、OpenCode、客户端依赖与 mysql2 驱动版本，Windows 干净机器验证后再发布。首个开发包可以依赖已安装 Node；面向使用者的本地试用包应包含已验证运行依赖，或在启动前一次性清楚列出缺项，不能运行时静默下载安装。
 
-启动流程：检查 Git/OpenCode/Node → 检查数据目录 → 探测实际服务和认证 → 核对能力资源 → 启动 Harness 并打开本机页面。
+MySQL 可在本机运行，或连接公司批准的开发实例；使用独立空库，不使用业务生产库。工作台不静默安装数据库，首期不要求 Docker。
+
+启动流程：检查 Git/OpenCode/Node/MySQL → 检查数据库连接与迁移状态 → 检查数据目录 → 探测实际服务和认证 → 核对能力资源 → 启动 Harness 并打开本机页面。
 
 - Harness 只绑定 loopback，静态页面与业务 API 同源。
 - 启动口令/本机会话由服务端管理；修改操作校验 Origin 与 CSRF，避免仅以“localhost”作为授权。
@@ -142,7 +146,7 @@ Workbench/
 - 关浏览器只断开显示；正在执行的任务继续。关闭 Harness 服务需提示仍在运行的任务并按中断流程处理。
 - 睡眠/休眠后先恢复连接与核对状态，不能把客户端超时直接当作执行失败。
 
-原生能力未安装时给出具体缺失项；已有同名配置摘要不一致时明确冲突，不自动覆盖。使用者只需现有 OpenCode 及工作台运行包；不要求安装旧版 Go Runtime、Maven 或 Docker。
+原生能力未安装时给出具体缺失项；已有同名配置摘要不一致时明确冲突，不自动覆盖。使用者需要现有 OpenCode、工作台运行包及可连接的 MySQL 8.4 独立库；不要求安装旧版 Go Runtime、Maven 或 Docker。
 
 ## 7. 页面与交互
 
@@ -273,25 +277,9 @@ Workbench/
 
 如果目标版本不支持 instruction entry，首版将补充要求字段禁用并说明，不用额外 prompt 偷偷启动第二轮，不把任意用户文本拼入命令。该降级必须在连接诊断中可见。
 
-### 9.3 建议的适配层契约
+### 9.3 适配层契约
 
-以下是 Harness 自有抽象，不是宣称 SDK 存在这些同名方法。具体实现应调用固定版本生成客户端。
-
-```typescript
-interface OpenCodeAdapter {
-  probe(): Promise<Capabilities>;
-  createSession(binding: TaskBinding): Promise<SessionBinding>;
-  putContext(binding: SessionBinding, value: TrustedTaskContext): Promise<void>;
-  startReview(binding: SessionBinding, request: ReviewInvocation): Promise<AcceptedExecution>;
-  discuss(binding: SessionBinding, request: DiscussionInput): Promise<AcceptedExecution>;
-  inspect(binding: SessionBinding): Promise<ExecutionSnapshot>;
-  readMessages(binding: SessionBinding, cursor?: string): Promise<MessagePage>;
-  subscribe(binding: SessionBinding, cursor?: string): AsyncIterable<NativeEnvelope>;
-  interrupt(binding: SessionBinding): Promise<void>;
-  listInteractions(binding: SessionBinding): Promise<PendingInteraction[]>;
-  answer(binding: SessionBinding, answer: InteractionAnswer): Promise<void>;
-}
-```
+Harness 自有端口统一见[任务计划 §2 的 OpenCodeAdapter](../plans/2026-11-02-code-harness-web-workbench.md#2-文件结构与共享类型)，实现映射和能力降级见[后端规格 §8](2026-11-02-code-harness-web-backend-design.md#8-opencode-适配与必须验证的映射)。这些是自有抽象，不是 SDK 同名能力声明；业务层不得直接依赖某版 SDK。
 
 会话表单和 permission request 必须保存原生 ID 与业务 Task/Run 绑定。网页只能回答当前用户、当前有效轮次且仍待处理的请求；过期、已回答、重复回复均不转成新的执行。
 
@@ -307,7 +295,7 @@ interface OpenCodeAdapter {
 
 建议一个 Task 绑定一个固定代码快照与根 Session，Task 下有多个 Run。
 
-Run 类型：`REVIEW` 首轮审查、`DISCUSS` 普通追问、`RECHECK` 明确复查、`RETRY` 失败后重试。普通追问只要求有效回答，不要求重写正式报告；复查生成新报告版本，失败不覆盖旧报告。
+Run 类型：`REVIEW` 首轮审查、`DISCUSS` 普通追问、`RECHECK` 明确复查。失败重试创建同 kind 的新 Run，并保存 `retryOfRunId`，不增加 RETRY kind。普通追问只要求有效回答，不要求重写正式报告；复查生成新报告版本，失败不覆盖旧报告。
 
 ```text
 QUEUED → PREPARING → RUNNING → COLLECTING → SUCCEEDED
@@ -341,7 +329,7 @@ QUEUED → PREPARING → RUNNING → COLLECTING → SUCCEEDED
 
 创建任务与 outbox 在同一事务中提交；模型启动在事务外执行。浏览器请求超时先按 operationId 查询受理结果，不重新创建任务。
 
-原生 command 不具备已确认的业务幂等键，不能把 HTTP 204 当作最终完成。出站请求超时或 Harness 在发送后崩溃时，标记“受理状态待核对”，根据绑定 Session 的 inbox、消息和持久事件确认；无法证明未受理则不自动重发。必要时结束为“执行状态未确定”，让用户明确新建重试，保留所有记录。
+原生 command 不具备已确认的业务幂等键，不能把 HTTP 204 当作最终完成。出站请求超时或 Harness 在发送后崩溃时，标记“受理状态待核对”，根据绑定 Session 的 inbox、消息和持久事件确认；无法证明未受理则不自动重发。不能确定时保持 RECOVERING 和隔离槽位，保留记录并显示“执行状态待核对”；只有证实原生空闲且无可恢复输入后才可结算。明确 FAILED/STOPPED 后才提供显式重试。
 
 普通 prompt 若目标版本支持稳定消息 ID，则使用并保存该 ID；同样需要读取真实受理结果。所有网络请求失败都不能直接触发无限模型重试。
 
@@ -353,13 +341,13 @@ Harness 收集事件并持久化为自己的业务序列。浏览器使用 Harne
 
 | Harness 向浏览器的事件 | 数据来源 |
 | --- | --- |
-| `run.queued / preparing` | 调度器的实际状态 |
-| `run.started / stopped / failed` | 引擎终态与后端核对结果 |
-| `message.delta / completed` | 原生消息；delta 可批量落盘，完整消息为恢复依据 |
-| `tool.started / completed` | 原生工具事件，摘要脱敏且有长度上限 |
-| `interaction.pending / resolved` | 原生权限/表单请求 |
-| `artifact.ready` | 本轮成果校验并归档成功 |
-| `run.completed` | 执行结束且本轮所需成果收集完成 |
+| `task.created / scope.ready` | 已落盘的任务与代码副本 |
+| `run.status` | 真实调度/引擎/收集状态，包含终态 |
+| `message.delta / message.completed` | 原生消息；合批持久化后广播，完整消息为权威 |
+| `tool.started / tool.completed` | 原生工具事件，摘要脱敏、有长度上限 |
+| `interaction.pending / interaction.resolved` | 真实原生权限/表单请求 |
+| `artifact.ready` | 本轮报告验证并归档成功 |
+| `continuity.gap` | 原生中间过程不能完整恢复，明确提示 |
 
 若目标构建支持 `/api/experimental/session/{sessionID}/log`，适配层保存其聚合序列并在断线后读取补偿；该 API 为 experimental，要锁版本验证，不能承诺覆盖全部瞬时 token 和工具输出。
 
@@ -379,32 +367,13 @@ Harness 收集事件并持久化为自己的业务序列。浏览器使用 Harne
 
 原始模型 Markdown 是证据内容，不是后端指令。未来需要结构化发现时，通过新增明确版本的结果契约与插件提交接口实现；不在前端用正则猜任意 Markdown。
 
-## 14. Harness 对外 API 草案
+## 14. Harness 对外 API 与数据库
 
-下表为新增 Harness API，不是 OpenCode API 的同名映射。
+统一前缀 `/api/v1`，共 25 个 HTTP 接口。包括本机会话、健康/能力、仓库登记与 ref、范围预览、Task/Run/幂等操作查询、历史消息、SSE、固定版本源码、追问/复查/重试/停止、原生交互和报告下载。完整请求/响应/错误见[OpenAPI 契约](contracts/2026-11-02-code-harness-web-v1.openapi.yaml)，行为和接口清单见[后端规格 §4](2026-11-02-code-harness-web-backend-design.md#4-http-通用约定)。
 
-| 方法与路径 | 用途 |
-| --- | --- |
-| `GET /api/health` | 本机服务健康与已验证能力概览；不泄露密钥 |
-| `GET /api/repositories` | 用户可使用的已登记仓库 |
-| `POST /api/repositories` | 本地登记；路径归一化并限制可信根 |
-| `GET /api/repositories/:id/refs` | ref 标识、完整名称、OID |
-| `POST /api/review-previews` | 只读校验与返回 head/base/merge-base/范围/排除项 |
-| `POST /api/tasks` | 携带 operationId 和已显示范围创建任务 |
-| `GET /api/operations/:id` | 查询启动是否已受理 |
-| `GET /api/tasks`、`GET /api/tasks/:id` | 历史与完整任务快照 |
-| `GET /api/tasks/:id/events?after=seq` | 自有持久 SSE，补齐并订阅 |
-| `POST /api/tasks/:id/messages` | 普通追问，带 operationId、报告版本引用 |
-| `POST /api/tasks/:id/rechecks` | 明确复查同一快照 |
-| `POST /api/runs/:id/stop` | 幂等停止请求 |
-| `POST /api/runs/:id/retries` | 新操作号、新 Run；不覆盖旧轮次 |
-| `GET /api/tasks/:id/interactions` | 当前有效权限与表单请求 |
-| `POST /api/interactions/:id/answers` | 校验归属、版本和待处理状态后回复 |
-| `GET /api/artifacts/:id`、`.../download` | 读取已归档成果 |
+启动采用 `POST review-previews` → `POST tasks` 两步；创建 Task 只传 `operationId`、`previewId`、可选 title/controller/notes。OID 和范围从已展示预览中取，后端再次校验原仓库；变化返回冲突要求重新预览。不能传 native sessionID、模型密钥、任意命令、工作目录、插件地址或服务 URL。
 
-`POST /api/tasks` 中用户可传 repositoryId、baseRefId、expectedHeadOID、expectedBaseOID、可选 Controller、关注要求和 operationId。不能传 sessionID、模型密钥、任意命令、工作目录、插件地址或服务 URL。
-
-错误需区分：参数错误、权限不足、版本变化、基线不存在、无共同祖先、不支持的仓库形态、能力资源缺失、模型连接失败、受理待核对、报告无效、中断失败。前端展示可操作原因，诊断详情带 requestId。
+使用 MySQL 8.4/InnoDB 的 14 张业务表，表字典、唯一约束、事务/Outbox/槽位租约和恢复策略见[后端规格 §6–7](2026-11-02-code-harness-web-backend-design.md#6-mysql-表与字段字典)，DDL 见[独立 SQL 文件](database/2026-11-02-code-harness-web-mysql-v1.sql)。这是开发依据；尚未在实际数据库执行。
 
 ## 15. 场景扩展
 
@@ -442,7 +411,7 @@ writePolicy: report-only
 | 本地仓库白名单 | 服务端获准仓库、用户代码权限与受控凭据 |
 | 单执行槽 | 排队、公平限额、节点租约与故障恢复 |
 | 同用户 OpenCode 服务 | 按用户/任务的运行身份、目录、配置、模型凭据和网络隔离 |
-| SQLite 和本机成果目录 | 经迁移校验的 PostgreSQL、成果对象存储、备份和保留策略 |
+| MySQL 和本机成果目录 | 继续使用 MySQL，迁移连接配置/数据、成果对象存储、备份和保留策略 |
 | 单进程后台调度 | 可靠 worker；API 与 worker 可独立部署 |
 | localhost | 内网 HTTPS、反向代理、SSE 超时与缓冲配置 |
 
@@ -452,16 +421,16 @@ Linux 服务器还需独立测试大小写、权限、路径、Git、依赖与�
 
 ## 17. 分阶段研发与验收
 
-以下为设计级交付阶段，不替代设计确认后的逐任务实施计划。
+以下为阶段划分；具体分配与依赖以[14 个 Task 实施计划](../plans/2026-11-02-code-harness-web-workbench.md)为准。
 
 | 阶段 | 交付 | 退出条件 | 估算工作量 |
 | --- | --- | --- | ---: |
-| A 接通验证 | 公司 Windows、实际版本探针、真实 Git 样例、单轮 Review 与权限/中断 | 原生能力来源正确；真实报告可读；停止真实有效 | 5–8 人日 |
-| B 可用本地版 | 沿用 Demo 页面，Git 表单、固定副本、历史、归档、追问 | 完整路径与原仓库不变验证通过 | 6–10 人日 |
-| C 本地可靠性 | 幂等、崩溃待核对、刷新恢复、日志、运行包 | 断网/重启不重复发起，干净 Windows 机器验收 | 4–8 人日 |
+| A 基础与接通（T01–T02） | 公司 Windows/OpenCode 探针、MySQL 迁移、契约、鉴权 | 实际能力可用，空库迁移/鉴权通过 | 5–7 人日 |
+| B 核心链路（T03–T07/T10/T11） | Git 表单、固定副本、历史、单槽执行、事件、报告 | 完整路径与原仓库不变验证通过 | 13.5–19.5 人日 |
+| C 交互与交付（T08/T09/T12–T14） | 追问、权限、崩溃恢复、运行包 | 断网/重启不重复发起，干净 Windows 机器验收 | 6.5–10.5 人日 |
 | D 服务器试用 | 身份、授权、执行隔离、部署与数据迁移 | 不同用户互不可见/不可操作；故障恢复验证通过 | 另 8–15 人日 |
 
-A–C 合计约 15–26 人日，属于基于当前认知的估算，阶段 A 后重新评估。代码副本与资源隔离若公司要求更高，或现有 API 无法兼容，要单列增量，不能压成“复制文件即可”。
+按本次任务拆解，A–C 合计约 **25–37 人日**。早期 15–26 人日是概算，本次增加 MySQL 并发/恢复验收与明确接口交付；以新 Task 表为准。2 后端+1 前端并行、测试/发布兼职，初步约 3–5 周，阶段 A 后重新评估。代码副本与资源隔离若公司要求更高，或现有 API 无法兼容，要单列增量，不能压成“复制文件即可”。
 
 ### 17.1 必测用例
 
@@ -487,11 +456,13 @@ A–C 合计约 15–26 人日，属于基于当前认知的估算，阶段 A �
 
 开工前需要阶段 A 验证：公司实际 OpenCode 二进制和服务身份；命令/Skill/模板来源；原生 session instruction、持久日志、表单与权限；本机模型连接；Windows Git 形态与实际仓库规模。以上是技术探针，不重复要求用户解释已经明确的页面方向。
 
-实现者可在不改变本文行为的前提下选择：HTTP 框架、SQLite 驱动、组件细节、缓存批次、日志轮转、超时默认值。建议初始排队 20 项、单轮软超时 20 分钟、交互等待超时 15 分钟；均配置化。成果超过 30 天可提示用户清理，首版不自动删除历史报告、代码副本或 Session；只有可重新生成且未被活动任务使用的缓存可自动清理。超时先发中断并核对，不能只改数据库状态。删除历史需展示影响并由用户操作，不删除用户原仓库。
+HTTP 框架、MySQL 驱动、API 版本、状态和默认限制已在后端规格固定。实现者可选择不改变契约的组件细节、日志轮转与内部优化。初始排队最多 20 项、单轮软超时 20 分钟、交互等待超时 15 分钟；变更配置须同步验收。成果超过 30 天可提示用户清理，首版不自动删除历史报告、代码副本或 Session；只有可重新生成且未被活动任务使用的缓存可自动清理。超时先发中断并核对，不能只改数据库状态。删除历史需展示影响并由用户操作，不删除用户原仓库。
 
-设计确认后，再拆分实施任务和测试顺序。本稿仅记录设计，不包含 Web 产品代码、运行包或实机接通结果。
+用户已确认方向，本次已拆分实施任务和测试顺序。本稿及配套文件是研发交付设计，不包含 Web 产品代码、运行包或实机接通结果。
 
 独立可实施性复核结论：未发现仍需用户补充、且会改变实施计划的重要业务问题。公司实际 OpenCode 构建的任务目录绑定、可信能力加载及配置隔离应作为阶段 A 的前置探针与退出条件。
+
+本轮 MySQL/接口/表结构完成后又做了一次独立只读规格复核：未发现阻断实施的重大契约矛盾；Task 唯一活动轮次、单槽隔离恢复、Outbox、原生交互、报告与 SSE 可以衔接。该结论不是 MySQL 执行或真实产品联调结果。
 
 ## 19. 参考资料
 
@@ -504,5 +475,8 @@ A–C 合计约 15–26 人日，属于基于当前认知的估算，阶段 A �
 - [TUI 插件](https://dev.opencode.ai/v2/docs/build/plugins/cli/)
 - [GUI 实验接口](https://dev.opencode.ai/v2/docs/build/plugins/gui/)
 - [Git clone 的共享对象与本地复制语义](https://git-scm.com/docs/git-clone)
+
+- [MySQL 8.4 InnoDB 锁定读取](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html)
+- [MySQL 生成列索引](https://dev.mysql.com/doc/refman/8.4/en/create-table-secondary-indexes.html)
 
 以上线上资料于 2026-11-02 核对。落地以锁定版本源码、契约和公司实测为准。

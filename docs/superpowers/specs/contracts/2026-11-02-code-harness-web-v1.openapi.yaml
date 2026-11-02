@@ -1,0 +1,3484 @@
+openapi: 3.1.0
+info:
+  title: Code Harness Web Workbench API
+  version: 1.0.0-design
+  description: 研发契约草案，尚无产品实现。Windows本地单用户、MySQL8.4、已提交GitReview。所有业务POST需operationId及CSRF。
+servers:
+- url: http://127.0.0.1:4176/api/v1
+  description: 规划默认地址，可配置，同源静态页面
+security:
+- localSession: []
+paths:
+  /health:
+    get:
+      operationId: health_read
+      summary: 读取脱敏健康状态
+      tags:
+      - health
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖未就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+      description: 200 READY；503 DEGRADED/UNAVAILABLE 时仍返回 HealthResponse，不返回 Error。
+      security: []
+  /auth/session:
+    post:
+      operationId: auth_pair
+      summary: 消费一次性配对码
+      tags:
+      - auth
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapResponse'
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: harness_session=<opaque>; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200. HTTPS add
+                Secure.
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: 只允许同源 Origin/loopback Host；成功设置 HttpOnly SameSite=Strict cookie；不需 CSRF。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                pairingCode:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+              required:
+              - pairingCode
+    delete:
+      operationId: auth_logout
+      summary: 退出本机会话
+      tags:
+      - auth
+      responses:
+        '204':
+          description: 成功
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - &id001
+        name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 256
+  /bootstrap:
+    get:
+      operationId: bootstrap_read
+      summary: 取得用户、CSRF、能力和限额
+      tags:
+      - bootstrap
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /repositories:
+    get:
+      operationId: repository_list
+      summary: 列举可访问仓库
+      tags:
+      - repository
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryPageResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - &id002
+        name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - &id003
+        name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 2048
+    post:
+      operationId: repository_register
+      summary: 登记本机可信根内 Git 仓库
+      tags:
+      - repository
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRepository'
+  /repositories/{repositoryId}/refs:
+    get:
+      operationId: repository_refs
+      summary: 只读列出本地 ref 和当前 HEAD
+      tags:
+      - repository
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefsResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: repositoryId
+        in: path
+        required: true
+        schema: &id004
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+  /review-previews:
+    post:
+      operationId: preview_create
+      summary: 预览固定已提交范围
+      tags:
+      - preview
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewRequest'
+  /tasks:
+    post:
+      operationId: task_create
+      summary: 以有效预览创建任务与首轮执行
+      tags:
+      - task
+      responses:
+        '202':
+          description: 持久化受理；非执行完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTask'
+    get:
+      operationId: task_list
+      summary: 按时间倒序查询历史
+      tags:
+      - task
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPageResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id002
+      - *id003
+      - name: repositoryId
+        in: query
+        required: false
+        schema: *id004
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: &id010
+          - QUEUED
+          - PREPARING
+          - RUNNING
+          - WAITING_INPUT
+          - WAITING_PERMISSION
+          - COLLECTING
+          - STOP_REQUESTED
+          - RECOVERING
+          - SUCCEEDED
+          - FAILED
+          - STOPPED
+  /operations/{operationId}:
+    get:
+      operationId: operation_read
+      summary: 按原操作号查询受理结果
+      tags:
+      - operation
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: operationId
+        in: path
+        required: true
+        schema: *id004
+  /tasks/{taskId}:
+    get:
+      operationId: task_read
+      summary: 取得任务权威快照
+      tags:
+      - task
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDetailResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+  /tasks/{taskId}/runs:
+    get:
+      operationId: run_list
+      summary: 列举执行轮次
+      tags:
+      - run
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunPageResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+      - *id002
+      - *id003
+  /tasks/{taskId}/messages:
+    get:
+      operationId: message_list
+      summary: 列举完整消息
+      tags:
+      - message
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagePageResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+      - *id002
+      - *id003
+    post:
+      operationId: message_send
+      summary: 追问同一固定代码版本
+      tags:
+      - message
+      responses:
+        '202':
+          description: 持久化受理；非执行完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscussionRequest'
+  /tasks/{taskId}/events:
+    get:
+      operationId: event_subscribe
+      summary: 重放并订阅业务事件
+      tags:
+      - event
+      responses:
+        '200':
+          description: SSE id / event / data，data JSON 对应 Event schema
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: 'id: 12
+
+                event: run.status
+
+                data: {"seq":"12","type":"run.status","data":{"status":"RUNNING"}}
+
+
+                '
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: text/event-stream；Last-Event-ID 优先。持久化后发送，id=seq；每15秒心跳；按Event.data恢复，不转发思维链。首版保留所有事件。
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+      - name: after
+        in: query
+        required: false
+        schema: &id005
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+          description: Unsigned integer serialized as decimal string, never JS Number.
+      - name: Last-Event-ID
+        in: header
+        required: false
+        schema: *id005
+  /tasks/{taskId}/files:
+    get:
+      operationId: file_list
+      summary: 列举已获准浏览的固定快照文件
+      tags:
+      - file
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileListResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: snapshot 尚未 READY 返回409；文件ID绑定Task、side、Git tree path和blob，不接受任意文件路径。
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+  /tasks/{taskId}/files/{fileId}:
+    get:
+      operationId: file_lines
+      summary: 读取固定版本文件行
+      tags:
+      - file
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileLinesResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: endLine 默认 startLine+199；至多500行；超出文件结尾返回实际endLine/hasMore；空文件endLine=0。文本≤1MiB，敏感文件/控制文件不开放。
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+      - name: fileId
+        in: path
+        required: true
+        schema: &id011
+          type: string
+          pattern: ^[0-9a-f]{64}$
+      - name: startLine
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: endLine
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+  /tasks/{taskId}/rechecks:
+    post:
+      operationId: run_recheck
+      summary: 同一快照启动新一轮复查
+      tags:
+      - run
+      responses:
+        '202':
+          description: 持久化受理；非执行完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationRequest'
+  /runs/{runId}/stop:
+    post:
+      operationId: run_stop
+      summary: 请求停止或取消排队
+      tags:
+      - run
+      responses:
+        '202':
+          description: 持久化受理；非执行完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: *id004
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationRequest'
+  /runs/{runId}/retries:
+    post:
+      operationId: run_retry
+      summary: 失败或停止后显式创建同kind新轮次
+      tags:
+      - run
+      responses:
+        '202':
+          description: 持久化受理；非执行完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: 只允许Task最新Run；真实原生idle且inbox/forms无可恢复输入；RECOVERING不得重试。
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: *id004
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationRequest'
+  /tasks/{taskId}/interactions:
+    get:
+      operationId: interaction_list
+      summary: 获取当前轮次未解决原生请求
+      tags:
+      - interaction
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteractionListResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: *id004
+  /interactions/{interactionId}/answers:
+    post:
+      operationId: interaction_answer
+      summary: 回答当前有效原生权限或表单
+      tags:
+      - interaction
+      responses:
+        '202':
+          description: 持久化受理；非执行完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: interactionId
+        in: path
+        required: true
+        schema: *id004
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnswerRequest'
+  /artifacts/{artifactId}:
+    get:
+      operationId: artifact_read
+      summary: 取得已验证报告原文和元数据
+      tags:
+      - artifact
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: artifactId
+        in: path
+        required: true
+        schema: *id004
+  /artifacts/{artifactId}/download:
+    get:
+      operationId: artifact_download
+      summary: 下载已归档Markdown
+      tags:
+      - artifact
+      responses:
+        '200':
+          description: 校验文件哈希后附件下载
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="review-<version>.md"
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '400':
+          description: 参数/游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 本机会话缺失或过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Origin/CSRF/可信根校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 资源不存在或非当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态/幂等/范围/交互冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 场景或代码范围不支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 队列/请求限额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 数据库/执行服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: artifactId
+        in: path
+        required: true
+        schema: *id004
+components:
+  securitySchemes:
+    localSession:
+      type: apiKey
+      in: cookie
+      name: harness_session
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              maxLength: 64
+            message:
+              type: string
+              maxLength: 1000
+            retryable: &id012
+              type: boolean
+            details: &id006
+              type: object
+              additionalProperties: true
+              description: Read-only bounded metadata, never interpreted as commands.
+          required:
+          - code
+          - message
+          - retryable
+          - details
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - error
+      - requestId
+    OperationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: *id004
+      required:
+      - operationId
+    Operation:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: *id004
+        status:
+          type: string
+          enum:
+          - ACCEPTED
+          - PROCESSING
+          - SUCCEEDED
+          - FAILED
+          - UNKNOWN
+        taskId:
+          anyOf:
+          - *id004
+          - type: 'null'
+        runId:
+          anyOf:
+          - *id004
+          - type: 'null'
+        errorCode:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+        result:
+          anyOf:
+          - *id006
+          - type: 'null'
+      required:
+      - operationId
+      - status
+      - taskId
+      - runId
+      - errorCode
+      - result
+    Repository:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id004
+        name:
+          type: string
+          maxLength: 100
+        path:
+          type: string
+          maxLength: 4096
+        status:
+          type: string
+          enum:
+          - READY
+          - UNAVAILABLE
+          - DISABLED
+        createdAt: &id008
+          type: string
+          format: date-time
+      required:
+      - id
+      - name
+      - path
+      - status
+      - createdAt
+    RegisterRepository:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: *id004
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      required:
+      - operationId
+      - name
+      - path
+    Ref:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          maxLength: 2048
+        fullName:
+          type: string
+          maxLength: 1024
+        oid: &id007
+          type: string
+          pattern: ^(?:[0-9a-f]{40}|[0-9a-f]{64})$
+        kind:
+          type: string
+          enum:
+          - LOCAL_BRANCH
+          - REMOTE_TRACKING
+      required:
+      - id
+      - fullName
+      - oid
+      - kind
+    Refs:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ref'
+        headOID: *id007
+        branch:
+          anyOf:
+          - type: string
+            maxLength: 1024
+          - type: 'null'
+        objectFormat:
+          type: string
+          enum:
+          - sha1
+          - sha256
+        observedAt: *id008
+      required:
+      - items
+      - headOID
+      - branch
+      - objectFormat
+      - observedAt
+    DirtyCounts:
+      type: object
+      additionalProperties: false
+      properties:
+        staged: &id009
+          type: integer
+          minimum: 0
+        unstaged: *id009
+        untracked: *id009
+      required:
+      - staged
+      - unstaged
+      - untracked
+    Exclusion:
+      type: object
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          maxLength: 4096
+        reason:
+          type: string
+          maxLength: 256
+      required:
+      - path
+      - reason
+    Scope:
+      type: object
+      additionalProperties: false
+      properties:
+        headOID: *id007
+        baseOID: *id007
+        mergeBaseOID: *id007
+        baseRef:
+          type: string
+          maxLength: 1024
+        sourceBranch:
+          anyOf:
+          - type: string
+            maxLength: 1024
+          - type: 'null'
+        objectFormat:
+          type: string
+          enum:
+          - sha1
+          - sha256
+      required:
+      - headOID
+      - baseOID
+      - mergeBaseOID
+      - baseRef
+      - sourceBranch
+      - objectFormat
+    PreviewRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: *id004
+        repositoryId: *id004
+        baseRefId:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      required:
+      - operationId
+      - repositoryId
+      - baseRefId
+    Preview:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id004
+        repositoryId: *id004
+        scope:
+          $ref: '#/components/schemas/Scope'
+        changedFiles: *id009
+        applicableFiles: *id009
+        dirtyCounts:
+          $ref: '#/components/schemas/DirtyCounts'
+        exclusions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Exclusion'
+        expiresAt: *id008
+        notice:
+          type: string
+          maxLength: 1000
+      required:
+      - id
+      - repositoryId
+      - scope
+      - changedFiles
+      - applicableFiles
+      - dirtyCounts
+      - exclusions
+      - expiresAt
+      - notice
+    CreateTask:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: *id004
+        previewId: *id004
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        controller:
+          type: string
+          pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+          maxLength: 128
+        notes:
+          type: string
+          maxLength: 2000
+      required:
+      - operationId
+      - previewId
+    Run:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id004
+        taskId: *id004
+        number:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum:
+          - REVIEW
+          - DISCUSS
+          - RECHECK
+        status:
+          type: string
+          enum: *id010
+        retryOfRunId:
+          anyOf:
+          - *id004
+          - type: 'null'
+        dispatchState:
+          type: string
+          enum:
+          - NOT_SENT
+          - SENDING
+          - ACCEPTED
+          - UNKNOWN
+          - REJECTED
+        errorCode:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+        createdAt: *id008
+        startedAt:
+          anyOf:
+          - *id008
+          - type: 'null'
+        finishedAt:
+          anyOf:
+          - *id008
+          - type: 'null'
+      required:
+      - id
+      - taskId
+      - number
+      - kind
+      - status
+      - retryOfRunId
+      - dispatchState
+      - errorCode
+      - createdAt
+      - startedAt
+      - finishedAt
+    ArtifactSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id004
+        runId: *id004
+        version:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum:
+          - REVIEW_MARKDOWN
+        sha256: *id011
+        sizeBytes: *id005
+        coverage:
+          type: string
+          enum:
+          - FULL
+          - PARTIAL
+        createdAt: *id008
+      required:
+      - id
+      - runId
+      - version
+      - kind
+      - sha256
+      - sizeBytes
+      - coverage
+      - createdAt
+    TaskSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id004
+        repositoryId: *id004
+        title:
+          type: string
+          maxLength: 160
+        scenarioId:
+          type: string
+          enum:
+          - code-review
+        status:
+          type: string
+          enum: *id010
+        latestRunId: *id004
+        headOID: *id007
+        baseRef:
+          type: string
+          maxLength: 1024
+        createdAt: *id008
+        updatedAt: *id008
+      required:
+      - id
+      - repositoryId
+      - title
+      - scenarioId
+      - status
+      - latestRunId
+      - headOID
+      - baseRef
+      - createdAt
+      - updatedAt
+    TaskDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        task:
+          $ref: '#/components/schemas/TaskSummary'
+        scope:
+          $ref: '#/components/schemas/Scope'
+        snapshotStatus:
+          type: string
+          enum:
+          - PENDING
+          - READY
+          - FAILED
+        latestRun:
+          $ref: '#/components/schemas/Run'
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactSummary'
+        lastSeq: *id005
+        continuity:
+          type: string
+          enum:
+          - COMPLETE
+          - GAP
+          - UNKNOWN
+        controller:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+      required:
+      - task
+      - scope
+      - snapshotStatus
+      - latestRun
+      - reports
+      - lastSeq
+      - continuity
+      - controller
+      - notes
+    Message:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id004
+        runId: *id004
+        role:
+          type: string
+          enum:
+          - USER
+          - ASSISTANT
+        text:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - STREAMING
+          - COMPLETE
+          - INTERRUPTED
+        reportArtifactId:
+          anyOf:
+          - *id004
+          - type: 'null'
+        createdAt: *id008
+        updatedAt: *id008
+      required:
+      - id
+      - runId
+      - role
+      - text
+      - status
+      - reportArtifactId
+      - createdAt
+      - updatedAt
+    DiscussionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: *id004
+        text:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        reportArtifactId: *id004
+        quote:
+          type: string
+          maxLength: 4000
+      required:
+      - operationId
+      - text
+    File:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id011
+        path:
+          type: string
+          maxLength: 4096
+        change:
+          type: string
+          enum:
+          - ADDED
+          - MODIFIED
+          - DELETED
+          - RENAMED
+          - CONTEXT
+        blobOID: *id007
+        side:
+          type: string
+          enum:
+          - BASE
+          - HEAD
+        lineCount: *id009
+      required:
+      - id
+      - path
+      - change
+      - blobOID
+      - side
+      - lineCount
+    FileLines:
+      type: object
+      additionalProperties: false
+      properties:
+        file:
+          $ref: '#/components/schemas/File'
+        startLine:
+          type: integer
+          minimum: 1
+        endLine: *id009
+        lines:
+          type: array
+          items:
+            type: string
+        hasMore: *id012
+      required:
+      - file
+      - startLine
+      - endLine
+      - lines
+      - hasMore
+    FormField:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        label:
+          type: string
+          maxLength: 500
+        type:
+          type: string
+          enum:
+          - TEXT
+          - SINGLE_SELECT
+          - MULTI_SELECT
+          - BOOLEAN
+        required: *id012
+        options:
+          type: array
+          items:
+            type: string
+            maxLength: 500
+        maxLength:
+          type: integer
+          minimum: 1
+          maximum: 8000
+      required:
+      - id
+      - label
+      - type
+      - required
+      - options
+      - maxLength
+    Interaction:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          id: *id004
+          taskId: *id004
+          runId: *id004
+          kind:
+            type: string
+            enum:
+            - PERMISSION
+          revision:
+            type: integer
+            minimum: 1
+          status:
+            type: string
+            enum:
+            - PENDING
+            - ANSWERING
+            - UNKNOWN
+          expiresAt: *id008
+          tool:
+            type: string
+            maxLength: 256
+          requestText:
+            type: string
+            maxLength: 32000
+          allowedDecisions:
+            type: array
+            items:
+              type: string
+              enum:
+              - ALLOW_ONCE
+              - DENY
+        required:
+        - id
+        - taskId
+        - runId
+        - kind
+        - revision
+        - status
+        - expiresAt
+        - tool
+        - requestText
+        - allowedDecisions
+      - type: object
+        additionalProperties: false
+        properties:
+          id: *id004
+          taskId: *id004
+          runId: *id004
+          kind:
+            type: string
+            enum:
+            - FORM
+          revision:
+            type: integer
+            minimum: 1
+          status:
+            type: string
+            enum:
+            - PENDING
+            - ANSWERING
+            - UNKNOWN
+          expiresAt: *id008
+          title:
+            type: string
+            maxLength: 500
+          fields:
+            type: array
+            items:
+              $ref: '#/components/schemas/FormField'
+        required:
+        - id
+        - taskId
+        - runId
+        - kind
+        - revision
+        - status
+        - expiresAt
+        - title
+        - fields
+      discriminator:
+        propertyName: kind
+    AnswerRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: *id004
+        revision:
+          type: integer
+          minimum: 1
+        answer:
+          oneOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              kind:
+                type: string
+                enum:
+                - PERMISSION
+              decision:
+                type: string
+                enum:
+                - ALLOW_ONCE
+                - DENY
+            required:
+            - kind
+            - decision
+          - type: object
+            additionalProperties: false
+            properties:
+              kind:
+                type: string
+                enum:
+                - FORM
+              cancel: *id012
+              values:
+                type: object
+                maxProperties: 30
+                additionalProperties:
+                  oneOf:
+                  - type: string
+                    maxLength: 8000
+                  - *id012
+                  - type: array
+                    items:
+                      type: string
+                      maxLength: 500
+            required:
+            - kind
+            - cancel
+            - values
+      required:
+      - operationId
+      - revision
+      - answer
+    Artifact:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ArtifactSummary'
+        taskId: *id004
+        scope:
+          $ref: '#/components/schemas/Scope'
+        markdown:
+          type: string
+        validation: *id006
+      required:
+      - meta
+      - taskId
+      - scope
+      - markdown
+      - validation
+    Capability:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        status:
+          type: string
+          enum:
+          - SUPPORTED
+          - UNSUPPORTED
+          - UNKNOWN
+        required: *id012
+        evidence:
+          type: string
+          maxLength: 1000
+      required:
+      - name
+      - status
+      - required
+      - evidence
+    Health:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - READY
+          - DEGRADED
+          - UNAVAILABLE
+        database:
+          type: string
+          enum:
+          - READY
+          - UNAVAILABLE
+        opencode:
+          type: string
+          enum:
+          - READY
+          - UNAVAILABLE
+          - UNVERIFIED
+        build:
+          type: string
+          maxLength: 100
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+      required:
+      - status
+      - database
+      - opencode
+      - build
+      - capabilities
+    Bootstrap:
+      type: object
+      additionalProperties: false
+      properties:
+        owner:
+          type: object
+          additionalProperties: false
+          properties:
+            id: *id004
+            name:
+              type: string
+              maxLength: 100
+          required:
+          - id
+          - name
+        csrfToken:
+          type: string
+          maxLength: 256
+        scenarios:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+                enum:
+                - code-review
+              name:
+                type: string
+                maxLength: 100
+              enabled: *id012
+              reason:
+                anyOf:
+                - type: string
+                  maxLength: 1000
+                - type: 'null'
+            required:
+            - id
+            - name
+            - enabled
+            - reason
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        limits:
+          type: object
+          additionalProperties: false
+          properties:
+            maxQueued: *id009
+            maxActiveRuns: *id009
+            notesMaxLength: *id009
+            messageMaxLength: *id009
+            previewTTLSeconds: *id009
+          required:
+          - maxQueued
+          - maxActiveRuns
+          - notesMaxLength
+          - messageMaxLength
+          - previewTTLSeconds
+      required:
+      - owner
+      - csrfToken
+      - scenarios
+      - capabilities
+      - limits
+    Event:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - task.created
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              taskId: *id004
+            required:
+            - taskId
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - scope.ready
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              snapshotId: *id004
+              manifestHash: *id011
+            required:
+            - snapshotId
+            - manifestHash
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - run.status
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              status:
+                type: string
+                enum: *id010
+              previousStatus:
+                anyOf:
+                - type: string
+                  enum: *id010
+                - type: 'null'
+              errorCode:
+                anyOf:
+                - type: string
+                  maxLength: 64
+                - type: 'null'
+            required:
+            - status
+            - previousStatus
+            - errorCode
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - message.delta
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              messageId: *id004
+              offset: *id005
+              text:
+                type: string
+                maxLength: 4096
+            required:
+            - messageId
+            - offset
+            - text
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - message.completed
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              messageId: *id004
+              status:
+                type: string
+                enum:
+                - COMPLETE
+                - INTERRUPTED
+            required:
+            - messageId
+            - status
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - tool.started
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              toolCallId:
+                type: string
+                maxLength: 128
+              tool:
+                type: string
+                maxLength: 256
+              summary:
+                type: string
+                maxLength: 2000
+            required:
+            - toolCallId
+            - tool
+            - summary
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - tool.completed
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              toolCallId:
+                type: string
+                maxLength: 128
+              tool:
+                type: string
+                maxLength: 256
+              summary:
+                type: string
+                maxLength: 2000
+              outcome:
+                type: string
+                enum:
+                - SUCCEEDED
+                - FAILED
+                - CANCELLED
+            required:
+            - toolCallId
+            - tool
+            - summary
+            - outcome
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - interaction.pending
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              interactionId: *id004
+              revision:
+                type: integer
+                minimum: 1
+              status:
+                type: string
+                enum:
+                - PENDING
+            required:
+            - interactionId
+            - revision
+            - status
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - interaction.resolved
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              interactionId: *id004
+              revision:
+                type: integer
+                minimum: 1
+              status:
+                type: string
+                enum:
+                - ANSWERED
+                - EXPIRED
+                - CANCELLED
+            required:
+            - interactionId
+            - revision
+            - status
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - artifact.ready
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              artifactId: *id004
+              version:
+                type: integer
+                minimum: 1
+              coverage:
+                type: string
+                enum:
+                - FULL
+                - PARTIAL
+            required:
+            - artifactId
+            - version
+            - coverage
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      - type: object
+        additionalProperties: false
+        properties:
+          taskId: *id004
+          runId:
+            anyOf:
+            - *id004
+            - type: 'null'
+          seq: *id005
+          type:
+            type: string
+            enum:
+            - continuity.gap
+          occurredAt: *id008
+          data:
+            type: object
+            additionalProperties: false
+            properties:
+              reason:
+                type: string
+                maxLength: 1000
+              recoveredThroughNativeCursor:
+                anyOf:
+                - *id005
+                - type: 'null'
+            required:
+            - reason
+            - recoveredThroughNativeCursor
+        required:
+        - taskId
+        - runId
+        - seq
+        - type
+        - occurredAt
+        - data
+      discriminator:
+        propertyName: type
+    RepositoryPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Repository'
+        nextCursor:
+          anyOf:
+          - type: string
+            maxLength: 2048
+          - type: 'null'
+      required:
+      - items
+      - nextCursor
+    TaskPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskSummary'
+        nextCursor:
+          anyOf:
+          - type: string
+            maxLength: 2048
+          - type: 'null'
+      required:
+      - items
+      - nextCursor
+    RunPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Run'
+        nextCursor:
+          anyOf:
+          - type: string
+            maxLength: 2048
+          - type: 'null'
+      required:
+      - items
+      - nextCursor
+    MessagePage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        nextCursor:
+          anyOf:
+          - type: string
+            maxLength: 2048
+          - type: 'null'
+      required:
+      - items
+      - nextCursor
+    OperationResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Operation'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    RepositoryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Repository'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    RefResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Ref'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    RefsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Refs'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    DirtyCountsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/DirtyCounts'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    ExclusionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Exclusion'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    ScopeResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Scope'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    PreviewResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Preview'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    RunResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Run'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    ArtifactSummaryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/ArtifactSummary'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    TaskSummaryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/TaskSummary'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    TaskDetailResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/TaskDetail'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    MessageResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Message'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    FileResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/File'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    FileLinesResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/FileLines'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    FormFieldResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/FormField'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    InteractionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Interaction'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    ArtifactResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Artifact'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    CapabilityResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Capability'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Health'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    BootstrapResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Bootstrap'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    RepositoryPageResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/RepositoryPage'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    TaskPageResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/TaskPage'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    RunPageResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/RunPage'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    MessagePageResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/MessagePage'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    FileList:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+        excluded:
+          type: array
+          items:
+            $ref: '#/components/schemas/Exclusion'
+      required:
+      - items
+      - excluded
+    FileListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/FileList'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
+    InteractionList:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Interaction'
+      required:
+      - items
+    InteractionListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/InteractionList'
+        requestId:
+          type: string
+          maxLength: 128
+      required:
+      - data
+      - requestId
