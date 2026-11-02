@@ -2,6 +2,8 @@
 
 Codea Harness V1 是面向 Java + Spring Boot + Maven 项目的 Agent 原生 Harness 规范包。源码仓库只保存 Source；正式 Windows 产品由 CI 构建 Runtime、注入固定 ast-grep 后打包发布。
 
+Web 工作台设计：[总体方案与四张效果图](docs/superpowers/specs/2026-11-02-code-harness-web-workbench-design.md) · [后端接口与 MySQL 表设计](docs/superpowers/specs/2026-11-02-code-harness-web-backend-design.md) · [14 个研发 Task](docs/superpowers/plans/2026-11-02-code-harness-web-workbench.md)。已整理 25 个 HTTP 接口 OpenAPI 和 14 张 MySQL 表 DDL；当前交付为研发规格，尚未实现或发布 Web 运行包。首期 Windows 本地单用户，复用原生 Codea Review 2.0，只审查 Git 已提交变更。附带页面预览使用模拟数据。
+
 ## Codea Review 2.0 原生命令参数
 
 `/codea-review` 和 `/codea-review OrderController` 保持兼容；新增 `/codea-review --base origin/develop`、`/codea-review --controller OrderController` 及 `/codea-review --base origin/develop --controller OrderController`，两个显式参数顺序可互换。
