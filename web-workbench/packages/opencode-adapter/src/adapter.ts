@@ -232,7 +232,7 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     // No pretending live SSE can replay after disconnect; cursor requires durable native log.
     const route = cursor ? 'log' : 'events';
     const replacements: Record<string, string> = cursor ? { sessionID: binding.sessionId } : {};
-    const query = cursor ? { after: cursor, follow: 'true' } : {};
+    const query: Record<string, string> = cursor ? { after: cursor, follow: 'true' } : {};
     for await (const frame of this.options.transport.stream(route, replacements, query)) {
       const event = obj(frame.data);
       const props = event.properties && typeof event.properties === 'object' ? obj(event.properties) : event;
