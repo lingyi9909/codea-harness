@@ -24,6 +24,8 @@ export type AdapterOptions = {
   }): DTO<'Interaction'>;
   /** The map returns native request ID, not a Harness UUID. */
   getNativeRequestId(raw: unknown): string;
+  /** Optional verified T06 audit: absent/failed audit keeps externalMutation=true. */
+  auditExternalWriter?(binding: SessionBinding): Promise<boolean>;
 };
 
 function obj(value: unknown): NativeRecord {
@@ -181,9 +183,12 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       const interactions = await this.listInteractions(binding);
       pendingInteractions = interactions.length;
     } catch { /* Native schema/build not verified. */ }
-    return { active, pendingInputs, pendingInteractions, acceptedInputIds,
-      // Until T06 proves the binding has no concurrent TUI writer, remain conservative.
-      externalMutation: !state.runId };
+    let externalMutation = true;
+    if (this.options.auditExternalWriter) {
+      try { externalMutation = await this.options.auditExternalWriter(binding); }
+      catch { externalMutation = true; }
+    }
+    return { active, pendingInputs, pendingInteractions, acceptedInputIds, externalMutation };
   }
   async readMessages(binding: SessionBinding, cursor?: string): Promise<{
     items: DTO<'Message'>[]; nextCursor: string | null;
