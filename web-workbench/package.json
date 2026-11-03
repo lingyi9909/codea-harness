@@ -1,0 +1,26 @@
+{
+  "name": "@codea/web-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.16.0 <23"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "gen:api": "node scripts/generate-dto.mjs",
+    "typecheck": "tsc --noEmit --project tsconfig.base.json",
+    "test": "node --experimental-strip-types --test tests/capabilities/probe.test.ts tests/capabilities/adapter.test.ts",
+    "probe": "node --experimental-strip-types scripts/probe.ts",
+    "test:mysql": "node scripts/pending.mjs mysql",
+    "test:e2e": "node scripts/pending.mjs e2e",
+    "test:windows-smoke": "node --experimental-strip-types scripts/probe.ts --windows-smoke"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "typescript": "5.9.3"
+  }
+}
