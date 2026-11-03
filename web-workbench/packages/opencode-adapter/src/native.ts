@@ -111,8 +111,13 @@ export class LocalNativeTransport {
     let pending = '';
     const decoder = new TextDecoder();
     let size = 0;
-    for await (const chunk of response.body) {
-      pending += decoder.decode(chunk, { stream: true });
+    const reader = response.body.getReader();
+    try {
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        const chunk = next.value;
+        pending += decoder.decode(chunk, { stream: true });
       size += chunk.length;
       if (pending.length > 1_000_000) throw new Error('NATIVE_SSE_FRAME_TOO_LARGE');
       // Reset aggregate byte counter on successfully split frames, not on every chunk.
@@ -136,6 +141,10 @@ export class LocalNativeTransport {
         catch { throw new Error('NATIVE_SSE_INVALID_JSON'); }
         yield { event, id, data };
       }
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
   }
 }

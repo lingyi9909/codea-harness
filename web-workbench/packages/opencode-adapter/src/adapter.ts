@@ -231,7 +231,7 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     if (!state.runId) throw new Error('RUN_BINDING_MISSING');
     // No pretending live SSE can replay after disconnect; cursor requires durable native log.
     const route = cursor ? 'log' : 'events';
-    const replacements = cursor ? { sessionID: binding.sessionId } : {};
+    const replacements: Record<string, string> = cursor ? { sessionID: binding.sessionId } : {};
     const query = cursor ? { after: cursor, follow: 'true' } : {};
     for await (const frame of this.options.transport.stream(route, replacements, query)) {
       const event = obj(frame.data);
