@@ -1,0 +1,37 @@
+name: Web Workbench T01 contract checks
+on:
+  pull_request:
+    paths:
+      - 'web-workbench/**'
+      - 'docs/superpowers/plans/2026-11-02-code-harness-web-workbench.md'
+      - '.github/workflows/web-workbench-t01.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  t01-static:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: web-workbench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Install locked development dependencies (CI only)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Reproduce DTO generation
+        run: npm run gen:api
+      - name: Verify committed generated schema DTOs are unchanged
+        run: git diff --exit-code -- packages/contracts/src/api.generated.ts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Capability gate unit tests
+        run: npm test
+      - name: Evidence boundary
+        run: echo "STATIC CHECKS ONLY - DOES NOT prove company Windows/OpenCode/private model integration."

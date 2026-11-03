@@ -307,3 +307,32 @@ interface OpenCodeAdapter {
 每个Task只有在自己的测试和契约通过后完成；一次合并不得以“页面可点”代替后端验收。公共DTO改动同步OpenAPI，迁移修改必须保留已有checksum并加新版本，旧数据升级另写测试。研发负责人在Task表补姓名、实际工期、PR和证据链接即可跟踪。
 
 最终交接：源码分支/PR、Windows包、MySQL迁移、环境项模板（无秘密）、OpenAPI、四页截图、能力矩阵、测试矩阵、运行/备份恢复说明、已知限制。当前文档交付不等于上述产品已开发完成。
+
+---
+
+## 4. 研发启动台账（2026-11-03，功能分支专用）
+
+> 本章是执行进度，不改变 PR #67 的原设计、接口或依赖。计划日期是人员到位、T01 获独立审核通过的**暂定排期**，不是完工承诺。
+> 负责人未知时只填写责任岗位与 `待研发负责人实名确认`，不得捏造人员姓名。
+> **状态约定：** 所有验收初始 PENDING；只有附原生 Windows/MySQL/私有模型等真实证据且独立审核通过才能更新。
+
+| Task | 责任岗位 / 实际负责人 | 计划开始 | 计划完成 | 实际完成 | 代码分支 / PR | 自动化 / 实机验收 | 阻断或限制 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T01 能力探针与契约 | BE2 主责、BE1 协助 / 待实名 | 2026-11-03 | 2026-11-06 | PENDING | `feature/code-harness-web-workbench` / T01 PR 待登记 | PENDING / PENDING | 公司 OpenCode 构建、权限/中断、Agent/Skill/模型尚需 Windows 实测 |
+| T02 MySQL 与本机会话 | BE1 / 待实名 | 2026-11-09 | 2026-11-11 | PENDING | PENDING | PENDING / PENDING | T01 审核门槛；MySQL 8.4 独立测试库 |
+| T03 仓库与范围预览 | BE1 / 待实名 | 2026-11-12 | 2026-11-13 | PENDING | PENDING | PENDING / PENDING | 依赖 T02 |
+| T04 固定副本与源码证据 | BE1 / 待实名 | 2026-11-16 | 2026-11-19 | PENDING | PENDING | PENDING / PENDING | 依赖 T03 |
+| T05 Task/Run/幂等 | BE1 / 待实名 | 2026-11-12 | 2026-11-16 | PENDING | PENDING | PENDING / PENDING | 依赖 T02/T03 |
+| T06 调度/执行/恢复 | BE2 / 待实名 | 2026-11-20 | 2026-11-24 | PENDING | PENDING | PENDING / PENDING | 依赖 T01/T02/T04/T05 |
+| T07 持久事件/SSE | BE2 / 待实名 | 2026-11-23 | 2026-11-25 | PENDING | PENDING | PENDING / PENDING | 依赖 T02/T05/T06 联调 |
+| T08 追问/复查/重试 | BE1+BE2 / 待实名 | 2026-11-26 | 2026-11-27 | PENDING | PENDING | PENDING / PENDING | 依赖 T05/T06/T07 |
+| T09 原生权限/表单 | BE2 / 待实名 | 2026-11-26 | 2026-11-27 | PENDING | PENDING | PENDING / PENDING | 依赖 T06/T07 |
+| T10 报告归档与安全读取 | BE1 / 待实名 | 2026-11-25 | 2026-11-26 | PENDING | PENDING | PENDING / PENDING | 依赖 T04/T06/T07 |
+| T11 主页面/源码证据 | FE / 待实名 | 2026-11-11 | 2026-11-26 | PENDING | PENDING | PENDING / PENDING | 仅契约可准备，真实联调等 T03/T05/T07/T10 |
+| T12 页面交互与恢复 | FE / 待实名 | 2026-11-30 | 2026-12-02 | PENDING | PENDING | PENDING / PENDING | 依赖 T08/T09/T11 |
+| T13 整体/故障验收 | QA+BE1+BE2+FE / 待实名 | 2026-12-03 | 2026-12-07 | PENDING | PENDING | PENDING / PENDING | 依赖 T04–T12 |
+| T14 Windows 包与交接 | Release+QA / 待实名 | 2026-12-08 | 2026-12-09 | PENDING | PENDING | PENDING / PENDING | 依赖 T13；离线安装/备份恢复 |
+
+**T01 启动追溯：** 设计 PR #67 HEAD `b92549ad43718f0e0579cbcb43437d16f0e3c9c7`；创建独立分支 `feature/code-harness-web-workbench`。实际研发 Commit SHA、独立 PR、CI、Windows 实测证据待提交后回填。未经真实验收不得更新验收状态或开始受阻依赖。
+
+**更新规范：** 每次 Task PR 登记负责人、计划/实际日期、commit SHA、测试命令及原始脱敏证据路径、阻断/已知限制与独立评审结论。任一能力未知不得因为测试替身、接口 2xx 或设计文档而填写 PASS。
