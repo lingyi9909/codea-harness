@@ -19,7 +19,11 @@ export type NativeWireManifest = {
 
 /** Loopback-only, redirect-free HTTP transport. No implicit retries, including GET. */
 export class LocalNativeTransport {
-  constructor(private readonly manifest: NativeWireManifest, private readonly token?: string) {
+  private readonly manifest: NativeWireManifest;
+  private readonly token?: string;
+  constructor(manifest: NativeWireManifest, token?: string) {
+    this.manifest = manifest;
+    this.token = token;
     const url = new URL(manifest.baseUrl);
     if (url.protocol !== 'http:' ||
         !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
