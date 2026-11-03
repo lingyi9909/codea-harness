@@ -60,7 +60,7 @@ describe('T01 Adapter local HTTP harness: not company native evidence', () => {
       res.setHeader('Content-Type', 'application/json');
       if (path === '/api/session' && req.method === 'POST') {
         res.end(JSON.stringify({ data: { id: sessionId, agent: 'codea-reviewer',
-          location: { directory: root } } })); return;
+          location: (body as { location: { directory: string } }).location } })); return;
       }
       if (path.endsWith('/command')) { res.statusCode = 204; res.end(); return; }
       if (path.endsWith('/prompt')) {
