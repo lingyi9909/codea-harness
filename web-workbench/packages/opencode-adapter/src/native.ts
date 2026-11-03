@@ -6,7 +6,8 @@ import { REPORT_RELATIVE_PATH } from './mapping.ts';
 export type NativeMethod = 'GET' | 'POST' | 'PUT';
 export type NativeRoute = 'identity' | 'createSession' | 'session' | 'command'
   | 'messages' | 'events' | 'state' | 'permissions' | 'permissionReply'
-  | 'forms' | 'formReply' | 'prompt' | 'interrupt' | 'instructions' | 'log';
+  | 'forms' | 'formReply' | 'prompt' | 'interrupt' | 'instructions' | 'log'
+  | 'active' | 'inbox' | 'resources';
 export type NativeWireManifest = {
   /** Filled from actual company OpenCode build, not presumed public SDK methods. */
   build: string;
@@ -20,9 +21,11 @@ export type NativeWireManifest = {
 /** Loopback-only, redirect-free HTTP transport. No implicit retries, including GET. */
 export class LocalNativeTransport {
   private readonly manifest: NativeWireManifest;
+  readonly serviceIdentity: string;
   private readonly token?: string;
   constructor(manifest: NativeWireManifest, token?: string) {
     this.manifest = manifest;
+    this.serviceIdentity = manifest.serviceIdentity;
     this.token = token;
     const url = new URL(manifest.baseUrl);
     if (url.protocol !== 'http:' ||
@@ -33,7 +36,7 @@ export class LocalNativeTransport {
   }
 
   async call(route: NativeRoute, method: NativeMethod, payload?: unknown,
-    replacements: Record<string, string> = {}): Promise<{ status: number; body: unknown }> {
+    replacements: Record<string, string> = {}, query: Record<string, string> = {}): Promise<{ status: number; body: unknown }> {
     let path = this.manifest.paths[route];
     if (!path || !path.startsWith('/api/')) throw new Error('NATIVE_ROUTE_NOT_VERIFIED: ' + route);
     for (const [name, raw] of Object.entries(replacements)) {
@@ -46,6 +49,11 @@ export class LocalNativeTransport {
     const base = new URL(this.manifest.baseUrl);
     const url = new URL(path, base);
     if (url.origin !== base.origin) throw new Error('NATIVE_ORIGIN_MISMATCH');
+    for (const [key, value] of Object.entries(query)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9.]*$/.test(key) || value.length > 4096)
+        throw new Error('INVALID_NATIVE_QUERY_PARAMETER');
+      url.searchParams.append(key, value);
+    }
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (payload !== undefined) headers['Content-Type'] = 'application/json';
     if (this.token && this.manifest.authHeader) {
@@ -67,6 +75,68 @@ export class LocalNativeTransport {
       catch { body = { unparsed: true }; }
     }
     return { status: response.status, body };
+  }
+
+  /** SSE streaming is live-only; lack of native replay MUST be reconciled separately. */
+  async *stream(route: NativeRoute, replacements: Record<string, string> = {}, query: Record<string, string> = {},
+    signal?: AbortSignal): AsyncIterable<{ event: string; id?: string; data: unknown }> {
+    const path = this.manifest.paths[route];
+    if (!path || !path.startsWith('/api/') || path.includes('..') || path.includes('?') ||
+        path.includes('#')) throw new Error('NATIVE_STREAM_ROUTE_NOT_VERIFIED');
+    let rendered = path;
+    for (const [name, value] of Object.entries(replacements)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(name) || !value || value.length > 512)
+        throw new Error('INVALID_NATIVE_ROUTE_PARAMETER');
+      rendered = rendered.replace('{' + name + '}', encodeURIComponent(value));
+    }
+    if (rendered.includes('{') || rendered.includes('}')) throw new Error('UNSAFE_NATIVE_ROUTE');
+    const url = new URL(rendered, this.manifest.baseUrl);
+    const base = new URL(this.manifest.baseUrl);
+    if (url.origin !== base.origin) throw new Error('NATIVE_ORIGIN_MISMATCH');
+    for (const [key, value] of Object.entries(query)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9.]*$/.test(key) || value.length > 4096)
+        throw new Error('INVALID_NATIVE_QUERY_PARAMETER');
+      url.searchParams.set(key, value);
+    }
+    const headers: Record<string, string> = { Accept: 'text/event-stream' };
+    if (this.token && this.manifest.authHeader) {
+      if (!/^X-[A-Za-z0-9-]+$/.test(this.manifest.authHeader) &&
+          this.manifest.authHeader.toLowerCase() !== 'authorization') throw new Error('UNSAFE_AUTH_HEADER');
+      headers[this.manifest.authHeader] = this.manifest.authHeader.toLowerCase() === 'authorization'
+        ? 'Bearer ' + this.token : this.token;
+    }
+    const response = await fetch(url, { method: 'GET', headers, redirect: 'error', cache: 'no-store', signal });
+    if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream'))
+      throw new Error('NATIVE_SSE_NOT_AVAILABLE: ' + response.status);
+    let pending = '';
+    const decoder = new TextDecoder();
+    let size = 0;
+    for await (const chunk of response.body) {
+      pending += decoder.decode(chunk, { stream: true });
+      size += chunk.length;
+      if (pending.length > 1_000_000) throw new Error('NATIVE_SSE_FRAME_TOO_LARGE');
+      // Reset aggregate byte counter on successfully split frames, not on every chunk.
+      if (size > 50_000_000) throw new Error('NATIVE_SSE_BUDGET_EXCEEDED');
+      let boundary: number;
+      while ((boundary = pending.search(/\r?\n\r?\n/)) >= 0) {
+        const separator = pending.match(/\r?\n\r?\n/)![0].length;
+        const lines = pending.slice(0, boundary).split(/\r?\n/);
+        pending = pending.slice(boundary + separator);
+        const dataLines: string[] = [];
+        let event = 'message', id: string | undefined;
+        for (const line of lines) {
+          if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+          else if (line.startsWith('event:')) event = line.slice(6).trim();
+          else if (line.startsWith('id:')) id = line.slice(3).trim();
+        }
+        if (!dataLines.length) continue;
+        const raw = dataLines.join('\n');
+        let data: unknown;
+        try { data = JSON.parse(raw) as unknown; }
+        catch { throw new Error('NATIVE_SSE_INVALID_JSON'); }
+        yield { event, id, data };
+      }
+    }
   }
 }
 

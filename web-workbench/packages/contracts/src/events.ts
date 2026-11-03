@@ -5,7 +5,8 @@ export type NativeEnvelope = {
   cursor?: string;
   taskId: UUID;
   runId: UUID;
-  type: DTO<'Event'>['type'];
+  /** Actual native event type; T07 maps it to business Event.type after validation. */
+  type: string;
   data: Record<string, unknown>;
 };
 export type Continuity = 'COMPLETE' | 'GAP' | 'UNKNOWN';
