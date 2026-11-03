@@ -23,9 +23,6 @@ function isWithin(parent: string, child: string): boolean {
   const rel = relative(parent, child);
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
-function sameRoot(a: string, b: string): boolean {
-  return relative(a, b) === '' && relative(b, a) === '';
-}
 function mustOID(label: string, value: string): void {
   if (!OID.test(value)) throw new Error('INVALID_' + label + '_OID');
 }
@@ -55,9 +52,9 @@ export function inspectFrozenSnapshot(input: {
   const snapshot = realpathSync(resolve(input.snapshotRoot));
   if (isWithin(original, snapshot) || isWithin(snapshot, original))
     throw new Error('SNAPSHOT_NOT_INDEPENDENT');
-  if (!sameRoot(realpathSync(git(snapshot, ['rev-parse', '--show-toplevel'])), snapshot))
+  if (git(snapshot, ['rev-parse', '--show-prefix']) !== '')
     throw new Error('SNAPSHOT_NOT_GIT_ROOT');
-  if (!sameRoot(realpathSync(git(original, ['rev-parse', '--show-toplevel'])), original))
+  if (git(original, ['rev-parse', '--show-prefix']) !== '')
     throw new Error('SOURCE_NOT_GIT_ROOT');
   // Worktrees sharing source's .git common storage do not qualify as independent copies.
   const sharedGit = realpathSync(git(snapshot, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
