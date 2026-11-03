@@ -54,7 +54,7 @@ npm test
 ```powershell
 $env:CODE_HARNESS_NATIVE_TOKEN = "<read securely, never commit>"
 npm run probe -- --manifest "C:\\secure\\company.native.local.json"
-npm run probe -- --manifest "C:\\secure\\company.native.local.json" --source "D:\\test\\source-repo" --snapshot "D:\\test\\task-copy" --run-review
+npm run probe -- --manifest "C:\\secure\\company.native.local.json" --source "D:\\test\\source-repo" --snapshot "D:\\test\\task-copy" --expected-head "<frozen-head-oid>" --expected-merge-base "<frozen-merge-base-oid>" --run-review
 ```
 
 `--run-review` 明确发起**一次**原生 command；脚本绝不自动重发、自动回复权限或宣称已完成。它返回非零并列出 UNKNOWN，这是防止 HTTP 2xx 冒充成功的保护。记录真实 Session ID（仅在受控内网证据）、确认 Agent/Command/Skill/模板来源 SHA256 与首个工具动作为原生 Skill 加载；确认私有模型使用的实际 alias/provider。
@@ -67,10 +67,12 @@ npm run probe -- --manifest "C:\\secure\\company.native.local.json" --source "D:
 
 ## 4. 报告和隔离
 
-只在原生命令真正完成、且报告本轮实际产生之后，使用 `--verify-report --snapshot "D:\\test\\task-copy" --run-started-at <本轮毫秒时间戳> --manifest ...` 校验五章文件和 SHA256。校验脚本**不会**因存在旧报告就通过；报告校验必须附执行开始时间与上下文中的 native Session ID。
+只在原生命令真正完成、且报告本轮实际产生之后，使用 `--verify-report --source "D:\\test\\source-repo" --before-fingerprint <首轮JSON的sourceBeforeFingerprint> --snapshot "D:\\test\\task-copy" --run-started-at <本轮毫秒时间戳> --manifest ...` 校验五章文件和 SHA256。校验脚本**不会**因存在旧报告就通过；报告校验必须附执行开始时间与上下文中的 native Session ID。
 
 记录原仓库 HEAD、index 哈希和 `git status --porcelain=v1 -z` 前后结果，以及目标环境阻断外网的证据。避免将私有项目源码、完整命令输出、认证信息上传到公网 GitHub。
 
 ## 5. 审核
 
 把逐项实测记录填入 `docs/capability-matrix.md`，包括 build、客户端锁定版本、API shape、请求/响应脱敏 trace ID、资源 digest、测试时间与结论。由独立审核方复核并给出 PASS / CONDITIONAL PASS / FAIL；全部 required 证据满足之前不允许开始依赖原生执行的 T02–T14 工作，也不宣称 Web 内网正式可用。
+
+> 安全校验补充：真实 Review 之前运行只读 Git preflight，验证副本 Git common-dir 在副本内、仓库工作区干净、HEAD/本地 `harness-review-base`/merge-base OID 与指定值一致，拒绝 partial/promisor 仓库。保留首轮 JSON 的 `sourceBeforeFingerprint`，在原生命令实际终态后再比较原仓库指纹；未对账不能把 repository.immutable 标记为 SUPPORTED。

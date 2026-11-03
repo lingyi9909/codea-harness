@@ -33,3 +33,5 @@
 ### 验收文件约束
 
 提交：脱敏原生请求/响应结构及时间戳、哈希后的 Agent/Command/Skill/模板来源、真实报告 SHA256、原仓库前后 HEAD/index/status 的对比、网络阻断观察、`npm run typecheck` / `npm test` 终端输出、Node/Windows/Git/OpenCode 构建。不得提交 Token、Cookie、数据库 DSN、内部源代码正文、敏感路径或完整私有模型回复。
+
+- 2026-11-03：已创建 [T01 Draft PR #68](https://github.com/lingyi9909/codea-harness/pull/68)；GitHub hosted Windows 静态依赖安装/DTO生成/typecheck/单测已有成功记录。**这不是公司 Windows 实测**，仍保留所有 REQUIRED 原生能力 UNKNOWN。

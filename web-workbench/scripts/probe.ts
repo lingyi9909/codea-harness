@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { evaluateCapabilities, type Observation } from '../packages/opencode-adapter/src/probe.ts';
 import { LocalNativeTransport, verifyWrittenReport, type NativeWireManifest } from '../packages/opencode-adapter/src/native.ts';
 import { assertNativeId, reviewArguments, REVIEW_COMMAND } from '../packages/opencode-adapter/src/mapping.ts';
+import { inspectFrozenSnapshot, originalRepositoryFingerprint } from '../packages/opencode-adapter/src/git-guard.ts';
 
 type CompanyManifest = NativeWireManifest & {
   responseFields: { build: string; identity: string; sessionId: string; sessionLocation: string };
@@ -13,7 +14,7 @@ type CompanyManifest = NativeWireManifest & {
 function argumentsMap(argv: string[]): Map<string, string | true> {
   const args = new Map<string, string | true>();
   const flags = new Set(['--windows-smoke', '--run-review', '--verify-report']);
-  const named = new Set(['--manifest', '--snapshot', '--source', '--out', '--controller', '--run-started-at']);
+  const named = new Set(['--manifest', '--snapshot', '--source', '--out', '--controller', '--run-started-at', '--expected-head', '--expected-merge-base', '--before-fingerprint']);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (args.has(arg)) throw new Error('DUPLICATE_ARGUMENT: ' + arg);
@@ -67,6 +68,7 @@ async function main() {
   const sourceArg = getValue(args, '--source');
   let sessionId: string | undefined;
   let startedAt: number | undefined;
+  let sourceBeforeFingerprint: string | undefined;
   if (args.has('--run-review')) {
     if (!snapshotArg || !sourceArg) throw new Error('SNAPSHOT_AND_SOURCE_REQUIRED');
     const snapshot = await realpath(resolve(snapshotArg));
@@ -74,6 +76,13 @@ async function main() {
     if (matchesPath(source, snapshot) || matchesPath(snapshot, source))
       throw new Error('SNAPSHOT_MUST_BE_INDEPENDENT');
     if (snapshot.length > 4000) throw new Error('SNAPSHOT_PATH_TOO_LONG');
+    const expectedHeadOID = getValue(args, '--expected-head');
+    const expectedMergeBaseOID = getValue(args, '--expected-merge-base');
+    if (!expectedHeadOID || !expectedMergeBaseOID) throw new Error('FROZEN_OID_ARGUMENTS_REQUIRED');
+    inspectFrozenSnapshot({
+      sourceRoot: source, snapshotRoot: snapshot, expectedHeadOID, expectedMergeBaseOID,
+    });
+    sourceBeforeFingerprint = originalRepositoryFingerprint(source);
     const locationKey = manifest.requestFields.sessionLocation;
     const nameKey = manifest.requestFields.commandName;
     const textKey = manifest.requestFields.commandText;
@@ -102,6 +111,14 @@ async function main() {
     const value = getValue(args, '--run-started-at');
     if (!value || !/^\d+$/.test(value)) throw new Error('RUN_STARTED_AT_REQUIRED');
     const report = await verifyWrittenReport(await realpath(resolve(snapshotArg)), Number(value));
+    const expectedBefore = getValue(args, '--before-fingerprint');
+    if (sourceArg && expectedBefore) {
+      if (!/^[0-9a-f]{64}$/.test(expectedBefore)) throw new Error('INVALID_SOURCE_FINGERPRINT');
+      const observedAfter = originalRepositoryFingerprint(sourceArg);
+      record('repository.immutable', observedAfter === expectedBefore ? 'SUPPORTED' : 'UNSUPPORTED',
+        observedAfter === expectedBefore ? 'Original source fingerprint unchanged after native terminal run' :
+          'Original source fingerprint CHANGED; fail isolation acceptance');
+    }
     record('report.persist', 'SUPPORTED',
       'Native written five-chapter report verified: sha256=' + report.sha256 + ', bytes=' + report.bytes);
   }
@@ -113,7 +130,7 @@ async function main() {
     environment: { platform: process.platform, node: process.version },
     build: manifest.build, serviceIdentity: manifest.serviceIdentity,
     sessionIdRedacted: sessionId ? 'captured' : null,
-    startedAt, capabilities: result.capabilities, blockers: result.blockers,
+    startedAt, sourceBeforeFingerprint, capabilities: result.capabilities, blockers: result.blockers,
     ready: result.ready, notesEnabled: result.notesEnabled, continuity: result.continuity,
     caution: 'Partial transport checks only. Native permission/agent/skill/report/prompt/interrupt must be independently witnessed.',
   };

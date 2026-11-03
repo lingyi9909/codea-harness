@@ -318,7 +318,7 @@ interface OpenCodeAdapter {
 
 | Task | 责任岗位 / 实际负责人 | 计划开始 | 计划完成 | 实际完成 | 代码分支 / PR | 自动化 / 实机验收 | 阻断或限制 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| T01 能力探针与契约 | BE2 主责、BE1 协助 / 待实名 | 2026-11-03 | 2026-11-06 | PENDING | `feature/code-harness-web-workbench` / T01 PR 待登记 | PENDING / PENDING | 公司 OpenCode 构建、权限/中断、Agent/Skill/模型尚需 Windows 实测 |
+| T01 能力探针与契约 | BE2 主责、BE1 协助 / 待实名 | 2026-11-03 | 2026-11-06 | PENDING | `feature/code-harness-web-workbench` / [PR #68](https://github.com/lingyi9909/codea-harness/pull/68) | PENDING / PENDING | 公司 OpenCode 构建、权限/中断、Agent/Skill/模型尚需 Windows 实测 |
 | T02 MySQL 与本机会话 | BE1 / 待实名 | 2026-11-09 | 2026-11-11 | PENDING | PENDING | PENDING / PENDING | T01 审核门槛；MySQL 8.4 独立测试库 |
 | T03 仓库与范围预览 | BE1 / 待实名 | 2026-11-12 | 2026-11-13 | PENDING | PENDING | PENDING / PENDING | 依赖 T02 |
 | T04 固定副本与源码证据 | BE1 / 待实名 | 2026-11-16 | 2026-11-19 | PENDING | PENDING | PENDING / PENDING | 依赖 T03 |
@@ -333,6 +333,6 @@ interface OpenCodeAdapter {
 | T13 整体/故障验收 | QA+BE1+BE2+FE / 待实名 | 2026-12-03 | 2026-12-07 | PENDING | PENDING | PENDING / PENDING | 依赖 T04–T12 |
 | T14 Windows 包与交接 | Release+QA / 待实名 | 2026-12-08 | 2026-12-09 | PENDING | PENDING | PENDING / PENDING | 依赖 T13；离线安装/备份恢复 |
 
-**T01 启动追溯：** 设计 PR #67 HEAD `b92549ad43718f0e0579cbcb43437d16f0e3c9c7`；创建独立分支 `feature/code-harness-web-workbench`。实际研发 Commit SHA、独立 PR、CI、Windows 实测证据待提交后回填。未经真实验收不得更新验收状态或开始受阻依赖。
+**T01 启动追溯：** 设计 PR #67 HEAD `b92549ad43718f0e0579cbcb43437d16f0e3c9c7`；创建独立分支 `feature/code-harness-web-workbench`。T01 独立开发 PR #68 已创建（Draft）；静态 CI 有测试记录，Windows 公司实测证据待补。最终开发 Commit SHA 以 PR 最新 HEAD 为准。未经真实验收不得更新验收状态或开始受阻依赖。
 
 **更新规范：** 每次 Task PR 登记负责人、计划/实际日期、commit SHA、测试命令及原始脱敏证据路径、阻断/已知限制与独立评审结论。任一能力未知不得因为测试替身、接口 2xx 或设计文档而填写 PASS。

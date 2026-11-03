@@ -66,3 +66,76 @@ describe('T01 wire transport boundaries', () => {
     await assert.rejects(() => client.call('permissions', 'GET'), /NATIVE_ROUTE_NOT_VERIFIED/);
   });
 });
+
+
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { inspectFrozenSnapshot, originalRepositoryFingerprint } from '../../packages/opencode-adapter/src/git-guard.ts';
+
+describe('T01 fixed committed-only Git task location', () => {
+  it('allows independent clean clone with pinned OIDs and rejects subsequent dirty snapshot', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'harness-t01-'));
+    const source = join(parent, 'original');
+    const snapshot = join(parent, 'task-copy');
+    function run(args: string[]): string {
+      return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    }
+    try {
+      mkdirSync(source);
+      run(['init', '-q', source]);
+      writeFileSync(join(source, 'hello.txt'), 'hello\n');
+      run(['-C', source, 'add', 'hello.txt']);
+      run(['-C', source, '-c', 'user.name=T01', '-c', 'user.email=t01@example.invalid', 'commit', '-qm', 'initial']);
+      const head = run(['-C', source, 'rev-parse', 'HEAD']);
+      run(['clone', '-q', '--no-hardlinks', source, snapshot]);
+      run(['-C', snapshot, 'branch', 'harness-review-base', head]);
+      const before = originalRepositoryFingerprint(source);
+      const frozen = inspectFrozenSnapshot({
+        sourceRoot: source, snapshotRoot: snapshot, expectedHeadOID: head, expectedMergeBaseOID: head,
+      });
+      assert.equal(frozen.headOID, head);
+      assert.equal(frozen.baseOID, head);
+      writeFileSync(join(snapshot, 'extra.sql'), 'SELECT 1;\n');
+      assert.throws(() => inspectFrozenSnapshot({
+        sourceRoot: source, snapshotRoot: snapshot, expectedHeadOID: head, expectedMergeBaseOID: head,
+      }), /SNAPSHOT_NOT_CLEAN/);
+      assert.equal(originalRepositoryFingerprint(source), before);
+      assert.throws(() => inspectFrozenSnapshot({
+        sourceRoot: source, snapshotRoot: snapshot, expectedHeadOID: '0'.repeat(40), expectedMergeBaseOID: head,
+      }), /FROZEN_GIT_SCOPE_MISMATCH/);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+});
+
+
+import { verifyWrittenReport } from '../../packages/opencode-adapter/src/native.ts';
+
+describe('T01 native report file proof', () => {
+  it('requires five ordered chapters, fresh physical file and digest', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'harness-report-'));
+    try {
+      mkdirSync(join(root, 'temp'));
+      const file = join(root, 'temp', 'codea-review-report.md');
+      const markdown = [
+        '# 代码评审报告', '## 评审摘要', '## 调用链与覆盖范围',
+        '## 风险清单', '## 问题明细', '## 后续处理与评审边界',
+      ].join('\n');
+      const started = Date.now() - 2000;
+      writeFileSync(file, markdown);
+      const result = await verifyWrittenReport(root, started);
+      assert.equal(result.sections, 5);
+      assert.equal(result.sha256.length, 64);
+      await assert.rejects(() => verifyWrittenReport(root, Date.now() + 30000),
+        /REPORT_MISSING_OR_STALE/);
+      writeFileSync(file, '# Only heading\n');
+      await assert.rejects(() => verifyWrittenReport(root, started),
+        /REPORT_FIVE_CHAPTERS_INVALID/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
