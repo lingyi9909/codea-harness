@@ -57,8 +57,11 @@ export function inspectFrozenSnapshot(input: {
   if (git(original, ['rev-parse', '--show-prefix']) !== '')
     throw new Error('SOURCE_NOT_GIT_ROOT');
   // Worktrees sharing source's .git common storage do not qualify as independent copies.
-  const sharedGit = realpathSync(git(snapshot, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
-  if (!isWithin(snapshot, sharedGit)) throw new Error('SNAPSHOT_USES_EXTERNAL_GIT_COMMON_DIR');
+  const commonDir = git(snapshot, ['rev-parse', '--git-common-dir']);
+  // A normal standalone clone returns ".git"; a linked worktree/submodule exposes a shared path.
+  // Do not compare Windows paths as raw strings (MSYS, drive-case and 8.3 aliases differ).
+  if (commonDir !== '.git' && commonDir !== './.git')
+    throw new Error('SNAPSHOT_USES_EXTERNAL_GIT_COMMON_DIR');
   refusePartialGit(snapshot);
   const head = git(snapshot, ['rev-parse', '--verify', 'HEAD']);
   mustOID('ACTUAL_HEAD', head);
