@@ -1,0 +1,239 @@
+import { useCallback, useEffect, useState } from 'react';
+import { api, ApiError } from './api/client.ts';
+import type { Schema } from './api/client.ts';
+import { subscribeTask } from './api/events.ts';
+
+type Repository=Schema<'Repository'>;
+type Ref=Schema<'Ref'>;
+type Task=Schema<'TaskSummary'>;
+type Detail=Schema<'TaskDetail'>;
+type Interaction=Schema<'Interaction'>;
+type Artifact=Schema<'Artifact'>;
+type Message=Schema<'Message'>;
+const isActive=(status:string)=>['QUEUED','PREPARING','RUNNING','WAITING_INPUT','WAITING_PERMISSION','COLLECTING','STOP_REQUESTED','RECOVERING'].includes(status);
+const controllerPattern=/^[A-Za-z_][A-Za-z0-9_]*$/;
+const text=(error:unknown)=>error instanceof Error?error.message:'请求失败';
+const short=(s:string)=>s.length>12?s.slice(0,10)+'…':s;
+const operationId=()=>crypto.randomUUID();
+
+export function WorkbenchApp() {
+  const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);
+  const [repos,setRepos]=useState<Repository[]>([]);
+  const [tasks,setTasks]=useState<Task[]>([]);
+  const [selected,setSelected]=useState<string>('');
+  const [repoId,setRepoId]=useState('');
+  const [refs,setRefs]=useState<Ref[]>([]);
+  const [refId,setRefId]=useState('');
+  const [branch,setBranch]=useState('');
+  const [head,setHead]=useState('');
+  const [controller,setController]=useState('');
+  const [notes,setNotes]=useState('');
+  const [preview,setPreview]=useState<Schema<'Preview'>|null>(null);
+  const [detail,setDetail]=useState<Detail|null>(null);
+  const [messages,setMessages]=useState<Message[]>([]);
+  const [interactions,setInteractions]=useState<Interaction[]>([]);
+  const [artifact,setArtifact]=useState<Artifact|null>(null);
+  const [draft,setDraft]=useState('');
+  const [quote,setQuote]=useState('');
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [pendingOperation,setPendingOperation]=useState<string|null>(null);
+  const [eventState,setEventState]=useState('未连接');
+  const [gap,setGap]=useState('');
+  const [registerOpen,setRegisterOpen]=useState(false);
+  const [newName,setNewName]=useState('');
+  const [newPath,setNewPath]=useState('');
+
+  const refreshLists=useCallback(async()=>{
+    const [r,t]=await Promise.all([api.repositories(),api.tasks()]);
+    setRepos(r.items);setTasks(t.items);
+  },[]);
+  const loadDetail=useCallback(async(id:string)=>{
+    const [d,m,i]=await Promise.all([api.task(id),api.messages(id),api.interactions(id)]);
+    setDetail(d);setMessages(m.items);setInteractions(i.items);
+    const last=d.reports.at(-1);
+    if(last){try {setArtifact(await api.report(last.id));}catch{setArtifact(null);}}
+    else setArtifact(null);
+  },[]);
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      try {
+        const boot=await api.bootstrap();
+        if(cancelled)return;
+        api.setCsrf(boot.csrfToken);setBootstrap(boot);
+        await refreshLists();
+      }catch(e){if(!cancelled)setError(text(e));}
+    })();
+    return()=>{cancelled=true;};
+  },[refreshLists]);
+  useEffect(()=>{
+    if(!repoId){setRefs([]);setRefId('');setHead('');setBranch('');setPreview(null);return;}
+    let active=true;setPreview(null);setRefId('');
+    api.refs(repoId).then(v=>{if(active){setRefs(v.items);setHead(v.headOID);setBranch(v.branch??'(detached HEAD)');}})
+    .catch(e=>{if(active)setError(text(e));});
+    return()=>{active=false;};
+  },[repoId]);
+  useEffect(()=>{
+    if(!selected){setDetail(null);setInteractions([]);setMessages([]);setArtifact(null);return;}
+    loadDetail(selected).catch(e=>setError(text(e)));
+    const cleanup=subscribeTask(selected,{
+      onEvent:()=>loadDetail(selected).catch(e=>setError(text(e))),
+      onState:s=>setEventState(s==='connected'?'实时事件已连接':s==='connecting'?'连接中':'已断线'),
+      onGap:setGap,
+    });
+    return cleanup;
+  },[selected,loadDetail]);
+
+  const act=async(fn:()=>Promise<void>)=>{
+    setError('');setBusy(true);
+    try{await fn();}catch(e){setError(text(e));}
+    finally{setBusy(false);}
+  };
+  const create=()=>act(async()=>{
+    if(!repoId||!refId)throw new Error('请先选择仓库和基线');
+    if(controller&&(!controllerPattern.test(controller)||controller.length>128))
+      throw new Error('Controller 只能是 128 字符以内的 Java 简单类名');
+    if(notes.length>2000)throw new Error('补充要求不能超过 2000 字');
+    const id=operationId();setPendingOperation(id);
+    const p=await api.preview(repoId,refId,id);
+    setPreview(p);
+    if(p.applicableFiles===0)throw new Error('没有可审查的已提交业务变更');
+    if(p.changedFiles===0)throw new Error('没有已提交差异');
+    const createId=operationId();setPendingOperation(createId);
+    const op=await api.createTask(p.id,createId,controller||undefined,notes||undefined);
+    if(op.taskId){setSelected(op.taskId);await refreshLists();}
+    else setError('任务受理中，请按操作号查询结果，禁止重新提交');
+    setPendingOperation(null);
+  });
+  const checkOperation=()=>act(async()=>{
+    if(!pendingOperation)return;
+    const op=await api.operation(pendingOperation);
+    if(op.taskId){setSelected(op.taskId);setPendingOperation(null);await refreshLists();}
+    else setError('操作状态：'+op.status+'；请继续查询，不能重新创建任务');
+  });
+  const register=()=>act(async()=>{
+    const id=operationId();setPendingOperation(id);
+    await api.register(newName,newPath,id);setRegisterOpen(false);
+    await refreshLists();setPendingOperation(null);
+  });
+  const answer=(interaction:Interaction,decision:'ALLOW_ONCE'|'DENY')=>act(async()=>{
+    const id=operationId();setPendingOperation(id);
+    await api.answer(interaction.id,interaction.revision,{kind:'PERMISSION',decision},id);
+    await loadDetail(selected);setPendingOperation(null);
+  });
+  const stop=()=>act(async()=>{
+    if(!detail)return;
+    const id=operationId();setPendingOperation(id);
+    await api.stop(detail.latestRun.id,id);await loadDetail(selected);
+    setPendingOperation(null);
+  });
+  const discuss=()=>act(async()=>{
+    if(!selected||!draft.trim())return;
+    const id=operationId();setPendingOperation(id);
+    await api.discuss(selected,draft,id,artifact?.meta.id,quote||undefined);
+    setDraft('');setQuote('');await loadDetail(selected);setPendingOperation(null);
+  });
+  const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
+  const active=Boolean(detail&&isActive(detail.latestRun.status));
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>AI 研发工作台</small></div></div>
+      <button className={'side-link '+(!selected?'selected':'')} onClick={()=>setSelected('')}>▦ <span>工作台</span></button>
+      <div className="side-section">任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
+      <div className="history">
+        {tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')}
+          onClick={()=>setSelected(task.id)}>
+          <span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}
+        {!tasks.length&&<p className="muted small">暂无历史任务</p>}
+      </div>
+      <div className="side-bottom">仅本地 · 固定代码范围<br/>Code Review 场景</div>
+    </aside>
+    <main className="main">
+      <header className="topbar"><div className="breadcrumb">研发场景 <span>/</span> {selected?'任务详情':'代码审查'}</div>
+        <span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 服务已就绪':'● 服务未就绪'}</span></header>
+      <div className="page">
+      {error&&<div className="alert" role="alert">{error}<button onClick={()=>setError('')}>关闭</button></div>}
+      {gap&&selected&&<div className="notice" role="status">{gap}<button onClick={()=>{loadDetail(selected).catch(e=>setError(text(e)));setGap('');}}>重新读取</button></div>}
+      {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
+        <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
+      {!selected?<section className="workbench">
+        <div className="eyebrow">SCENARIO / CODE REVIEW</div>
+        <h1>代码审查工作台<span className="accent">.</span></h1>
+        <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
+        <div className="form-panel">
+          <div className="panel-head"><div><h2>创建 Review 任务</h2><p>执行前固定代码范围，原仓库保持不变。</p></div><span className="chip">Git · Local</span></div>
+          <div className="form-grid">
+            <label>本地代码仓库<select value={repoId} onChange={e=>setRepoId(e.target.value)}>
+              <option value="">请选择已登记仓库</option>{repos.map(repo=><option value={repo.id} key={repo.id}>{repo.name}</option>)}</select></label>
+            <label>基线分支<select value={refId} onChange={e=>{setRefId(e.target.value);setPreview(null);}}>
+              <option value="">请选择基线</option>{refs.map(ref=><option key={ref.id} value={ref.id}>{ref.fullName}</option>)}</select></label>
+          </div>
+          <div className="scope-line"><span>当前分支：<strong>{branch||'—'}</strong></span><span>HEAD：<code>{head?short(head):'—'}</code></span></div>
+          <button className="subtle" onClick={()=>setRegisterOpen(x=>!x)}>{registerOpen?'取消添加':'＋ 添加本地仓库'}</button>
+          {registerOpen&&<div className="register form-grid"><label>仓库名称<input value={newName} maxLength={100} onChange={e=>setNewName(e.target.value)}/></label>
+            <label>本地绝对路径<input value={newPath} maxLength={4096} onChange={e=>setNewPath(e.target.value)} placeholder="D:\\work\\project"/></label>
+            <button className="secondary" disabled={busy||!newPath||!newName} onClick={register}>登记仓库</button></div>}
+          <label className="full-label">关注入口 <span className="muted">（选填，仅 Java Controller 简名）</span>
+            <input maxLength={128} value={controller} onChange={e=>setController(e.target.value)} placeholder="例如：OrderController"/></label>
+          <label className="full-label">补充要求 <span className="muted">（选填）</span>
+            <textarea rows={4} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="你希望重点核查的事务、幂等、金额、SQL 或权限风险…"/></label>
+          <div className="scope-hint"><strong>固定审查范围</strong><span>只审查 Git 已提交变更，不包含 staged、unstaged 或 untracked 文件。</span></div>
+          {preview&&<div className="preview-meta">最近预检：{preview.changedFiles} 个已变更文件，{preview.applicableFiles} 个适用文件；{preview.notice}</div>}
+          <div className="form-actions"><span>{!ready?'服务尚未就绪，不能开始真实任务':''}</span><button className="primary" disabled={busy||!ready||!repoId||!refId} onClick={create}>{busy?'正在处理…':'开始 Review  →'}</button></div>
+        </div>
+      </section>:<section className="task-page">
+        <button className="back" onClick={()=>setSelected('')}>← 返回工作台</button>
+        <div className="detail-heading"><div className="eyebrow">REVIEW TASK / {short(selected)}</div>
+          <h1>{detail?.task.title??'正在读取任务…'}</h1><p>固定 HEAD：<code>{detail?.scope.headOID??'—'}</code></p>
+          <p>基线：{detail?.scope.baseRef??'—'} · merge-base：<code>{detail?.scope.mergeBaseOID??'—'}</code></p></div>
+        <div className="detail-grid">
+          <div className="content-column">
+            <section className="detail-card"><div className="card-head"><h2>执行过程</h2><span className="chip">{detail?.latestRun.status??'读取中'}</span></div>
+              <p className="muted">真实执行状态来自服务端。{eventState}。不显示模型推测的进度。</p>
+              <div className="steps">
+                {['准备代码副本','加载原生 Agent / Skill','执行 Code Review','采集五章报告'].map((name,index)=>
+                  <div className="step" key={name}><span className="step-index">{index+1}</span><span>{name}</span>
+                    <small>以服务端事件为准</small></div>)}
+              </div>
+              {detail?.latestRun.status==='STOP_REQUESTED'&&<p className="notice">正在停止；等待原生中断与最终状态核验。</p>}
+              {active&&<button className="secondary danger" disabled={busy||detail?.latestRun.status==='STOP_REQUESTED'} onClick={stop}>停止本轮执行</button>}
+            </section>
+            {interactions.map(i=><section className="detail-card permission" key={i.id}>
+              <div className="card-head"><h2>{i.kind==='PERMISSION'?'原生工具授权':'原生补充表单'}</h2><span className="chip">请求 #{i.revision}</span></div>
+              {i.kind==='PERMISSION'?<><p>工具：<strong>{i.tool}</strong></p><pre>{i.requestText}</pre>
+                <p className="muted">仅作用于本次会话的当前请求，不改变全局权限。</p>
+                <div className="button-row"><button disabled={busy} onClick={()=>answer(i,'DENY')}>拒绝</button>
+                  <button className="primary" disabled={busy} onClick={()=>answer(i,'ALLOW_ONCE')}>本次允许</button></div></>:
+                <p>表单：{i.title}。需要按照公司实际原生 Form Schema 完成字段映射后才能提交。</p>}
+            </section>)}
+            <section className="detail-card">
+              <div className="card-head"><h2>审查报告</h2><span className="chip">{artifact?'已归档':'等待产物'}</span></div>
+              {artifact?<><div className="report-actions"><button onClick={()=>navigator.clipboard.writeText(artifact.markdown)}>复制 Markdown</button>
+                <a href={'/api/v1/artifacts/'+encodeURIComponent(artifact.meta.id)+'/download'}>下载报告</a></div>
+                <pre className="report-text">{artifact.markdown}</pre>
+                <button className="subtle" onClick={()=>setQuote(window.getSelection()?.toString().slice(0,4000)??'')}>引用所选文本追问</button>
+                {quote&&<blockquote className="quote">{quote}</blockquote>}</>
+               :<p className="muted">未收到本轮经过验证并归档的真实 Markdown 报告。</p>}
+            </section>
+            <section className="detail-card"><div className="card-head"><h2>追问与讨论</h2></div>
+              <div className="messages">{messages.map(m=><div className={'message '+m.role.toLowerCase()} key={m.id}>
+                <strong>{m.role==='USER'?'你':'Codea Reviewer'}</strong><p>{m.text}</p></div>)}
+                {!messages.length&&<p className="muted">暂无可显示的原生消息。</p>}</div>
+              <textarea rows={3} maxLength={8000} placeholder={active?'本轮执行中；暂不可并发发送':'基于固定代码快照继续追问'}
+                value={draft} onChange={e=>setDraft(e.target.value)}/>
+              <div className="form-actions"><small>追问沿用原 Session，不改变 Git 范围。</small><button className="primary"
+                disabled={busy||active||!draft.trim()||!detail} onClick={discuss}>发送追问</button></div>
+            </section>
+          </div>
+          <aside className="meta-column"><div className="detail-card"><h2>固定版本</h2>
+            <dl><dt>原分支</dt><dd>{detail?.scope.sourceBranch??'—'}</dd><dt>HEAD OID</dt><dd><code>{detail?.scope.headOID??'—'}</code></dd>
+              <dt>Base OID</dt><dd><code>{detail?.scope.baseOID??'—'}</code></dd>
+              <dt>审查状态</dt><dd>{detail?.latestRun.status??'—'}</dd>
+              <dt>事件连续性</dt><dd>{detail?.continuity??'UNKNOWN'}</dd></dl></div></aside>
+        </div>
+      </section>}
+      </div>
+    </main>
+  </div>;
+}
