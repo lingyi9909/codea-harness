@@ -1,0 +1,26 @@
+name: Workbench storage and Fastify contract
+on:
+  pull_request:
+    paths: ['web-workbench/**', '.github/workflows/workbench-storage.yml']
+permissions: { contents: read }
+jobs:
+  backend:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: web-workbench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Install exact lock
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Static DDL contract test
+        run: npm run test:schema-static
+      - name: T01 regression
+        run: npm test
