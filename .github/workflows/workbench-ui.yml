@@ -1,4 +1,4 @@
-name: Web Workbench UI compile (draft)
+name: Web Workbench UI compile
 on:
   pull_request:
     paths: ['web-workbench/**', '.github/workflows/workbench-ui.yml']
@@ -16,16 +16,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Generate locked UI dependencies for initial scaffolding
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Emit generated package lock for checked-in lock update
-        run: |
-          node -e "const fs=require('fs'); const b=fs.readFileSync('package-lock.json').toString('base64'); for(let i=0;i<b.length;i+=1200) console.log('LOCKCHUNK:'+b.slice(i,i+1200))"
-      - name: Reproducible install
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Install from committed lock only
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Typecheck existing contracts and native adapter
+      - name: Typecheck contracts and adapter
         run: npm run typecheck
       - name: UI TypeScript typecheck
         run: npm run web:typecheck
-      - name: Production web bundle
+      - name: Build production web assets
         run: npm run web:build
