@@ -14,12 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Generate exact initial backend dependency lock
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Emit lock for checked-in content
-        run: |
-          node -e "const fs=require('fs'); const b=fs.readFileSync('package-lock.json').toString('base64'); for(let i=0;i<b.length;i+=1200) console.log('LOCKCHUNK:'+b.slice(i,i+1200))"
-      - name: Install dependencies
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Install exact lock
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
