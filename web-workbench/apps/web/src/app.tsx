@@ -18,6 +18,7 @@ const operationId=()=>crypto.randomUUID();
 
 export function WorkbenchApp() {
   const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);
+  const [pairingCode,setPairingCode]=useState('');
   const [repos,setRepos]=useState<Repository[]>([]);
   const [tasks,setTasks]=useState<Task[]>([]);
   const [selected,setSelected]=useState<string>('');
@@ -44,6 +45,15 @@ export function WorkbenchApp() {
   const [newName,setNewName]=useState('');
   const [newPath,setNewPath]=useState('');
 
+  const pair=async()=>{
+    setBusy(true);setError('');
+    try {
+      const result=await api.pair(pairingCode.trim());
+      setBootstrap(result);setPairingCode('');
+      await refreshLists();
+    }catch(e){setError(text(e));}
+    finally{setBusy(false);}
+  };
   const refreshLists=useCallback(async()=>{
     const [r,t]=await Promise.all([api.repositories(),api.tasks()]);
     setRepos(r.items);setTasks(t.items);
@@ -136,6 +146,18 @@ export function WorkbenchApp() {
   });
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const active=Boolean(detail&&isActive(detail.latestRun.status));
+  if(!bootstrap) return <div className="pair-page">
+    <div className="pair-card"><div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>本地研发工作台</small></div></div>
+      <div className="eyebrow">LOCAL WORKBENCH</div><h1>连接工作台<span className="accent">.</span></h1>
+      <p className="intro">输入 Windows 服务启动时显示的一次性配对码。此操作只连接本机服务，不启动 OpenCode。</p>
+      {error&&<div className="alert" role="alert">{error}</div>}
+      <label>一次性配对码<input type="password" autoComplete="off" maxLength={256}
+        placeholder="请输入本地终端显示的配对码" value={pairingCode}
+        onChange={e=>setPairingCode(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&pairingCode.trim())void pair();}}/></label>
+      <button className="primary" disabled={busy||!pairingCode.trim()} onClick={pair}>连接本地工作台</button>
+      <p className="muted small">仅 localhost · HttpOnly 会话 · 不会修改全局 OpenCode 配置</p>
+    </div>
+  </div>;
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>AI 研发工作台</small></div></div>

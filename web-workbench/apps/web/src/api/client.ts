@@ -39,6 +39,18 @@ export class HarnessApi {
       throw new ApiError(response.status, 'CONTRACT_MISMATCH', '服务返回值不符合 OpenAPI 契约');
     return (data as {data:T}).data;
   }
+  async pair(pairingCode: string): Promise<Schema<'Bootstrap'>> {
+    const response = await fetch('/api/v1/auth/session', {
+      method: 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store',
+      headers: { 'Content-Type':'application/json', Accept:'application/json' },
+      body: JSON.stringify({ pairingCode }),
+    });
+    const body = await response.json() as { data?: Schema<'Bootstrap'>; error?: { message?: string } };
+    if (!response.ok || !body.data) throw new ApiError(response.status, 'PAIRING_FAILED',
+      body.error?.message ?? '配对失败，请检查一次性配对码');
+    this.setCsrf(body.data.csrfToken);
+    return body.data;
+  }
   bootstrap() { return this.request<Schema<'Bootstrap'>>('/bootstrap'); }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }
