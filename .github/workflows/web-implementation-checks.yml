@@ -1,0 +1,38 @@
+name: Web Workbench implementation checks
+on:
+  push:
+    branches: [feature/code-harness-web-implementation]
+  pull_request:
+    paths:
+      - 'web-workbench/**'
+      - '.github/workflows/web-implementation-checks.yml'
+permissions:
+  contents: read
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: web-workbench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Locked dependency install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Schema DTO reproducibility
+        shell: pwsh
+        run: |
+          npm run gen:api
+          git diff --exit-code -- packages/contracts/src/api.generated.ts
+      - name: Typecheck workbench
+        run: npm run typecheck
+      - name: Build real React frontend
+        run: npm run build:web
+      - name: Unit and loopback contract tests
+        run: npm test
+      - name: Scope boundary
+        run: echo "This job never proves private company OpenCode or MySQL 8.4 integration; those remain PENDING."

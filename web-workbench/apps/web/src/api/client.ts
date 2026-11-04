@@ -1,4 +1,4 @@
-import type { DTO } from '../../../../../packages/contracts/src/domain.ts';
+import type { DTO } from '../../../../packages/contracts/src/domain.ts';
 
 export type Repository = DTO<'Repository'>;
 export type RepositoryPage = DTO<'RepositoryPage'>;
