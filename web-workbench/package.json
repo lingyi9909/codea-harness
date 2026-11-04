@@ -13,7 +13,7 @@
   "scripts": {
     "gen:api": "node scripts/generate-dto.mjs",
     "typecheck": "tsc --noEmit --project tsconfig.base.json",
-    "test": "node --experimental-strip-types --test tests/capabilities/probe.test.ts tests/capabilities/adapter.test.ts",
+    "test": "node --experimental-strip-types --test tests/capabilities/probe.test.ts tests/capabilities/adapter.test.ts tests/capabilities/snapshot.test.ts",
     "probe": "node --experimental-strip-types scripts/probe.ts",
     "test:mysql": "node scripts/pending.mjs mysql",
     "test:e2e": "node scripts/pending.mjs e2e",
