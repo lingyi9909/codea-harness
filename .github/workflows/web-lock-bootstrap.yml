@@ -1,0 +1,24 @@
+name: Bootstrap workbench dependency lock
+on:
+  push:
+    branches: [feature/code-harness-web-implementation]
+    paths:
+      - 'web-workbench/package.json'
+      - 'web-workbench/apps/**/package.json'
+      - '.github/workflows/web-lock-bootstrap.yml'
+permissions:
+  contents: read
+jobs:
+  resolve-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve pinned dependency lock for offline mirror
+        working-directory: web-workbench
+        shell: bash
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          node -e 'const fs=require("node:fs"); console.log("LOCKFILE_PAYLOAD="+JSON.stringify(fs.readFileSync("package-lock.json","utf8")))'

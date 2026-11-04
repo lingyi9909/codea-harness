@@ -8,7 +8,9 @@
       "DOM"
     ],
     "types": [
-      "node"
+      "node",
+      "react",
+      "react-dom"
     ],
     "strict": true,
     "forceConsistentCasingInFileNames": true,
@@ -16,10 +18,13 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "jsx": "react-jsx"
   },
   "include": [
     "packages/**/*.ts",
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
     "tests/**/*.ts",
     "scripts/**/*.ts"
   ]
