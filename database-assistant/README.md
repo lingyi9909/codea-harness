@@ -4,7 +4,9 @@
 
 **当前交付供V1.0代码审核与整体集成测试。公司Windows私有模型、DBHub/MySQL/TeamAI实测均PENDING，PR保持Draft、不合并。**
 
-**V1.0默认每个Subagent部署仅授权一个DBHub source。** 同源授权表之间可在核实Schema、关联键和行级/列级权限后JOIN；不同DBHub sources不能直接JOIN，也不支持Subagent自动切源或跨源联合调查。下文订单/流水示例仅在两张表都属于同一授权source时适用。 按最新开发安排，T2–T4规则一并交付，不再以T1内网测试作为开发阶段门槛；这不代表真实安全验收已经通过。
+**V1.0默认每个Subagent部署仅授权一个DBHub source。** 同源授权表之间可在核实Schema、关联键和行级/列级权限后JOIN；不同DBHub sources不能直接JOIN，也不支持Subagent自动切源或跨源联合调查。下文订单/流水示例仅在两张表都属于同一授权source时适用。
+
+按最新开发安排，T2–T4规则一并交付，不再以T1内网测试作为开发阶段门槛；这不代表真实安全验收已经通过。
 
 ## 文件及依赖
 
