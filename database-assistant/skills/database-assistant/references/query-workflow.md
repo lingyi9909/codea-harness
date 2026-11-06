@@ -12,6 +12,8 @@
 
 ## 合成示例
 
+**前提：下列`orders`、`payments`指同一个已授权DBHub source内的两张获准数据表，并非两个DBHub sources；表间JOIN或子查询只可在该前提下使用。** 两张表如果实际分属不同source，则本版只查询当前授权源并报告证据缺口，不能跨源生成SQL。
+
 以下仅为文档示例，表名不代表公司Schema，必须先核实。`orders`中的amount_minor为整数分，currency为币种；样例时间列是UTC DATETIME。主键id唯一。用户7的订单10001、10002均为CNY 100分，10003为USD 250分，10004为CNY NULL；10001状态PAID，其余PENDING。四条创建时间均为2026-01-01 00:00:00 UTC。payments包含订单10001两条SUCCEEDED流水、10002一条SUCCEEDED流水。状态含义是本合成夹具的预先约定，真实部署需业务核实。
 
 “查订单10001的编号、状态和金额”：
@@ -53,3 +55,7 @@ SELECT id, status FROM orders WHERE id = 99999 LIMIT 1;
 ```
 
 期望空表，回答“本源按此条件未返回记录”。用户SQL引用未知列时先探索并解释；工具仍报错时记录真实错误，最多一次有依据纠错。权限/超时错误直接停止。
+
+## 不同数据源时如何回答
+
+例如DBHub只授权`orders`源，但需要的付款记录实际仅存在于`payments`源：可以查询`orders`源内已获准的订单表，**不得**执行`JOIN payments...`（这里的`payments`是另一个source，不是本源获准的表），也不得改用`payments`源的search_objects/execute_sql。输出示例：“Q1已核实当前源订单10002状态为PENDING；Q2支付成功状态尚缺`payments`源证据，不能确定是否已成功支付。需管理员为该源独立审核账号与工具授权，并由人工分源核对流水及时间口径；V1.0不自动执行跨源调查。”

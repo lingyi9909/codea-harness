@@ -1,5 +1,9 @@
 # Candidate only: pin the installed DBHub version and validate in isolated MySQL.
 # Each DSN must use a DIFFERENT dedicated account restricted to approved views.
+# This config illustrates two separate sources; a database-assistant deployment
+# grants exact tools for ONLY ONE source. It does not support cross-source JOIN.
+# Sample tables named orders/payments in docs must coexist within one authorized
+# source for JOIN/EXISTS examples to be valid.
 [[sources]]
 id = "orders"
 dsn = "${ORDERS_DSN}"
