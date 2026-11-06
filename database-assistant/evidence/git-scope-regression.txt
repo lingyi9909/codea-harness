@@ -4,6 +4,6 @@ test_nested_hidden_directory_is_excluded (__main__.GitScopeTest.test_nested_hidd
 test_saved_report_does_not_reenter_review (__main__.GitScopeTest.test_saved_report_does_not_reenter_review) ... ok
 
 ----------------------------------------------------------------------
-Ran 4 tests in 1.235s
+Ran 4 tests in 1.204s
 
 OK

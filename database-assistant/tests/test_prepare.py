@@ -17,7 +17,8 @@ if SCRIPT.exists():
 def fixture():
     config = {'sources': [{'id': 'orders', 'dsn': '${ORDERS_DSN}', 'query_timeout': 15, 'connection_timeout': 10},
                           {'id': 'payments', 'dsn': '${PAYMENTS_DSN}', 'query_timeout': 15, 'connection_timeout': 10}],
-              'tools': [{'name': 'execute_sql', 'source': s, 'readonly': True, 'max_rows': 100} for s in ('orders', 'payments')]}
+              'tools': [{'name': 'execute_sql', 'source': s, 'readonly': True, 'max_rows': 100} for s in ('orders', 'payments')] +
+                       [{'name': 'search_objects', 'source': s} for s in ('orders', 'payments')]}
     inv = {'opencode_version': '2.0.27', 'dbhub_version': 'test-fixture', 'tools': [
         {'source': s, 'kind': k, 'action': f'dbhub_{k}_{s}'}
         for s in ('orders', 'payments') for k in ('search_objects', 'execute_sql')]}
@@ -40,6 +41,35 @@ class PrepareTests(unittest.TestCase):
         parent = result['agents']['database-entry']['permissions']
         self.assertEqual(parent, [{'action': '*', 'resource': '*', 'effect': 'deny'},
                                   {'action': 'subagent', 'resource': 'database-assistant', 'effect': 'allow'}])
+
+    def test_v2_system_and_steps_without_legacy_fields(self):
+        result = self.build()
+        for name, agent in result['agents'].items():
+            self.assertIn('system', agent)
+            self.assertTrue(agent['system'].strip())
+            self.assertEqual(agent['steps'], 8)
+            self.assertFalse({'prompt', 'permission', 'bash', 'task', 'maxSteps'} & agent.keys())
+            self.assertFalse({'bash', 'task'} & {r['action'] for r in agent['permissions']})
+        self.assertIn('orders', result['agents']['database-assistant']['system'])
+        self.assertIn('database-assistant', result['agents']['database-entry']['system'])
+
+    def test_each_source_requires_both_toml_tools(self):
+        for index in range(4):
+            c, _ = fixture(); c['tools'].pop(index)
+            with self.subTest(index=index), self.assertRaises(ValueError): self.build(config=c)
+
+    def test_toml_duplicate_or_wrong_source(self):
+        for index in range(4):
+            c, _ = fixture(); c['tools'].append(copy.deepcopy(c['tools'][index]))
+            with self.subTest(index=index), self.assertRaises(ValueError): self.build(config=c)
+        for source in ('unknown', 'payments'):
+            c, _ = fixture(); c['tools'][2]['source'] = source
+            with self.subTest(source=source), self.assertRaises(ValueError): self.build(config=c)
+
+    def test_search_objects_rejects_sql_and_unknown_options(self):
+        for key in ('sql', 'readonly', 'max_rows'):
+            c, _ = fixture(); c['tools'][2][key] = 'unexpected'
+            with self.subTest(key=key), self.assertRaises(ValueError): self.build(config=c)
 
     def test_unknown_source(self):
         with self.assertRaises(ValueError): self.build(source='prod')

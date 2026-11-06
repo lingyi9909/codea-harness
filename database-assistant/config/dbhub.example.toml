@@ -23,3 +23,11 @@ name = "execute_sql"
 source = "payments"
 readonly = true
 max_rows = 100
+
+[[tools]]
+name = "search_objects"
+source = "orders"
+
+[[tools]]
+name = "search_objects"
+source = "payments"

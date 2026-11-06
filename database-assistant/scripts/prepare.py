@@ -43,13 +43,18 @@ def prepare(config, inventory, source):
     require(source in sources, 'source is not configured')
     configured = set()
     for item in config['tools']:
-        require(set(item) == {'name', 'source', 'readonly', 'max_rows'}, 'unsupported tool fields')
-        require(item['name'] == 'execute_sql', 'only execute_sql overrides supported in T1')
-        require(item['source'] in sources and item['source'] not in configured, 'unknown or duplicate tool source')
-        require(item['readonly'] is True, 'readonly must be true')
-        require(bounded(item['max_rows'], 100), 'max_rows must be 1..100')
-        configured.add(item['source'])
-    require(configured == set(sources), 'each source requires readonly execute_sql configuration')
+        kind = item.get('name')
+        require(kind in KINDS, 'unsupported tool kind')
+        fields = {'name', 'source'} | ({'readonly', 'max_rows'} if kind == 'execute_sql' else set())
+        require(set(item) == fields, 'unsupported tool fields')
+        pair = (item['source'], kind)
+        require(item['source'] in sources and pair not in configured, 'unknown or duplicate tool source/kind')
+        if kind == 'execute_sql':
+            require(item['readonly'] is True, 'readonly must be true')
+            require(bounded(item['max_rows'], 100), 'max_rows must be 1..100')
+        configured.add(pair)
+    require(configured == {(s, k) for s in sources for k in KINDS},
+            'each source requires execute_sql and search_objects')
     require(set(inventory) == {'opencode_version', 'dbhub_version', 'tools'}, 'invalid inventory fields')
     require(isinstance(inventory['opencode_version'], str) and re.fullmatch(r'2\.\d+\.\d+', inventory['opencode_version']), 'OpenCode V2 version required')
     require(isinstance(inventory['dbhub_version'], str) and inventory['dbhub_version'].strip(), 'DBHub version required')
@@ -71,14 +76,14 @@ def prepare(config, inventory, source):
                    {'action': 'skill', 'resource': 'database-assistant', 'effect': 'allow'},
                    {'action': 'skill', 'resource': 'dbhub', 'effect': 'allow'}]
     permissions.extend({'action': a, 'resource': '*', 'effect': 'allow'} for a in sorted(selected))
-    prompt = (ROOT / 'agents' / 'database-assistant.md').read_text(encoding='utf-8').split('---', 2)[2].strip()
+    system = (ROOT / 'agents' / 'database-assistant.md').read_text(encoding='utf-8').split('---', 2)[2].strip()
     return {'agents': {
-        'database-assistant': {'description': '受限只读数据库查询助手', 'mode': 'subagent',
+        'database-assistant': {'description': '受限只读数据库查询助手', 'mode': 'subagent', 'steps': 8,
                                'permissions': permissions,
-                               'prompt': prompt + '\n本部署唯一授权数据源 ID：' + source},
-        'database-entry': {'description': '数据库助手受限委派入口', 'mode': 'primary',
+                               'system': system + '\n本部署唯一授权数据源 ID：' + source},
+        'database-entry': {'description': '数据库助手受限委派入口', 'mode': 'primary', 'steps': 8,
                            'permissions': [deny.copy(), {'action': 'subagent', 'resource': 'database-assistant', 'effect': 'allow'}],
-                           'prompt': '仅委派 database-assistant。传递用户问题、明确数据源、条件、时间范围及证据 ID；缺失时先在对话中澄清。不得直接查询数据库。每次重新委派重新验证数据源范围。'}
+                           'system': '仅委派 database-assistant。传递用户问题、明确数据源、条件、时间范围及证据 ID；缺失时先在对话中澄清。不得直接查询数据库。每次重新委派重新验证数据源范围。'}
     }}
 
 

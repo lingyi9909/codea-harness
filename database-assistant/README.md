@@ -1,6 +1,6 @@
 # Database Assistant V1.0 — T1 开发预览
 
-版本 `1.0.0-t1`；来源 `lingyi9909/codea-harness` 的 `feat/database-assistant-v1` 分支。
+版本 `1.0.0-t1-r1`；来源 `lingyi9909/codea-harness` 的 `feat/database-assistant-v1` 分支。
 **T1 尚未验收通过，不能接生产。T2–T4 未实施。** 已交付原生 Agent/Skill、离线配置生成器和 A 类测试；缺少真实 DBHub/MySQL/私有模型执行证据。
 
 ## 分发和安装
@@ -16,7 +16,7 @@
 py -3.12 database-assistant/scripts/prepare.py --config database-assistant/config/dbhub.example.toml --inventory C:/approved/tools.json --source orders --out C:/approved/database-candidate.json
 ```
 
-生成器只输出候选 `agents` 配置，不连接数据库、不执行 SQL、不修改现有设置。默认上限 100 行、15 秒，连接 60 秒以内；减小可行，提高需修改策略并重测。当前严格仅支持示例 TOML 子集，其他字段拒绝，避免默默忽略。
+生成器只输出候选 `agents` 配置，不连接数据库、不执行 SQL、不修改现有设置。默认上限 100 行、15 秒，连接 60 秒以内；减小可行，提高需修改策略并重测。每个源必须显式配置 execute_sql 与 search_objects；execute_sql强制只读和行数，search_objects仅接受name/source。当前严格仅支持示例 TOML 子集，其他字段拒绝，避免默默忽略。
 
 6. 在隔离 OpenCode 配置目录安装 `skills/database-assistant/` 和已批准的官方 `dbhub` Skill；将候选 JSON 的两个 Agent 合并至该环境的原生 V2 `agents` 配置。源 Markdown 是默认禁用数据库的分发模板；**不要同时安装同名 Markdown 与 JSON Agent**。检查项目级/全局同名覆盖与保存的授权，重启后核对实际生效配置。
 7. TUI 切换 `database-entry` 主 Agent，再要求“使用 database-assistant 查询 orders 测试库订单 10001”。该入口只允许委派，子 Agent 只允许选定源的两个工具及两个 Skill。不要从不受限 Build 启动并声称父路径安全；原有 Build/Review 不被本补丁修改，现有高权限路径必须由管理员关闭或隔离。
@@ -27,14 +27,14 @@ py -3.12 database-assistant/scripts/prepare.py --config database-assistant/confi
 ## 安全边界及已知缺口
 - 生成器验证静态约束，不验证管理员清单真实性、MySQL GRANT、实际 OpenCode 合并/权限执行，也不是 SQL 防火墙。
 - 单一部署只允许一个源。切换 orders/payments 必须重新准备、重载并验证授权；不实现同一子会话动态授权。不可将两套 allow 简单合并。
-- SQL 副作用/资源攻击阻断依赖实际 DBHub 及数据库能力，尚无本地服务端证据；任务总调用数/总时长仅行为约束，尚无硬限制。因此安全验收状态为证据不足，禁止生产。
+- SQL 副作用/资源攻击阻断依赖实际 DBHub 及数据库能力，尚无本地服务端证据；新增原生 steps: 8（模型步骤，实装待验证）；任务总调用数/总时长仍仅行为约束，尚无硬限制。因此安全验收状态为证据不足，禁止生产。
 - T2 固定参数 TeamAI CLI 适配未实施；不会为了 recall 开放 Shell。T3 聚合及异常多轮流程未实施。T4 提供验收步骤，不宣称完成攻击测试。
 - 不重新复制官方 DBHub Skill；记录内网安装的来源/版本/hash，确认与实际 DBHub 相容。
 
 ## 测试与回滚
 
 ```powershell
-py -3.12 database-assistant/tests/test_prepare.py
+py -3.12 -m unittest discover -s database-assistant/tests -v
 py -3.12 tests/test_codea_review_2_0_hardening.py
 py -3.12 tests/fixtures/codea-review-t1/test_git_scope.py
 ```
@@ -45,3 +45,12 @@ py -3.12 tests/fixtures/codea-review-t1/test_git_scope.py
 - [DBHub TOML](https://dbhub.ai/config/toml)：sources 超时，tools readonly/max_rows，环境插值。
 - [Issue 384](https://github.com/bytebase/dbhub/issues/384)、[PR 386](https://github.com/bytebase/dbhub/pull/386)：客户端超时、服务端取消及连接池问题。后续文档仍说明取消可能失败，不能只确认 PR 合入就放行。
 - 本地已获取的 OpenCode v2.0.27 `packages/core/src/tool/mcp.ts`：权限动作是实际注册的 server/tool 映射；本生成器不自行拼接它。公司版本仍须实测。
+
+
+## T1 独立审核整改 r1
+- P0-01：生成JSON使用V2 `system`，不含旧prompt；保留mode/permissions，增加原生steps: 8。
+- P0-02：TOML和校验同时要求每源两个工具；缺失、重复、未知/错误源映射拒绝。
+- P1-01：增加独立注册证据与有效Agent快照比对，拒绝工具交换、额外注册、父入口越权及其他可访问DB的Agent。它不能认证快照来源，也不能替代调用前拒绝实测。
+- P1-02：步骤限制不等于调用次数或总时长。生产硬总预算风险仍未解决。
+- 内网操作及证据要求见 [部署验证](tests/deployment-verification.md)。实际配置/双工具/权限/模型执行仍PENDING。
+- [生成配置样例](evidence/generated.synthetic.json) 使用合成测试清单，供审阅字段，不是实装配置或真实注册清单；禁止直接部署。

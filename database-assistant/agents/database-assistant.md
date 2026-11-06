@@ -1,6 +1,7 @@
 ---
 description: Database Assistant V1.0 T1：基于真实 Schema 的中文只读查询
 mode: subagent
+steps: 8
 permissions:
   - { action: "*", resource: "*", effect: deny }
   - { action: skill, resource: database-assistant, effect: allow }
