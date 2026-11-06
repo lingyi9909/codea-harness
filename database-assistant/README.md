@@ -1,64 +1,72 @@
-# Database Assistant V1.0 — T1 开发预览
+# Database Assistant T1
 
-版本 `1.0.0-t1-r1`；来源 `lingyi9909/codea-harness` 的 `feat/database-assistant-v1` 分支。
-**T1 尚未验收通过，不能接生产。T2–T4 未实施。** 已交付原生 Agent/Skill、离线配置生成器和 A 类测试；缺少真实 DBHub/MySQL/私有模型执行证据。
+一个 OpenCode 2.x 原生 `database-assistant` Subagent，配一个专属 Skill；复用现有 DBHub MCP 和官方 `dbhub` Skill。
+T1只做普通只读查询与Schema探索。T2再接TeamAI，T3再做统计/多轮排查，T4做综合验证。
+**当前仍待内网实测，PR保持Draft；不代表T1已通过。**
 
-## 分发和安装
-沿用 Codea Review 的 agents/、skills/ 目录和 TeamAI 原生 push/pull 分发方式。同步整个 Skill 目录，记录分发版本和文件 SHA256。不修改 Codea Review，不添加 LLM 调度器/数据库 MCP，不改 OpenCode 核心代码。
+## 文件与运行依赖
 
-1. 管理员记录实际 Windows、OpenCode 2.x、DBHub、mysql2、MySQL 版本及 DBHub lockfile；禁止以 latest 作为内网部署版本。Python 3.11+ 仅用于离线准备和测试，不是 Agent 执行依赖。
-2. DBA 在隔离库配置两个不同的专用只读账号，只授予各自批准的脱敏视图 SELECT；不得具有全局 SELECT、FILE、EXECUTE、写权限、跨库角色或可间接访问敏感数据的视图权限。使用 SHOW GRANTS 及实际拒绝测试双重验证。凭据经公司安全方式注入 DBHub 环境，严禁放入仓库或 Agent 可读目录。
-3. 参考 config/dbhub.example.toml，在实际版本验证配置被加载。`${ORDERS_DSN}` 等必须在启动前由管理员确认存在；DBHub 未设置的变量可能保留原样。不同 source 使用不同账号，清理同一服务器上其他高权限 MCP 实例。
-4. 管理员导出实际 DBHub 工具和 **OpenCode 实际权限 action 名称**，检查其源映射，按 config/inventory.example.json 结构录入。示例故意为空，不能生成可用配置。每条包含 `source`、`kind`（search_objects 或 execute_sql）、`action`（实际注册的完整动作名）。不得按后缀猜工具名。该清单是管理员信任输入，不接收模型、知识库或数据库文本自动修改。
-5. 在准备机运行（PowerShell 示例）：
-
-```powershell
-py -3.12 database-assistant/scripts/prepare.py --config database-assistant/config/dbhub.example.toml --inventory C:/approved/tools.json --source orders --out C:/approved/database-candidate.json
+```text
+database-assistant/
+  agents/database-assistant.md
+  skills/database-assistant/SKILL.md
+  skills/database-assistant/references/manual-verification.md
+  config/dbhub.example.toml
+  README.md
 ```
 
-生成器只输出候选 `agents` 配置，不连接数据库、不执行 SQL、不修改现有设置。默认上限 100 行、15 秒，连接 60 秒以内；减小可行，提高需修改策略并重测。每个源必须显式配置 execute_sql 与 search_objects；execute_sql强制只读和行数，search_objects仅接受name/source。当前严格仅支持示例 TOML 子集，其他字段拒绝，避免默默忽略。
+运行只使用现有OpenCode、私有模型、DBHub和MySQL。没有配置生成器、安装器、权限比对器、测试平台或打包程序；不依赖Python或新增Node.js脚本，不新增primary Agent/MCP服务。
 
-6. 在隔离 OpenCode 配置目录安装 `skills/database-assistant/` 和已批准的官方 `dbhub` Skill；将候选 JSON 的两个 Agent 合并至该环境的原生 V2 `agents` 配置。源 Markdown 是默认禁用数据库的分发模板；**不要同时安装同名 Markdown 与 JSON Agent**。检查项目级/全局同名覆盖与保存的授权，重启后核对实际生效配置。
-7. TUI 切换 `database-entry` 主 Agent，再要求“使用 database-assistant 查询 orders 测试库订单 10001”。该入口只允许委派，子 Agent 只允许选定源的两个工具及两个 Skill。不要从不受限 Build 启动并声称父路径安全；原有 Build/Review 不被本补丁修改，现有高权限路径必须由管理员关闭或隔离。
-8. 完成 tests/acceptance.md 中 T1 强制拒绝和服务端超时验证，保留脱敏轨迹，经独立审核后再进入 T2。
+## 直接安装到现有 OpenCode
 
-官方 dbhub Skill 若需要额外 read 权限或实际运行产生其他权限请求，先检查所需路径和版本；本包不默认开放任意 read。加载失败停止。
+1. 记录实际OpenCode、DBHub/mysql2、MySQL及官方dbhub Skill版本。先在公司Windows隔离测试环境操作，使用专用只读账号和合成数据。
+2. 在现有DBHub配置中按 [TOML示例](config/dbhub.example.toml) 核对所需source及两种工具。不要覆盖已有配置或再建MCP服务。`query_timeout`/`connection_timeout`在sources，`readonly`/`max_rows`在execute_sql工具。示例DSN从启动环境注入；确认变量已设置，凭据不得进入Agent/Skill或仓库。
+3. 使用现有MCP诊断工具取得完整tools/list，并核对OpenCode实际注册的**权限action名称**与来源。两者名称可能不同；不要仅按命名后缀猜测。通过真实Schema及该源测试记录确认映射。
+4. 手工编辑 `agents/database-assistant.md`：将“部署授权数据源：未配置。”改为批准的唯一source ID；在permissions中取消两条示例的注释，并将action替换为该源实际search_objects和execute_sql动作名。保留deny-all及两个Skill allow，不加通配符工具权限。未完成这一步时模板不会放行数据库工具。
+5. 备份同名旧文件后，将该Agent复制到 `%USERPROFILE%\.config\opencode\agents\database-assistant.md`，将整个专属Skill目录复制到 `%USERPROFILE%\.config\opencode\skills\database-assistant\`。已安装的官方dbhub Skill沿用原位置，不复制第二份。也可用现有TeamAI分发渠道同步这些原生文件，T1不调用TeamAI知识检索。
+6. 检查项目及父目录`.opencode`、用户级同名文件和JSON配置，排除同名覆盖。Markdown正文自动作为V2的system，不另建同名JSON Agent，也不使用旧prompt字段。重启OpenCode，核对实际加载来源、system、mode:subagent、permissions及steps:8。
 
-## 安全边界及已知缺口
-- 生成器验证静态约束，不验证管理员清单真实性、MySQL GRANT、实际 OpenCode 合并/权限执行，也不是 SQL 防火墙。
-- 单一部署只允许一个源。切换 orders/payments 必须重新准备、重载并验证授权；不实现同一子会话动态授权。不可将两套 allow 简单合并。
-- SQL 副作用/资源攻击阻断依赖实际 DBHub 及数据库能力，尚无本地服务端证据；新增原生 steps: 8（模型步骤，实装待验证）；任务总调用数/总时长仍仅行为约束，尚无硬限制。因此安全验收状态为证据不足，禁止生产。
-- T2 固定参数 TeamAI CLI 适配未实施；不会为了 recall 开放 Shell。T3 聚合及异常多轮流程未实施。T4 提供验收步骤，不宣称完成攻击测试。
-- 不重新复制官方 DBHub Skill；记录内网安装的来源/版本/hash，确认与实际 DBHub 相容。
+## 由现有主 Agent 安全委派
 
-## 测试与回滚
+使用现有主Agent显式委派，不安装额外主Agent。子Agent权限独立，限制子Agent本身不能保证父Agent安全。
+在数据库专用测试目录的原生OpenCode配置里，为**已经存在、实际使用的主Agent**设置仅委派权限。例如仅当现有ID确实为build时：
 
-```powershell
-py -3.12 -m unittest discover -s database-assistant/tests -v
-py -3.12 tests/test_codea_review_2_0_hardening.py
-py -3.12 tests/fixtures/codea-review-t1/test_git_scope.py
+```json
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "database-assistant", "effect": "allow" }
+      ]
+    }
+  }
+}
 ```
 
-安装前备份实际配置及同名文件；不覆盖安装。回滚仅移除新增两个 Agent 配置、database-assistant Skill 并恢复备份。停止专用 DBHub 进程、由 DBA 撤销专用账号访问；保留脱敏审计证据。不要删除其他 Skill 或修改业务库。
+这是现有主Agent的会话工作目录权限收紧，不创建新primary，不替换其system/model。手工合并到该测试目录已有配置；备份后操作，不全局覆盖现有开发权限，不改Codea Review文件。此目录中的该主Agent将不能直接执行Shell、读写文件或调用DBHub，只能委派；需要正常编码时退出该目录/恢复原配置。
 
-## 核验参考
-- [DBHub TOML](https://dbhub.ai/config/toml)：sources 超时，tools readonly/max_rows，环境插值。
-- [Issue 384](https://github.com/bytebase/dbhub/issues/384)、[PR 386](https://github.com/bytebase/dbhub/pull/386)：客户端超时、服务端取消及连接池问题。后续文档仍说明取消可能失败，不能只确认 PR 合入就放行。
-- 本地已获取的 OpenCode v2.0.27 `packages/core/src/tool/mcp.ts`：权限动作是实际注册的 server/tool 映射；本生成器不自行拼接它。公司版本仍须实测。
+OpenCode V2的自定义子Agent使用自己的权限，故可在父Agent拒绝直接DB工具时，仅由子Agent精确调用批准的两种工具。必须在公司实装版本验证这种行为；检查保存的授权、其他可切换Agent、项目/全局规则及其他MCP实例，关闭未经授权的绕过路径。若组织配置不允许这种安全委派，停止接入并说明具体冲突，不放宽权限或重建执行框架。
 
+## 使用
 
-## T1 独立审核整改 r1
-- P0-01：生成JSON使用V2 `system`，不含旧prompt；保留mode/permissions，增加原生steps: 8。
-- P0-02：TOML和校验同时要求每源两个工具；缺失、重复、未知/错误源映射拒绝。
-- P1-01：增加独立注册证据与有效Agent快照比对，拒绝工具交换、额外注册、父入口越权及其他可访问DB的Agent。它不能认证快照来源，也不能替代调用前拒绝实测。
-- P1-02：步骤限制不等于调用次数或总时长。生产硬总预算风险仍未解决。
-- 内网操作及证据要求见 [部署验证](tests/deployment-verification.md)。实际配置/双工具/权限/模型执行仍PENDING。
-- [生成配置样例](evidence/generated.synthetic.json) 使用合成测试清单，供审阅字段，不是实装配置或真实注册清单；禁止直接部署。
+在上述目录启动TUI，选择已收紧权限的现有主Agent，输入：
+- “使用database-assistant查询orders测试源中订单10001的编号、状态和金额。”
+- “使用database-assistant查看orders测试源中订单表的字段和索引。”
+- “使用database-assistant查询用户7在指定日期区间内支付失败的订单，最多20条。”
 
+将orders替换为部署批准的source ID。观察父委派、两个Skill加载、真实Schema查询、只读SQL及中文结果。没有实际工具结果不视为成功。切换数据源需重新核验授权并手工调整该Subagent部署，不合并多个来源的allow来代替授权确认。
 
-## Windows 内网验收包
-代码整改已获用户转述的第二轮独立审核PASS（778baec）；T1阶段仍PENDING。
-当前增加的acceptance/仅用于测试部署/合成数据/证据采集，不接入Agent运行链路，不扩展功能。
-内网测试人员从 [WINDOWS-RUNBOOK](acceptance/WINDOWS-RUNBOOK.md) 开始：隔离双库、直接账号检查、官方Inspector直接DBHub调用、原生TUI任务及服务端超时观测。
-凭据不随包分发；官方DBHub Skill及客户端依赖复用公司批准版本。离线包可用 `python acceptance/build_bundle.py --revision <完整提交SHA> --out <新zip路径>` 在本目录生成。
-新增Python验收脚本只做本机A类自检；PowerShell、SQL及Windows/内网真实链路尚未执行，不能视为C类验收。
+## 安全与手工验收
+
+- 每源使用独立MySQL只读账号，只授批准的表/脱敏视图SELECT；核对角色和间接视图权限。不得有写入、FILE、EXECUTE或跨库权限。
+- DBHub显式readonly=true；默认100行、15秒单SQL超时。结果行数不限制扫描成本。
+- 原生steps限制模型步骤，不是总调用次数或墙钟时限；Skill的8次/120秒是行为预算。硬任务总预算仍未实现，不能宣称生产资源风险已解决。
+- 对照 [手工验证清单](skills/database-assistant/references/manual-verification.md)，用现有TUI、DBHub诊断工具及MySQL客户端验证只读、跨源隔离和服务端超时。模型说拒绝不等于工具/数据库已阻断。
+
+没有内网C类证据的项目全部PENDING。精简前的自动化日志和验收包不再属于当前交付，不能证明当前方案可用；历史留在Git提交记录。
+
+## 升级与回滚
+
+升级前备份Agent、专属Skill及本次改动的原生权限/DBHub配置，记下版本或提交。手工替换本模块文件，保留并重新核对实际source/action和凭据注入方式，重启后复验。
+回滚时恢复这些备份并重启，不删除其他Skill、不改Codea Review、不自动修改数据库。旧版生成的同名JSON Agent或额外数据库主入口应从实际配置中手工移除，避免与本版Markdown重复加载；旧辅助脚本和离线验收包停止使用。
