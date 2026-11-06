@@ -1,0 +1,25 @@
+# Candidate only: pin the installed DBHub version and validate in isolated MySQL.
+# Each DSN must use a DIFFERENT dedicated account restricted to approved views.
+[[sources]]
+id = "orders"
+dsn = "${ORDERS_DSN}"
+query_timeout = 15
+connection_timeout = 10
+
+[[sources]]
+id = "payments"
+dsn = "${PAYMENTS_DSN}"
+query_timeout = 15
+connection_timeout = 10
+
+[[tools]]
+name = "execute_sql"
+source = "orders"
+readonly = true
+max_rows = 100
+
+[[tools]]
+name = "execute_sql"
+source = "payments"
+readonly = true
+max_rows = 100
