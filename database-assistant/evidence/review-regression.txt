@@ -40,9 +40,9 @@ test_report_skill_retains_review_and_save_invariants (__main__.UsabilityReportPr
 test_three_finding_example_is_consistent_across_list_and_details (__main__.UsabilityReportPresentation.test_three_finding_example_is_consistent_across_list_and_details) ... ok
 
 ----------------------------------------------------------------------
-Ran 40 tests in 15.000s
+Ran 40 tests in 15.055s
 
 OK
-PARAM_BASE_EVIDENCE master ec45abfcbdc3d6a66d66ad5d508ff44651bcb242 {'COMMITTED': {'db/order.sql', 'db/develop.sql'}, 'STAGED': {'db/staged.sql'}, 'UNSTAGED': {'db/working.SQL'}, 'UNTRACKED': {'db/untracked.sql'}}
-PARAM_BASE_EVIDENCE origin/develop a6fee07786a78d92b3f45acdcf7ad1aa72c15564 {'COMMITTED': {'db/order.sql'}, 'STAGED': {'db/staged.sql'}, 'UNSTAGED': {'db/working.SQL'}, 'UNTRACKED': {'db/untracked.sql'}}
-PARAM_BASE_EVIDENCE origin/develop a6fee07786a78d92b3f45acdcf7ad1aa72c15564 {'COMMITTED': {'db/order.sql'}, 'STAGED': {'db/staged.sql'}, 'UNSTAGED': {'db/working.SQL'}, 'UNTRACKED': {'db/untracked.sql'}}
+PARAM_BASE_EVIDENCE master 637f72bfa559a6a8a8ed65d4009c0117344c2f67 {'COMMITTED': {'db/order.sql', 'db/develop.sql'}, 'STAGED': {'db/staged.sql'}, 'UNSTAGED': {'db/working.SQL'}, 'UNTRACKED': {'db/untracked.sql'}}
+PARAM_BASE_EVIDENCE origin/develop b4bdd0bcb513da1f1d91bd8e256fb73f67ac3419 {'COMMITTED': {'db/order.sql'}, 'STAGED': {'db/staged.sql'}, 'UNSTAGED': {'db/working.SQL'}, 'UNTRACKED': {'db/untracked.sql'}}
+PARAM_BASE_EVIDENCE origin/develop b4bdd0bcb513da1f1d91bd8e256fb73f67ac3419 {'COMMITTED': {'db/order.sql'}, 'STAGED': {'db/staged.sql'}, 'UNSTAGED': {'db/working.SQL'}, 'UNTRACKED': {'db/untracked.sql'}}

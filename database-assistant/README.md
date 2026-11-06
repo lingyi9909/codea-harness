@@ -54,3 +54,11 @@ py -3.12 tests/fixtures/codea-review-t1/test_git_scope.py
 - P1-02：步骤限制不等于调用次数或总时长。生产硬总预算风险仍未解决。
 - 内网操作及证据要求见 [部署验证](tests/deployment-verification.md)。实际配置/双工具/权限/模型执行仍PENDING。
 - [生成配置样例](evidence/generated.synthetic.json) 使用合成测试清单，供审阅字段，不是实装配置或真实注册清单；禁止直接部署。
+
+
+## Windows 内网验收包
+代码整改已获用户转述的第二轮独立审核PASS（778baec）；T1阶段仍PENDING。
+当前增加的acceptance/仅用于测试部署/合成数据/证据采集，不接入Agent运行链路，不扩展功能。
+内网测试人员从 [WINDOWS-RUNBOOK](acceptance/WINDOWS-RUNBOOK.md) 开始：隔离双库、直接账号检查、官方Inspector直接DBHub调用、原生TUI任务及服务端超时观测。
+凭据不随包分发；官方DBHub Skill及客户端依赖复用公司批准版本。离线包可用 `python acceptance/build_bundle.py --revision <完整提交SHA> --out <新zip路径>` 在本目录生成。
+新增Python验收脚本只做本机A类自检；PowerShell、SQL及Windows/内网真实链路尚未执行，不能视为C类验收。

@@ -1,3 +1,11 @@
+test_bad_login_name_never_becomes_option (test_acceptance.AcceptanceTests.test_bad_login_name_never_becomes_option) ... ok
+test_bundle_revision_and_no_overwrite (test_acceptance.AcceptanceTests.test_bundle_revision_and_no_overwrite) ... ok
+test_canary_failure_prevents_attack_queries (test_acceptance.AcceptanceTests.test_canary_failure_prevents_attack_queries) ... ok
+test_permission_denial_requires_specific_code (test_acceptance.AcceptanceTests.test_permission_denial_requires_specific_code) ... ok
+test_query_results_exact_not_only_exit_code (test_acceptance.AcceptanceTests.test_query_results_exact_not_only_exit_code) ... ok
+test_stage_refuses_existing_directory_and_preserves_configs (test_acceptance.AcceptanceTests.test_stage_refuses_existing_directory_and_preserves_configs) ... ok
+test_stage_rejects_broad_default_and_legacy_candidate (test_acceptance.AcceptanceTests.test_stage_rejects_broad_default_and_legacy_candidate) ... ok
+test_unexpected_write_success_stops_without_saving_output (test_acceptance.AcceptanceTests.test_unexpected_write_success_stops_without_saving_output) ... ok
 test_candidate_tampering_rejected (test_deployment.DeploymentTests.test_candidate_tampering_rejected) ... ok
 test_cli_checks_utf8_bom_snapshots_without_executing_tools (test_deployment.DeploymentTests.test_cli_checks_utf8_bom_snapshots_without_executing_tools) ... ok
 test_matching_snapshots_are_not_runtime_pass (test_deployment.DeploymentTests.test_matching_snapshots_are_not_runtime_pass) ... ok
@@ -26,6 +34,8 @@ test_unknown_source (test_prepare.PrepareTests.test_unknown_source) ... ok
 test_v2_system_and_steps_without_legacy_fields (test_prepare.PrepareTests.test_v2_system_and_steps_without_legacy_fields) ... ok
 
 ----------------------------------------------------------------------
-Ran 26 tests in 0.268s
+Ran 34 tests in 0.309s
 
 OK
+DIRECT_CHECKS_ONLY; T1 remains PENDING; inspect mysql-direct.json
+DIRECT_CHECKS_ONLY; T1 remains PENDING; inspect mysql-direct.json

@@ -1,0 +1,25 @@
+{
+  "code_review": "PASS (user-reported independent review at 778baec)",
+  "stage_acceptance": "PENDING",
+  "versions": {"windows": null, "opencode": null, "dbhub": null, "mysql2": null, "mysql": null, "private_model": null},
+  "effective_agents_evidence": null,
+  "registration_evidence": null,
+  "grants_evidence": null,
+  "tests": [
+    {"id":"INSTALL","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T01","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T02","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T03","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T09","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T10","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T11","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T12","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T13","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T15","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T16","environment":"C","status":"PENDING","evidence":[]},
+    {"id":"T18","environment":"C","status":"PENDING","evidence":[]}
+  ],
+  "timeout": {"client_error":null,"server_seen_running":null,"server_terminated_early":null,"pool_discard_or_known_state":null,"next_query_success":null,"cancel_failure_detected":null},
+  "independent_reviewer": null,
+  "known_risks": ["No enforced total task wall-clock/tool-call budget", "Snapshot checks cannot authenticate evidence"]
+}
