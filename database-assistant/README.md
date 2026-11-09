@@ -13,11 +13,18 @@
 - [原生Agent](agents/database-assistant.md)：mode/steps/permissions及system正文。
 - [专属Skill](skills/database-assistant/SKILL.md)：查询、统计、排查、知识、追问与安全的完整运行规则。
 - [DBHub TOML](config/dbhub.example.toml)：两个隔离源和每源两个工具的参考，不是已接通配置。
-- references：[查询](skills/database-assistant/references/query-workflow.md)、[统计](skills/database-assistant/references/analysis-workflow.md)、[排查](skills/database-assistant/references/troubleshooting-workflow.md)、[TeamAI](skills/database-assistant/references/knowledge-policy.md)、[安全](skills/database-assistant/references/sql-safety.md)、[输出](skills/database-assistant/references/report-template.md)、[验收](skills/database-assistant/references/manual-verification.md)。
+- references：[统一业务SOP](skills/database-assistant/references/business-sop.md)、[查询](skills/database-assistant/references/query-workflow.md)、[统计](skills/database-assistant/references/analysis-workflow.md)、[排查](skills/database-assistant/references/troubleshooting-workflow.md)、[TeamAI](skills/database-assistant/references/knowledge-policy.md)、[安全](skills/database-assistant/references/sql-safety.md)、[输出](skills/database-assistant/references/report-template.md)、[验收](skills/database-assistant/references/manual-verification.md)。
 - [研发验证与已知限制](VALIDATION.md)。
 
 运行依赖仅为现有OpenCode、模型、DBHub、MySQL及可选TeamAI CLI；不用Python、新Node.js脚本、配置生成器、安装器、测试平台、独立Runtime、新MCP或额外primary Agent。知识服务不可用时，已明确口径的数据库查询仍可运行。
 
+## 统一业务执行流程（本轮P1整改）
+
+业务语义相关的查询/统计/排查，一律按 **A识别业务 → B TeamAI业务与项目/source/表候选定位 → C DBHub授权source及search_objects真实Schema核验 → D最小查询计划 → E execute_sql逐步只读查询与证据分析 → F中文结论**。只有明确source、表/列且不依赖业务语义的纯技术任务可记录原因跳过B；仅知道订单号不属于TECH。任何SQL之前都须完成C与D；知识结果不得替代真实Schema。
+
+固定的四个TeamAI主题**不保证查到具体业务→项目→source→表映射**，因为命令不能携带动态业务ID。管理员必须根据公司知识覆盖情况，静态审批可支持的业务域/专属固定主题并同步Agent与Skill；不在批准范围或未找到映射时不能猜库、猜表或跨源探测。可确认已授权source/表的任务才允许降级为纯技术事实，不能做未验证的业务语义解释。本轮未证明TeamAI有可安全使用的结构化检索接口，也不因此新增工具或放宽shell权限。
+
+阶段门禁、八类成功/失败/降级预期轨迹见[统一业务SOP参考](skills/database-assistant/references/business-sop.md)，执行时以Agent和Skill正文为准。内网须依实际工具日志验证顺序，提示词SOP不能保证程序级强制。
 ## Windows离线安装
 
 1. 在可联网环境取得本PR确定Commit的这些原生文件；通过公司已有离线渠道或现有TeamAI分发规范传入内网，不新建分发系统。内网沿用已批准的OpenCode、DBHub及官方dbhub Skill、TeamAI CLI和私有模型，不由Agent下载或安装依赖。记录各实际版本、Skill来源/版本与文件摘要。
@@ -25,7 +32,7 @@
 3. 在已有DBHub实例手工合并[TOML参考](config/dbhub.example.toml)，不要覆盖其他源或再建MCP服务。核实实装DBHub版本支持的格式；query_timeout/connection_timeout位于sources，readonly/max_rows位于execute_sql。DSN由现有启动环境注入，确认变量设置，不将密码写进文件或仓库。
 4. 区分DBHub配置中可存在的多个source与本Subagent一次部署**唯一被授权的source**；不把不同source的表当成一个可JOIN的库。用现有MCP诊断工具查看完整tools/list，同时核对OpenCode实际注册的**完整权限action**。两者命名可能不同，不能猜后缀。每源必须同时注册search_objects与execute_sql；利用真实Schema和合成标记记录确认来源。交换工具/源的负例必须能发现。
 5. 编辑[Agent](agents/database-assistant.md)：将“部署授权数据源：未配置。”改为唯一批准source ID；将两条注释工具allow替换成该源实测的完整action。保留deny-all和两个Skill allow，不增加工具通配符。模板未配置前不能调用数据库。官方Skill名称若不是dbhub，按实际已安装名称同步修改Skill allow和加载指令，不凭名称假装加载成功。
-6. TeamAI使用已确认的`teamai recall "帮我查询数据库"`位置参数语法，以及同语法的三个固定主题。管理员沿用已有CLI安装、登录和访问域配置，核实可信可执行文件、PATH/别名及Windows命令解析。命令与Skill映射必须逐字匹配，不能用`recall *`或插入用户内容。默认四个主题是有限范围的知识检索入口，不保证覆盖所有业务场景。管理员可在安装时按业务域替换或增加**有限、逐条批准的固定完整主题命令**，必须将Agent的精确shell allow与Skill内主题/命令映射同步改动并重测；不可放宽为动态recall或任意Shell。尚未验证时可删除四条shell allow，普通查询仍可用，自动知识增强记录PENDING。见[TeamAI权限说明](skills/database-assistant/references/knowledge-policy.md)。
+6. 安装者需先明确本次部署支持的业务范围，并核实TeamAI是否存在能实际召回“业务→项目→source→表→口径”的来源明确知识；没有完整映射的业务不能宣称自动定位能力。TeamAI使用已确认的`teamai recall "帮我查询数据库"`位置参数语法，以及同语法的三个固定主题。管理员沿用已有CLI安装、登录和访问域配置，核实可信可执行文件、PATH/别名及Windows命令解析。命令与Skill映射必须逐字匹配，不能用`recall *`或插入用户内容。默认四个主题是有限范围的知识检索入口，不保证覆盖所有业务场景。管理员可在安装时按业务域替换或增加**有限、逐条批准的固定完整主题命令**，必须将Agent的精确shell allow与Skill内主题/命令映射同步改动并重测；不可放宽为动态recall或任意Shell。尚未验证时可删除四条shell allow，普通查询仍可用，自动知识增强记录PENDING。见[TeamAI权限说明](skills/database-assistant/references/knowledge-policy.md)。
 7. 备份同名文件后，将Agent复制到`%USERPROFILE%\.config\opencode\agents\database-assistant.md`；将整个专属Skill目录复制到`%USERPROFILE%\.config\opencode\skills\database-assistant\`。复用官方Skill既有位置，不复制第二份。若公司配置了自定义目录，使用实装OpenCode实际加载路径并记录，不盲目复制两份。
 8. 检查用户/项目/父目录`.opencode`及JSON同名覆盖。Markdown正文由V2加载为system，不另建同名JSON Agent，不使用旧prompt/permission/bash/task配置。重启TUI，确认system、mode:subagent、steps:8、permissions以及两个Skill实际加载。JSON/YAML语法通过不能代替这一步。
 
@@ -62,7 +69,7 @@
 - “订单10002有成功支付流水但订单未更新，按只读数据逐步排查，区分事实、原因候选与待验证项。”
 - “解释这条SELECT并在核实Schema与安全后执行。”
 
-有返回才给结论；固定知识主题未命中就说明缺失，必要时澄清。完整查询及统计SQL合成示例见references，不能直接当公司业务Schema。
+有返回才给结论；业务任务须先尝试知识定位，固定知识主题未命中就说明缺失且不得猜业务映射，必要时澄清。完整查询及统计SQL合成示例见references，不能直接当公司业务Schema。
 
 ## 单源与跨源边界
 
