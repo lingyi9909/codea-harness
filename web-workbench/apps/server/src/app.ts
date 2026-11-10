@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { delimiter } from 'node:path';
 import { registerGitRoutes } from './modules/repositories/routes.ts';
 import { registerTaskFileRoutes } from './modules/tasks/files.ts';
+import { registerTaskRoutes } from './modules/tasks/routes.ts';
 import type { Pool } from 'mysql2/promise';
 import { LocalAuth, AuthProblem, ensureLocalOwner } from './auth.ts';
 import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/probe.ts';
@@ -55,8 +56,11 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth}){
   registerGitRoutes(app,{pool:opts.pool,auth:opts.auth,
     roots:(process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean),
     refKey:process.env.HARNESS_REF_KEY??''});
+  registerTaskRoutes(app,{pool:opts.pool,auth:opts.auth,
+    roots:(process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean),
+    cursorKey:process.env.HARNESS_CURSOR_KEY??'',notesSupported:false});
   registerTaskFileRoutes(app,{pool:opts.pool,auth:opts.auth,
     dataRoot:process.env.HARNESS_DATA_DIR??'.workbench-local'});
-  // Task execution, permission and report endpoints are still unavailable until T05-T10.
+  // Native execution and artifacts remain unavailable until T06-T10.
   return app;
 }
