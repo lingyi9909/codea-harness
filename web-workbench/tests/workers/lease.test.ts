@@ -33,7 +33,7 @@ function fixture(opts:{occupied?:boolean;expired?:boolean;quarantined?:boolean}=
       return [[{id:runId,task_id:taskId,status:runStatus,dispatch_state:dispatch}],[]];
     if(sql.includes('UPDATE wh_executor_slots')){
       if(sql.includes('quarantined=1'))slot.quarantined=1;
-      if(sql.includes('run_id=?')){
+      if(sql.includes('SET run_id=?')){
         slot.run_id=String(values[0]);slot.lease_owner=String(values[1]);
         slot.fence=String(values[2]);slot.valid=1;
       }
