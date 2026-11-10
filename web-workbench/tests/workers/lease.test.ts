@@ -55,11 +55,11 @@ function fixture(opts:{occupied?:boolean;expired?:boolean;quarantined?:boolean}=
       return [{affectedRows:1},[]];
     }
     if(sql.includes('UPDATE wh_outbox')){
-      if(sql.includes("status='CLAIMED'"))boxStatus='CLAIMED';
-      if(sql.includes("status='SENDING'"))boxStatus='SENDING';
-      if(sql.includes("status='SENT'"))boxStatus='SENT';
-      if(sql.includes("status='UNKNOWN'"))boxStatus='UNKNOWN';
-      if(sql.includes("status='CANCELLED'")){boxStatus='CANCELLED';return [{affectedRows:1},[]];}
+      if(sql.includes("SET status='CLAIMED'"))boxStatus='CLAIMED';
+      if(sql.includes("SET status='SENDING'"))boxStatus='SENDING';
+      if(sql.includes("SET status='SENT'"))boxStatus='SENT';
+      if(sql.includes("SET status='UNKNOWN'"))boxStatus='UNKNOWN';
+      if(sql.includes("SET status='CANCELLED'")){boxStatus='CANCELLED';return [{affectedRows:1},[]];}
       return [{affectedRows:1},[]];
     }
     if(sql.includes('UPDATE wh_tasks SET next_event_seq=')){seq=BigInt(String(values[0]));return [{affectedRows:1},[]];}
