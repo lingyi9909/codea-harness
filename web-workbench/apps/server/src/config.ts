@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { configFromEnv } from '../../../../packages/storage/src/db.ts';
+import { configFromEnv } from '../../../packages/storage/src/db.ts';
 
 export function runtimeConfig(env:NodeJS.ProcessEnv=process.env){
   const port=Number(env.HARNESS_HTTP_PORT??'4176');

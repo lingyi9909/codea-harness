@@ -22,5 +22,7 @@ jobs:
         run: npm run typecheck
       - name: Static DDL contract test
         run: npm run test:schema-static
+      - name: Git committed-scope tests
+        run: npm run test:git
       - name: T01 regression
         run: npm test
