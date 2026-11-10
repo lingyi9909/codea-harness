@@ -5,6 +5,8 @@ import type { Pool,PoolConnection,RowDataPacket } from 'mysql2/promise';
 import { claimNext,renewLease,beginNativeSend,markNativeAccepted,quarantineUnknown,
   LeaseError } from '../../packages/storage/src/slots.ts';
 import { requestStop } from '../../apps/server/src/modules/runs/stop.ts';
+import { dispatchNext } from '../../apps/server/src/workers/scheduler.ts';
+import type { OpenCodeAdapter } from '../../packages/contracts/src/ports.ts';
 
 type RunState='QUEUED'|'PREPARING'|'RUNNING'|'STOP_REQUESTED'|'RECOVERING'|'STOPPED';
 function fixture(opts:{occupied?:boolean;expired?:boolean;quarantined?:boolean}={}){
@@ -75,6 +77,19 @@ function fixture(opts:{occupied?:boolean;expired?:boolean;quarantined?:boolean}=
     get operations(){return insertedOperations;},get rollbacks(){return rollbackCount;}};
 }
 describe('T06 leased outbox safety (deterministic SQL contract, not MySQL)',()=>{
+  it('does not claim a slot or call native when required evidence is UNKNOWN',async()=>{
+    let probed=0,modelCalls=0,dbCalls=0;
+    const adapter={probe:async()=>{probed++;return[{name:'command.execute',status:'UNKNOWN',required:true,evidence:'not proven'}];},
+      startReview:async()=>{modelCalls++;return {state:'UNKNOWN'};}} as unknown as OpenCodeAdapter;
+    const pool={getConnection:async()=>{dbCalls++;throw Error('DB must not be touched')}} as unknown as Pool;
+    const config={pool,workerId:'worker-1',dataRoot:'D:/test',repositoryRoots:[],
+      nativeVersion:'2.0.27',adapter};
+    assert.equal(await dispatchNext(config),null);
+    assert.equal(probed,1);assert.equal(dbCalls,0);assert.equal(modelCalls,0);
+    assert.equal(await dispatchNext({...config,nativeVersion:'UNVERIFIED'}),null);
+    assert.equal(probed,1);assert.equal(dbCalls,0);assert.equal(modelCalls,0);
+  });
+
   it('claims only one pending run, records fence and PREPARING, renews and accepts once',async()=>{
     const f=fixture(),lease=await claimNext(f.pool,'worker-1');
     assert.ok(lease);
