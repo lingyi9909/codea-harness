@@ -25,7 +25,10 @@
     "test:snapshot": "node --experimental-strip-types --test tests/git/snapshot.test.ts tests/api/files.test.ts",
     "test:tasks": "node --experimental-strip-types --test tests/api/tasks.test.ts",
     "test:events": "node --experimental-strip-types --test tests/events/replay.test.ts",
-    "test:lease": "node --experimental-strip-types --test tests/workers/lease.test.ts"
+    "test:lease": "node --experimental-strip-types --test tests/workers/lease.test.ts",
+    "web:dev": "npm run dev --workspace @codea/web",
+    "web:build": "npm run build --workspace @codea/web",
+    "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
