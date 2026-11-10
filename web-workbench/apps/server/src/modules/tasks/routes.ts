@@ -24,7 +24,7 @@ export function registerTaskRoutes(app:FastifyInstance,opts:{
     '/api/v1/tasks',async(req,reply)=>{
       const {ownerId}=opts.auth.session(req);
       const limit=Number(req.query.limit??'20');
-      return reply.send(wrap(await listTasks({ownerId,limit,...req.query},opts)));
+      return reply.send(wrap(await listTasks({...req.query,ownerId,limit},opts)));
     });
   app.get<{Params:{taskId:string}}>('/api/v1/tasks/:taskId',async(req,reply)=>{
     const {ownerId}=opts.auth.session(req);
