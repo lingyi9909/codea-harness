@@ -24,7 +24,8 @@
     "test:git": "node --experimental-strip-types --test tests/git/provider.test.ts",
     "test:snapshot": "node --experimental-strip-types --test tests/git/snapshot.test.ts tests/api/files.test.ts",
     "test:tasks": "node --experimental-strip-types --test tests/api/tasks.test.ts",
-    "test:events": "node --experimental-strip-types --test tests/events/replay.test.ts"
+    "test:events": "node --experimental-strip-types --test tests/events/replay.test.ts",
+    "test:lease": "node --experimental-strip-types --test tests/workers/lease.test.ts"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
