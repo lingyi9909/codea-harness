@@ -28,5 +28,7 @@ jobs:
         run: npm run test:snapshot
       - name: Task idempotency and validation contract
         run: npm run test:tasks
+      - name: Persisted event sequence and replay contract
+        run: npm run test:events
       - name: T01 regression
         run: npm test
