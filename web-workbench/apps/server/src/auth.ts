@@ -12,7 +12,10 @@ export class LocalAuth {
   private readonly createdAt=Date.now();
   private readonly attempts:number[]=[];
   private readonly sessions=new Map<string,Session>();
-  constructor(readonly pairingCode:string,private readonly port:number,private readonly devOrigin?:string){
+  private readonly port:number;
+  private readonly devOrigin?:string;
+  constructor(pairingCode:string,port:number,devOrigin?:string){
+    this.port=port;this.devOrigin=devOrigin;
     this.pairingHash=hash(pairingCode);
     if(devOrigin&&!/^http:\/\/(127\.0\.0\.1|localhost):4175$/.test(devOrigin))
       throw new Error('UNSAFE_DEVELOPMENT_ORIGIN');
@@ -65,7 +68,8 @@ export class LocalAuth {
   }
 }
 export class AuthProblem extends Error{
-  constructor(readonly status:number,readonly code:string){super(code);}
+  readonly status:number; readonly code:string;
+  constructor(status:number,code:string){super(code);this.status=status;this.code=code;}
 }
 export async function ensureLocalOwner(pool:Pool):Promise<{id:string;name:string}>{
   const subject='local-single-user';
