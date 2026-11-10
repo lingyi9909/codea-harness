@@ -5,6 +5,7 @@ import type { Pool } from 'mysql2/promise';
 import type { LocalAuth } from '../../auth.ts';
 import { GitFailure, getRefs, trustedRepository } from '../../../../../packages/git-provider/src/repository.ts';
 import { checkUuid, findRepository, listRepositories, registerRepository } from './service.ts';
+import { createPreview } from './preview-service.ts';
 
 type Deps={pool:Pool;auth:LocalAuth;roots:string[];refKey:string};
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
@@ -37,4 +38,12 @@ export function registerGitRoutes(app:FastifyInstance,deps:Deps):void{
       throw e;
     }
   });
+  app.post<{Body:{operationId:string;repositoryId:string;baseRefId:string}}>(
+    '/api/v1/review-previews',async(req,reply)=>{
+      const {ownerId}=deps.auth.mutation(req);
+      if(!req.body||typeof req.body!=='object')throw new AuthProblem(400,'INVALID_REQUEST');
+      const result=await createPreview({ownerId,...req.body},deps);
+      return reply.status(201).send(wrap(result));
+    });
+
 }
