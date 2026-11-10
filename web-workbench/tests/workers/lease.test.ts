@@ -40,7 +40,7 @@ function fixture(opts:{occupied?:boolean;expired?:boolean;quarantined?:boolean}=
       return [{affectedRows:1},[]];
     }
     if(sql.includes('UPDATE wh_runs')){
-      if(sql.includes("status='PREPARING'")){runStatus='PREPARING';return [{affectedRows:1},[]];}
+      if(sql.includes("SET status='PREPARING'")){runStatus='PREPARING';return [{affectedRows:1},[]];}
       if(sql.includes("dispatch_state='SENDING'")){
         if(dispatch!=='NOT_SENT')return [{affectedRows:0},[]];
         dispatch='SENDING';return [{affectedRows:1},[]];
