@@ -24,5 +24,7 @@ jobs:
         run: npm run test:schema-static
       - name: Git committed-scope tests
         run: npm run test:git
+      - name: Immutable Git snapshots and API ownership
+        run: npm run test:snapshot
       - name: T01 regression
         run: npm test
