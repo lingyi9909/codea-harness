@@ -130,6 +130,9 @@ export async function prepareSnapshot(input:{
   const taskDir=join(dataReal,'tasks',taskId);
   const partial=join(taskDir,'repo.partial'),final=join(taskDir,'repo');
   await mkdir(taskDir,{recursive:true});
+  const taskReal=await realpath(taskDir);
+  if(!safeWithin(dataReal,taskReal)||(await lstat(taskDir)).isSymbolicLink())
+    throw new GitFailure('SNAPSHOT_TASK_DIRECTORY_ESCAPE');
   // No reuse of unknown partial state. Another worker must explicitly reconcile first.
   try{await lstat(partial);throw new GitFailure('SNAPSHOT_PARTIAL_EXISTS');}
   catch(e){if(!(e instanceof Error&&'code' in e&&e.code==='ENOENT'))throw e;}
@@ -191,6 +194,8 @@ export async function prepareSnapshot(input:{
     const manifest:Manifest={version:1,taskId,scope,files,excluded,
       storageKey,createdAt:new Date().toISOString()};
     const encoded=JSON.stringify(manifest);
+    if(Buffer.byteLength(encoded,'utf8')>32*1024*1024)
+      throw new GitFailure('BUDGET_EXCEEDED_MANIFEST');
     const manifestHash=sha256(encoded);
     const handle=await open(join(taskDir,'manifest.partial'),'wx');
     try{await handle.writeFile(encoded,'utf8');await handle.sync();}finally{await handle.close();}
