@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { delimiter } from 'node:path';
 import { registerGitRoutes } from './modules/repositories/routes.ts';
+import { registerTaskFileRoutes } from './modules/tasks/files.ts';
 import type { Pool } from 'mysql2/promise';
 import { LocalAuth, AuthProblem, ensureLocalOwner } from './auth.ts';
 import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/probe.ts';
@@ -54,6 +55,8 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth}){
   registerGitRoutes(app,{pool:opts.pool,auth:opts.auth,
     roots:(process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean),
     refKey:process.env.HARNESS_REF_KEY??''});
-  // No mock task execution, permission or report endpoints. Missing features stay unavailable.
+  registerTaskFileRoutes(app,{pool:opts.pool,auth:opts.auth,
+    dataRoot:process.env.HARNESS_DATA_DIR??'.workbench-local'});
+  // Task execution, permission and report endpoints are still unavailable until T05-T10.
   return app;
 }

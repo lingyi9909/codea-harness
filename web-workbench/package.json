@@ -21,7 +21,8 @@
     "server:start": "node --experimental-strip-types apps/server/src/start.ts",
     "migrate": "node --experimental-strip-types scripts/migrate.ts",
     "test:schema-static": "node --experimental-strip-types --test tests/mysql/migration.test.ts",
-    "test:git": "node --experimental-strip-types --test tests/git/provider.test.ts"
+    "test:git": "node --experimental-strip-types --test tests/git/provider.test.ts",
+    "test:snapshot": "node --experimental-strip-types --test tests/git/snapshot.test.ts tests/api/files.test.ts"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
