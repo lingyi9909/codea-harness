@@ -1,6 +1,6 @@
 import { describe,it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync,mkdirSync,writeFileSync,rmSync } from 'node:fs';
+import { mkdtempSync,mkdirSync,writeFileSync,rmSync,realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -19,7 +19,7 @@ describe('T03 local committed Git preview (real git, no remote)',()=>{
       writeFileSync(join(root,'OrderController.java'),'class OrderController { int a; }\n');
       git('add','.');git('commit','-qm','feature');
       writeFileSync(join(root,'untracked.sql'),'select 1;');
-      assert.equal(await trustedRepository(root,[parent]),root);
+      assert.equal(await trustedRepository(root,[parent]),realpathSync(root));
       const id=randomUUID(),secret='local-fixture-secret';
       const refs=await getRefs(root,id,secret);
       const base=refs.items.find(r=>r.fullName==='refs/heads/base-for-review');
