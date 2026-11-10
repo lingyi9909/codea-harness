@@ -4,8 +4,8 @@ import { delimiter } from 'node:path';
 import { registerGitRoutes } from './modules/repositories/routes.ts';
 import type { Pool } from 'mysql2/promise';
 import { LocalAuth, AuthProblem, ensureLocalOwner } from './auth.ts';
-import { evaluateCapabilities } from '../../../../packages/opencode-adapter/src/probe.ts';
-import type { DTO } from '../../../../packages/contracts/src/domain.ts';
+import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/probe.ts';
+import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
 export async function createApp(opts:{pool:Pool;auth:LocalAuth}){

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createPool } from '../../../../packages/storage/src/db.ts';
+import { createPool } from '../../../packages/storage/src/db.ts';
 import { runtimeConfig } from './config.ts';
 import { LocalAuth } from './auth.ts';
 import { createApp } from './app.ts';
