@@ -65,7 +65,7 @@ export async function requestStop(pool:Pool,input:{ownerId:string;runId:string;o
         [randomUUID(),operationDbId,taskId,input.runId,JSON.stringify({runId:input.runId})]);
     }
     await appendEvent(tx,{taskId,runId:input.runId,type:'run.status',
-      data:{status:queued?'STOPPED':'STOP_REQUESTED',previousStatus:status,errorCode:null}});
+      data:{status:queued?'STOPPED':'STOP_REQUESTED',previousStatus:status as DTO<'Run'>['status'],errorCode:null}});
     return{operationId:input.operationId,taskId,runId:input.runId,
       status:queued?'SUCCEEDED':'ACCEPTED',errorCode:null,result};
   });
