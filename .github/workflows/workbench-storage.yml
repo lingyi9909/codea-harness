@@ -34,5 +34,7 @@ jobs:
         run: npm run test:lease
       - name: T09 native interaction authorization regression
         run: npm run test:interactions
+      - name: T08 scoped continuation tests
+        run: npm run test:continuations
       - name: T01 regression
         run: npm test

@@ -7,6 +7,7 @@ import { registerTaskRoutes } from './modules/tasks/routes.ts';
 import { registerEventRoutes } from './modules/events/routes.ts';
 import { registerRunStopRoute } from './modules/runs/routes.ts';
 import { registerInteractionRoutes } from './modules/interactions/routes.ts';
+import { registerMessageRoutes } from './modules/messages/routes.ts';
 import type { Pool } from 'mysql2/promise';
 import { LocalAuth, AuthProblem, ensureLocalOwner } from './auth.ts';
 import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/probe.ts';
@@ -65,6 +66,8 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth}){
   registerEventRoutes(app,{pool:opts.pool,auth:opts.auth});
   registerRunStopRoute(app,{pool:opts.pool,auth:opts.auth});
   registerInteractionRoutes(app,{pool:opts.pool,auth:opts.auth});
+  registerMessageRoutes(app,{pool:opts.pool,auth:opts.auth,
+    cursorKey:process.env.HARNESS_CURSOR_KEY??''});
   registerTaskFileRoutes(app,{pool:opts.pool,auth:opts.auth,
     dataRoot:process.env.HARNESS_DATA_DIR??'.workbench-local'});
   // Native execution and artifacts remain unavailable until T06-T10.

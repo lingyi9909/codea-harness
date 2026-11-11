@@ -139,6 +139,11 @@ export function WorkbenchApp() {
     await api.stop(detail.latestRun.id,id);await loadDetail(selected);
     setPendingOperation(null);
   });
+  const recheck=()=>act(async()=>{
+    if(!selected)return;
+    const id=operationId();setPendingOperation(id);
+    await api.recheck(selected,id);await loadDetail(selected);setPendingOperation(null);
+  });
   const discuss=()=>act(async()=>{
     if(!selected||!draft.trim())return;
     const id=operationId();setPendingOperation(id);
@@ -226,7 +231,9 @@ export function WorkbenchApp() {
               onAnswer={answerPayload=>answer(i,answerPayload)}/>)}
             <section className="detail-card">
               <div className="card-head"><h2>审查报告</h2><span className="chip">{artifact?'已归档':'等待产物'}</span></div>
-              {artifact?<><div className="report-actions"><button onClick={()=>navigator.clipboard.writeText(artifact.markdown)}>复制 Markdown</button>
+              {artifact?<><div className="report-actions">
+                  <button className="secondary" disabled={busy||active} onClick={recheck}>重新复查固定版本</button>
+                  <button onClick={()=>navigator.clipboard.writeText(artifact.markdown)}>复制 Markdown</button>
                 <a href={'/api/v1/artifacts/'+encodeURIComponent(artifact.meta.id)+'/download'}>下载报告</a></div>
                 <pre className="report-text">{artifact.markdown}</pre>
                 <button className="subtle" onClick={()=>setQuote(window.getSelection()?.toString().slice(0,4000)??'')}>引用所选文本追问</button>
