@@ -28,7 +28,8 @@
     "test:lease": "node --experimental-strip-types --test tests/workers/lease.test.ts",
     "web:dev": "npm run dev --workspace @codea/web",
     "web:build": "npm run build --workspace @codea/web",
-    "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit"
+    "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit",
+    "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
