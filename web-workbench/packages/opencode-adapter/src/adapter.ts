@@ -249,17 +249,19 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
   async *subscribe(binding: SessionBinding, cursor?: string): AsyncIterable<NativeEnvelope> {
     const state = this.state(binding);
     if (!state.runId) throw new Error('RUN_BINDING_MISSING');
+    const subscribedRunId = state.runId;
     // No pretending live SSE can replay after disconnect; cursor requires durable native log.
     const route = cursor ? 'log' : 'events';
     const replacements: Record<string, string> = cursor ? { sessionID: binding.sessionId } : {};
     const query: Record<string, string> = cursor ? { after: cursor, follow: 'true' } : {};
     for await (const frame of this.options.transport.stream(route, replacements, query)) {
+      if (state.runId !== subscribedRunId) throw new Error('NATIVE_EVENT_RUN_CHANGED');
       const event = obj(frame.data);
       const props = event.properties && typeof event.properties === 'object' ? obj(event.properties) : event;
       const eventSession = props.sessionID ?? event.sessionID;
       if (eventSession !== binding.sessionId) continue;
       yield { sourceId: frame.id, cursor: frame.id, taskId: binding.taskId,
-        runId: state.runId, type: requiredString(event.type ?? frame.event, 'NATIVE_EVENT_TYPE'),
+        runId: subscribedRunId, type: requiredString(event.type ?? frame.event, 'NATIVE_EVENT_TYPE'),
         data: props };
     }
   }

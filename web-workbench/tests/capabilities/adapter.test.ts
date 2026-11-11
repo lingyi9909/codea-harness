@@ -58,6 +58,15 @@ describe('T01 Adapter local HTTP harness: not company native evidence', () => {
       const path = new URL(req.url!, 'http://127.0.0.1').pathname;
       requests.push({ method: req.method!, path, body });
       res.setHeader('Content-Type', 'application/json');
+      if (path === '/api/event') {
+        res.setHeader('Content-Type', 'text/event-stream');
+        for (const id of ['1', '2']) {
+          res.write('id: ' + id + '\ndata: ' +
+            JSON.stringify({ sessionID: sessionId, type: 'fixture.progress' }) + '\n\n');
+        }
+        res.end();
+        return;
+      }
       if (path === '/api/session' && req.method === 'POST') {
         res.end(JSON.stringify({ data: { id: sessionId, agent: 'codea-reviewer',
           location: (body as { location: { directory: string } }).location } })); return;
@@ -145,9 +154,15 @@ describe('T01 Adapter local HTTP harness: not company native evidence', () => {
       const inspected = await adapter.inspect(bound);
       assert.equal(inspected.active, true);
       assert.equal(inspected.pendingInteractions, 0);
+      const stream = adapter.subscribe(bound)[Symbol.asyncIterator]();
+      const first = await stream.next();
+      assert.equal(first.done, false);
+      assert.equal(first.value.runId, runId);
+      assert.equal(first.value.cursor, '1');
       const prompt = await adapter.discuss(bound, {
         runId: randomUUID(), messageId: randomUUID(), text: 'What is the SQL risk?',
       });
+      await assert.rejects(stream.next(), /NATIVE_EVENT_RUN_CHANGED/);
       assert.equal(prompt.state, 'ACCEPTED');
       assert.equal(prompt.inputId, 'native-prompt-1');
       assert.deepEqual(await adapter.interrupt(bound), { responseReceived: true, interrupted: true });
