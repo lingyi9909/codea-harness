@@ -1,0 +1,39 @@
+name: Workbench full-stack Windows integration
+on:
+  pull_request:
+    paths: ['web-workbench/**', '.github/workflows/workbench-integrate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  combined:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: web-workbench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare combined lock (initial one-time integration)
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Emit merged exact lock for repository commit
+        run: |
+          node -e "const fs=require('fs'); const b=fs.readFileSync('package-lock.json').toString('base64'); for(let i=0;i<b.length;i+=1200) console.log('LOCKCHUNK:'+b.slice(i,i+1200))"
+      - name: Install complete dependency set
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Backend contracts and server compile
+        run: npm run typecheck
+      - name: Frontend TS compile
+        run: npm run web:typecheck
+      - name: Frontend production assets
+        run: npm run web:build
+      - name: T01 and backend regressions
+        run: |
+          npm test
+          npm run test:git
+          npm run test:snapshot
+          npm run test:tasks
+          npm run test:events
+          npm run test:lease
