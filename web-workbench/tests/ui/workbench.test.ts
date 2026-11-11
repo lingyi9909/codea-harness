@@ -83,7 +83,7 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     await expect(page.getByText('Review completed in fixture')).toBeVisible();
     await page.getByRole('button',{name:'查看固定版本源码'}).click();
     await page.getByLabel('文件与版本').selectOption({label:'HEAD · OrderController.java'});
-    await expect(page.getByText(/1  class OrderController/)).toContainText('amount');
+    await expect(page.locator(".report-text").filter({hasText:"class OrderController"})).toContainText('amount');
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
   }finally{await browser.close();await app.close();await pool.end();await rm(root,{recursive:true,force:true});}
