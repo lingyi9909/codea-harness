@@ -1,3 +1,5 @@
+import { resumeExpired } from './recovery.ts';
+import { collectNativeEvents } from './event-collector.ts';
 import { join, resolve } from 'node:path';
 import { lstat, realpath, rm } from 'node:fs/promises';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
@@ -17,7 +19,7 @@ import { REPORT_RELATIVE_PATH } from '../../../../packages/opencode-adapter/src/
 import { setTimeout as delay } from 'node:timers/promises';
 
 export interface SchedulerConfig{
-  pool:Pool;workerId:string;dataRoot:string;repositoryRoots:string[];
+  signal?:AbortSignal;pool:Pool;workerId:string;dataRoot:string;repositoryRoots:string[];
   nativeVersion:string;adapter:OpenCodeAdapter;
 }
 type Discussion={messageId:string;text:string;quote?:string;reportArtifactId?:string};
@@ -30,7 +32,7 @@ const safeError=(e:unknown)=>e instanceof Error&&e.message.startsWith('OPENCODE_
 
 async function loadRun(config:SchedulerConfig,lease:Lease){
   const [rows]=await config.pool.execute<RowDataPacket[]>(
-    "SELECT t.id,t.controller,t.notes,repo.canonical_path,r.kind,r.status AS run_status,"+
+    "SELECT t.id,t.controller,t.notes,repo.canonical_path,r.kind,r.retry_of_run_id,r.status AS run_status,"+
     "s.id AS snapshot_id,s.head_oid,s.base_oid,s.merge_base_oid,s.base_ref,s.source_branch,"+
     "s.object_format,s.status AS snapshot_status,s.storage_key,s.manifest_sha256 "+
     "FROM wh_tasks t JOIN wh_scope_snapshots s ON s.task_id=t.id "+
@@ -136,9 +138,11 @@ async function continuation(config:SchedulerConfig,lease:Lease,
   let discussion:Discussion|undefined;
   if(kind==='DISCUSS'){
     const [messages]=await config.pool.execute<RowDataPacket[]>(
-      "SELECT id,content FROM wh_messages WHERE task_id=? AND run_id=? "+
-      "AND role='USER' AND status='COMPLETE' ORDER BY created_at ASC",
-      [lease.taskId,lease.runId]);
+      "WITH RECURSIVE ancestry AS (SELECT id,retry_of_run_id FROM wh_runs WHERE task_id=? AND id=? "+
+      "UNION ALL SELECT r.id,r.retry_of_run_id FROM wh_runs r JOIN ancestry a ON r.id=a.retry_of_run_id "+
+      "WHERE r.task_id=? AND r.kind='DISCUSS') SELECT m.id,m.content FROM wh_messages m JOIN ancestry a ON a.id=m.run_id "+
+      "WHERE m.task_id=? AND m.role='USER' AND m.status='COMPLETE'",
+      [lease.taskId,lease.runId,lease.taskId,lease.taskId]);
     if(messages.length!==1)throw new Error('DISCUSSION_MESSAGE_NOT_UNIQUE');
     let payload:unknown;
     try{payload=JSON.parse(String(messages[0].content)) as unknown;}
@@ -170,6 +174,8 @@ async function continuation(config:SchedulerConfig,lease:Lease,
 async function prepare(config:SchedulerConfig,lease:Lease,
   capabilities:DTO<'Capability'>[]):Promise<Prepared>{
   const {row,scope,kind}=await loadRun(config,lease);
+  if(kind==='REVIEW' && row.retry_of_run_id && row.snapshot_status==='READY')
+    return continuation(config,lease,row,scope,'RECHECK');
   return kind==='REVIEW'?
     initialReview(config,lease,capabilities,row,scope):
     continuation(config,lease,row,scope,kind);
@@ -190,7 +196,10 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
   if(!config.nativeVersion.trim()||config.nativeVersion==='UNVERIFIED')return null;
   const capabilities=await config.adapter.probe();
   if(!requiredCapabilities(capabilities))return null;
-  const lease=await claimNext(config.pool,config.workerId);
+  config.signal?.throwIfAborted();
+  const fresh=await claimNext(config.pool,config.workerId);
+  const resumed=fresh?null:await resumeExpired(config);
+  const lease=fresh??resumed?.lease;
   if(!lease)return null;
   const abort=new AbortController();
   let leaseLost=false;
@@ -198,20 +207,29 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
     while(!abort.signal.aborted){
       try{await delay(10000,undefined,{signal:abort.signal});}catch{break;}
       if(abort.signal.aborted)break;
-      try{await renewLease(config.pool,lease);}catch{leaseLost=true;break;}
+      try{await renewLease(config.pool,lease);}catch{leaseLost=true;abort.abort();break;}
     }
   })();
+  const durable=capabilities.some(cap=>cap.name==='session.log'&&cap.status==='SUPPORTED');
+  const signal=config.signal?AbortSignal.any([abort.signal,config.signal]):abort.signal;
   try{
+    if(resumed){
+      await collectNativeEvents({...config,...resumed,durable},signal);
+      return lease.runId;
+    }
     const prepared=await prepare(config,lease,capabilities);
+    config.signal?.throwIfAborted();
     if(leaseLost)throw new Error('LEASE_RENEWAL_LOST');
     await renewLease(config.pool,lease);
     await beginNativeSend(config.pool,lease);
     let acceptance:Awaited<ReturnType<OpenCodeAdapter['startReview']>>;
     try{acceptance=await invokePreparedNative(config.adapter,prepared,lease.runId);}
     catch{acceptance={state:'UNKNOWN',reason:'NATIVE_TRANSPORT_OR_MAPPING_UNCERTAIN'};}
-    if(acceptance.state==='ACCEPTED'&&acceptance.inputId)
+    if(acceptance.state==='ACCEPTED'&&acceptance.inputId){
       await markNativeAccepted(config.pool,lease,acceptance.inputId);
-    else
+      await collectNativeEvents({...config,lease,binding:prepared.binding,inputId:acceptance.inputId,
+        durable},signal);
+    }else
       await quarantineUnknown(config.pool,lease,'NATIVE_ACCEPTANCE_UNKNOWN');
   }catch(e){
     // Any possible native execution or stale lease is reconciled, never replayed.

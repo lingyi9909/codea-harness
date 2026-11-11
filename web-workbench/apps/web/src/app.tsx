@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api/client.ts';
 import type { Schema } from './api/client.ts';
 import { subscribeTask } from './api/events.ts';
+import Markdown from 'react-markdown';
+import { SourceView } from './SourceView.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
 
 type Repository=Schema<'Repository'>;
@@ -22,7 +24,11 @@ export function WorkbenchApp() {
   const [pairingCode,setPairingCode]=useState('');
   const [repos,setRepos]=useState<Repository[]>([]);
   const [tasks,setTasks]=useState<Task[]>([]);
-  const [selected,setSelected]=useState<string>('');
+  const [selected,setSelected]=useState(()=>sessionStorage.getItem('harness.task')??'');
+  const selection=useRef(selected);
+  selection.current=selected;
+  const detailRequest=useRef(0);
+  useEffect(()=>{sessionStorage.setItem('harness.task',selected);},[selected]);
   const [repoId,setRepoId]=useState('');
   const [refs,setRefs]=useState<Ref[]>([]);
   const [refId,setRefId]=useState('');
@@ -39,9 +45,14 @@ export function WorkbenchApp() {
   const [quote,setQuote]=useState('');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
-  const [pendingOperation,setPendingOperation]=useState<string|null>(null);
+  const [pendingOperation,setPending]=useState(()=>sessionStorage.getItem('harness.operation'));
+  const setPendingOperation=(id:string|null)=>{
+    if(id)sessionStorage.setItem('harness.operation',id);else sessionStorage.removeItem('harness.operation');
+    setPending(id);
+  };
   const [eventState,setEventState]=useState('未连接');
   const [gap,setGap]=useState('');
+  const [progress,setProgress]=useState<Array<{seq:string;text:string}>>([]);
   const [registerOpen,setRegisterOpen]=useState(false);
   const [newName,setNewName]=useState('');
   const [newPath,setNewPath]=useState('');
@@ -60,11 +71,14 @@ export function WorkbenchApp() {
     setRepos(r.items);setTasks(t.items);
   },[]);
   const loadDetail=useCallback(async(id:string)=>{
-    const [d,m,i]=await Promise.all([api.task(id),api.messages(id),api.interactions(id)]);
-    setDetail(d);setMessages(m.items);setInteractions(i.items);
+    const order=++detailRequest.current;
+    const d=await api.task(id);
+    const [m,i]=await Promise.all([api.messages(id),api.interactions(id)]);
     const last=d.reports.at(-1);
-    if(last){try {setArtifact(await api.report(last.id));}catch{setArtifact(null);}}
-    else setArtifact(null);
+    const report=last?await api.report(last.id):null;
+    if(selection.current!==id||order!==detailRequest.current)return d.lastSeq;
+    setDetail(d);setMessages(m.items.reverse());setInteractions(i.items);
+    setArtifact(report);return d.lastSeq;
   },[]);
   useEffect(()=>{
     let cancelled=false;
@@ -86,41 +100,70 @@ export function WorkbenchApp() {
     return()=>{active=false;};
   },[repoId]);
   useEffect(()=>{
-    if(!selected){setDetail(null);setInteractions([]);setMessages([]);setArtifact(null);return;}
-    loadDetail(selected).catch(e=>setError(text(e)));
-    const cleanup=subscribeTask(selected,{
-      onEvent:()=>loadDetail(selected).catch(e=>setError(text(e))),
-      onState:s=>setEventState(s==='connected'?'实时事件已连接':s==='connecting'?'连接中':'已断线'),
-      onGap:setGap,
-    });
-    return cleanup;
-  },[selected,loadDetail]);
+    if(!selected||!bootstrap){setDetail(null);setInteractions([]);setMessages([]);setArtifact(null);return;}
+    let active=true,cleanup=()=>{};
+    setDetail(null);setMessages([]);setArtifact(null);setInteractions([]);setGap('');setProgress([]);setDraft(sessionStorage.getItem('harness.draft.'+selected)??'');setQuote('');
+    const fail=(e:unknown)=>{if(active){setError(text(e));if(e instanceof ApiError&&e.status===401)setBootstrap(null);}};
+    let refreshing=false,dirty=false;
+    const refresh=async()=>{
+      dirty=true;
+      if(refreshing)return;
+      refreshing=true;
+      try{while(active&&dirty){dirty=false;await loadDetail(selected);}}
+      catch(e){fail(e);}finally{refreshing=false;}
+    };
+    loadDetail(selected).then(seq=>{
+      if(!active)return;
+      cleanup=subscribeTask(selected,{
+        onEvent:event=>{
+          const label=event.type==='run.status'?event.data.status:
+            event.type==='tool.started'?event.data.tool+' · 开始':
+            event.type==='tool.completed'?event.data.tool+' · '+event.data.outcome:
+            event.type==='artifact.ready'?'已归档报告 v'+event.data.version:null;
+          if(label)setProgress(current=>[...current.slice(-99),{seq:event.seq,text:label}]);
+          if(event.type==='continuity.gap')setGap('部分原生过程记录缺失');
+          if(BigInt(event.seq)>BigInt(seq))void refresh();
+        },
+        onState:s=>setEventState(s==='connected'?'实时事件已连接':s==='connecting'?'连接中':'已断线'),
+        onGap:setGap,
+      },'0');
+    }).catch(fail);
+    return ()=>{active=false;cleanup();};
+  },[selected,bootstrap,loadDetail]);
 
   const act=async(fn:()=>Promise<void>)=>{
     setError('');setBusy(true);
-    try{await fn();}catch(e){setError(text(e));}
+    try{await fn();}catch(e){
+      if(e instanceof ApiError && [400,403,409,422,429].includes(e.status))setPendingOperation(null);
+      if(e instanceof ApiError && ['SCOPE_CHANGED','PREVIEW_EXPIRED','PREVIEW_USED'].includes(e.code))setPreview(null);
+      if(e instanceof ApiError && e.status===401)setBootstrap(null);
+      setError(text(e));
+    }
     finally{setBusy(false);}
   };
-  const create=()=>act(async()=>{
+  const previewScope=()=>act(async()=>{
     if(!repoId||!refId)throw new Error('请先选择仓库和基线');
     if(controller&&(!controllerPattern.test(controller)||controller.length>128))
       throw new Error('Controller 只能是 128 字符以内的 Java 简单类名');
     if(notes.length>2000)throw new Error('补充要求不能超过 2000 字');
-    const id=operationId();setPendingOperation(id);
-    const p=await api.preview(repoId,refId,id);
+    const p=await api.preview(repoId,refId,operationId());
     setPreview(p);
     if(p.applicableFiles===0)throw new Error('没有可审查的已提交业务变更');
     if(p.changedFiles===0)throw new Error('没有已提交差异');
+  });
+  const create=()=>act(async()=>{
+    if(!preview||pendingOperation)return;
     const createId=operationId();setPendingOperation(createId);
-    const op=await api.createTask(p.id,createId,controller||undefined,notes||undefined);
+    const op=await api.createTask(preview.id,createId,controller||undefined,notes||undefined);
     if(op.taskId){setSelected(op.taskId);await refreshLists();}
     else setError('任务受理中，请按操作号查询结果，禁止重新提交');
-    setPendingOperation(null);
+    if(op.taskId)setPendingOperation(null);
   });
   const checkOperation=()=>act(async()=>{
     if(!pendingOperation)return;
     const op=await api.operation(pendingOperation);
     if(op.taskId){setSelected(op.taskId);setPendingOperation(null);await refreshLists();}
+    else if(op.status==='SUCCEEDED'||op.status==='FAILED'){setPendingOperation(null);await refreshLists();}
     else setError('操作状态：'+op.status+'；请继续查询，不能重新创建任务');
   });
   const register=()=>act(async()=>{
@@ -139,6 +182,11 @@ export function WorkbenchApp() {
     await api.stop(detail.latestRun.id,id);await loadDetail(selected);
     setPendingOperation(null);
   });
+  const retry=()=>act(async()=>{
+    if(!detail)return;
+    const id=operationId();setPendingOperation(id);
+    await api.retry(detail.latestRun.id,id);await loadDetail(selected);setPendingOperation(null);
+  });
   const recheck=()=>act(async()=>{
     if(!selected)return;
     const id=operationId();setPendingOperation(id);
@@ -148,9 +196,10 @@ export function WorkbenchApp() {
     if(!selected||!draft.trim())return;
     const id=operationId();setPendingOperation(id);
     await api.discuss(selected,draft,id,artifact?.meta.id,quote||undefined);
-    setDraft('');setQuote('');await loadDetail(selected);setPendingOperation(null);
+    sessionStorage.removeItem('harness.draft.'+selected);setDraft('');setQuote('');await loadDetail(selected);setPendingOperation(null);
   });
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
+  const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
   if(!bootstrap) return <div className="pair-page">
     <div className="pair-card"><div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>本地研发工作台</small></div></div>
@@ -205,10 +254,10 @@ export function WorkbenchApp() {
           <label className="full-label">关注入口 <span className="muted">（选填，仅 Java Controller 简名）</span>
             <input maxLength={128} value={controller} onChange={e=>setController(e.target.value)} placeholder="例如：OrderController"/></label>
           <label className="full-label">补充要求 <span className="muted">（选填）</span>
-            <textarea rows={4} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="你希望重点核查的事务、幂等、金额、SQL 或权限风险…"/></label>
+            <textarea disabled={!bootstrap.capabilities.some(c=>c.name==='instruction.entry'&&c.status==='SUPPORTED')} rows={4} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="你希望重点核查的事务、幂等、金额、SQL 或权限风险…"/></label>
           <div className="scope-hint"><strong>固定审查范围</strong><span>只审查 Git 已提交变更，不包含 staged、unstaged 或 untracked 文件。</span></div>
           {preview&&<div className="preview-meta">最近预检：{preview.changedFiles} 个已变更文件，{preview.applicableFiles} 个适用文件；{preview.notice}</div>}
-          <div className="form-actions"><span>{!ready?'服务尚未就绪，不能开始真实任务':''}</span><button className="primary" disabled={busy||!ready||!repoId||!refId} onClick={create}>{busy?'正在处理…':'开始 Review  →'}</button></div>
+          <div className="form-actions"><span>{!ready?'服务尚未就绪，不能开始真实任务':''}</span><button className="primary" disabled={busy||!repoId||!refId} onClick={previewScope}>预览变更范围</button><button className="primary" disabled={busy||!!pendingOperation||!ready||!preview?.applicableFiles} onClick={create}>{busy?'正在处理…':'开始 Review  →'}</button></div>
         </div>
       </section>:<section className="task-page">
         <button className="back" onClick={()=>setSelected('')}>← 返回工作台</button>
@@ -219,23 +268,25 @@ export function WorkbenchApp() {
           <div className="content-column">
             <section className="detail-card"><div className="card-head"><h2>执行过程</h2><span className="chip">{detail?.latestRun.status??'读取中'}</span></div>
               <p className="muted">真实执行状态来自服务端。{eventState}。不显示模型推测的进度。</p>
-              <div className="steps">
-                {['准备代码副本','加载原生 Agent / Skill','执行 Code Review','采集五章报告'].map((name,index)=>
-                  <div className="step" key={name}><span className="step-index">{index+1}</span><span>{name}</span>
-                    <small>以服务端事件为准</small></div>)}
-              </div>
+              <ol className="steps">{progress.map(entry=><li className="step" key={entry.seq}>
+                <small>#{entry.seq}</small> {entry.text}</li>)}</ol>
               {detail?.latestRun.status==='STOP_REQUESTED'&&<p className="notice">正在停止；等待原生中断与最终状态核验。</p>}
-              {active&&<button className="secondary danger" disabled={busy||detail?.latestRun.status==='STOP_REQUESTED'} onClick={stop}>停止本轮执行</button>}
+              {detail&&['FAILED','STOPPED'].includes(detail.latestRun.status)&&<button disabled={mutationBusy||!ready} onClick={retry}>重试本轮</button>}
+              {active&&<button className="secondary danger" disabled={mutationBusy||detail?.latestRun.status==='STOP_REQUESTED'} onClick={stop}>停止本轮执行</button>}
             </section>
-            {interactions.map(i=><InteractionPanel key={i.id} item={i} busy={busy}
+            {detail?.snapshotStatus==='READY'&&<SourceView key={selected} taskId={selected}/>}
+            {interactions.map(i=><InteractionPanel key={i.id} item={i} busy={mutationBusy}
               onAnswer={answerPayload=>answer(i,answerPayload)}/>)}
             <section className="detail-card">
               <div className="card-head"><h2>审查报告</h2><span className="chip">{artifact?'已归档':'等待产物'}</span></div>
               {artifact?<><div className="report-actions">
-                  <button className="secondary" disabled={busy||active} onClick={recheck}>重新复查固定版本</button>
+                  <button className="secondary" disabled={mutationBusy||active} onClick={recheck}>重新复查固定版本</button>
                   <button onClick={()=>navigator.clipboard.writeText(artifact.markdown)}>复制 Markdown</button>
                 <a href={'/api/v1/artifacts/'+encodeURIComponent(artifact.meta.id)+'/download'}>下载报告</a></div>
-                <pre className="report-text">{artifact.markdown}</pre>
+                <article className="report-text"><Markdown skipHtml
+                  disallowedElements={['img']} urlTransform={url=>/^https?:\/\//i.test(url)?url:''}
+                  components={{a:({href,children})=>href?<a href={href} rel="noreferrer noopener" target="_blank">{children}</a>:<>{children}</>}}>
+                  {artifact.markdown}</Markdown></article>
                 <button className="subtle" onClick={()=>setQuote(window.getSelection()?.toString().slice(0,4000)??'')}>引用所选文本追问</button>
                 {quote&&<blockquote className="quote">{quote}</blockquote>}</>
                :<p className="muted">未收到本轮经过验证并归档的真实 Markdown 报告。</p>}
@@ -245,9 +296,9 @@ export function WorkbenchApp() {
                 <strong>{m.role==='USER'?'你':'Codea Reviewer'}</strong><p>{m.text}</p></div>)}
                 {!messages.length&&<p className="muted">暂无可显示的原生消息。</p>}</div>
               <textarea rows={3} maxLength={8000} placeholder={active?'本轮执行中；暂不可并发发送':'基于固定代码快照继续追问'}
-                value={draft} onChange={e=>setDraft(e.target.value)}/>
+                value={draft} onChange={e=>{setDraft(e.target.value);sessionStorage.setItem('harness.draft.'+selected,e.target.value);}}/>
               <div className="form-actions"><small>追问沿用原 Session，不改变 Git 范围。</small><button className="primary"
-                disabled={busy||active||!draft.trim()||!detail} onClick={discuss}>发送追问</button></div>
+                disabled={mutationBusy||active||!draft.trim()||!detail} onClick={discuss}>发送追问</button></div>
             </section>
           </div>
           <aside className="meta-column"><div className="detail-card"><h2>固定版本</h2>

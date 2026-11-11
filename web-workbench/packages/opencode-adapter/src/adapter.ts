@@ -1,9 +1,10 @@
+import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { DTO, NativeAcceptance, NativeInspection, SessionBinding, Snapshot, UUID } from '../../contracts/src/domain.ts';
-import type { NativeEnvelope } from '../../contracts/src/events.ts';
-import type { OpenCodeAdapter } from '../../contracts/src/ports.ts';
+import type { NativeEnvelope, NativeObservation } from '../../contracts/src/events.ts';
+import type { OpenCodeAdapter,AnswerExpectation } from '../../contracts/src/ports.ts';
 import { REVIEW_COMMAND, AGENT_ID, reviewArguments, assertNativeId } from './mapping.ts';
 import { LocalNativeTransport } from './native.ts';
 import { evaluateCapabilities, requireReady, type Observation } from './probe.ts';
@@ -14,6 +15,13 @@ type BoundState = { binding: SessionBinding; runId?: UUID; answered: Set<string>
   requests: Map<string, { nativeId: string; kind: InterKind }> };
 export type AdapterOptions = {
   transport: LocalNativeTransport;
+  /** Decode only public assistant text, safe tool metadata and attributable execution evidence. */
+  decodeEvent?(type: string, properties: NativeRecord): NativeObservation | undefined;
+  /** Read-only native proof from the pinned build, including accepted input ownership. */
+  inspectBinding?(binding:SessionBinding):Promise<{sessionId:string;serviceIdentity:string;locationKey:string;
+    inputId:string;externalMutation:boolean}>;
+  decodeMessage?(message:NativeRecord):Extract<NativeObservation,{kind:'message'}>|undefined;
+  decodeTerminal?(state:NativeRecord):Extract<NativeObservation,{kind:'terminal'}>|undefined;
   /** T04 must independently establish clean, pinned and immutable snapshot before any mutation. */
   verifySnapshot(snapshot: Snapshot): Promise<void>;
   /** Only externally captured T01 company evidence may enable production execution. */
@@ -76,7 +84,11 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
   constructor(options: AdapterOptions) { this.options = options; }
 
   async probe(): Promise<DTO<'Capability'>[]> {
-    return evaluateCapabilities(this.options.observations).capabilities;
+    const caps=evaluateCapabilities(this.options.observations).capabilities;
+    const liveOnly=!caps.some(c=>c.name==='session.log'&&c.status==='SUPPORTED');
+    if(!this.options.decodeEvent || (liveOnly && (!this.options.decodeMessage || !this.options.decodeTerminal)))
+      return caps.map(c=>c.name==='events.read'?{...c,status:'UNKNOWN',evidence:'Pinned-build observation decoder required'}:c);
+    return caps;
   }
   private ready(): void { requireReady(evaluateCapabilities(this.options.observations)); }
   private state(binding: SessionBinding): BoundState {
@@ -108,6 +120,22 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       sessionId: id, locationKey: location };
     this.sessions.set(id, { binding, answered: new Set(), requests: new Map() });
     return binding;
+  }
+  async reattach(binding:SessionBinding,runId:string,inputId:string):Promise<boolean>{
+    this.ready();
+    if(!this.options.inspectBinding || binding.serviceIdentity!==this.options.transport.serviceIdentity ||
+      !this.options.auditExternalWriter)return false;
+    const proof=await this.options.inspectBinding(binding);
+    if(proof.sessionId!==binding.sessionId || proof.locationKey!==binding.locationKey ||
+      proof.serviceIdentity!==binding.serviceIdentity || proof.inputId!==inputId || proof.externalMutation ||
+      await this.options.auditExternalWriter(binding)!==false)return false;
+    const existing=this.sessions.get(binding.sessionId);
+    if(existing){
+      this.state(binding);
+      return existing.runId===runId;
+    }
+    this.sessions.set(binding.sessionId,{binding,runId,answered:new Set(),requests:new Map()});
+    return true;
   }
   async putContext(binding: SessionBinding, context: { scope: DTO<'Scope'>; notes?: string }): Promise<void> {
     this.ready();
@@ -246,7 +274,34 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       nextCursor: typeof next === 'string' ? next : null,
     };
   }
-  async *subscribe(binding: SessionBinding, cursor?: string): AsyncIterable<NativeEnvelope> {
+  async *recoverObservations(binding:SessionBinding,inputId:string,signal:AbortSignal):AsyncIterable<NativeObservation>{
+    const state=this.state(binding),runId=state.runId;
+    const {decodeMessage,decodeTerminal}=this.options;
+    if(!runId || !decodeMessage || !decodeTerminal)throw new Error('NATIVE_HISTORY_DECODER_REQUIRED');
+    const route={sessionID:binding.sessionId};
+    const inspection=await this.options.transport.call('state','GET',undefined,route);
+    ensure2xx(inspection.status,'NATIVE_STATE');
+    const terminal=decodeTerminal(obj(payload(inspection.body)));
+    const seen=new Set<string>();
+    let cursor:string|undefined;
+    do{
+      signal.throwIfAborted();
+      const response=await this.options.transport.call('messages','GET',undefined,route,cursor?{cursor}:{});
+      ensure2xx(response.status,'NATIVE_MESSAGES');
+      if(state.runId!==runId)throw new Error('NATIVE_EVENT_RUN_CHANGED');
+      for(const raw of list(response.body)){
+        const observation=decodeMessage(obj(raw));
+        if(observation?.inputId===inputId)yield observation;
+      }
+      const page=payload(response.body);
+      const next=Array.isArray(page)?null:obj(page).cursor;
+      if(next==null)break;
+      if(typeof next!=='string'||!next||seen.has(next))throw new Error('NATIVE_MESSAGE_CURSOR_INVALID');
+      seen.add(next);cursor=next;
+    }while(true);
+    if(terminal?.inputId===inputId)yield terminal;
+  }
+  async *subscribe(binding: SessionBinding, cursor?: string, signal?: AbortSignal): AsyncIterable<NativeEnvelope> {
     const state = this.state(binding);
     if (!state.runId) throw new Error('RUN_BINDING_MISSING');
     const subscribedRunId = state.runId;
@@ -254,14 +309,15 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     const route = cursor ? 'log' : 'events';
     const replacements: Record<string, string> = cursor ? { sessionID: binding.sessionId } : {};
     const query: Record<string, string> = cursor ? { after: cursor, follow: 'true' } : {};
-    for await (const frame of this.options.transport.stream(route, replacements, query)) {
+    for await (const frame of this.options.transport.stream(route, replacements, query, signal)) {
       if (state.runId !== subscribedRunId) throw new Error('NATIVE_EVENT_RUN_CHANGED');
       const event = obj(frame.data);
       const props = event.properties && typeof event.properties === 'object' ? obj(event.properties) : event;
       const eventSession = props.sessionID ?? event.sessionID;
       if (eventSession !== binding.sessionId) continue;
-      yield { sourceId: frame.id, cursor: frame.id, taskId: binding.taskId,
-        runId: subscribedRunId, type: requiredString(event.type ?? frame.event, 'NATIVE_EVENT_TYPE'),
+      const type = requiredString(event.type ?? frame.event, 'NATIVE_EVENT_TYPE');
+      yield { observation: this.options.decodeEvent?.(type, props), sourceId: frame.id, cursor: frame.id, taskId: binding.taskId,
+        runId: subscribedRunId, type,
         data: props };
     }
   }
@@ -278,10 +334,10 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     } catch { return { responseReceived: false }; }
     // State reconciliation is separate: interrupted=true does not prove stopped.
   }
-  async listInteractions(binding: SessionBinding): Promise<DTO<'Interaction'>[]> {
+  async listInteractions(binding: SessionBinding): Promise<Array<DTO<'Interaction'> & { nativeRequestId: string }>> {
     const state = this.state(binding);
     if (!state.runId) throw new Error('RUN_BINDING_MISSING');
-    const results: DTO<'Interaction'>[] = [];
+    const results: Array<DTO<'Interaction'> & {nativeRequestId: string}> = [];
     for (const [route, kind] of [['permissions', 'PERMISSION'], ['forms', 'FORM']] as const) {
       const response = await this.options.transport.call(route, 'GET', undefined,
         { sessionID: binding.sessionId });
@@ -291,7 +347,6 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
         if (entry.sessionID !== binding.sessionId)
           throw new Error('NATIVE_INTERACTION_SESSION_MISMATCH');
         const nativeId = assertNativeId(this.options.getNativeRequestId(raw));
-        const key = kind + ':' + nativeId;
         const existing = [...state.requests.entries()].find(([, req]) => req.nativeId === nativeId && req.kind === kind);
         const businessId = existing?.[0] ?? randomUUID();
         const interaction = this.options.mapInteraction(raw, kind,
@@ -300,23 +355,31 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
             interaction.kind !== kind || interaction.id !== businessId ||
             interaction.status !== 'PENDING') throw new Error('NATIVE_INTERACTION_SCOPE_INVALID');
         state.requests.set(businessId, { nativeId, kind });
-        results.push(interaction);
+        results.push({...interaction,nativeRequestId:nativeId});
       }
     }
     return results;
   }
-  async answer(binding: SessionBinding, nativeRequestId: string,
-    answer: DTO<'AnswerRequest'>['answer']): Promise<NativeAcceptance> {
+  async answer(binding: SessionBinding, interactionId: string,
+    answer: DTO<'AnswerRequest'>['answer'],expected?:AnswerExpectation): Promise<NativeAcceptance> {
     this.ready();
     const state = this.state(binding);
-    const req = state.requests.get(nativeRequestId);
-    if (!req || state.answered.has(nativeRequestId) || req.kind !== answer.kind)
+    const req = state.requests.get(interactionId);
+    if (!req || state.answered.has(interactionId) || req.kind !== answer.kind)
       return { state: 'REJECTED', reason: 'INTERACTION_NOT_PENDING_OR_NOT_OWNED' };
     // Re-read pending native requests; reject if request already settled or changed.
     const pending = await this.listInteractions(binding);
-    if (!pending.some(i => i.id === nativeRequestId && i.kind === answer.kind))
+    const current=pending.find(i=>i.id===interactionId&&i.kind===answer.kind);
+    if (!current)
       return { state: 'REJECTED', reason: 'NATIVE_INTERACTION_EXPIRED' };
-    state.answered.add(nativeRequestId); // Prevent double-send even when transport fails.
+    if(expected){
+      const schema=current.kind==='FORM'?{title:current.title,fields:current.fields}:
+        {tool:current.tool,requestText:current.requestText,allowedDecisions:current.allowedDecisions};
+      if(current.nativeRequestId!==expected.nativeRequestId || current.revision!==expected.revision ||
+        Date.parse(current.expiresAt)<=Date.now() || !isDeepStrictEqual(schema,expected.schema))
+        return {state:'REJECTED',reason:'NATIVE_INTERACTION_CHANGED'};
+    }
+    state.answered.add(interactionId); // Prevent double-send even when transport fails.
     const route = answer.kind === 'PERMISSION' ? 'permissionReply' : 'formReply';
     const body = answer.kind === 'PERMISSION'
       ? { decision: answer.decision === 'ALLOW_ONCE' ? 'once' : 'reject' }

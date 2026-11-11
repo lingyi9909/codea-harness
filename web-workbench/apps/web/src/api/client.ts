@@ -55,7 +55,7 @@ export class HarnessApi {
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }
   register(name: string,path:string,operationId:string) {
-    return this.request<Schema<'Operation'>>('/repositories',{method:'POST',body:JSON.stringify({name,path,operationId})});
+    return this.request<Schema<'Repository'>>('/repositories',{method:'POST',body:JSON.stringify({name,path,operationId})});
   }
   preview(repositoryId:string,baseRefId:string,operationId:string) {
     return this.request<Schema<'Preview'>>('/review-previews',{method:'POST',
@@ -74,6 +74,8 @@ export class HarnessApi {
     return this.request<Schema<'Operation'>>('/interactions/'+encodeURIComponent(interactionId)+'/answers',{
       method:'POST',body:JSON.stringify({revision,answer,operationId})});
   }
+  retry(runId:string,operationId:string){return this.request<Schema<'Operation'>>('/runs/'+encodeURIComponent(runId)+'/retries',
+    {method:'POST',body:JSON.stringify({operationId})});}
   stop(runId:string,operationId:string) {
     return this.request<Schema<'Operation'>>('/runs/'+encodeURIComponent(runId)+'/stop',{
       method:'POST',body:JSON.stringify({operationId})});
@@ -87,6 +89,8 @@ export class HarnessApi {
     return this.request<Schema<'Operation'>>('/tasks/'+encodeURIComponent(taskId)+'/rechecks',{
       method:'POST',body:JSON.stringify({operationId})});
   }
+  files(taskId:string){return this.request<Schema<'FileList'>>('/tasks/'+encodeURIComponent(taskId)+'/files');}
+  lines(taskId:string,id:string,start:number){return this.request<Schema<'FileLines'>>('/tasks/'+encodeURIComponent(taskId)+'/files/'+encodeURIComponent(id)+'?startLine='+start+'&endLine='+(start+199));}
   report(id:string) { return this.request<Schema<'Artifact'>>('/artifacts/'+encodeURIComponent(id)); }
 }
 export const api = new HarnessApi();

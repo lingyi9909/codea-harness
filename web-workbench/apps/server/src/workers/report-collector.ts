@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readFile, realpath, rename, stat } from 'node:fs/promises';
+import { link, lstat, mkdir, open, readFile, realpath, unlink } from 'node:fs/promises';
 import { join, resolve, relative, isAbsolute, sep } from 'node:path';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { DTO, Snapshot } from '../../../../packages/contracts/src/domain.ts';
@@ -21,7 +21,7 @@ export type NativeWriteEvidence={
   nativeWriteMessageId:string;path:string;toolOutcome:'SUCCEEDED';
   /** Native state confirmed after input and form reconciliation. */
   modelTerminated:true;pendingInputs:0;pendingInteractions:0;externalMutation:false;
-  coverage:'FULL'|'PARTIAL';
+  cursor?:string;coverage:'FULL'|'PARTIAL';
 };
 export interface ReportCollectorConfig{pool:Pool;dataRoot:string}
 export async function collectReport(config:ReportCollectorConfig,lease:Lease,
@@ -92,15 +92,19 @@ export async function collectReport(config:ReportCollectorConfig,lease:Lease,
   }else{
     const temp=join(canonicalDir,lease.runId+'.'+randomUUID()+'.partial');
     const file=await open(temp,'wx',0o600);
-    try{await file.writeFile(candidate);await file.sync();}finally{await file.close();}
-    // Fence checked before final publication. DB failure leaves a reconcilable
-    // per-run artifact, not a published event or a second model invocation.
-    await withTransaction(config.pool,async tx=>{await assertFencedLease(tx,lease);});
     try{
-      try{await lstat(dest);throw new AuthProblem(409,'ARCHIVED_REPORT_CONFLICT');}
-      catch(e){if(!(e instanceof Error&&'code' in e&&e.code==='ENOENT'))throw e;}
-      await rename(temp,dest);
-    }catch(e){throw e;}
+      try{await file.writeFile(candidate);await file.sync();}finally{await file.close();}
+      await withTransaction(config.pool,async tx=>{
+        await assertFencedLease(tx,lease);
+        try{await link(temp,dest);}
+        catch(error){
+          if(!(error instanceof Error&&'code' in error&&error.code==='EEXIST'))throw error;
+          const info=await lstat(dest);
+          if(!info.isFile()||info.isSymbolicLink()||sha(await readFile(dest))!==digest)
+            throw new AuthProblem(409,'ARCHIVED_REPORT_CONFLICT');
+        }
+      });
+    }finally{await unlink(temp);}
   }
   const finalBytes=await readFile(dest);
   if(sha(finalBytes)!==digest||finalBytes.length!==candidate.length)
@@ -149,6 +153,11 @@ export async function collectReport(config:ReportCollectorConfig,lease:Lease,
       data:{artifactId,version,coverage:evidence.coverage}});
     await appendEvent(tx,{taskId:lease.taskId,runId:lease.runId,type:'run.status',
       data:{status:'SUCCEEDED',previousStatus:'COLLECTING',errorCode:null}});
+    if(evidence.cursor){
+      if(!/^(0|[1-9][0-9]{0,63})$/.test(evidence.cursor))throw new Error('NATIVE_CURSOR_INVALID');
+      await tx.execute("UPDATE wh_session_bindings SET native_log_seq=?,continuity=IF(continuity='GAP','GAP','COMPLETE'),"+
+        "updated_at=UTC_TIMESTAMP(3) WHERE task_id=?",[evidence.cursor,lease.taskId]);
+    }
     await tx.execute(
       "UPDATE wh_executor_slots SET run_id=NULL,lease_owner=NULL,lease_until=NULL,"+
       "quarantined=0,updated_at=UTC_TIMESTAMP(3) "+

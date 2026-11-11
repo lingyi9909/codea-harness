@@ -36,6 +36,17 @@ export async function claimNext(pool:Pool,workerId:string):Promise<Lease|null>{
     const slot=await lockedSlot(tx);
     if(slot.run_id){
       if(Number(slot.valid)!==1&&!Boolean(slot.quarantined)){
+        const [runs]=await tx.execute<RowDataPacket[]>(
+          'SELECT task_id,status FROM wh_runs WHERE id=? FOR UPDATE',[slot.run_id]);
+        if(runs.length===1 && !['SUCCEEDED','FAILED','STOPPED','RECOVERING'].includes(runs[0].status)){
+          await tx.execute("UPDATE wh_runs SET status='RECOVERING',error_code='LEASE_EXPIRED',"+
+            "dispatch_state=IF(dispatch_state='SENDING','UNKNOWN',dispatch_state),updated_at=UTC_TIMESTAMP(3) WHERE id=?",[slot.run_id]);
+          await tx.execute("UPDATE wh_operations p JOIN wh_outbox o ON o.operation_id=p.id "+
+            "SET p.status='UNKNOWN',p.error_code='LEASE_EXPIRED',p.updated_at=UTC_TIMESTAMP(3) WHERE o.run_id=? AND o.status='SENDING'",[slot.run_id]);
+          await tx.execute("UPDATE wh_outbox SET status='UNKNOWN',updated_at=UTC_TIMESTAMP(3) WHERE run_id=? AND status='SENDING'",[slot.run_id]);
+          await appendEvent(tx,{taskId:String(runs[0].task_id),runId:slot.run_id,type:'run.status',
+            data:{status:'RECOVERING',previousStatus:runs[0].status,errorCode:'LEASE_EXPIRED'}});
+        }
         await tx.execute("UPDATE wh_executor_slots SET quarantined=1,updated_at=UTC_TIMESTAMP(3) "+
           "WHERE slot_key='local-default'");
       }
@@ -119,11 +130,13 @@ export async function quarantineUnknown(pool:Pool,lease:Lease,reason:string):Pro
     if(['SUCCEEDED','FAILED','STOPPED'].includes(String(state[0].status)))
       throw new LeaseError('TERMINAL_RUN_CANNOT_RECOVER');
     const previous=String(state[0].status);
-    await tx.execute("UPDATE wh_runs SET status='RECOVERING',dispatch_state='UNKNOWN',"+
+    await tx.execute("UPDATE wh_operations p JOIN wh_outbox o ON p.id=o.operation_id SET p.status='UNKNOWN',"+
+      "p.error_code=?,p.updated_at=UTC_TIMESTAMP(3) WHERE o.id=? AND o.status<>'SENT'",[reason,lease.outboxId]);
+    await tx.execute("UPDATE wh_runs SET status='RECOVERING',dispatch_state=IF(dispatch_state='ACCEPTED','ACCEPTED','UNKNOWN'),"+
       "error_code=?,updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_fence=?",
       [reason,lease.runId,lease.fence]);
     await tx.execute("UPDATE wh_outbox SET status='UNKNOWN',updated_at=UTC_TIMESTAMP(3) "+
-      "WHERE id=? AND lease_fence=?",[lease.outboxId,lease.fence]);
+      "WHERE id=? AND lease_fence=? AND status<>'SENT'",[lease.outboxId,lease.fence]);
     await tx.execute("UPDATE wh_executor_slots SET quarantined=1,updated_at=UTC_TIMESTAMP(3) "+
       "WHERE slot_key='local-default' AND fence=?",[lease.fence]);
     await appendEvent(tx,{taskId:lease.taskId,runId:lease.runId,type:'run.status',
@@ -144,6 +157,8 @@ export async function markNativeAccepted(pool:Pool,lease:Lease,nativeInputId:str
     await tx.execute("UPDATE wh_outbox SET status='SENT',updated_at=UTC_TIMESTAMP(3) "+
       "WHERE id=? AND status='SENDING' AND lease_fence=?",
       [lease.outboxId,lease.fence]);
+    await tx.execute("UPDATE wh_operations p JOIN wh_outbox o ON p.id=o.operation_id SET p.status='SUCCEEDED',"+
+      "p.updated_at=UTC_TIMESTAMP(3) WHERE o.id=? AND o.status='SENT'",[lease.outboxId]);
     await appendEvent(tx,{taskId:lease.taskId,runId:lease.runId,
       type:'run.status',data:{status:'RUNNING',previousStatus:'PREPARING',errorCode:null}});
   });

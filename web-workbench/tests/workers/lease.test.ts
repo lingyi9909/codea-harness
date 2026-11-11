@@ -27,6 +27,7 @@ function fixture(opts:{occupied?:boolean;expired?:boolean;quarantined?:boolean}=
       return [boxStatus==='PENDING'?[{id:outboxId,task_id:taskId,run_id:runId}]:[],[]];
     if(sql.includes('SELECT next_event_seq FROM wh_tasks'))
       return [[{next_event_seq:seq.toString()}],[]];
+    if(sql.includes('SELECT task_id,status FROM wh_runs WHERE id='))return [[{task_id:taskId,status:runStatus}],[]];
     if(sql.includes('SELECT status FROM wh_runs WHERE id='))
       return [[{status:runStatus}],[]];
     if(sql.includes('FROM wh_operations WHERE owner_id='))
@@ -113,6 +114,7 @@ describe('T06 leased outbox safety (deterministic SQL contract, not MySQL)',()=>
     assert.equal(f.slot.quarantined,1);
     assert.equal(f.slot.run_id,f.runId);
     assert.equal(f.slot.lease_owner,'old-worker');
+    assert.equal(f.runStatus,'RECOVERING');assert.equal(f.boxStatus,'UNKNOWN');
   });
   it('rejects stale fence and does not send the native command',async()=>{
     const f=fixture(),lease=await claimNext(f.pool,'worker-1');

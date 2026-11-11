@@ -26,7 +26,7 @@ export async function findRepository(pool:Pool,ownerId:string,repoId:string):Pro
 export async function listRepositories(pool:Pool,ownerId:string,limit:number):Promise<DTO<'Repository'>[]>{
   const [rows]=await pool.execute<RowDataPacket[]>(
     'SELECT id,name,canonical_path,status,created_at FROM wh_repositories WHERE owner_id=? ORDER BY created_at DESC,id DESC LIMIT ?',
-    [ownerId,limit]);
+    [ownerId,String(limit)]);
   return rows.map(asRepository);
 }
 export async function registerRepository(input:{

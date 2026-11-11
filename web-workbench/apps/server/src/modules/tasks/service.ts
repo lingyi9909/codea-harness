@@ -222,7 +222,7 @@ export async function listTasks(input:{ownerId:string;limit:number;cursor?:strin
   if(cursor){sql+='AND (t.created_at<? OR (t.created_at=? AND t.id<?)) ';
     params.push(cursor.date,cursor.date,cursor.id);}
   sql+='ORDER BY t.created_at DESC,t.id DESC LIMIT ?';
-  params.push(limit+1);
+  params.push(String(limit+1));
   const [rows]=await opts.pool.execute<RowDataPacket[]>(sql,params);
   const page=rows.slice(0,limit);
   const last=page.at(-1);
@@ -237,6 +237,6 @@ export async function listRuns(pool:Pool,ownerId:string,taskId:string,limit:numb
   if(!owned.length)throw new AuthProblem(404,'NOT_FOUND');
   const [runs]=await pool.execute<RowDataPacket[]>(
     'SELECT * FROM wh_runs WHERE task_id=? ORDER BY run_number DESC LIMIT ?',
-    [taskId,limit]);
+    [taskId,String(limit)]);
   return{items:runs.map(runDTO),nextCursor:null};
 }
