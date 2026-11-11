@@ -1,9 +1,10 @@
+import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { DTO, NativeAcceptance, NativeInspection, SessionBinding, Snapshot, UUID } from '../../contracts/src/domain.ts';
 import type { NativeEnvelope, NativeObservation } from '../../contracts/src/events.ts';
-import type { OpenCodeAdapter } from '../../contracts/src/ports.ts';
+import type { OpenCodeAdapter,AnswerExpectation } from '../../contracts/src/ports.ts';
 import { REVIEW_COMMAND, AGENT_ID, reviewArguments, assertNativeId } from './mapping.ts';
 import { LocalNativeTransport } from './native.ts';
 import { evaluateCapabilities, requireReady, type Observation } from './probe.ts';
@@ -359,18 +360,26 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     }
     return results;
   }
-  async answer(binding: SessionBinding, nativeRequestId: string,
-    answer: DTO<'AnswerRequest'>['answer']): Promise<NativeAcceptance> {
+  async answer(binding: SessionBinding, interactionId: string,
+    answer: DTO<'AnswerRequest'>['answer'],expected?:AnswerExpectation): Promise<NativeAcceptance> {
     this.ready();
     const state = this.state(binding);
-    const req = state.requests.get(nativeRequestId);
-    if (!req || state.answered.has(nativeRequestId) || req.kind !== answer.kind)
+    const req = state.requests.get(interactionId);
+    if (!req || state.answered.has(interactionId) || req.kind !== answer.kind)
       return { state: 'REJECTED', reason: 'INTERACTION_NOT_PENDING_OR_NOT_OWNED' };
     // Re-read pending native requests; reject if request already settled or changed.
     const pending = await this.listInteractions(binding);
-    if (!pending.some(i => i.id === nativeRequestId && i.kind === answer.kind))
+    const current=pending.find(i=>i.id===interactionId&&i.kind===answer.kind);
+    if (!current)
       return { state: 'REJECTED', reason: 'NATIVE_INTERACTION_EXPIRED' };
-    state.answered.add(nativeRequestId); // Prevent double-send even when transport fails.
+    if(expected){
+      const schema=current.kind==='FORM'?{title:current.title,fields:current.fields}:
+        {tool:current.tool,requestText:current.requestText,allowedDecisions:current.allowedDecisions};
+      if(current.nativeRequestId!==expected.nativeRequestId || current.revision!==expected.revision ||
+        Date.parse(current.expiresAt)<=Date.now() || !isDeepStrictEqual(schema,expected.schema))
+        return {state:'REJECTED',reason:'NATIVE_INTERACTION_CHANGED'};
+    }
+    state.answered.add(interactionId); // Prevent double-send even when transport fails.
     const route = answer.kind === 'PERMISSION' ? 'permissionReply' : 'formReply';
     const body = answer.kind === 'PERMISSION'
       ? { decision: answer.decision === 'ALLOW_ONCE' ? 'once' : 'reject' }

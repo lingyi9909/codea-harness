@@ -24,8 +24,9 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
   process.env.HARNESS_REPOSITORY_ROOTS=repo;
   process.env.HARNESS_DATA_DIR=dataRoot;
   process.env.HARNESS_REF_KEY=randomUUID();process.env.HARNESS_CURSOR_KEY=randomUUID();
-  const code=randomUUID(),permissionId=randomUUID(),sessionId=randomUUID();
+  const code=randomUUID(),permissionId=randomUUID(),formId=randomUUID(),sessionId=randomUUID();
   let runId='',answered=false,review=true,stopped=false,discussionCount=0,seq=0;
+  let permissionDone=false;
   const discussionIds:string[]=[];
   const report=['评审摘要','调用链与覆盖范围','风险清单','问题明细','后续处理与评审边界'].map(s=>'## '+s+'\nFixture evidence.').join('\n');
   const adapter:OpenCodeAdapter={
@@ -39,11 +40,18 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     },
     async inspect(){return {active:!answered,pendingInputs:0,pendingInteractions:answered?0:1,externalMutation:false,acceptedInputIds:[]};},
     async readMessages(){return {items:[],nextCursor:null};},
-    async listInteractions(binding){return answered?[]:[{id:permissionId,taskId:binding.taskId,runId,revision:1,kind:'PERMISSION',
+    async listInteractions(binding){
+      if(answered)return [];
+      if(permissionDone)return [{id:formId,taskId:binding.taskId,runId,revision:1,kind:'FORM',status:'PENDING',
+        expiresAt:new Date(Date.now()+600000).toISOString(),nativeRequestId:'form',title:'Fixture question',
+        fields:[{id:'detail',label:'Evidence detail',type:'TEXT',required:true,maxLength:100,options:[]}]}];
+      return [{id:permissionId,taskId:binding.taskId,runId,revision:1,kind:'PERMISSION',
       status:'PENDING',expiresAt:new Date(Date.now()+600000).toISOString(),tool:'read',requestText:'Read OrderController',
       nativeRequestId:'permission',allowedDecisions:['ALLOW_ONCE','DENY']}];},
-    async answer(_binding,id,answer){assert.equal(id,permissionId);assert.deepEqual(answer,{kind:'PERMISSION',decision:'ALLOW_ONCE'});
-      answered=true;return {state:'ACCEPTED',inputId:'reply'};},
+    async answer(_binding,id,answer){
+      if(id===permissionId){assert.deepEqual(answer,{kind:'PERMISSION',decision:'ALLOW_ONCE'});permissionDone=true;}
+      else{assert.equal(id,formId);assert.deepEqual(answer,{kind:'FORM',cancel:false,values:{detail:'confirmed'}});answered=true;}
+      return {state:'ACCEPTED',inputId:'reply'};},
     async interrupt(){stopped=true;return {responseReceived:true,interrupted:true};},
     async *subscribe(binding,_cursor,signal){
       while(!answered)await delay(25,undefined,{signal});
@@ -86,8 +94,12 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     await expect(page.getByText(/最近预检：1 个已变更文件/)).toBeVisible();
     await page.getByRole('button',{name:'开始 Review'}).click();
     await expect(page.getByRole('heading',{name:'原生工具授权'})).toBeVisible({timeout:20000});
+    await page.getByPlaceholder('本轮执行中；暂不可并发发送').fill('saved draft');
     await page.reload();
+    await expect(page.getByPlaceholder('本轮执行中；暂不可并发发送')).toHaveValue('saved draft');
     await page.getByRole('button',{name:'仅本次允许'}).click();
+    await page.getByLabel('Evidence detail').fill('confirmed');
+    await page.getByRole('button',{name:'提交原生表单'}).click();
     await expect(page.locator('.report-text').first()).toContainText('评审摘要',{timeout:20000});
     await expect(page.getByText('Review completed in fixture')).toBeVisible();
     await page.getByRole('button',{name:'查看固定版本源码'}).click();

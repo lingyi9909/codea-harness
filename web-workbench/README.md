@@ -12,7 +12,7 @@ npm run web:build
 npm run server:start
 ```
 
-Apply the versioned migrations with the migration account before starting the service. The migration command requires explicit database selection via its command-line arguments (see `scripts/migrate.ts`). Open the address printed by the service and enter the pairing code from its console.
+Apply the versioned migrations with the migration account before starting the service. Set `HARNESS_MIGRATION_CONFIRM_DATABASE` to the exact database name, set `HARNESS_MIGRATION_USER` and `HARNESS_MIGRATION_PASSWORD`, then run `npm run migrate`. Open the address printed by the service and enter the pairing code from its console.
 
 The default launcher supports repository registration, preview and browsing persisted evidence. Native dispatch requires the pinned company build integration. Its local launcher can call `startWorkbench(native)` with the verified adapter, version, worker identity, repository roots and data directory. Point the API and worker to the same storage and roots. No HTTP endpoint accepts an adapter, a capability override or an observation decoder.
 

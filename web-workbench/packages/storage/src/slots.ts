@@ -130,6 +130,8 @@ export async function quarantineUnknown(pool:Pool,lease:Lease,reason:string):Pro
     if(['SUCCEEDED','FAILED','STOPPED'].includes(String(state[0].status)))
       throw new LeaseError('TERMINAL_RUN_CANNOT_RECOVER');
     const previous=String(state[0].status);
+    await tx.execute("UPDATE wh_operations p JOIN wh_outbox o ON p.id=o.operation_id SET p.status='UNKNOWN',"+
+      "p.error_code=?,p.updated_at=UTC_TIMESTAMP(3) WHERE o.id=? AND o.status<>'SENT'",[reason,lease.outboxId]);
     await tx.execute("UPDATE wh_runs SET status='RECOVERING',dispatch_state=IF(dispatch_state='ACCEPTED','ACCEPTED','UNKNOWN'),"+
       "error_code=?,updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_fence=?",
       [reason,lease.runId,lease.fence]);
@@ -155,6 +157,8 @@ export async function markNativeAccepted(pool:Pool,lease:Lease,nativeInputId:str
     await tx.execute("UPDATE wh_outbox SET status='SENT',updated_at=UTC_TIMESTAMP(3) "+
       "WHERE id=? AND status='SENDING' AND lease_fence=?",
       [lease.outboxId,lease.fence]);
+    await tx.execute("UPDATE wh_operations p JOIN wh_outbox o ON p.id=o.operation_id SET p.status='SUCCEEDED',"+
+      "p.updated_at=UTC_TIMESTAMP(3) WHERE o.id=? AND o.status='SENT'",[lease.outboxId]);
     await appendEvent(tx,{taskId:lease.taskId,runId:lease.runId,
       type:'run.status',data:{status:'RUNNING',previousStatus:'PREPARING',errorCode:null}});
   });

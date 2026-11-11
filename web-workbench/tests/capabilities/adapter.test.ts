@@ -140,6 +140,10 @@ describe('T01 Adapter local HTTP harness: not company native evidence', () => {
       const pending = await adapter.listInteractions(bound);
       assert.equal(pending.length, 1);
       assert.equal(pending[0].kind, 'PERMISSION');
+      const changed=await adapter.answer(bound,pending[0].id,{kind:'PERMISSION',decision:'DENY'},
+        {revision:2,nativeRequestId:'perm-native-1',schema:{}});
+      assert.equal(changed.state,'REJECTED');
+      assert.equal(requests.filter(r=>r.path.endsWith('/reply')).length,0);
       const reply = await adapter.answer(bound, pending[0].id,
         { kind: 'PERMISSION', decision: 'DENY' });
       assert.equal(reply.state, 'UNKNOWN');

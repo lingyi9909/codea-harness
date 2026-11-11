@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
+import { AuthProblem } from '../auth.ts';
+import { requestStop } from '../modules/runs/stop.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { DTO, SessionBinding } from '../../../../packages/contracts/src/domain.ts';
-import type { OpenCodeAdapter } from '../../../../packages/contracts/src/ports.ts';
+import type { OpenCodeAdapter, AnswerExpectation } from '../../../../packages/contracts/src/ports.ts';
 import { withTransaction } from '../../../../packages/storage/src/db.ts';
 import { appendEvent } from '../../../../packages/storage/src/events.ts';
 import { assertFencedLease, type Lease } from '../../../../packages/storage/src/slots.ts';
@@ -9,7 +12,7 @@ import { validateAnswer } from '../modules/interactions/service.ts';
 
 type Context = {pool:Pool; lease:Lease; binding:SessionBinding; adapter:OpenCodeAdapter};
 type Control = { id:string; operationId:string } & (
-  { action:'INTERRUPT' } | { action:'ANSWER'; interactionId:string; answer:DTO<'AnswerRequest'>['answer'] }
+  { action:'INTERRUPT' } | { action:'ANSWER'; interactionId:string; expected:AnswerExpectation; answer:DTO<'AnswerRequest'>['answer'] }
 );
 
 async function claim(c:Context):Promise<Control|null>{
@@ -46,7 +49,9 @@ async function claim(c:Context):Promise<Control|null>{
       }
       const item=items[0];
       const answer=validateAnswer(item.kind,item.schema_json,typeof item.answer_json==='string'?JSON.parse(item.answer_json):item.answer_json);
-      control={...common,action:'ANSWER',interactionId:payload.interactionId,answer};
+      control={...common,action:'ANSWER',interactionId:payload.interactionId,answer,
+        expected:{revision:payload.revision,nativeRequestId:payload.nativeRequestId,
+          schema:typeof item.schema_json==='string'?JSON.parse(item.schema_json):item.schema_json}};
     }
     await tx.execute("UPDATE wh_outbox SET status='SENDING',lease_owner=?,lease_fence=?,attempts=attempts+1,"+
       "updated_at=UTC_TIMESTAMP(3) WHERE id=?",[c.lease.owner,c.lease.fence,control.id]);
@@ -60,7 +65,7 @@ export async function dispatchControl(c:Context){
   let status:'SENT'|'FAILED'|'UNKNOWN'='UNKNOWN';
   try{
     if(control.action==='ANSWER'){
-      const result=await c.adapter.answer(c.binding,control.interactionId,control.answer);
+      const result=await c.adapter.answer(c.binding,control.interactionId,control.answer,control.expected);
       if(result.state==='ACCEPTED')status='SENT';
       if(result.state==='REJECTED')status='FAILED';
     }else{
@@ -85,13 +90,15 @@ export async function dispatchControl(c:Context){
 export async function syncInteractions(c:Context){
   const pending=await c.adapter.listInteractions(c.binding);
   const {taskId,runId}=c.lease;
-  await withTransaction(c.pool,async tx=>{
+  const stopOwner=await withTransaction(c.pool,async tx=>{
     await assertFencedLease(tx,c.lease);
-    const [runs]=await tx.execute<RowDataPacket[]>('SELECT status FROM wh_runs WHERE id=? AND task_id=? FOR UPDATE',[runId,taskId]);
+    const [runs]=await tx.execute<RowDataPacket[]>("SELECT r.status,t.owner_id,(r.started_at<=UTC_TIMESTAMP(3)-INTERVAL 20 MINUTE) AS timed_out "+
+      "FROM wh_runs r JOIN wh_tasks t ON t.id=r.task_id WHERE r.id=? AND r.task_id=? FOR UPDATE",[runId,taskId]);
     const previous=runs[0]?.status;
     if(!['RUNNING','WAITING_INPUT','WAITING_PERMISSION','STOP_REQUESTED'].includes(previous))
       throw new Error('INTERACTION_SYNC_STATE_CHANGED');
-    const [rows]=await tx.execute<RowDataPacket[]>('SELECT id,kind,revision,status,native_request_id,schema_json FROM wh_interactions WHERE run_id=? FOR UPDATE',[runId]);
+    const [rows]=await tx.execute<RowDataPacket[]>("SELECT id,kind,revision,status,native_request_id,schema_json,(expires_at<=UTC_TIMESTAMP(3)) AS expired "+
+      "FROM wh_interactions WHERE run_id=? FOR UPDATE",[runId]);
     for(const i of pending){
       if(i.taskId!==taskId||i.runId!==runId||i.status!=='PENDING'||!i.nativeRequestId)
         throw new Error('INTERACTION_SCOPE_CHANGED');
@@ -130,5 +137,11 @@ export async function syncInteractions(c:Context){
       await tx.execute('UPDATE wh_runs SET status=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?',[next,runId]);
       await appendEvent(tx,{taskId,runId,type:'run.status',data:{previousStatus:previous,status:next,errorCode:null}});
     }
+    const expired=rows.some(r=>Number(r.expired)===1 && pending.some(i=>i.id===r.id));
+    if(previous!=='STOP_REQUESTED' && (Number(runs[0].timed_out)===1 || expired))return String(runs[0].owner_id);
   });
+  if(stopOwner){
+    try{await requestStop(c.pool,{ownerId:stopOwner,runId,operationId:randomUUID()});}
+    catch(e){if(!(e instanceof AuthProblem && ['RUN_ALREADY_TERMINAL','STOP_ALREADY_REQUESTED'].includes(e.code)))throw e;}
+  }
 }
