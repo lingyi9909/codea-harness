@@ -40,5 +40,7 @@ jobs:
         run: npm run test:reports
       - name: Native continuation routing and safety
         run: npm run test:dispatch-continue
+      - name: OpenCode direct chat HTTP contract (scripted peer)
+        run: npm run test:chat
       - name: T01 regression
         run: npm test

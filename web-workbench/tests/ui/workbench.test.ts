@@ -84,6 +84,7 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     await page.goto('http://127.0.0.1:4176/');
     await page.getByPlaceholder('请输入本地终端显示的配对码').fill(code);
     await page.getByRole('button',{name:'连接本地工作台'}).click();
+    await page.getByRole('navigation').getByRole('button',{name:'代码审查'}).click();
     await page.getByRole('button',{name:'添加本地仓库'}).click();
     const name='UI '+randomUUID();
     await page.getByLabel('仓库名称').fill(name);await page.getByLabel('本地绝对路径').fill(repo);

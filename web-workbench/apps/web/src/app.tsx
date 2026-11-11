@@ -3,6 +3,9 @@ import { api, ApiError } from './api/client.ts';
 import type { Schema } from './api/client.ts';
 import { subscribeTask } from './api/events.ts';
 import Markdown from 'react-markdown';
+import { DirectChat } from './DirectChat.tsx';
+import { FileScene } from './FileScenes.tsx';
+import { ScenarioHome, scenes, type Scene } from './ScenarioHome.tsx';
 import { SourceView } from './SourceView.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
 
@@ -25,6 +28,11 @@ export function WorkbenchApp() {
   const [repos,setRepos]=useState<Repository[]>([]);
   const [tasks,setTasks]=useState<Task[]>([]);
   const [selected,setSelected]=useState(()=>sessionStorage.getItem('harness.task')??'');
+  const [scene,setScene]=useState<Scene>(()=>{
+    const saved=sessionStorage.getItem('harness.scene')??'home';
+    return Object.hasOwn(scenes,saved)?saved as Scene:'home';
+  });
+  const navigate=(next:Scene)=>{setSelected('');setScene(next);sessionStorage.setItem('harness.scene',next);};
   const selection=useRef(selected);
   selection.current=selected;
   const detailRequest=useRef(0);
@@ -216,7 +224,9 @@ export function WorkbenchApp() {
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>AI 研发工作台</small></div></div>
-      <button className={'side-link '+(!selected?'selected':'')} onClick={()=>setSelected('')}>▦ <span>工作台</span></button>
+      <nav aria-label="场景导航" className="scene-nav">{(Object.keys(scenes) as Scene[]).map(key=>
+        <button key={key} className={'side-link '+(!selected&&scene===key?'selected':'')} onClick={()=>navigate(key)}>
+          <span aria-hidden="true">{{home:'▦',chat:'✳',review:'⌘',logs:'≋',data:'▥'}[key]}</span>{scenes[key]}</button>)}</nav>
       <div className="side-section">任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
       <div className="history">
         {tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')}
@@ -224,17 +234,18 @@ export function WorkbenchApp() {
           <span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}
         {!tasks.length&&<p className="muted small">暂无历史任务</p>}
       </div>
-      <div className="side-bottom">仅本地 · 固定代码范围<br/>Code Review 场景</div>
+      <div className="side-bottom">Code Harness · 本地研发工作台</div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="breadcrumb">研发场景 <span>/</span> {selected?'任务详情':'代码审查'}</div>
-        <span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 服务已就绪':'● 服务未就绪'}</span></header>
+      <header className="topbar"><div className="breadcrumb">研发场景 <span>/</span> {selected?'任务详情':scenes[scene]}</div>
+        {(selected||scene==='review')&&<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 服务已就绪':'● 服务未就绪'}</span>}</header>
       <div className="page">
       {error&&<div className="alert" role="alert">{error}<button onClick={()=>setError('')}>关闭</button></div>}
       {gap&&selected&&<div className="notice" role="status">{gap}<button onClick={()=>{loadDetail(selected).catch(e=>setError(text(e)));setGap('');}}>重新读取</button></div>}
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
-      {!selected?<section className="workbench">
+      {!selected&&scene==='home'?<ScenarioHome open={navigate}/>:!selected&&scene==='chat'?<DirectChat/>:
+       !selected&&(scene==='logs'||scene==='data')?<FileScene key={scene} mode={scene}/>:!selected?<section className="workbench">
         <div className="eyebrow">SCENARIO / CODE REVIEW</div>
         <h1>代码审查工作台<span className="accent">.</span></h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
@@ -260,7 +271,7 @@ export function WorkbenchApp() {
           <div className="form-actions"><span>{!ready?'服务尚未就绪，不能开始真实任务':''}</span><button className="primary" disabled={busy||!repoId||!refId} onClick={previewScope}>预览变更范围</button><button className="primary" disabled={busy||!!pendingOperation||!ready||!preview?.applicableFiles} onClick={create}>{busy?'正在处理…':'开始 Review  →'}</button></div>
         </div>
       </section>:<section className="task-page">
-        <button className="back" onClick={()=>setSelected('')}>← 返回工作台</button>
+        <button className="back" onClick={()=>navigate('home')}>← 返回工作台</button>
         <div className="detail-heading"><div className="eyebrow">REVIEW TASK / {short(selected)}</div>
           <h1>{detail?.task.title??'正在读取任务…'}</h1><p>固定 HEAD：<code>{detail?.scope.headOID??'—'}</code></p>
           <p>基线：{detail?.scope.baseRef??'—'} · merge-base：<code>{detail?.scope.mergeBaseOID??'—'}</code></p></div>

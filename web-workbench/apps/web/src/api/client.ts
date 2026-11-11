@@ -1,3 +1,4 @@
+import type { ChatStatus,ChatSettings } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
@@ -50,6 +51,12 @@ export class HarnessApi {
       body.error?.message ?? '配对失败，请检查一次性配对码');
     this.setCsrf(body.data.csrfToken);
     return body.data;
+  }
+  chatSettings(){return this.request<ChatSettings>('/chat/settings');}
+  newChat(directory:string){return this.request<{id:string;directory:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory})});}
+  chat(id:string){return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id));}
+  chatAction(id:string,action:'messages'|'permission'|'interrupt',body:object={}){
+    return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() { return this.request<Schema<'Bootstrap'>>('/bootstrap'); }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }

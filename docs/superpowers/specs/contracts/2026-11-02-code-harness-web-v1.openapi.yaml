@@ -2626,6 +2626,9 @@ components:
                 type: string
                 enum:
                 - code-review
+                - direct-chat
+                - log-inspection
+                - data-analysis
               name:
                 type: string
                 maxLength: 100

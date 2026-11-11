@@ -239,7 +239,7 @@ export interface components {
     };
       "csrfToken": string;
       "scenarios": Array<{
-      "id": "code-review";
+      "id": "code-review" | "direct-chat" | "log-inspection" | "data-analysis";
       "name": string;
       "enabled": boolean;
       "reason": (string | null);
