@@ -21,7 +21,7 @@ export type NativeWriteEvidence={
   nativeWriteMessageId:string;path:string;toolOutcome:'SUCCEEDED';
   /** Native state confirmed after input and form reconciliation. */
   modelTerminated:true;pendingInputs:0;pendingInteractions:0;externalMutation:false;
-  coverage:'FULL'|'PARTIAL';
+  cursor?:string;coverage:'FULL'|'PARTIAL';
 };
 export interface ReportCollectorConfig{pool:Pool;dataRoot:string}
 export async function collectReport(config:ReportCollectorConfig,lease:Lease,
@@ -153,6 +153,11 @@ export async function collectReport(config:ReportCollectorConfig,lease:Lease,
       data:{artifactId,version,coverage:evidence.coverage}});
     await appendEvent(tx,{taskId:lease.taskId,runId:lease.runId,type:'run.status',
       data:{status:'SUCCEEDED',previousStatus:'COLLECTING',errorCode:null}});
+    if(evidence.cursor){
+      if(!/^(0|[1-9][0-9]{0,63})$/.test(evidence.cursor))throw new Error('NATIVE_CURSOR_INVALID');
+      await tx.execute("UPDATE wh_session_bindings SET native_log_seq=?,continuity=IF(continuity='GAP','GAP','COMPLETE'),"+
+        "updated_at=UTC_TIMESTAMP(3) WHERE task_id=?",[evidence.cursor,lease.taskId]);
+    }
     await tx.execute(
       "UPDATE wh_executor_slots SET run_id=NULL,lease_owner=NULL,lease_until=NULL,"+
       "quarantined=0,updated_at=UTC_TIMESTAMP(3) "+

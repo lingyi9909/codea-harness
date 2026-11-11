@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import type { RowDataPacket } from 'mysql2/promise';
 import { createPool,configFromEnv } from '../../packages/storage/src/db.ts';
 import { runMigrations } from '../../packages/storage/src/migrate.ts';
+import { resumeExpired } from '../../apps/server/src/workers/recovery.ts';
+import { claimNext,type Lease } from '../../packages/storage/src/slots.ts';
 import { collectNativeEvents } from '../../apps/server/src/workers/event-collector.ts';
 import { dispatchControl,syncInteractions } from '../../apps/server/src/workers/native-controls.ts';
 import { requestStop } from '../../apps/server/src/modules/runs/stop.ts';
@@ -19,9 +21,10 @@ it('MySQL 8.4 with a scripted native peer: replay, control delivery and terminal
   await runMigrations(config,config.database,fileURLToPath(new URL('../../packages/storage/migrations',import.meta.url)));
   const pool=await createPool(config);
   const [owner,repo,preview,taskId,runId,sessionId,interactionId]=Array.from({length:7},()=>randomUUID());
-  const lease={slotKey:'local-default' as const,taskId,runId,outboxId:randomUUID(),owner:'worker',fence:'1'};
+  const lease:Lease={slotKey:'local-default' as const,taskId,runId,outboxId:randomUUID(),owner:'worker',fence:'1'};
   const binding={taskId,serviceIdentity:'fixture',sessionId,locationKey:'fixture'};
   const inputId='accepted-fixture';
+  let verified=false;
   let answers=0,interrupts=0,pending=true;
   const starts:string[]=[];
   const types:NativeObservation[]=[
@@ -35,6 +38,7 @@ it('MySQL 8.4 with a scripted native peer: replay, control delivery and terminal
   const adapter:OpenCodeAdapter={
     probe:unexpected,createSession:unexpected,putContext:unexpected,startReview:unexpected,
     discuss:unexpected,readMessages:unexpected,
+    async reattach(bound,id,input){return verified&&bound.sessionId===sessionId&&id===runId&&input===inputId;},
     async *subscribe(_binding,cursor){
       starts.push(String(cursor));
       const indexes=starts.length===1?[0,1,2,3,4]:[4,5];
@@ -71,6 +75,20 @@ it('MySQL 8.4 with a scripted native peer: replay, control delivery and terminal
     const [slot]=await pool.query<RowDataPacket[]>("SELECT run_id,quarantined FROM wh_executor_slots WHERE slot_key='local-default'");
     assert.equal(slot[0].run_id,null);assert.equal(slot[0].quarantined,0);
     await pool.execute("UPDATE wh_executor_slots SET run_id=?,lease_owner='worker',fence=1,lease_until=NOW(3)+INTERVAL 30 SECOND WHERE slot_key='local-default' AND run_id IS NULL",[runId]);
+    const operation=randomUUID();
+    await pool.execute("INSERT INTO wh_operations(id,owner_id,operation_key,action,request_sha256,status,created_at,updated_at) "+
+      "VALUES (?,?,?,'TASK_DISCUSS',SHA2('test',256),'ACCEPTED',NOW(3),NOW(3))",[operation,owner,randomUUID()]);
+    await pool.execute("INSERT INTO wh_outbox(id,operation_id,task_id,run_id,action,payload,status,created_at,updated_at,available_at) "+
+      "VALUES (?,?,?,?,'DISPATCH',JSON_OBJECT(),'SENT',NOW(3),NOW(3),NOW(3))",[lease.outboxId,operation,taskId,runId]);
+    await pool.execute("UPDATE wh_executor_slots SET lease_until=DATE_SUB(NOW(3),INTERVAL 1 SECOND) WHERE run_id=?",[runId]);
+    assert.equal(await claimNext(pool,'replacement'),null);
+    const config={...ctx,workerId:'replacement',repositoryRoots:[],nativeVersion:'fixture'};
+    assert.equal(await resumeExpired(config),null);
+    verified=true;
+    const resumed=await resumeExpired(config);
+    assert.ok(resumed);assert.equal(resumed.lease.fence,'2');assert.equal(resumed.inputId,inputId);
+    await assert.rejects(()=>syncInteractions(ctx),/LEASE_FENCE_LOST/);
+    ctx.lease=resumed.lease;
     await syncInteractions(ctx);
     const answer=await answerInteraction({pool,ownerId:owner,interactionId,revision:1,operationId:randomUUID(),
       answer:{kind:'PERMISSION',decision:'DENY'}});

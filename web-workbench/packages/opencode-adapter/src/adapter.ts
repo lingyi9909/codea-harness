@@ -16,6 +16,9 @@ export type AdapterOptions = {
   transport: LocalNativeTransport;
   /** Decode only public assistant text, safe tool metadata and attributable execution evidence. */
   decodeEvent?(type: string, properties: NativeRecord): NativeObservation | undefined;
+  /** Read-only native proof from the pinned build, including accepted input ownership. */
+  inspectBinding?(binding:SessionBinding):Promise<{sessionId:string;serviceIdentity:string;locationKey:string;
+    inputId:string;externalMutation:boolean}>;
   decodeMessage?(message:NativeRecord):Extract<NativeObservation,{kind:'message'}>|undefined;
   decodeTerminal?(state:NativeRecord):Extract<NativeObservation,{kind:'terminal'}>|undefined;
   /** T04 must independently establish clean, pinned and immutable snapshot before any mutation. */
@@ -116,6 +119,22 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       sessionId: id, locationKey: location };
     this.sessions.set(id, { binding, answered: new Set(), requests: new Map() });
     return binding;
+  }
+  async reattach(binding:SessionBinding,runId:string,inputId:string):Promise<boolean>{
+    this.ready();
+    if(!this.options.inspectBinding || binding.serviceIdentity!==this.options.transport.serviceIdentity ||
+      !this.options.auditExternalWriter)return false;
+    const proof=await this.options.inspectBinding(binding);
+    if(proof.sessionId!==binding.sessionId || proof.locationKey!==binding.locationKey ||
+      proof.serviceIdentity!==binding.serviceIdentity || proof.inputId!==inputId || proof.externalMutation ||
+      await this.options.auditExternalWriter(binding)!==false)return false;
+    const existing=this.sessions.get(binding.sessionId);
+    if(existing){
+      this.state(binding);
+      return existing.runId===runId;
+    }
+    this.sessions.set(binding.sessionId,{binding,runId,answered:new Set(),requests:new Map()});
+    return true;
   }
   async putContext(binding: SessionBinding, context: { scope: DTO<'Scope'>; notes?: string }): Promise<void> {
     this.ready();

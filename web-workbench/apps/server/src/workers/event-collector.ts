@@ -70,9 +70,9 @@ async function finish(c: Context, terminal: Terminal, cursor?:string) {
     const status = terminal.outcome;
     if (!['RUNNING','WAITING_INPUT','WAITING_PERMISSION','STOP_REQUESTED'].includes(run.status) ||
         !['SUCCEEDED','FAILED','STOPPED'].includes(status)) throw new Error('RUN_NOT_FINISHABLE');
-    if(cursor)await tx.execute("UPDATE wh_session_bindings SET native_log_seq=?,continuity=IF(continuity='GAP','GAP','COMPLETE'),"+
-      "updated_at=UTC_TIMESTAMP(3) WHERE task_id=?",[cursor,c.lease.taskId]);
     const archive = status==='SUCCEEDED' && run.kind!=='DISCUSS';
+    if(cursor&&!archive)await tx.execute("UPDATE wh_session_bindings SET native_log_seq=?,continuity=IF(continuity='GAP','GAP','COMPLETE'),"+
+      "updated_at=UTC_TIMESTAMP(3) WHERE task_id=?",[cursor,c.lease.taskId]);
     if (archive && !terminal.report) throw new Error('REPORT_WRITE_EVIDENCE_MISSING');
     const next = archive?'COLLECTING':status;
     await tx.execute('UPDATE wh_runs SET status=?,finished_at=IF(?,NULL,UTC_TIMESTAMP(3)),'+
@@ -91,7 +91,7 @@ async function finish(c: Context, terminal: Terminal, cursor?:string) {
   if (report) await collectReport(c,c.lease,{taskId:c.lease.taskId,runId:c.lease.runId,
     nativeSessionId:c.binding.sessionId,serviceIdentity:c.binding.serviceIdentity,
     nativeWriteMessageId:report.writeMessageId,path:report.path,toolOutcome:'SUCCEEDED',
-    coverage:report.coverage,modelTerminated:true,pendingInputs:0,pendingInteractions:0,externalMutation:false});
+    cursor,coverage:report.coverage,modelTerminated:true,pendingInputs:0,pendingInteractions:0,externalMutation:false});
 }
 
 async function* monitoredFrames(c:Context, start:string|undefined, signal:AbortSignal,flushAt:()=>number) {

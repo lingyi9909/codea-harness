@@ -5,6 +5,8 @@ import type { NativeEnvelope, NativeObservation } from './events.ts';
 export interface OpenCodeAdapter {
   probe(): Promise<DTO<'Capability'>[]>;
   createSession(taskId: UUID, snapshot: Snapshot): Promise<SessionBinding>;
+  /** Read-only reattachment to an independently verified, already accepted input. */
+  reattach?(binding:SessionBinding,runId:UUID,inputId:string):Promise<boolean>;
   putContext(binding: SessionBinding, context: { scope: DTO<'Scope'>; notes?: string }): Promise<void>;
   startReview(binding: SessionBinding, input: { runId: UUID; controller?: string; recheck?: boolean }): Promise<NativeAcceptance>;
   discuss(binding: SessionBinding, input: { runId: UUID; messageId: UUID; text: string; quote?: string; reportArtifactId?: string }): Promise<NativeAcceptance>;

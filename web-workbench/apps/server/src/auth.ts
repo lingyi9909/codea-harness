@@ -7,18 +7,29 @@ const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
 export class LocalAuth {
-  private readonly pairingHash:Buffer;
+  private pairingHash:Buffer;
   private paired=false;
-  private readonly createdAt=Date.now();
+  private createdAt=Date.now();
   private readonly attempts:number[]=[];
   private readonly sessions=new Map<string,Session>();
   private readonly port:number;
   private readonly devOrigin?:string;
-  constructor(pairingCode:string,port:number,devOrigin?:string){
+  private readonly publishCode?: (code:string)=>void;
+  constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void){
+    this.publishCode=publishCode;
     this.port=port;this.devOrigin=devOrigin;
     this.pairingHash=hash(pairingCode);
     if(devOrigin&&!/^http:\/\/(127\.0\.0\.1|localhost):4175$/.test(devOrigin))
       throw new Error('UNSAFE_DEVELOPMENT_ORIGIN');
+  }
+  private refreshPairing(){
+    if(!this.publishCode)return;
+    const now=Date.now();
+    for(const [key,session] of this.sessions)if(session.expires<=now)this.sessions.delete(key);
+    if(this.sessions.size || (!this.paired && now-this.createdAt<=300000))return;
+    const code=randomBytes(32).toString('base64url');
+    this.createdAt=now;this.pairingHash=hash(code);this.paired=false;
+    this.publishCode(code);
   }
   origin(req:FastifyRequest):boolean{
     const host=req.headers.host??'';
@@ -29,6 +40,7 @@ export class LocalAuth {
   }
   pair(req:FastifyRequest,reply:FastifyReply,provided:unknown,ownerId:string):Session{
     if(!this.origin(req))throw new AuthProblem(403,'ORIGIN_INVALID');
+    this.refreshPairing();
     const now=Date.now();
     if(typeof provided!=='string'||provided.length>256)throw new AuthProblem(401,'PAIRING_INVALID');
     while(this.attempts.length&&this.attempts[0]<now-60000)this.attempts.shift();
@@ -45,6 +57,7 @@ export class LocalAuth {
   }
   session(req:FastifyRequest):Session{
     if(!this.origin(req))throw new AuthProblem(403,'ORIGIN_INVALID');
+    this.refreshPairing();
     const token=req.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
     if(!token)throw new AuthProblem(401,'AUTH_REQUIRED');
     const key=hash(token).toString('hex');
@@ -64,6 +77,7 @@ export class LocalAuth {
     this.mutation(req);
     const token=req.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
     if(token)this.sessions.delete(hash(token).toString('hex'));
+    this.refreshPairing();
     reply.header('Set-Cookie',COOKIE+'=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
   }
 }

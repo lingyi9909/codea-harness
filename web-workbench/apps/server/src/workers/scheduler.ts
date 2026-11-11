@@ -1,3 +1,4 @@
+import { resumeExpired } from './recovery.ts';
 import { collectNativeEvents } from './event-collector.ts';
 import { join, resolve } from 'node:path';
 import { lstat, realpath, rm } from 'node:fs/promises';
@@ -196,7 +197,9 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
   const capabilities=await config.adapter.probe();
   if(!requiredCapabilities(capabilities))return null;
   config.signal?.throwIfAborted();
-  const lease=await claimNext(config.pool,config.workerId);
+  const fresh=await claimNext(config.pool,config.workerId);
+  const resumed=fresh?null:await resumeExpired(config);
+  const lease=fresh??resumed?.lease;
   if(!lease)return null;
   const abort=new AbortController();
   let leaseLost=false;
@@ -207,7 +210,13 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
       try{await renewLease(config.pool,lease);}catch{leaseLost=true;abort.abort();break;}
     }
   })();
+  const durable=capabilities.some(cap=>cap.name==='session.log'&&cap.status==='SUPPORTED');
+  const signal=config.signal?AbortSignal.any([abort.signal,config.signal]):abort.signal;
   try{
+    if(resumed){
+      await collectNativeEvents({...config,...resumed,durable},signal);
+      return lease.runId;
+    }
     const prepared=await prepare(config,lease,capabilities);
     config.signal?.throwIfAborted();
     if(leaseLost)throw new Error('LEASE_RENEWAL_LOST');
@@ -219,7 +228,7 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
     if(acceptance.state==='ACCEPTED'&&acceptance.inputId){
       await markNativeAccepted(config.pool,lease,acceptance.inputId);
       await collectNativeEvents({...config,lease,binding:prepared.binding,inputId:acceptance.inputId,
-        durable:capabilities.some(cap=>cap.name==='session.log'&&cap.status==='SUPPORTED')},config.signal?AbortSignal.any([abort.signal,config.signal]):abort.signal);
+        durable},signal);
     }else
       await quarantineUnknown(config.pool,lease,'NATIVE_ACCEPTANCE_UNKNOWN');
   }catch(e){
