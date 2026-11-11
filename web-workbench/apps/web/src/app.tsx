@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from './api/client.ts';
 import type { Schema } from './api/client.ts';
 import { subscribeTask } from './api/events.ts';
+import { InteractionPanel } from './InteractionPanel.tsx';
 
 type Repository=Schema<'Repository'>;
 type Ref=Schema<'Ref'>;
@@ -127,9 +128,9 @@ export function WorkbenchApp() {
     await api.register(newName,newPath,id);setRegisterOpen(false);
     await refreshLists();setPendingOperation(null);
   });
-  const answer=(interaction:Interaction,decision:'ALLOW_ONCE'|'DENY')=>act(async()=>{
+  const answer=(interaction:Interaction,response:Schema<'AnswerRequest'>['answer'])=>act(async()=>{
     const id=operationId();setPendingOperation(id);
-    await api.answer(interaction.id,interaction.revision,{kind:'PERMISSION',decision},id);
+    await api.answer(interaction.id,interaction.revision,response,id);
     await loadDetail(selected);setPendingOperation(null);
   });
   const stop=()=>act(async()=>{
@@ -221,14 +222,8 @@ export function WorkbenchApp() {
               {detail?.latestRun.status==='STOP_REQUESTED'&&<p className="notice">正在停止；等待原生中断与最终状态核验。</p>}
               {active&&<button className="secondary danger" disabled={busy||detail?.latestRun.status==='STOP_REQUESTED'} onClick={stop}>停止本轮执行</button>}
             </section>
-            {interactions.map(i=><section className="detail-card permission" key={i.id}>
-              <div className="card-head"><h2>{i.kind==='PERMISSION'?'原生工具授权':'原生补充表单'}</h2><span className="chip">请求 #{i.revision}</span></div>
-              {i.kind==='PERMISSION'?<><p>工具：<strong>{i.tool}</strong></p><pre>{i.requestText}</pre>
-                <p className="muted">仅作用于本次会话的当前请求，不改变全局权限。</p>
-                <div className="button-row"><button disabled={busy} onClick={()=>answer(i,'DENY')}>拒绝</button>
-                  <button className="primary" disabled={busy} onClick={()=>answer(i,'ALLOW_ONCE')}>本次允许</button></div></>:
-                <p>表单：{i.title}。需要按照公司实际原生 Form Schema 完成字段映射后才能提交。</p>}
-            </section>)}
+            {interactions.map(i=><InteractionPanel key={i.id} item={i} busy={busy}
+              onAnswer={answerPayload=>answer(i,answerPayload)}/>)}
             <section className="detail-card">
               <div className="card-head"><h2>审查报告</h2><span className="chip">{artifact?'已归档':'等待产物'}</span></div>
               {artifact?<><div className="report-actions"><button onClick={()=>navigator.clipboard.writeText(artifact.markdown)}>复制 Markdown</button>
