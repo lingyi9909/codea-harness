@@ -31,7 +31,7 @@ const asFormFields=(obj:Record<string,unknown>):Field[]=>{
     throw new AuthProblem(503,'UNSUPPORTED_NATIVE_FORM_SCHEMA');
   return fields;
 };
-function validateAnswer(kind:string,schemaRaw:unknown,answer:unknown):Answer{
+export function validateAnswer(kind:string,schemaRaw:unknown,answer:unknown):Answer{
   if(!isObject(answer))throw new AuthProblem(400,'INVALID_ANSWER');
   const schema=parseJson(schemaRaw);
   if(kind==='PERMISSION'){

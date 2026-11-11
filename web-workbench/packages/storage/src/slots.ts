@@ -119,11 +119,11 @@ export async function quarantineUnknown(pool:Pool,lease:Lease,reason:string):Pro
     if(['SUCCEEDED','FAILED','STOPPED'].includes(String(state[0].status)))
       throw new LeaseError('TERMINAL_RUN_CANNOT_RECOVER');
     const previous=String(state[0].status);
-    await tx.execute("UPDATE wh_runs SET status='RECOVERING',dispatch_state='UNKNOWN',"+
+    await tx.execute("UPDATE wh_runs SET status='RECOVERING',dispatch_state=IF(dispatch_state='ACCEPTED','ACCEPTED','UNKNOWN'),"+
       "error_code=?,updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_fence=?",
       [reason,lease.runId,lease.fence]);
     await tx.execute("UPDATE wh_outbox SET status='UNKNOWN',updated_at=UTC_TIMESTAMP(3) "+
-      "WHERE id=? AND lease_fence=?",[lease.outboxId,lease.fence]);
+      "WHERE id=? AND lease_fence=? AND status<>'SENT'",[lease.outboxId,lease.fence]);
     await tx.execute("UPDATE wh_executor_slots SET quarantined=1,updated_at=UTC_TIMESTAMP(3) "+
       "WHERE slot_key='local-default' AND fence=?",[lease.fence]);
     await appendEvent(tx,{taskId:lease.taskId,runId:lease.runId,type:'run.status',

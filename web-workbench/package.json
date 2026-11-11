@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit --project tsconfig.base.json",
     "test": "node --experimental-strip-types --test tests/capabilities/probe.test.ts tests/capabilities/adapter.test.ts",
     "probe": "node --experimental-strip-types scripts/probe.ts",
-    "test:mysql": "node scripts/pending.mjs mysql",
+    "test:mysql": "node --experimental-strip-types --test tests/mysql/native-events.test.ts",
     "test:e2e": "node scripts/pending.mjs e2e",
     "test:windows-smoke": "node --experimental-strip-types scripts/probe.ts --windows-smoke",
     "server:start": "node --experimental-strip-types apps/server/src/start.ts",

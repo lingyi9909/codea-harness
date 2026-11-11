@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { DTO, NativeAcceptance, NativeInspection, SessionBinding, Snapshot, UUID } from '../../contracts/src/domain.ts';
-import type { NativeEnvelope } from '../../contracts/src/events.ts';
+import type { NativeEnvelope, NativeObservation } from '../../contracts/src/events.ts';
 import type { OpenCodeAdapter } from '../../contracts/src/ports.ts';
 import { REVIEW_COMMAND, AGENT_ID, reviewArguments, assertNativeId } from './mapping.ts';
 import { LocalNativeTransport } from './native.ts';
@@ -14,6 +14,8 @@ type BoundState = { binding: SessionBinding; runId?: UUID; answered: Set<string>
   requests: Map<string, { nativeId: string; kind: InterKind }> };
 export type AdapterOptions = {
   transport: LocalNativeTransport;
+  /** Decode only public assistant text, safe tool metadata and attributable execution evidence. */
+  decodeEvent?(type: string, properties: NativeRecord): NativeObservation | undefined;
   /** T04 must independently establish clean, pinned and immutable snapshot before any mutation. */
   verifySnapshot(snapshot: Snapshot): Promise<void>;
   /** Only externally captured T01 company evidence may enable production execution. */
@@ -246,7 +248,7 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       nextCursor: typeof next === 'string' ? next : null,
     };
   }
-  async *subscribe(binding: SessionBinding, cursor?: string): AsyncIterable<NativeEnvelope> {
+  async *subscribe(binding: SessionBinding, cursor?: string, signal?: AbortSignal): AsyncIterable<NativeEnvelope> {
     const state = this.state(binding);
     if (!state.runId) throw new Error('RUN_BINDING_MISSING');
     const subscribedRunId = state.runId;
@@ -254,14 +256,15 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     const route = cursor ? 'log' : 'events';
     const replacements: Record<string, string> = cursor ? { sessionID: binding.sessionId } : {};
     const query: Record<string, string> = cursor ? { after: cursor, follow: 'true' } : {};
-    for await (const frame of this.options.transport.stream(route, replacements, query)) {
+    for await (const frame of this.options.transport.stream(route, replacements, query, signal)) {
       if (state.runId !== subscribedRunId) throw new Error('NATIVE_EVENT_RUN_CHANGED');
       const event = obj(frame.data);
       const props = event.properties && typeof event.properties === 'object' ? obj(event.properties) : event;
       const eventSession = props.sessionID ?? event.sessionID;
       if (eventSession !== binding.sessionId) continue;
-      yield { sourceId: frame.id, cursor: frame.id, taskId: binding.taskId,
-        runId: subscribedRunId, type: requiredString(event.type ?? frame.event, 'NATIVE_EVENT_TYPE'),
+      const type = requiredString(event.type ?? frame.event, 'NATIVE_EVENT_TYPE');
+      yield { observation: this.options.decodeEvent?.(type, props), sourceId: frame.id, cursor: frame.id, taskId: binding.taskId,
+        runId: subscribedRunId, type,
         data: props };
     }
   }
@@ -278,10 +281,10 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     } catch { return { responseReceived: false }; }
     // State reconciliation is separate: interrupted=true does not prove stopped.
   }
-  async listInteractions(binding: SessionBinding): Promise<DTO<'Interaction'>[]> {
+  async listInteractions(binding: SessionBinding): Promise<Array<DTO<'Interaction'> & { nativeRequestId: string }>> {
     const state = this.state(binding);
     if (!state.runId) throw new Error('RUN_BINDING_MISSING');
-    const results: DTO<'Interaction'>[] = [];
+    const results: Array<DTO<'Interaction'> & {nativeRequestId: string}> = [];
     for (const [route, kind] of [['permissions', 'PERMISSION'], ['forms', 'FORM']] as const) {
       const response = await this.options.transport.call(route, 'GET', undefined,
         { sessionID: binding.sessionId });
@@ -291,7 +294,6 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
         if (entry.sessionID !== binding.sessionId)
           throw new Error('NATIVE_INTERACTION_SESSION_MISMATCH');
         const nativeId = assertNativeId(this.options.getNativeRequestId(raw));
-        const key = kind + ':' + nativeId;
         const existing = [...state.requests.entries()].find(([, req]) => req.nativeId === nativeId && req.kind === kind);
         const businessId = existing?.[0] ?? randomUUID();
         const interaction = this.options.mapInteraction(raw, kind,
@@ -300,7 +302,7 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
             interaction.kind !== kind || interaction.id !== businessId ||
             interaction.status !== 'PENDING') throw new Error('NATIVE_INTERACTION_SCOPE_INVALID');
         state.requests.set(businessId, { nativeId, kind });
-        results.push(interaction);
+        results.push({...interaction,nativeRequestId:nativeId});
       }
     }
     return results;

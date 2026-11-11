@@ -37,3 +37,33 @@ jobs:
           npm run test:tasks
           npm run test:events
           npm run test:lease
+
+  native-event-storage:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+          MYSQL_DATABASE: harness_ci_test
+          MYSQL_USER: harness_ci
+          MYSQL_PASSWORD: disposable-ci-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    defaults:
+      run:
+        working-directory: web-workbench
+    env:
+      HARNESS_MYSQL_DATABASE: harness_ci_test
+      HARNESS_MYSQL_USER: harness_ci
+      HARNESS_MYSQL_PASSWORD: disposable-ci-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:mysql

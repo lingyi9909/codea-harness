@@ -1,3 +1,4 @@
+import { collectNativeEvents } from './event-collector.ts';
 import { join, resolve } from 'node:path';
 import { lstat, realpath, rm } from 'node:fs/promises';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
@@ -198,7 +199,7 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
     while(!abort.signal.aborted){
       try{await delay(10000,undefined,{signal:abort.signal});}catch{break;}
       if(abort.signal.aborted)break;
-      try{await renewLease(config.pool,lease);}catch{leaseLost=true;break;}
+      try{await renewLease(config.pool,lease);}catch{leaseLost=true;abort.abort();break;}
     }
   })();
   try{
@@ -209,9 +210,11 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
     let acceptance:Awaited<ReturnType<OpenCodeAdapter['startReview']>>;
     try{acceptance=await invokePreparedNative(config.adapter,prepared,lease.runId);}
     catch{acceptance={state:'UNKNOWN',reason:'NATIVE_TRANSPORT_OR_MAPPING_UNCERTAIN'};}
-    if(acceptance.state==='ACCEPTED'&&acceptance.inputId)
+    if(acceptance.state==='ACCEPTED'&&acceptance.inputId){
       await markNativeAccepted(config.pool,lease,acceptance.inputId);
-    else
+      await collectNativeEvents({...config,lease,binding:prepared.binding,inputId:acceptance.inputId,
+        durable:capabilities.some(cap=>cap.name==='session.log'&&cap.status==='SUPPORTED')},abort.signal);
+    }else
       await quarantineUnknown(config.pool,lease,'NATIVE_ACCEPTANCE_UNKNOWN');
   }catch(e){
     // Any possible native execution or stale lease is reconciled, never replayed.

@@ -10,8 +10,8 @@ export interface OpenCodeAdapter {
   discuss(binding: SessionBinding, input: { runId: UUID; messageId: UUID; text: string; quote?: string; reportArtifactId?: string }): Promise<NativeAcceptance>;
   inspect(binding: SessionBinding): Promise<NativeInspection>;
   readMessages(binding: SessionBinding, cursor?: string): Promise<{ items: DTO<'Message'>[]; nextCursor: string | null }>;
-  subscribe(binding: SessionBinding, cursor?: string): AsyncIterable<NativeEnvelope>;
+  subscribe(binding: SessionBinding, cursor?: string, signal?: AbortSignal): AsyncIterable<NativeEnvelope>;
   interrupt(binding: SessionBinding): Promise<{ responseReceived: boolean; interrupted?: boolean }>;
-  listInteractions(binding: SessionBinding): Promise<DTO<'Interaction'>[]>;
+  listInteractions(binding: SessionBinding): Promise<Array<DTO<'Interaction'> & { nativeRequestId: string }>>;
   answer(binding: SessionBinding, nativeRequestId: string, answer: DTO<'AnswerRequest'>['answer']): Promise<NativeAcceptance>;
 }
