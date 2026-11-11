@@ -29,7 +29,8 @@
     "web:dev": "npm run dev --workspace @codea/web",
     "web:build": "npm run build --workspace @codea/web",
     "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit",
-    "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts"
+    "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts",
+    "test:continuations": "node --experimental-strip-types --test tests/api/continuations.test.ts"
   },
   "devDependencies": {
     "@types/node": "22.18.6",

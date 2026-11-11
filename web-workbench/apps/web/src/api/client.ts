@@ -83,6 +83,10 @@ export class HarnessApi {
       method:'POST',body:JSON.stringify({text,operationId,...(reportArtifactId?{reportArtifactId}:{}),
         ...(quote?{quote}:{})})});
   }
+  recheck(taskId:string,operationId:string) {
+    return this.request<Schema<'Operation'>>('/tasks/'+encodeURIComponent(taskId)+'/rechecks',{
+      method:'POST',body:JSON.stringify({operationId})});
+  }
   report(id:string) { return this.request<Schema<'Artifact'>>('/artifacts/'+encodeURIComponent(id)); }
 }
 export const api = new HarnessApi();
