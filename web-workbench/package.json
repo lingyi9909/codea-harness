@@ -16,7 +16,7 @@
     "test": "node --experimental-strip-types --test tests/capabilities/probe.test.ts tests/capabilities/adapter.test.ts",
     "probe": "node --experimental-strip-types scripts/probe.ts",
     "test:mysql": "node --experimental-strip-types --test tests/mysql/native-events.test.ts",
-    "test:e2e": "node scripts/pending.mjs e2e",
+    "test:e2e": "node --experimental-strip-types --test tests/ui/workbench.test.ts",
     "test:windows-smoke": "node --experimental-strip-types scripts/probe.ts --windows-smoke",
     "server:start": "node --experimental-strip-types apps/server/src/start.ts",
     "migrate": "node --experimental-strip-types scripts/migrate.ts",
@@ -35,6 +35,7 @@
     "test:dispatch-continue": "node --experimental-strip-types --test tests/workers/continuation-dispatch.test.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@types/node": "22.18.6",
     "typescript": "5.9.3"
   }

@@ -13,7 +13,7 @@ export function registerTaskRoutes(app:FastifyInstance,opts:{
     controller?:string;notes?:string}}>('/api/v1/tasks',async(req,reply)=>{
     const {ownerId}=opts.auth.mutation(req);
     if(!req.body||typeof req.body!=='object')throw new AuthProblem(400,'INVALID_REQUEST');
-    const result=await createTask({ownerId,...req.body},opts);
+    const result=await createTask({...req.body,ownerId},opts);
     return reply.status(202).send(wrap(result));
   });
   app.get<{Params:{operationId:string}}>('/api/v1/operations/:operationId',async(req,reply)=>{

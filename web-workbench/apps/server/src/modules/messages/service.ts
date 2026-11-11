@@ -170,7 +170,7 @@ export async function listTaskMessages(input:{
     params.push(cursor.date,cursor.date,cursor.id);
   }
   sql+='ORDER BY created_at DESC,id DESC LIMIT ?';
-  params.push(input.limit+1);
+  params.push(String(input.limit+1));
   const [rows]=await input.pool.execute<RowDataPacket[]>(sql,params);
   const page=rows.slice(0,input.limit);
   const last=page.at(-1);

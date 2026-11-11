@@ -68,6 +68,6 @@ export async function readTaskEvents(pool:Pool,taskId:string,after:string,limit=
   const [rows]=await pool.execute<RowDataPacket[]>(
     'SELECT task_id,seq,run_id,event_type,payload,created_at FROM wh_events '+
     'WHERE task_id=? AND seq>? ORDER BY seq ASC LIMIT ?',
-    [taskId,after,limit]);
+    [taskId,after,String(limit)]);
   return rows.map(eventFromRow);
 }

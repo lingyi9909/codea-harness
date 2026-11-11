@@ -67,3 +67,6 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run test:mysql
+      - run: npm run web:build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

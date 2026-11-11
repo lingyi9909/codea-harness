@@ -21,7 +21,7 @@ export function registerGitRoutes(app:FastifyInstance,deps:Deps):void{
   app.post<{Body:{operationId:string;name:string;path:string}}>('/api/v1/repositories',async(req,reply)=>{
     const {ownerId}=deps.auth.mutation(req);
     if(!req.body||typeof req.body!=='object')throw new AuthProblem(400,'INVALID_REQUEST');
-    const repo=await registerRepository({ownerId,...req.body},deps);
+    const repo=await registerRepository({...req.body,ownerId},deps);
     return reply.status(201).send(wrap(repo));
   });
   app.get<{Params:{repositoryId:string}}>('/api/v1/repositories/:repositoryId/refs',async(req,reply)=>{
@@ -42,7 +42,7 @@ export function registerGitRoutes(app:FastifyInstance,deps:Deps):void{
     '/api/v1/review-previews',async(req,reply)=>{
       const {ownerId}=deps.auth.mutation(req);
       if(!req.body||typeof req.body!=='object')throw new AuthProblem(400,'INVALID_REQUEST');
-      const result=await createPreview({ownerId,...req.body},deps);
+      const result=await createPreview({...req.body,ownerId},deps);
       return reply.status(201).send(wrap(result));
     });
 

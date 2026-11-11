@@ -87,6 +87,8 @@ export class HarnessApi {
     return this.request<Schema<'Operation'>>('/tasks/'+encodeURIComponent(taskId)+'/rechecks',{
       method:'POST',body:JSON.stringify({operationId})});
   }
+  files(taskId:string){return this.request<Schema<'FileList'>>('/tasks/'+encodeURIComponent(taskId)+'/files');}
+  lines(taskId:string,id:string,start:number){return this.request<Schema<'FileLines'>>('/tasks/'+encodeURIComponent(taskId)+'/files/'+encodeURIComponent(id)+'?startLine='+start+'&endLine='+(start+199));}
   report(id:string) { return this.request<Schema<'Artifact'>>('/artifacts/'+encodeURIComponent(id)); }
 }
 export const api = new HarnessApi();

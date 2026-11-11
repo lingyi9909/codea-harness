@@ -18,7 +18,7 @@ import { REPORT_RELATIVE_PATH } from '../../../../packages/opencode-adapter/src/
 import { setTimeout as delay } from 'node:timers/promises';
 
 export interface SchedulerConfig{
-  pool:Pool;workerId:string;dataRoot:string;repositoryRoots:string[];
+  signal?:AbortSignal;pool:Pool;workerId:string;dataRoot:string;repositoryRoots:string[];
   nativeVersion:string;adapter:OpenCodeAdapter;
 }
 type Discussion={messageId:string;text:string;quote?:string;reportArtifactId?:string};
@@ -191,6 +191,7 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
   if(!config.nativeVersion.trim()||config.nativeVersion==='UNVERIFIED')return null;
   const capabilities=await config.adapter.probe();
   if(!requiredCapabilities(capabilities))return null;
+  config.signal?.throwIfAborted();
   const lease=await claimNext(config.pool,config.workerId);
   if(!lease)return null;
   const abort=new AbortController();
@@ -204,6 +205,7 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
   })();
   try{
     const prepared=await prepare(config,lease,capabilities);
+    config.signal?.throwIfAborted();
     if(leaseLost)throw new Error('LEASE_RENEWAL_LOST');
     await renewLease(config.pool,lease);
     await beginNativeSend(config.pool,lease);
@@ -213,7 +215,7 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
     if(acceptance.state==='ACCEPTED'&&acceptance.inputId){
       await markNativeAccepted(config.pool,lease,acceptance.inputId);
       await collectNativeEvents({...config,lease,binding:prepared.binding,inputId:acceptance.inputId,
-        durable:capabilities.some(cap=>cap.name==='session.log'&&cap.status==='SUPPORTED')},abort.signal);
+        durable:capabilities.some(cap=>cap.name==='session.log'&&cap.status==='SUPPORTED')},config.signal?AbortSignal.any([abort.signal,config.signal]):abort.signal);
     }else
       await quarantineUnknown(config.pool,lease,'NATIVE_ACCEPTANCE_UNKNOWN');
   }catch(e){
