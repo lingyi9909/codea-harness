@@ -36,5 +36,7 @@ jobs:
         run: npm run test:interactions
       - name: T08 scoped continuation tests
         run: npm run test:continuations
+      - name: T10 artifact scope and integrity tests
+        run: npm run test:reports
       - name: T01 regression
         run: npm test
