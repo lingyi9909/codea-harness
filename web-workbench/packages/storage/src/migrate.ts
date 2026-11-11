@@ -28,7 +28,7 @@ export async function runMigrations(config:DbConfig,expectedDatabase:string,migr
     if(!/^8\.4(?:\.|\b)/.test(String(dbRows[0]?.v)))throw new Error('MYSQL_8_4_REQUIRED');
     const [lockRows]=await conn.query<RowDataPacket[]>('SELECT GET_LOCK(?,30) AS acquired',
       ['code_harness_migration_'+expectedDatabase]);
-    if(lockRows[0]?.acquired!==1)throw new Error('MIGRATION_LOCK_UNAVAILABLE');
+    if(Number(lockRows[0]?.acquired)!==1)throw new Error('MIGRATION_LOCK_UNAVAILABLE');
     locked=true;
     await conn.query(`CREATE TABLE IF NOT EXISTS wh_schema_migrations (
       version VARCHAR(100) NOT NULL PRIMARY KEY,
