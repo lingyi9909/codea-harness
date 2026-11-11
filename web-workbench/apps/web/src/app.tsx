@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api/client.ts';
 import type { Schema } from './api/client.ts';
 import { subscribeTask } from './api/events.ts';
+import Markdown from 'react-markdown';
 import { SourceView } from './SourceView.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
 
@@ -51,6 +52,7 @@ export function WorkbenchApp() {
   };
   const [eventState,setEventState]=useState('未连接');
   const [gap,setGap]=useState('');
+  const [progress,setProgress]=useState<Array<{seq:string;text:string}>>([]);
   const [registerOpen,setRegisterOpen]=useState(false);
   const [newName,setNewName]=useState('');
   const [newPath,setNewPath]=useState('');
@@ -75,7 +77,7 @@ export function WorkbenchApp() {
     const last=d.reports.at(-1);
     const report=last?await api.report(last.id):null;
     if(selection.current!==id||order!==detailRequest.current)return d.lastSeq;
-    setDetail(d);setMessages(m.items);setInteractions(i.items);
+    setDetail(d);setMessages(m.items.reverse());setInteractions(i.items);
     setArtifact(report);return d.lastSeq;
   },[]);
   useEffect(()=>{
@@ -100,18 +102,31 @@ export function WorkbenchApp() {
   useEffect(()=>{
     if(!selected||!bootstrap){setDetail(null);setInteractions([]);setMessages([]);setArtifact(null);return;}
     let active=true,cleanup=()=>{};
-    setDetail(null);setMessages([]);setArtifact(null);setInteractions([]);setGap('');setDraft('');setQuote('');
-    const fail=(e:unknown)=>{if(active)setError(text(e));};
+    setDetail(null);setMessages([]);setArtifact(null);setInteractions([]);setGap('');setProgress([]);setDraft(sessionStorage.getItem('harness.draft.'+selected)??'');setQuote('');
+    const fail=(e:unknown)=>{if(active){setError(text(e));if(e instanceof ApiError&&e.status===401)setBootstrap(null);}};
+    let refreshing=false,dirty=false;
+    const refresh=async()=>{
+      dirty=true;
+      if(refreshing)return;
+      refreshing=true;
+      try{while(active&&dirty){dirty=false;await loadDetail(selected);}}
+      catch(e){fail(e);}finally{refreshing=false;}
+    };
     loadDetail(selected).then(seq=>{
       if(!active)return;
       cleanup=subscribeTask(selected,{
         onEvent:event=>{
+          const label=event.type==='run.status'?event.data.status:
+            event.type==='tool.started'?event.data.tool+' · 开始':
+            event.type==='tool.completed'?event.data.tool+' · '+event.data.outcome:
+            event.type==='artifact.ready'?'已归档报告 v'+event.data.version:null;
+          if(label)setProgress(current=>[...current.slice(-99),{seq:event.seq,text:label}]);
           if(event.type==='continuity.gap')setGap('部分原生过程记录缺失');
-          void loadDetail(selected).catch(fail);
+          if(BigInt(event.seq)>BigInt(seq))void refresh();
         },
         onState:s=>setEventState(s==='connected'?'实时事件已连接':s==='connecting'?'连接中':'已断线'),
         onGap:setGap,
-      },seq);
+      },'0');
     }).catch(fail);
     return ()=>{active=false;cleanup();};
   },[selected,bootstrap,loadDetail]);
@@ -120,6 +135,7 @@ export function WorkbenchApp() {
     setError('');setBusy(true);
     try{await fn();}catch(e){
       if(e instanceof ApiError && [400,403,409,422,429].includes(e.status))setPendingOperation(null);
+      if(e instanceof ApiError && ['SCOPE_CHANGED','PREVIEW_EXPIRED','PREVIEW_USED'].includes(e.code))setPreview(null);
       if(e instanceof ApiError && e.status===401)setBootstrap(null);
       setError(text(e));
     }
@@ -180,7 +196,7 @@ export function WorkbenchApp() {
     if(!selected||!draft.trim())return;
     const id=operationId();setPendingOperation(id);
     await api.discuss(selected,draft,id,artifact?.meta.id,quote||undefined);
-    setDraft('');setQuote('');await loadDetail(selected);setPendingOperation(null);
+    sessionStorage.removeItem('harness.draft.'+selected);setDraft('');setQuote('');await loadDetail(selected);setPendingOperation(null);
   });
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const mutationBusy=busy||Boolean(pendingOperation);
@@ -252,11 +268,8 @@ export function WorkbenchApp() {
           <div className="content-column">
             <section className="detail-card"><div className="card-head"><h2>执行过程</h2><span className="chip">{detail?.latestRun.status??'读取中'}</span></div>
               <p className="muted">真实执行状态来自服务端。{eventState}。不显示模型推测的进度。</p>
-              <div className="steps">
-                {['准备代码副本','加载原生 Agent / Skill','执行 Code Review','采集五章报告'].map((name,index)=>
-                  <div className="step" key={name}><span className="step-index">{index+1}</span><span>{name}</span>
-                    <small>以服务端事件为准</small></div>)}
-              </div>
+              <ol className="steps">{progress.map(entry=><li className="step" key={entry.seq}>
+                <small>#{entry.seq}</small> {entry.text}</li>)}</ol>
               {detail?.latestRun.status==='STOP_REQUESTED'&&<p className="notice">正在停止；等待原生中断与最终状态核验。</p>}
               {detail&&['FAILED','STOPPED'].includes(detail.latestRun.status)&&<button disabled={mutationBusy||!ready} onClick={retry}>重试本轮</button>}
               {active&&<button className="secondary danger" disabled={mutationBusy||detail?.latestRun.status==='STOP_REQUESTED'} onClick={stop}>停止本轮执行</button>}
@@ -270,7 +283,10 @@ export function WorkbenchApp() {
                   <button className="secondary" disabled={mutationBusy||active} onClick={recheck}>重新复查固定版本</button>
                   <button onClick={()=>navigator.clipboard.writeText(artifact.markdown)}>复制 Markdown</button>
                 <a href={'/api/v1/artifacts/'+encodeURIComponent(artifact.meta.id)+'/download'}>下载报告</a></div>
-                <pre className="report-text">{artifact.markdown}</pre>
+                <article className="report-text"><Markdown skipHtml
+                  disallowedElements={['img']} urlTransform={url=>/^https?:\/\//i.test(url)?url:''}
+                  components={{a:({href,children})=>href?<a href={href} rel="noreferrer noopener" target="_blank">{children}</a>:<>{children}</>}}>
+                  {artifact.markdown}</Markdown></article>
                 <button className="subtle" onClick={()=>setQuote(window.getSelection()?.toString().slice(0,4000)??'')}>引用所选文本追问</button>
                 {quote&&<blockquote className="quote">{quote}</blockquote>}</>
                :<p className="muted">未收到本轮经过验证并归档的真实 Markdown 报告。</p>}
@@ -280,7 +296,7 @@ export function WorkbenchApp() {
                 <strong>{m.role==='USER'?'你':'Codea Reviewer'}</strong><p>{m.text}</p></div>)}
                 {!messages.length&&<p className="muted">暂无可显示的原生消息。</p>}</div>
               <textarea rows={3} maxLength={8000} placeholder={active?'本轮执行中；暂不可并发发送':'基于固定代码快照继续追问'}
-                value={draft} onChange={e=>setDraft(e.target.value)}/>
+                value={draft} onChange={e=>{setDraft(e.target.value);sessionStorage.setItem('harness.draft.'+selected,e.target.value);}}/>
               <div className="form-actions"><small>追问沿用原 Session，不改变 Git 范围。</small><button className="primary"
                 disabled={mutationBusy||active||!draft.trim()||!detail} onClick={discuss}>发送追问</button></div>
             </section>

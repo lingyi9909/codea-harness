@@ -3,7 +3,7 @@ import { dispatchControl, syncInteractions } from './native-controls.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { SessionBinding } from '../../../../packages/contracts/src/domain.ts';
-import type { NativeObservation } from '../../../../packages/contracts/src/events.ts';
+import type { NativeEnvelope,NativeObservation } from '../../../../packages/contracts/src/events.ts';
 import type { OpenCodeAdapter } from '../../../../packages/contracts/src/ports.ts';
 import { withTransaction, type Tx } from '../../../../packages/storage/src/db.ts';
 import { appendEvent } from '../../../../packages/storage/src/events.ts';
@@ -39,16 +39,23 @@ async function persistMessage(tx: Tx, c: Context, m: Extract<NativeObservation,{
   const [rows] = await tx.execute<RowDataPacket[]>(
     'SELECT id,run_id,role,content,status FROM wh_messages WHERE task_id=? AND native_message_id=? FOR UPDATE',
     [c.lease.taskId,m.nativeMessageId]);
+  let id:string;
   if (rows.length) {
     const row = rows[0];
-    if (row.run_id!==c.lease.runId || row.role!=='ASSISTANT' || row.content!==m.text || row.status!==m.status)
+    if (row.run_id!==c.lease.runId || row.role!=='ASSISTANT')
       throw new Error('NATIVE_MESSAGE_CONFLICT');
-    return;
-  }
-  const id = randomUUID();
-  await tx.execute("INSERT INTO wh_messages(id,task_id,run_id,native_message_id,role,content,status,"+
+    if(row.status!=='STREAMING'){
+      if(row.content!==m.text || row.status!==m.status)throw new Error('NATIVE_MESSAGE_CONFLICT');
+      return;
+    }
+    id=String(row.id);
+    await tx.execute('UPDATE wh_messages SET content=?,status=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?',[m.text,m.status,id]);
+  }else{
+    id=randomUUID();
+    await tx.execute("INSERT INTO wh_messages(id,task_id,run_id,native_message_id,role,content,status,"+
     "created_at,updated_at) VALUES (?,?,?,?,'ASSISTANT',?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))",
     [id,c.lease.taskId,c.lease.runId,m.nativeMessageId,m.text,m.status]);
+  }
   await appendEvent(tx,{taskId:c.lease.taskId,runId:c.lease.runId,type:'message.completed',
     data:{messageId:id,status:m.status}});
 }
@@ -87,7 +94,7 @@ async function finish(c: Context, terminal: Terminal, cursor?:string) {
     coverage:report.coverage,modelTerminated:true,pendingInputs:0,pendingInteractions:0,externalMutation:false});
 }
 
-async function* monitoredFrames(c:Context, start:string|undefined, signal:AbortSignal) {
+async function* monitoredFrames(c:Context, start:string|undefined, signal:AbortSignal,flushAt:()=>number) {
   const cancel=new AbortController();
   const combined=AbortSignal.any([signal,cancel.signal]);
   const iterator=c.adapter.subscribe(c.binding,start,combined)[Symbol.asyncIterator]();
@@ -110,7 +117,8 @@ async function* monitoredFrames(c:Context, start:string|undefined, signal:AbortS
           }
           nextPoll=Date.now()+1000;
         }
-        if(!wake.aborted) await delay(Math.max(1,nextPoll-Date.now()),undefined,{signal:wake})
+        if(flushAt()<=Date.now())yield null;
+        if(!wake.aborted) await delay(Math.max(1,Math.min(nextPoll,flushAt())-Date.now()),undefined,{signal:wake})
           .catch(error=>{if(!wake.aborted)throw error;});
       }while(!wake.aborted);
       combined.throwIfAborted();
@@ -148,9 +156,28 @@ async function collectConnection(c: Context, signal: AbortSignal) {
       JSON.stringify([runId,'live-gap']));
     return undefined;
   });
-  for await (const frame of monitoredFrames(c,start,signal)) {
+  let batch:NativeEnvelope[]=[];
+  let bytes=0,deadline=Infinity;
+  const flush=async()=>{
+    if(batch.length)await persistDeltas(c,batch);
+    batch=[];bytes=0;deadline=Infinity;
+  };
+  for await (const frame of monitoredFrames(c,start,signal,()=>deadline)) {
+    if(!frame){await flush();continue;}
     if (frame.taskId!==taskId || frame.runId!==runId) throw new Error('EVENT_SCOPE_CHANGED');
     const cursor = c.durable ? nativeCursor(frame.cursor) : undefined;
+    const ob=frame.observation;
+    if(ob?.kind==='delta' && ob.inputId===c.inputId){
+      if(typeof ob.text!=='string'||!ob.text||Buffer.byteLength(ob.text)>16384)throw new Error('NATIVE_DELTA_INVALID');
+      const size=Buffer.byteLength(JSON.stringify(ob.text));
+      if(batch.length && (size+bytes>4096 || batch[0].observation?.kind!=='delta' ||
+        batch[0].observation.nativeMessageId!==ob.nativeMessageId))await flush();
+      if(!batch.length)deadline=Date.now()+100;
+      batch.push(frame);bytes+=size;
+      if(bytes>=4096||Date.now()>=deadline)await flush();
+      continue;
+    }
+    await flush();
     const terminal = await withTransaction(c.pool,async tx=>{
       const row = await checkpoint(tx,c);
       if (cursor && row.native_log_seq!==null && BigInt(cursor)<=BigInt(nativeCursor(row.native_log_seq)))
@@ -179,4 +206,62 @@ async function persistTool(tx: Tx,c: Context,ob: Extract<NativeObservation,{kind
   else if (ob.phase==='completed' && ob.outcome && ['SUCCEEDED','FAILED','CANCELLED'].includes(ob.outcome))
     await appendEvent(tx,{...scope,type:'tool.completed',data:{...data,outcome:ob.outcome}},key);
   else throw new Error('NATIVE_TOOL_OUTCOME_INVALID');
+}
+
+
+async function persistDeltas(c:Context,batch:NativeEnvelope[]){
+  const {taskId,runId}=c.lease;
+  await withTransaction(c.pool,async tx=>{
+    const binding=await checkpoint(tx,c);
+    let cursor:string|null=binding.native_log_seq;
+    const deltas:Array<Extract<NativeObservation,{kind:'delta'}>>=[];
+    for(const frame of batch){
+      if(c.durable){
+        const next=nativeCursor(frame.cursor);
+        if(cursor!==null && BigInt(next)<=BigInt(cursor))continue;
+        cursor=next;
+      }
+      if(frame.observation?.kind==='delta')deltas.push(frame.observation);
+    }
+    if(!deltas.length)return;
+    const key=deltas[0].nativeMessageId;
+    if(!/^[!-~]{1,128}$/.test(key))throw new Error('NATIVE_MESSAGE_INVALID');
+    const [rows]=await tx.execute<RowDataPacket[]>('SELECT id,run_id,status,role,content FROM wh_messages WHERE task_id=? AND native_message_id=? FOR UPDATE',[taskId,key]);
+    const row=rows[0];
+    if(row && (row.run_id!==runId || row.role!=='ASSISTANT'))throw new Error('NATIVE_MESSAGE_CONFLICT');
+    if(!row||row.status==='STREAMING'){
+      const original=row?String(row.content):'';
+      const points=Array.from(original);
+      const offset=points.length;
+      for(const d of deltas){
+        if(!/^(0|[1-9][0-9]{0,7})$/.test(d.offset)||Number(d.offset)>points.length)throw new Error('NATIVE_DELTA_GAP');
+        let i=Number(d.offset);
+        for(const char of d.text){
+          if(i===points.length)points.push(char);
+          else if(points[i]!==char)throw new Error('NATIVE_DELTA_CONFLICT');
+          i++;
+        }
+      }
+      const text=points.slice(offset).join('');
+      if(text){
+        if(Buffer.byteLength(original)+Buffer.byteLength(text)>2_000_000)throw new Error('NATIVE_MESSAGE_INVALID');
+        const id=row?String(row.id):randomUUID();
+        if(row)await tx.execute('UPDATE wh_messages SET content=CONCAT(content,?),updated_at=UTC_TIMESTAMP(3) WHERE id=?',[text,id]);
+        else await tx.execute("INSERT INTO wh_messages(id,task_id,run_id,native_message_id,role,content,status,created_at,updated_at) "+
+          "VALUES (?,?,?,?,'ASSISTANT',?,'STREAMING',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))",[id,taskId,runId,key,text]);
+        let chunk='',size=0,position=offset;
+        const emit=async()=>{
+          await appendEvent(tx,{taskId,runId,type:'message.delta',data:{messageId:id,offset:String(position),text:chunk}});
+          position+=Array.from(chunk).length;chunk='';size=0;
+        };
+        for(const char of text){
+          const n=Buffer.byteLength(JSON.stringify(char))-2;
+          if(size+n>4096)await emit();
+          chunk+=char;size+=n;
+        }
+        if(chunk)await emit();
+      }
+    }
+    if(c.durable)await tx.execute('UPDATE wh_session_bindings SET native_log_seq=?,updated_at=UTC_TIMESTAMP(3) WHERE task_id=?',[cursor,taskId]);
+  });
 }

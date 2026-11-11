@@ -16,6 +16,7 @@ export type Continuity = 'COMPLETE' | 'GAP' | 'UNKNOWN';
 export type NativeObservation = { inputId: string } & (
   | { kind: 'tool'; phase: 'started' | 'completed'; callId: string; tool: string;
       outcome?: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' }
+  | { kind: 'delta'; nativeMessageId:string; offset:string; text:string }
   | { kind: 'message'; nativeMessageId: string; text: string; status: 'COMPLETE' | 'INTERRUPTED' }
   | { kind: 'terminal'; outcome: 'SUCCEEDED' | 'FAILED' | 'STOPPED';
       report?: { path: string; writeMessageId: string; coverage: 'FULL' | 'PARTIAL' } }

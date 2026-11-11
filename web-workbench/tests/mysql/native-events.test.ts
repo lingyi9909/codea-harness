@@ -27,6 +27,8 @@ it('MySQL 8.4 with a scripted native peer: replay, control delivery and terminal
   const types:NativeObservation[]=[
     {inputId:'older-input',kind:'message',status:'COMPLETE',nativeMessageId:'old',text:'old'},
     {inputId,kind:'tool',phase:'started',callId:'c1',tool:'read'},
+    {inputId,kind:'delta',nativeMessageId:'m1',offset:'0',text:'临🌱'},
+    {inputId,kind:'delta',nativeMessageId:'m1',offset:'2',text:'时'},
     {inputId,kind:'message',status:'COMPLETE',nativeMessageId:'m1',text:'public reply'},
     {inputId,kind:'terminal',outcome:'SUCCEEDED'}];
   const unexpected=async():Promise<never>=>{throw new Error('UNEXPECTED_NATIVE_CALL');};
@@ -35,7 +37,7 @@ it('MySQL 8.4 with a scripted native peer: replay, control delivery and terminal
     discuss:unexpected,readMessages:unexpected,
     async *subscribe(_binding,cursor){
       starts.push(String(cursor));
-      const indexes=starts.length===1?[0,1,2]:[2,3];
+      const indexes=starts.length===1?[0,1,2,3,4]:[4,5];
       for(const index of indexes){
         const envelope:NativeEnvelope={taskId,runId,type:'fixture',data:{},cursor:String(index+1),
           observation:types[index]};
@@ -77,13 +79,18 @@ it('MySQL 8.4 with a scripted native peer: replay, control delivery and terminal
     await dispatchControl(ctx);await dispatchControl(ctx);
     assert.equal(answers,1);assert.equal(interrupts,1);
     await collectNativeEvents(ctx,AbortSignal.timeout(15000));
-    assert.deepEqual(starts,['0','3']);
+    assert.deepEqual(starts,['0','5']);
     const [states]=await pool.execute<RowDataPacket[]>('SELECT status FROM wh_runs WHERE id=?',[runId]);
     assert.equal(states[0].status,'SUCCEEDED');
     const [messages]=await pool.execute<RowDataPacket[]>('SELECT content FROM wh_messages WHERE task_id=?',[taskId]);
     assert.deepEqual(messages.map(r=>r.content),['public reply']);
     const events=await readTaskEvents(pool,taskId,'0');
-    assert.equal(events.filter(e=>e.type==='message.completed').length,1);
+    const delta=events.filter(e=>e.type==='message.delta');
+    assert.equal(delta.map(e=>e.data.text).join(''),'临🌱时');
+    assert.equal(delta[0].data.offset,'0');
+    const completed=events.filter(e=>e.type==='message.completed');
+    assert.equal(completed.length,1);
+    assert.equal(completed[0].data.messageId,delta[0].data.messageId);
     assert.equal(events.filter(e=>e.type==='tool.started').length,1);
     assert.deepEqual(events.map(e=>e.seq),events.map((_,i)=>String(i+1)));
     const [ops]=await pool.execute<RowDataPacket[]>('SELECT operation_key,status FROM wh_operations WHERE run_id=?',[runId]);
