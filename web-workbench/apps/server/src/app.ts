@@ -1,3 +1,4 @@
+import { registerChat } from './modules/chat/routes.ts';
 import Fastify from 'fastify';
 import serveStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
@@ -20,7 +21,7 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{pool:Pool;auth:LocalAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{pool?:Pool;auth:LocalAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -29,7 +30,7 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth;native?:Omit<Sche
   const capability={ready:enabled,capabilities};
   const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
   if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false});
-  if(opts.native && enabled){
+  if(opts.native && opts.pool && enabled){
     const stop=new AbortController();
     const config={...opts.native,pool:opts.pool,signal:stop.signal};
     let worker:Promise<void>|undefined;
@@ -45,7 +46,8 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth;native?:Omit<Sche
   }
   const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>>=>({
     owner,csrfToken:csrf,
-    scenarios:[{id:'code-review',name:'Codea Review',enabled:capability.ready,
+    scenarios:[{id:'direct-chat',name:'直接对话',enabled:true,reason:null},{id:'log-inspection',name:'日志排查',enabled:true,reason:null},
+      {id:'data-analysis',name:'数据分析',enabled:true,reason:null},{id:'code-review',name:'Codea Review',enabled:capability.ready,
       reason:capability.ready?null:'OpenCode native capabilities require target-environment validation'}],
     capabilities:capability.capabilities,
     limits:{maxQueued:20,maxActiveRuns:1,notesMaxLength:2000,messageMaxLength:8000,previewTTLSeconds:300},
@@ -58,7 +60,7 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth;native?:Omit<Sche
   });
   app.get('/api/v1/health',async(req,reply)=>{
     let database:'READY'|'UNAVAILABLE'='READY';
-    try{await opts.pool.query('SELECT 1');}catch{database='UNAVAILABLE';}
+    try{if(!opts.pool)throw new Error();await opts.pool.query('SELECT 1');}catch{database='UNAVAILABLE';}
     const health:DTO<'Health'>={
       status:database==='READY'&&capability.ready?'READY':database==='READY'?'DEGRADED':'UNAVAILABLE',
       database,opencode:capability.ready?'READY':'UNVERIFIED',build:'UNVERIFIED',
@@ -70,7 +72,7 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth;native?:Omit<Sche
     body:{type:'object',additionalProperties:false,required:['pairingCode'],
       properties:{pairingCode:{type:'string',minLength:1,maxLength:256}}},
   }},async(req,reply)=>{
-    const owner=await ensureLocalOwner(opts.pool);
+    const owner=opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:'Local Developer'};
     const session=opts.auth.pair(req,reply,req.body.pairingCode,owner.id);
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
@@ -79,10 +81,17 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth;native?:Omit<Sche
   });
   app.get('/api/v1/bootstrap',async(req,reply)=>{
     const session=opts.auth.session(req);
-    const owner=await ensureLocalOwner(opts.pool);
+    const owner=opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:'Local Developer'};
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
+  registerChat(app,opts.auth);
+  if(!opts.pool){
+    for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
+      opts.auth.session(req);return result({items:[],nextCursor:null});
+    });
+    return app;
+  }
   registerGitRoutes(app,{pool:opts.pool,auth:opts.auth,
     roots:(process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean),
     refKey:process.env.HARNESS_REF_KEY??''});
