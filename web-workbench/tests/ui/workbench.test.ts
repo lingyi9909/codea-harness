@@ -25,14 +25,18 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
   process.env.HARNESS_DATA_DIR=dataRoot;
   process.env.HARNESS_REF_KEY=randomUUID();process.env.HARNESS_CURSOR_KEY=randomUUID();
   const code=randomUUID(),permissionId=randomUUID(),sessionId=randomUUID();
-  let runId='',answered=false;
+  let runId='',answered=false,review=true,stopped=false,discussionCount=0,seq=0;
+  const discussionIds:string[]=[];
   const report=['评审摘要','调用链与覆盖范围','风险清单','问题明细','后续处理与评审边界'].map(s=>'## '+s+'\nFixture evidence.').join('\n');
   const adapter:OpenCodeAdapter={
     async probe(){return CAPABILITIES.map(c=>({...c,status:'SUPPORTED',evidence:'UI test peer'}));},
     async createSession(taskId,snapshot){return {taskId,serviceIdentity:'UI fixture',sessionId,locationKey:snapshot.storageKey};},
     async putContext(){},
-    async startReview(_binding,input){runId=input.runId;return {state:'ACCEPTED',inputId:runId};},
-    async discuss(){throw new Error('unexpected discussion');},
+    async startReview(_binding,input){runId=input.runId;review=true;answered=Boolean(input.recheck);return {state:'ACCEPTED',inputId:runId};},
+    async discuss(_binding,input){
+      runId=input.runId;review=false;stopped=false;discussionIds.push(input.messageId);
+      discussionCount++;return {state:'ACCEPTED',inputId:runId};
+    },
     async inspect(){return {active:!answered,pendingInputs:0,pendingInteractions:answered?0:1,externalMutation:false,acceptedInputIds:[]};},
     async readMessages(){return {items:[],nextCursor:null};},
     async listInteractions(binding){return answered?[]:[{id:permissionId,taskId:binding.taskId,runId,revision:1,kind:'PERMISSION',
@@ -40,15 +44,20 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
       nativeRequestId:'permission',allowedDecisions:['ALLOW_ONCE','DENY']}];},
     async answer(_binding,id,answer){assert.equal(id,permissionId);assert.deepEqual(answer,{kind:'PERMISSION',decision:'ALLOW_ONCE'});
       answered=true;return {state:'ACCEPTED',inputId:'reply'};},
-    async interrupt(){return {responseReceived:false};},
+    async interrupt(){stopped=true;return {responseReceived:true,interrupted:true};},
     async *subscribe(binding,_cursor,signal){
       while(!answered)await delay(25,undefined,{signal});
       const envelope={taskId:binding.taskId,runId,type:'fixture',data:{}};
-      yield {...envelope,cursor:'1',observation:{inputId:runId,kind:'message',nativeMessageId:'fixture-final',
+      if(!review){
+        if(discussionCount===1)while(!stopped)await delay(25,undefined,{signal});
+        yield {...envelope,cursor:String(++seq),observation:{inputId:runId,kind:'terminal',outcome:stopped?'STOPPED':'SUCCEEDED'}};
+        return;
+      }
+      yield {...envelope,cursor:String(++seq),observation:{inputId:runId,kind:'message',nativeMessageId:'fixture-final',
         text:'Review completed in fixture',status:'COMPLETE'}};
       await mkdir(join(binding.locationKey,'temp'),{recursive:true});
       await writeFile(join(binding.locationKey,REPORT_RELATIVE_PATH),report);
-      yield {...envelope,cursor:'2',observation:{inputId:runId,kind:'terminal',outcome:'SUCCEEDED',
+      yield {...envelope,cursor:String(++seq),observation:{inputId:runId,kind:'terminal',outcome:'SUCCEEDED',
         report:{path:REPORT_RELATIVE_PATH,coverage:'FULL',writeMessageId:'fixture-write'}}};
     },
   };
@@ -84,6 +93,19 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     await page.getByRole('button',{name:'查看固定版本源码'}).click();
     await page.getByLabel('文件与版本').selectOption({label:'HEAD · OrderController.java'});
     await expect(page.locator(".report-text").filter({hasText:"class OrderController"})).toContainText('amount');
+    await page.getByRole('button',{name:'重新复查固定版本'}).click();
+    await expect.poll(async()=>{
+      const [rows]=await pool.execute<import('mysql2/promise').RowDataPacket[]>('SELECT COUNT(*) AS n FROM wh_artifacts WHERE task_id=(SELECT task_id FROM wh_runs WHERE id=?)',[runId]);
+      return Number(rows[0].n);
+    },{timeout:15000}).toBe(2);
+    await page.getByPlaceholder('基于固定代码快照继续追问').fill('Explain the fixed revision');
+    await page.getByRole('button',{name:'发送追问'}).click();
+    await expect.poll(()=>discussionCount,{timeout:10000}).toBe(1);
+    await page.getByRole('button',{name:'停止本轮执行'}).click();
+    await page.getByRole('button',{name:'重试本轮'}).click();
+    await expect.poll(()=>discussionCount,{timeout:15000}).toBe(2);
+    await expect(page.locator('.card-head .chip').first()).toHaveText('SUCCEEDED',{timeout:15000});
+    assert.equal(discussionIds[0],discussionIds[1]);
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
   }finally{await browser.close();await app.close();await pool.end();await rm(root,{recursive:true,force:true});}

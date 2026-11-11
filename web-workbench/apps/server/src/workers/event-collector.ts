@@ -53,7 +53,7 @@ async function persistMessage(tx: Tx, c: Context, m: Extract<NativeObservation,{
     data:{messageId:id,status:m.status}});
 }
 
-async function finish(c: Context, terminal: Terminal) {
+async function finish(c: Context, terminal: Terminal, cursor?:string) {
   await syncInteractions(c);
   const state = await c.adapter.inspect(c.binding);
   if (state.active!==false || state.pendingInputs!==0 || state.pendingInteractions!==0 ||
@@ -63,6 +63,8 @@ async function finish(c: Context, terminal: Terminal) {
     const status = terminal.outcome;
     if (!['RUNNING','WAITING_INPUT','WAITING_PERMISSION','STOP_REQUESTED'].includes(run.status) ||
         !['SUCCEEDED','FAILED','STOPPED'].includes(status)) throw new Error('RUN_NOT_FINISHABLE');
+    if(cursor)await tx.execute("UPDATE wh_session_bindings SET native_log_seq=?,continuity=IF(continuity='GAP','GAP','COMPLETE'),"+
+      "updated_at=UTC_TIMESTAMP(3) WHERE task_id=?",[cursor,c.lease.taskId]);
     const archive = status==='SUCCEEDED' && run.kind!=='DISCUSS';
     if (archive && !terminal.report) throw new Error('REPORT_WRITE_EVIDENCE_MISSING');
     const next = archive?'COLLECTING':status;
@@ -89,7 +91,7 @@ async function* monitoredFrames(c:Context, start:string|undefined, signal:AbortS
   const cancel=new AbortController();
   const combined=AbortSignal.any([signal,cancel.signal]);
   const iterator=c.adapter.subscribe(c.binding,start,combined)[Symbol.asyncIterator]();
-  let nextPoll=0;
+  let nextPoll=0,nextHistory=0;
   try {
     while(!combined.aborted){
       const ready=new AbortController();
@@ -100,6 +102,12 @@ async function* monitoredFrames(c:Context, start:string|undefined, signal:AbortS
         if(Date.now()>=nextPoll){
           await syncInteractions(c);
           await dispatchControl(c);
+          if(!c.durable && Date.now()>=nextHistory && c.adapter.recoverObservations){
+            for await(const observation of c.adapter.recoverObservations(c.binding,c.inputId,combined)){
+              yield {taskId:c.lease.taskId,runId:c.lease.runId,type:'snapshot',data:{},cursor:undefined,observation};
+            }
+            nextHistory=Date.now()+5000;
+          }
           nextPoll=Date.now()+1000;
         }
         if(!wake.aborted) await delay(Math.max(1,nextPoll-Date.now()),undefined,{signal:wake})
@@ -122,7 +130,7 @@ export async function collectNativeEvents(c:Context,signal:AbortSignal){
   for(let attempt=0;;attempt++){
     try { await collectConnection(c,signal); return; }
     catch(error){
-      if(!c.durable || signal.aborted || attempt>=2 || !(error instanceof Error) ||
+      if((!c.durable&&!c.adapter.recoverObservations) || signal.aborted || attempt>=2 || !(error instanceof Error) ||
           error.message!=='NATIVE_STREAM_DISCONNECTED') throw error;
       await delay(250*(attempt+1),undefined,{signal});
     }
@@ -156,7 +164,7 @@ async function collectConnection(c: Context, signal: AbortSignal) {
       if (cursor) await tx.execute('UPDATE wh_session_bindings SET native_log_seq=?,updated_at=UTC_TIMESTAMP(3) WHERE task_id=?',
         [cursor,taskId]);
     });
-    if (terminal) { await finish(c,terminal); return; }
+    if (terminal) { await finish(c,terminal,cursor); return; }
   }
   throw new Error('NATIVE_STREAM_ENDED_BEFORE_TERMINATION');
 }

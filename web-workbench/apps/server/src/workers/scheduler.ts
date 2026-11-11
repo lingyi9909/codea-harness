@@ -31,7 +31,7 @@ const safeError=(e:unknown)=>e instanceof Error&&e.message.startsWith('OPENCODE_
 
 async function loadRun(config:SchedulerConfig,lease:Lease){
   const [rows]=await config.pool.execute<RowDataPacket[]>(
-    "SELECT t.id,t.controller,t.notes,repo.canonical_path,r.kind,r.status AS run_status,"+
+    "SELECT t.id,t.controller,t.notes,repo.canonical_path,r.kind,r.retry_of_run_id,r.status AS run_status,"+
     "s.id AS snapshot_id,s.head_oid,s.base_oid,s.merge_base_oid,s.base_ref,s.source_branch,"+
     "s.object_format,s.status AS snapshot_status,s.storage_key,s.manifest_sha256 "+
     "FROM wh_tasks t JOIN wh_scope_snapshots s ON s.task_id=t.id "+
@@ -137,9 +137,11 @@ async function continuation(config:SchedulerConfig,lease:Lease,
   let discussion:Discussion|undefined;
   if(kind==='DISCUSS'){
     const [messages]=await config.pool.execute<RowDataPacket[]>(
-      "SELECT id,content FROM wh_messages WHERE task_id=? AND run_id=? "+
-      "AND role='USER' AND status='COMPLETE' ORDER BY created_at ASC",
-      [lease.taskId,lease.runId]);
+      "WITH RECURSIVE ancestry AS (SELECT id,retry_of_run_id FROM wh_runs WHERE task_id=? AND id=? "+
+      "UNION ALL SELECT r.id,r.retry_of_run_id FROM wh_runs r JOIN ancestry a ON r.id=a.retry_of_run_id "+
+      "WHERE r.task_id=? AND r.kind='DISCUSS') SELECT m.id,m.content FROM wh_messages m JOIN ancestry a ON a.id=m.run_id "+
+      "WHERE m.task_id=? AND m.role='USER' AND m.status='COMPLETE'",
+      [lease.taskId,lease.runId,lease.taskId,lease.taskId]);
     if(messages.length!==1)throw new Error('DISCUSSION_MESSAGE_NOT_UNIQUE');
     let payload:unknown;
     try{payload=JSON.parse(String(messages[0].content)) as unknown;}
@@ -171,6 +173,8 @@ async function continuation(config:SchedulerConfig,lease:Lease,
 async function prepare(config:SchedulerConfig,lease:Lease,
   capabilities:DTO<'Capability'>[]):Promise<Prepared>{
   const {row,scope,kind}=await loadRun(config,lease);
+  if(kind==='REVIEW' && row.retry_of_run_id && row.snapshot_status==='READY')
+    return continuation(config,lease,row,scope,'RECHECK');
   return kind==='REVIEW'?
     initialReview(config,lease,capabilities,row,scope):
     continuation(config,lease,row,scope,kind);

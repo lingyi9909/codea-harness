@@ -16,6 +16,8 @@ export type AdapterOptions = {
   transport: LocalNativeTransport;
   /** Decode only public assistant text, safe tool metadata and attributable execution evidence. */
   decodeEvent?(type: string, properties: NativeRecord): NativeObservation | undefined;
+  decodeMessage?(message:NativeRecord):Extract<NativeObservation,{kind:'message'}>|undefined;
+  decodeTerminal?(state:NativeRecord):Extract<NativeObservation,{kind:'terminal'}>|undefined;
   /** T04 must independently establish clean, pinned and immutable snapshot before any mutation. */
   verifySnapshot(snapshot: Snapshot): Promise<void>;
   /** Only externally captured T01 company evidence may enable production execution. */
@@ -78,7 +80,11 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
   constructor(options: AdapterOptions) { this.options = options; }
 
   async probe(): Promise<DTO<'Capability'>[]> {
-    return evaluateCapabilities(this.options.observations).capabilities;
+    const caps=evaluateCapabilities(this.options.observations).capabilities;
+    const liveOnly=!caps.some(c=>c.name==='session.log'&&c.status==='SUPPORTED');
+    if(!this.options.decodeEvent || (liveOnly && (!this.options.decodeMessage || !this.options.decodeTerminal)))
+      return caps.map(c=>c.name==='events.read'?{...c,status:'UNKNOWN',evidence:'Pinned-build observation decoder required'}:c);
+    return caps;
   }
   private ready(): void { requireReady(evaluateCapabilities(this.options.observations)); }
   private state(binding: SessionBinding): BoundState {
@@ -247,6 +253,33 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       }),
       nextCursor: typeof next === 'string' ? next : null,
     };
+  }
+  async *recoverObservations(binding:SessionBinding,inputId:string,signal:AbortSignal):AsyncIterable<NativeObservation>{
+    const state=this.state(binding),runId=state.runId;
+    const {decodeMessage,decodeTerminal}=this.options;
+    if(!runId || !decodeMessage || !decodeTerminal)throw new Error('NATIVE_HISTORY_DECODER_REQUIRED');
+    const route={sessionID:binding.sessionId};
+    const inspection=await this.options.transport.call('state','GET',undefined,route);
+    ensure2xx(inspection.status,'NATIVE_STATE');
+    const terminal=decodeTerminal(obj(payload(inspection.body)));
+    const seen=new Set<string>();
+    let cursor:string|undefined;
+    do{
+      signal.throwIfAborted();
+      const response=await this.options.transport.call('messages','GET',undefined,route,cursor?{cursor}:{});
+      ensure2xx(response.status,'NATIVE_MESSAGES');
+      if(state.runId!==runId)throw new Error('NATIVE_EVENT_RUN_CHANGED');
+      for(const raw of list(response.body)){
+        const observation=decodeMessage(obj(raw));
+        if(observation?.inputId===inputId)yield observation;
+      }
+      const page=payload(response.body);
+      const next=Array.isArray(page)?null:obj(page).cursor;
+      if(next==null)break;
+      if(typeof next!=='string'||!next||seen.has(next))throw new Error('NATIVE_MESSAGE_CURSOR_INVALID');
+      seen.add(next);cursor=next;
+    }while(true);
+    if(terminal?.inputId===inputId)yield terminal;
   }
   async *subscribe(binding: SessionBinding, cursor?: string, signal?: AbortSignal): AsyncIterable<NativeEnvelope> {
     const state = this.state(binding);

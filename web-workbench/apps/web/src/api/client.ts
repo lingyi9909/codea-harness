@@ -74,6 +74,8 @@ export class HarnessApi {
     return this.request<Schema<'Operation'>>('/interactions/'+encodeURIComponent(interactionId)+'/answers',{
       method:'POST',body:JSON.stringify({revision,answer,operationId})});
   }
+  retry(runId:string,operationId:string){return this.request<Schema<'Operation'>>('/runs/'+encodeURIComponent(runId)+'/retries',
+    {method:'POST',body:JSON.stringify({operationId})});}
   stop(runId:string,operationId:string) {
     return this.request<Schema<'Operation'>>('/runs/'+encodeURIComponent(runId)+'/stop',{
       method:'POST',body:JSON.stringify({operationId})});

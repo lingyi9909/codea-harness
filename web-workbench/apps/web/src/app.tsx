@@ -165,6 +165,11 @@ export function WorkbenchApp() {
     await api.stop(detail.latestRun.id,id);await loadDetail(selected);
     setPendingOperation(null);
   });
+  const retry=()=>act(async()=>{
+    if(!detail)return;
+    const id=operationId();setPendingOperation(id);
+    await api.retry(detail.latestRun.id,id);await loadDetail(selected);setPendingOperation(null);
+  });
   const recheck=()=>act(async()=>{
     if(!selected)return;
     const id=operationId();setPendingOperation(id);
@@ -252,6 +257,7 @@ export function WorkbenchApp() {
                     <small>以服务端事件为准</small></div>)}
               </div>
               {detail?.latestRun.status==='STOP_REQUESTED'&&<p className="notice">正在停止；等待原生中断与最终状态核验。</p>}
+              {detail&&['FAILED','STOPPED'].includes(detail.latestRun.status)&&<button disabled={mutationBusy||!ready} onClick={retry}>重试本轮</button>}
               {active&&<button className="secondary danger" disabled={mutationBusy||detail?.latestRun.status==='STOP_REQUESTED'} onClick={stop}>停止本轮执行</button>}
             </section>
             {detail?.snapshotStatus==='READY'&&<SourceView key={selected} taskId={selected}/>}
