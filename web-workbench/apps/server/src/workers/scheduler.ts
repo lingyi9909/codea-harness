@@ -1,4 +1,5 @@
 import { join, resolve } from 'node:path';
+import { lstat, realpath, rm } from 'node:fs/promises';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import type { DTO, SessionBinding, Snapshot } from '../../../../packages/contracts/src/domain.ts';
 import type { OpenCodeAdapter } from '../../../../packages/contracts/src/ports.ts';
@@ -8,66 +9,70 @@ import { assertFencedLease, beginNativeSend, claimNext, markNativeAccepted,
   quarantineUnknown, renewLease } from '../../../../packages/storage/src/slots.ts';
 import type { Lease } from '../../../../packages/storage/src/slots.ts';
 import { prepareSnapshot } from '../../../../packages/git-provider/src/snapshot.ts';
-import { trustedRepository } from '../../../../packages/git-provider/src/repository.ts';
+import { verifiedManifest } from '../../../../packages/git-provider/src/files.ts';
+import { git, trustedRepository } from '../../../../packages/git-provider/src/repository.ts';
 import { inspectFrozenSnapshot, originalRepositoryFingerprint } from
   '../../../../packages/opencode-adapter/src/git-guard.ts';
+import { REPORT_RELATIVE_PATH } from '../../../../packages/opencode-adapter/src/mapping.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export interface SchedulerConfig {
-  pool: Pool;
-  workerId: string;
-  dataRoot: string;
-  repositoryRoots: string[];
-  nativeVersion: string; // must come from verified target build, not guessed
-  adapter: OpenCodeAdapter;
+export interface SchedulerConfig{
+  pool:Pool;workerId:string;dataRoot:string;repositoryRoots:string[];
+  nativeVersion:string;adapter:OpenCodeAdapter;
 }
-function requireCapabilities(caps:DTO<'Capability'>[]):boolean{
-  // The production adapter already fails closed; scheduler must not claim the DB
-  // execution slot before checking the verified readiness gate.
-  return caps.length>0 && caps.every(c=>!c.required||c.status==='SUPPORTED');
-}
-function safeDetail(e:unknown):string{
-  // Never persist native response bodies, paths, credentials or model prompts.
-  if(e instanceof Error&&e.message.startsWith('OPENCODE_CAPABILITY_BLOCKED'))return 'CAPABILITY_UNVERIFIED';
-  return 'PREPARE_OR_DISPATCH_UNCERTAIN';
-}
-async function prepareAndPersist(config:SchedulerConfig,lease:Lease,capabilities:DTO<'Capability'>[]):Promise<{
-  binding:SessionBinding; controller?:string;
-}>{
+type Discussion={messageId:string;text:string;quote?:string;reportArtifactId?:string};
+type Prepared={binding:SessionBinding;kind:'REVIEW'|'RECHECK'|'DISCUSS';
+  controller?:string;discussion?:Discussion};
+const requiredCapabilities=(caps:DTO<'Capability'>[])=>caps.length>0&&
+  caps.every(c=>!c.required||c.status==='SUPPORTED');
+const safeError=(e:unknown)=>e instanceof Error&&e.message.startsWith('OPENCODE_CAPABILITY_BLOCKED')?
+  'CAPABILITY_UNVERIFIED':'PREPARE_OR_DISPATCH_UNCERTAIN';
+
+async function loadRun(config:SchedulerConfig,lease:Lease){
   const [rows]=await config.pool.execute<RowDataPacket[]>(
-    "SELECT t.id,t.controller,t.notes,repo.canonical_path,"+
-    "s.id AS snapshot_id,s.head_oid,s.base_oid,s.merge_base_oid,s.base_ref,s.source_branch,s.object_format,s.status "+
+    "SELECT t.id,t.controller,t.notes,repo.canonical_path,r.kind,r.status AS run_status,"+
+    "s.id AS snapshot_id,s.head_oid,s.base_oid,s.merge_base_oid,s.base_ref,s.source_branch,"+
+    "s.object_format,s.status AS snapshot_status,s.storage_key,s.manifest_sha256 "+
     "FROM wh_tasks t JOIN wh_scope_snapshots s ON s.task_id=t.id "+
     "JOIN wh_repositories repo ON repo.id=t.repository_id "+
     "JOIN wh_runs r ON r.task_id=t.id "+
     "WHERE t.id=? AND r.id=?",
     [lease.taskId,lease.runId]);
-  if(rows.length!==1||rows[0].status!=='PENDING')throw new Error('SNAPSHOT_NOT_PENDING');
-  const row=rows[0],root=await trustedRepository(String(row.canonical_path),config.repositoryRoots);
+  if(rows.length!==1||rows[0].run_status!=='PREPARING')
+    throw new Error('RUN_NOT_PREPARING');
+  const row=rows[0];
+  if(!['REVIEW','DISCUSS','RECHECK'].includes(row.kind))
+    throw new Error('UNSUPPORTED_RUN_KIND');
   const scope:DTO<'Scope'>={
     headOID:String(row.head_oid),baseOID:String(row.base_oid),
     mergeBaseOID:String(row.merge_base_oid),baseRef:String(row.base_ref),
     sourceBranch:row.source_branch===null?null:String(row.source_branch),
     objectFormat:row.object_format,
   };
-  const fingerprintBefore=originalRepositoryFingerprint(root);
+  return{row,scope,kind:row.kind as Prepared['kind']};
+}
+async function initialReview(config:SchedulerConfig,lease:Lease,
+  capabilities:DTO<'Capability'>[],row:RowDataPacket,scope:DTO<'Scope'>):Promise<Prepared>{
+  if(row.snapshot_status!=='PENDING')throw new Error('SNAPSHOT_NOT_PENDING');
+  const root=await trustedRepository(String(row.canonical_path),config.repositoryRoots);
+  const before=originalRepositoryFingerprint(root);
   const built=await prepareSnapshot({
     taskId:lease.taskId,sourceRoot:root,dataRoot:config.dataRoot,scope,
   });
-  const fingerprintAfter=originalRepositoryFingerprint(root);
-  if(fingerprintBefore!==fingerprintAfter)throw new Error('SOURCE_MUTATED_DURING_SNAPSHOT');
+  const after=originalRepositoryFingerprint(root);
+  if(before!==after)throw new Error('SOURCE_MUTATED_DURING_SNAPSHOT');
   const snapshotPath=resolve(config.dataRoot,...built.snapshot.storageKey.split('/'));
   inspectFrozenSnapshot({sourceRoot:root,snapshotRoot:snapshotPath,
     expectedHeadOID:scope.headOID,expectedMergeBaseOID:scope.mergeBaseOID});
   await withTransaction(config.pool,async tx=>{
     await assertFencedLease(tx,lease);
-    const [result]=await tx.execute<ResultSetHeader>(
+    const [res]=await tx.execute<ResultSetHeader>(
       "UPDATE wh_scope_snapshots SET manifest=?,manifest_sha256=?,storage_key=?,"+
       "status='READY',ready_at=UTC_TIMESTAMP(3) "+
       "WHERE task_id=? AND status='PENDING' AND head_oid=? AND merge_base_oid=?",
       [JSON.stringify(built.manifest),built.snapshot.manifestHash,built.snapshot.storageKey,
         lease.taskId,scope.headOID,scope.mergeBaseOID]);
-    if(result.affectedRows!==1)throw new Error('SNAPSHOT_READY_CONFLICT');
+    if(res.affectedRows!==1)throw new Error('SNAPSHOT_READY_CONFLICT');
     const [run]=await tx.execute<RowDataPacket[]>(
       'SELECT status,dispatch_state FROM wh_runs WHERE id=? AND task_id=? FOR UPDATE',
       [lease.runId,lease.taskId]);
@@ -76,9 +81,8 @@ async function prepareAndPersist(config:SchedulerConfig,lease:Lease,capabilities
     await appendEvent(tx,{taskId:lease.taskId,runId:lease.runId,type:'scope.ready',
       data:{snapshotId:String(row.snapshot_id),manifestHash:built.snapshot.manifestHash}});
   });
-  // Adapter is explicitly bound to the absolute verified repository directory.
-  const adapterSnapshot:Snapshot={...built.snapshot,storageKey:snapshotPath};
-  const binding=await config.adapter.createSession(lease.taskId,adapterSnapshot);
+  const snapshot:Snapshot={...built.snapshot,storageKey:snapshotPath};
+  const binding=await config.adapter.createSession(lease.taskId,snapshot);
   await withTransaction(config.pool,async tx=>{
     await assertFencedLease(tx,lease);
     const [run]=await tx.execute<RowDataPacket[]>(
@@ -93,15 +97,99 @@ async function prepareAndPersist(config:SchedulerConfig,lease:Lease,capabilities
       [lease.taskId,binding.serviceIdentity,binding.sessionId,binding.locationKey,
         config.nativeVersion,JSON.stringify(capabilities)]);
   });
-  // T05 rejects notes until the pinned build proves instruction entries exist.
   if(row.notes)await config.adapter.putContext(binding,{scope,notes:String(row.notes)});
-  return {binding,...(row.controller?{controller:String(row.controller)}:{})};
+  return{binding,kind:'REVIEW',...(row.controller?{controller:String(row.controller)}:{})};
+}
+async function continuation(config:SchedulerConfig,lease:Lease,
+  row:RowDataPacket,scope:DTO<'Scope'>,kind:'DISCUSS'|'RECHECK'):Promise<Prepared>{
+  if(row.snapshot_status!=='READY')throw new Error('CONTINUATION_SNAPSHOT_NOT_READY');
+  const snapshot:Snapshot={taskId:lease.taskId,scope,
+    storageKey:String(row.storage_key),manifestHash:String(row.manifest_sha256)};
+  const {root}=await verifiedManifest(config.dataRoot,snapshot);
+  // Check committed tree identity even if the old model left an expected report file.
+  const [head,base,tracked,untracked]=await Promise.all([
+    git(root,['rev-parse','--verify','HEAD']),
+    git(root,['rev-parse','--verify','refs/heads/harness-review-base']),
+    git(root,['diff','--name-only','HEAD','--']),
+    git(root,['ls-files','--others','--exclude-standard']),
+  ]);
+  if(head!==scope.headOID||base!==scope.mergeBaseOID||tracked.trim()||
+    untracked.split(/\r?\n/).filter(Boolean).some(path=>path!==REPORT_RELATIVE_PATH))
+    throw new Error('CONTINUATION_SNAPSHOT_MUTATED');
+  const [rows]=await config.pool.execute<RowDataPacket[]>(
+    'SELECT task_id,service_identity,native_session_id,location_key,native_version '+
+    'FROM wh_session_bindings WHERE task_id=?',[lease.taskId]);
+  if(rows.length!==1||rows[0].native_version!==config.nativeVersion)
+    throw new Error('NATIVE_SESSION_UNVERIFIED');
+  const native=rows[0];
+  const location=await realpath(String(native.location_key));
+  if(location!==root)throw new Error('NATIVE_SESSION_LOCATION_CHANGED');
+  const binding:SessionBinding={taskId:lease.taskId,
+    serviceIdentity:String(native.service_identity),
+    sessionId:String(native.native_session_id),locationKey:location};
+  // An in-memory binding lost on restart is NOT silently recreated; only a
+  // verified T13 native reattachment protocol may allow it.
+  const state=await config.adapter.inspect(binding);
+  if(state.active!==false||state.pendingInputs!==0||state.pendingInteractions!==0||
+    state.externalMutation||state.acceptedInputIds.length>0)
+    throw new Error('NATIVE_SESSION_NOT_PROVEN_IDLE');
+  let discussion:Discussion|undefined;
+  if(kind==='DISCUSS'){
+    const [messages]=await config.pool.execute<RowDataPacket[]>(
+      "SELECT id,content FROM wh_messages WHERE task_id=? AND run_id=? "+
+      "AND role='USER' AND status='COMPLETE' ORDER BY created_at ASC",
+      [lease.taskId,lease.runId]);
+    if(messages.length!==1)throw new Error('DISCUSSION_MESSAGE_NOT_UNIQUE');
+    let payload:unknown;
+    try{payload=JSON.parse(String(messages[0].content)) as unknown;}
+    catch{throw new Error('DISCUSSION_PAYLOAD_INVALID');}
+    if(!payload||typeof payload!=='object')throw new Error('DISCUSSION_PAYLOAD_INVALID');
+    const value=payload as Record<string,unknown>;
+    if(typeof value.text!=='string'||!value.text.trim()||value.text.length>8000||
+      (value.quote!==undefined&&typeof value.quote!=='string'))
+      throw new Error('DISCUSSION_PAYLOAD_INVALID');
+    discussion={messageId:String(messages[0].id),text:value.text,
+      ...(value.quote?{quote:value.quote}:{}),
+      ...(typeof value.reportArtifactId==='string'?{reportArtifactId:value.reportArtifactId}:{})};
+  }else{
+    // The previous report is already archived; an old working-tree report
+    // must never become the current recheck's new write evidence.
+    const path=join(root,...REPORT_RELATIVE_PATH.split('/'));
+    try{
+      const info=await lstat(path);
+      if(!info.isFile()||info.isSymbolicLink())throw new Error('STALE_REPORT_UNSAFE');
+      await rm(path);
+    }catch(e){
+      if(!(e instanceof Error&&'code' in e&&e.code==='ENOENT'))throw e;
+    }
+  }
+  await withTransaction(config.pool,async tx=>{await assertFencedLease(tx,lease);});
+  return{binding,kind,...(row.controller?{controller:String(row.controller)}:{}),
+    ...(discussion?{discussion}:{})};
+}
+async function prepare(config:SchedulerConfig,lease:Lease,
+  capabilities:DTO<'Capability'>[]):Promise<Prepared>{
+  const {row,scope,kind}=await loadRun(config,lease);
+  return kind==='REVIEW'?
+    initialReview(config,lease,capabilities,row,scope):
+    continuation(config,lease,row,scope,kind);
+}
+/** Pure selection: a continuation MUST NOT silently become a fresh REVIEW. */
+export async function invokePreparedNative(adapter:OpenCodeAdapter,prepared:Prepared,
+  runId:string):Promise<Awaited<ReturnType<OpenCodeAdapter['startReview']>>>{
+  if(prepared.kind==='DISCUSS'){
+    if(!prepared.discussion)throw new Error('DISCUSSION_INPUT_MISSING');
+    return adapter.discuss(prepared.binding,{runId,...prepared.discussion});
+  }
+  return adapter.startReview(prepared.binding,{
+    runId,...(prepared.controller?{controller:prepared.controller}:{}),
+    ...(prepared.kind==='RECHECK'?{recheck:true}:{}),
+  });
 }
 export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
-  if(!config.nativeVersion.trim()||config.nativeVersion==='UNVERIFIED')
-    return null;
+  if(!config.nativeVersion.trim()||config.nativeVersion==='UNVERIFIED')return null;
   const capabilities=await config.adapter.probe();
-  if(!requireCapabilities(capabilities))return null;
+  if(!requiredCapabilities(capabilities))return null;
   const lease=await claimNext(config.pool,config.workerId);
   if(!lease)return null;
   const abort=new AbortController();
@@ -110,35 +198,27 @@ export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
     while(!abort.signal.aborted){
       try{await delay(10000,undefined,{signal:abort.signal});}catch{break;}
       if(abort.signal.aborted)break;
-      try{await renewLease(config.pool,lease);}
-      catch{leaseLost=true;break;}
+      try{await renewLease(config.pool,lease);}catch{leaseLost=true;break;}
     }
   })();
   try{
-    const prepared=await prepareAndPersist(config,lease,capabilities);
+    const prepared=await prepare(config,lease,capabilities);
     if(leaseLost)throw new Error('LEASE_RENEWAL_LOST');
     await renewLease(config.pool,lease);
     await beginNativeSend(config.pool,lease);
     let acceptance:Awaited<ReturnType<OpenCodeAdapter['startReview']>>;
-    try {
-      acceptance=await config.adapter.startReview(prepared.binding,{
-        runId:lease.runId,controller:prepared.controller,
-      });
-    }catch{
-      acceptance={state:'UNKNOWN',reason:'NATIVE_TRANSPORT_UNCERTAIN'};
-    }
-    if(acceptance.state==='ACCEPTED'&&acceptance.inputId){
+    try{acceptance=await invokePreparedNative(config.adapter,prepared,lease.runId);}
+    catch{acceptance={state:'UNKNOWN',reason:'NATIVE_TRANSPORT_OR_MAPPING_UNCERTAIN'};}
+    if(acceptance.state==='ACCEPTED'&&acceptance.inputId)
       await markNativeAccepted(config.pool,lease,acceptance.inputId);
-    }else{
+    else
       await quarantineUnknown(config.pool,lease,'NATIVE_ACCEPTANCE_UNKNOWN');
-    }
   }catch(e){
-    // Do not clear an execution slot or reissue native commands on errors.
-    try {await quarantineUnknown(config.pool,lease,safeDetail(e));}
-    catch { /* On DB/lease loss, occupied slot must be reconciled on restart. */ }
+    // Any possible native execution or stale lease is reconciled, never replayed.
+    try{await quarantineUnknown(config.pool,lease,safeError(e));}
+    catch{/* Lease/DB loss keeps occupied slot for explicit recovery. */}
   }finally{
-    abort.abort();
-    await heartbeat;
+    abort.abort();await heartbeat;
   }
   return lease.runId;
 }
