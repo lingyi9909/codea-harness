@@ -6,8 +6,8 @@ export interface OpenCodeAdapter {
   probe(): Promise<DTO<'Capability'>[]>;
   createSession(taskId: UUID, snapshot: Snapshot): Promise<SessionBinding>;
   putContext(binding: SessionBinding, context: { scope: DTO<'Scope'>; notes?: string }): Promise<void>;
-  startReview(binding: SessionBinding, input: { runId: UUID; controller?: string }): Promise<NativeAcceptance>;
-  discuss(binding: SessionBinding, input: { runId: UUID; messageId: UUID; text: string }): Promise<NativeAcceptance>;
+  startReview(binding: SessionBinding, input: { runId: UUID; controller?: string; recheck?: boolean }): Promise<NativeAcceptance>;
+  discuss(binding: SessionBinding, input: { runId: UUID; messageId: UUID; text: string; quote?: string; reportArtifactId?: string }): Promise<NativeAcceptance>;
   inspect(binding: SessionBinding): Promise<NativeInspection>;
   readMessages(binding: SessionBinding, cursor?: string): Promise<{ items: DTO<'Message'>[]; nextCursor: string | null }>;
   subscribe(binding: SessionBinding, cursor?: string): AsyncIterable<NativeEnvelope>;

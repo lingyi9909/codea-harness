@@ -31,7 +31,8 @@
     "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit",
     "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts",
     "test:continuations": "node --experimental-strip-types --test tests/api/continuations.test.ts",
-    "test:reports": "node --experimental-strip-types --test tests/reports/collect.test.ts"
+    "test:reports": "node --experimental-strip-types --test tests/reports/collect.test.ts",
+    "test:dispatch-continue": "node --experimental-strip-types --test tests/workers/continuation-dispatch.test.ts"
   },
   "devDependencies": {
     "@types/node": "22.18.6",

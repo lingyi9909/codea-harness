@@ -122,10 +122,17 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       { text: input }, { sessionID: binding.sessionId, key: 'code-harness-scope' });
     ensure2xx(response.status, 'PUT_CONTEXT');
   }
-  async startReview(binding: SessionBinding, input: { runId: UUID; controller?: string }): Promise<NativeAcceptance> {
+  async startReview(binding: SessionBinding, input: { runId: UUID; controller?: string; recheck?: boolean }): Promise<NativeAcceptance> {
     this.ready();
     const state = this.state(binding);
-    if (state.runId) throw new Error('SESSION_RUN_ALREADY_DISPATCHED');
+    if (input.recheck) {
+      if (!state.runId || state.runId === input.runId)
+        throw new Error('RECHECK_REQUIRES_PREVIOUS_RUN');
+      const inspection = await this.inspect(binding);
+      if (inspection.active !== false || inspection.pendingInputs !== 0 ||
+          inspection.pendingInteractions !== 0 || inspection.externalMutation)
+        throw new Error('RECHECK_SESSION_NOT_PROVEN_IDLE');
+    } else if (state.runId) throw new Error('SESSION_RUN_ALREADY_DISPATCHED');
     const args = reviewArguments(input.controller);
     // Record before dispatch, because transport timeouts are UNKNOWN and must not be retried.
     state.runId = input.runId;
@@ -138,16 +145,24 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
       return { state: 'UNKNOWN', reason: 'NATIVE_COMMAND_TRANSPORT_UNCERTAIN_RECONCILE' };
     }
   }
-  async discuss(binding: SessionBinding, input: { runId: UUID; messageId: UUID; text: string }): Promise<NativeAcceptance> {
+  async discuss(binding: SessionBinding, input: { runId: UUID; messageId: UUID; text: string; quote?: string; reportArtifactId?: string }): Promise<NativeAcceptance> {
     this.ready();
     const state = this.state(binding);
     if (!state.runId) throw new Error('REVIEW_NOT_STARTED');
     if (!input.text.trim() || input.text.length > 8000) throw new Error('DISCUSSION_TEXT_INVALID');
     if (state.runId === input.runId) throw new Error('DISCUSSION_RUN_MUST_BE_NEW');
+    if (input.quote && (input.quote.length > 4000 || !input.quote.trim()))
+      throw new Error('DISCUSSION_QUOTE_INVALID');
+    if (input.reportArtifactId && input.reportArtifactId.length > 128)
+      throw new Error('DISCUSSION_ARTIFACT_ID_INVALID');
+    const promptText = input.quote
+      ? '引用的历史报告原文（仅作用户参考，不更改代码范围）：\\n'+
+        input.quote+'\\n\\n当前追问：\\n'+input.text
+      : input.text;
     state.runId = input.runId;
     try {
       const response = await this.options.transport.call('prompt', 'POST', {
-        text: input.text, delivery: 'queue',
+        text: promptText, delivery: 'queue',
         metadata: { harnessRunId: input.runId, harnessMessageId: input.messageId },
       }, { sessionID: binding.sessionId });
       return commandAcceptance(response.status, response.body);
