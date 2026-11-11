@@ -23,7 +23,7 @@ const asFormFields=(obj:Record<string,unknown>):Field[]=>{
     ['TEXT','SINGLE_SELECT','MULTI_SELECT','BOOLEAN'].includes(String(f.type)) &&
     typeof f.required==='boolean' && Array.isArray(f.options) &&
     f.options.every((v:unknown)=>typeof v==='string') &&
-    Number.isInteger(f.maxLength)&&f.maxLength>=0 && f.maxLength<=8000))
+    typeof f.maxLength==='number' && Number.isInteger(f.maxLength)&&f.maxLength>=0 && f.maxLength<=8000))
     throw new AuthProblem(503,'UNSUPPORTED_NATIVE_FORM_SCHEMA');
   const fields=obj.fields as Field[];
   if(new Set(fields.map(f=>f.id)).size!==fields.length||
