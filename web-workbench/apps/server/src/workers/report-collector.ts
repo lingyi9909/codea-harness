@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readFile, realpath, rename, stat } from 'node:fs/promises';
+import { link, lstat, mkdir, open, readFile, realpath, unlink } from 'node:fs/promises';
 import { join, resolve, relative, isAbsolute, sep } from 'node:path';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { DTO, Snapshot } from '../../../../packages/contracts/src/domain.ts';
@@ -92,15 +92,19 @@ export async function collectReport(config:ReportCollectorConfig,lease:Lease,
   }else{
     const temp=join(canonicalDir,lease.runId+'.'+randomUUID()+'.partial');
     const file=await open(temp,'wx',0o600);
-    try{await file.writeFile(candidate);await file.sync();}finally{await file.close();}
-    // Fence checked before final publication. DB failure leaves a reconcilable
-    // per-run artifact, not a published event or a second model invocation.
-    await withTransaction(config.pool,async tx=>{await assertFencedLease(tx,lease);});
     try{
-      try{await lstat(dest);throw new AuthProblem(409,'ARCHIVED_REPORT_CONFLICT');}
-      catch(e){if(!(e instanceof Error&&'code' in e&&e.code==='ENOENT'))throw e;}
-      await rename(temp,dest);
-    }catch(e){throw e;}
+      try{await file.writeFile(candidate);await file.sync();}finally{await file.close();}
+      await withTransaction(config.pool,async tx=>{
+        await assertFencedLease(tx,lease);
+        try{await link(temp,dest);}
+        catch(error){
+          if(!(error instanceof Error&&'code' in error&&error.code==='EEXIST'))throw error;
+          const info=await lstat(dest);
+          if(!info.isFile()||info.isSymbolicLink()||sha(await readFile(dest))!==digest)
+            throw new AuthProblem(409,'ARCHIVED_REPORT_CONFLICT');
+        }
+      });
+    }finally{await unlink(temp);}
   }
   const finalBytes=await readFile(dest);
   if(sha(finalBytes)!==digest||finalBytes.length!==candidate.length)

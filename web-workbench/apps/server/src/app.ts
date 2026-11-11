@@ -88,7 +88,7 @@ export async function createApp(opts:{pool:Pool;auth:LocalAuth;native?:Omit<Sche
     refKey:process.env.HARNESS_REF_KEY??''});
   registerTaskRoutes(app,{pool:opts.pool,auth:opts.auth,
     roots:(process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean),
-    cursorKey:process.env.HARNESS_CURSOR_KEY??'',notesSupported:enabled&&capabilities.some(c=>c.name==='instruction.entry'&&c.status==='SUPPORTED')});
+    cursorKey:process.env.HARNESS_CURSOR_KEY??'',ready:enabled,notesSupported:enabled&&capabilities.some(c=>c.name==='instruction.entry'&&c.status==='SUPPORTED')});
   registerEventRoutes(app,{pool:opts.pool,auth:opts.auth});
   registerRunStopRoute(app,{pool:opts.pool,auth:opts.auth,adapter:enabled?opts.native?.adapter:undefined});
   registerInteractionRoutes(app,{pool:opts.pool,auth:opts.auth});

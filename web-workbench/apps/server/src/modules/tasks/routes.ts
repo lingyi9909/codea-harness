@@ -6,13 +6,14 @@ import { AuthProblem } from '../../auth.ts';
 import { createTask, getOperation, getTask, listTasks, listRuns } from './service.ts';
 
 export function registerTaskRoutes(app:FastifyInstance,opts:{
-  pool:Pool;auth:LocalAuth;roots:string[];cursorKey:string;notesSupported:boolean;
+  pool:Pool;auth:LocalAuth;roots:string[];cursorKey:string;notesSupported:boolean;ready?:boolean;
 }):void{
   const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
   app.post<{Body:{operationId:string;previewId:string;title?:string;
     controller?:string;notes?:string}}>('/api/v1/tasks',async(req,reply)=>{
     const {ownerId}=opts.auth.mutation(req);
     if(!req.body||typeof req.body!=='object')throw new AuthProblem(400,'INVALID_REQUEST');
+    if(opts.ready===false)throw new AuthProblem(503,'OPENCODE_UNAVAILABLE');
     const result=await createTask({...req.body,ownerId},opts);
     return reply.status(202).send(wrap(result));
   });

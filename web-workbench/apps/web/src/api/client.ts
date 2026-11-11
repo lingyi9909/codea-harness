@@ -55,7 +55,7 @@ export class HarnessApi {
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }
   register(name: string,path:string,operationId:string) {
-    return this.request<Schema<'Operation'>>('/repositories',{method:'POST',body:JSON.stringify({name,path,operationId})});
+    return this.request<Schema<'Repository'>>('/repositories',{method:'POST',body:JSON.stringify({name,path,operationId})});
   }
   preview(repositoryId:string,baseRefId:string,operationId:string) {
     return this.request<Schema<'Preview'>>('/review-previews',{method:'POST',

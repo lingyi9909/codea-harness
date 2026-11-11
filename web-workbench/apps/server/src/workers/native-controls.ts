@@ -35,6 +35,13 @@ async function claim(c:Context):Promise<Control|null>{
       if(!items.length||!['WAITING_PERMISSION','WAITING_INPUT'].includes(row.status)){
         await tx.execute("UPDATE wh_outbox SET status='CANCELLED',updated_at=UTC_TIMESTAMP(3) WHERE id=?",[row.id]);
         await tx.execute("UPDATE wh_operations SET status='FAILED',error_code='INTERACTION_STALE',updated_at=UTC_TIMESTAMP(3) WHERE id=?",[row.operation_id]);
+        const resolution=row.status==='STOP_REQUESTED'?'CANCELLED':'EXPIRED';
+        const [expired]=await tx.execute<ResultSetHeader>(
+          "UPDATE wh_interactions SET status=?,resolved_at=UTC_TIMESTAMP(3),updated_at=UTC_TIMESTAMP(3) "+
+          "WHERE id=? AND run_id=? AND status='ANSWERING' AND revision=?",
+          [resolution,payload.interactionId,c.lease.runId,payload.revision]);
+        if(expired.affectedRows===1)await appendEvent(tx,{taskId:c.lease.taskId,runId:c.lease.runId,type:'interaction.resolved',
+          data:{interactionId:payload.interactionId,revision:payload.revision,status:resolution}});
         return null;
       }
       const item=items[0];
@@ -94,7 +101,7 @@ export async function syncInteractions(c:Context){
       if(row){
         const stored=typeof row.schema_json==='string'?JSON.parse(row.schema_json):row.schema_json;
         if(row.kind!==i.kind||row.revision!==i.revision||row.native_request_id!==i.nativeRequestId||
-            !isDeepStrictEqual(stored,schema)||!['PENDING','ANSWERING','UNKNOWN'].includes(row.status))
+            !isDeepStrictEqual(stored,schema)||!['PENDING','ANSWERING','UNKNOWN'].includes(row.status) && !(previous==='STOP_REQUESTED'&&row.status==='CANCELLED'))
           throw new Error('NATIVE_REQUEST_CHANGED');
         continue;
       }

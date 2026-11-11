@@ -53,7 +53,7 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
         yield {...envelope,cursor:String(++seq),observation:{inputId:runId,kind:'terminal',outcome:stopped?'STOPPED':'SUCCEEDED'}};
         return;
       }
-      yield {...envelope,cursor:String(++seq),observation:{inputId:runId,kind:'message',nativeMessageId:'fixture-final',
+      yield {...envelope,cursor:String(++seq),observation:{inputId:runId,kind:'message',nativeMessageId:'fixture-final-'+runId,
         text:'Review completed in fixture',status:'COMPLETE'}};
       await mkdir(join(binding.locationKey,'temp'),{recursive:true});
       await writeFile(join(binding.locationKey,REPORT_RELATIVE_PATH),report);

@@ -119,7 +119,7 @@ export function WorkbenchApp() {
   const act=async(fn:()=>Promise<void>)=>{
     setError('');setBusy(true);
     try{await fn();}catch(e){
-      if(e instanceof ApiError && e.status>=400 && e.status<500)setPendingOperation(null);
+      if(e instanceof ApiError && [400,403,409,422,429].includes(e.status))setPendingOperation(null);
       if(e instanceof ApiError && e.status===401)setBootstrap(null);
       setError(text(e));
     }
@@ -147,6 +147,7 @@ export function WorkbenchApp() {
     if(!pendingOperation)return;
     const op=await api.operation(pendingOperation);
     if(op.taskId){setSelected(op.taskId);setPendingOperation(null);await refreshLists();}
+    else if(op.status==='SUCCEEDED'||op.status==='FAILED'){setPendingOperation(null);await refreshLists();}
     else setError('操作状态：'+op.status+'；请继续查询，不能重新创建任务');
   });
   const register=()=>act(async()=>{
