@@ -57,3 +57,5 @@ Windows 离线包解压后运行 `start-chat.cmd`，在浏览器配对并进入�
 当当前会话发来提问或权限请求时，输入区上方会显示待办，浏览器标签页也会提示等待回应。提交回答、取消提问、本次允许或拒绝会回传给同一个 OpenCode 会话。直接对话和日志排查使用相同的交互控件。
 
 助手回复与思考文本支持 Markdown 标题、引用、表格、任务列表和代码块。排版样式取自 [OpenCode Desktop v2.2.7](https://github.com/anomalyco/opencode/blob/v2.2.7/packages/session-ui/src/components/markdown.css)，React 渲染层适配本工作台，代码高亮及样式随网页离线分发。
+
+日志排查绑定当前项目加载的自定义 Skill `log-query`。工作台按名称定位它，并在首轮及每次追问的 OpenCode prompt 的 `skills` 字段指定实际 ID。该 Skill 由内网项目提供。缺失、同名冲突或目录查询失败会保留用户输入并提示原因。

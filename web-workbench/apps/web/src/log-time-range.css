@@ -42,3 +42,14 @@
   .log-time-range .range-fields { grid-template-columns: 1fr; gap: 6px; }
   .log-time-range .range-direction { justify-self: start; margin-left: 8px; line-height: 1; transform: rotate(90deg); }
 }
+
+.range-fields input[type="datetime-local"]{position:relative;cursor:pointer}
+.range-fields input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+  position:absolute;inset:0;width:auto;height:auto;margin:0;opacity:0;cursor:pointer
+}
+.range-fields label:has(input[type="datetime-local"]){position:relative}
+.range-fields label:has(input[type="datetime-local"])::after{
+  content:"";position:absolute;right:12px;bottom:12px;width:12px;height:11px;box-sizing:border-box;
+  border:1.5px solid currentColor;border-top-width:3px;border-radius:2px;pointer-events:none
+}
+.range-fields input[type="datetime-local"]{padding-inline-end:30px}

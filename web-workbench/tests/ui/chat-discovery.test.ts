@@ -51,6 +51,10 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
           res.write('data: '+JSON.stringify(e)+'\\n\\n');
         return;
       }
+      if(req.url.split('?')[0]==='/api/skill'){
+        const directory=new URL(req.url,'http://localhost').searchParams.get('location[directory]');
+        return res.end(JSON.stringify({location:{directory},data:fs.existsSync(flag+'.skill')?[{id:'corp-logs-v1',name:'log-query'}]:[]}));
+      }
       if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
       const save=(suffix,done)=>{let body='';req.on('data',s=>body+=s);req.on('end',()=>{
         fs.writeFileSync(flag+suffix,body);done(JSON.parse(body));res.writeHead(204);res.end();});};
@@ -78,7 +82,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
         {type:'tool',name:'grep',state:{status:'completed',input:{pattern:'abc123'},content:[{type:'text',text:'命中第 2 行'}]}},
         {type:'text',text:'检查结束。'},{type:'text',text:${JSON.stringify(diagnosis)}}]}]}));
       if(req.url===logBase+'/inbox')return res.end(JSON.stringify({data:[]}));
-      if(req.url==='/api/session/active')return res.end(JSON.stringify({data:{}}));
+      if(req.url==='/api/session/active')return res.end(JSON.stringify({data:fs.existsSync(flag+'.prompt')&&!generated?{ses_logs_fixture:{}}:{}}));
       if(req.url==='/api/session'&&req.method==='POST'){
         req.setEncoding('utf8');let body='';
         req.on('data',s=>body+=s);req.on('end',()=>{
@@ -163,6 +167,21 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await quarter.click();
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
+    await page.evaluate(()=>{
+      const native=HTMLInputElement.prototype.showPicker;
+      HTMLInputElement.prototype.showPicker=function(){
+        native.call(this);this.dataset.pickerCalls=String(Number(this.dataset.pickerCalls??0)+1);
+      };
+    });
+    for(const label of ['开始时间','结束时间']){
+      const input=page.getByLabel(label,{exact:true}),box=await input.boundingBox();
+      assert.ok(box);
+      for(const [index,x] of [8,box.width/2,box.width-10].entries()){
+        await input.click({position:{x,y:box.height/2}});
+        await expect(input).toHaveAttribute('data-picker-calls',String(index+1));
+        await page.keyboard.press('Escape');
+      }
+    }
     await page.getByLabel('开始时间').fill('2026-11-12T10:00');
     await page.getByLabel('结束时间').fill('2026-11-12T11:00');
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
@@ -176,7 +195,14 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(page.locator('.log-query pre')).toHaveText('2  2026-11-12 10:20:00 ERROR abc123 timeout included');
     await page.getByLabel('对话内容').fill('检查超时原因');
     await submit.click();
+    await expect(page.getByRole('alert')).toContainText('未加载自定义 Skill「log-query」');
+    await expect(page.getByLabel('对话内容')).toHaveValue('检查超时原因');
+    await writeFile(file+'.skill','1');
+    await submit.click();
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
+    const running=page.getByRole('button',{name:'正在执行 · 中断执行'});
+    await expect(running).toBeVisible();
+    await expect(running).toHaveCSS('background-color','rgb(170, 39, 46)');
     const feed=page.locator('.chat-feed');
     await expect(feed).toContainText('已扫描两个文件');
     await expect(feed.locator('.execution-tool')).toContainText('命中第 2 行');
@@ -200,6 +226,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(feed.getByText('已找到两条记录',{exact:true})).toBeVisible();
     await page.reload();
     await expect(feed.getByText('已找到两条记录',{exact:true})).toHaveCount(1);
+    await expect(running).toHaveCount(0);
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
     await expect(feed.getByRole('cell',{name:'120 ms'})).toBeVisible();
     await expect(feed.locator('pre code.language-json')).toContainText('"count"');
@@ -223,12 +250,14 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect.poll(async()=>(await recorded('.permission')).decision).toBe('once');
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
+    assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
     for(const value of ['A15','检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
     for(const value of ['wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));
     await page.getByLabel('对话内容').fill('下一步怎么查？');
     await page.getByLabel('对话内容').press('Enter');
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
+    assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
   }finally{
     process.chdir(cwd);
