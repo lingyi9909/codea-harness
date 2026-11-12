@@ -18,3 +18,5 @@
 @media(max-width:600px){.sidebar{display:block}.sidebar .brand{margin:0 0 9px}.scene-nav{display:flex;overflow:auto;gap:2px}.scene-nav .side-link{font-size:12px;padding:8px;flex-shrink:0}.scene-nav .side-link span{display:none}.scene-page{margin-top:8px}.scene-title h1{font-size:28px}}
 
 .access-log{max-height:55vh;overflow:auto}.access-log>div{padding:8px 0;border-bottom:1px solid #dce0e4}.access-log code,.access-log small{display:block;overflow-wrap:anywhere}.access-log small{color:#565e69}
+
+.project-path{display:block;overflow-wrap:anywhere;margin-bottom:8px}.context-box form button+button{margin-left:6px}

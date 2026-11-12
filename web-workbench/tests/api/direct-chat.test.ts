@@ -51,6 +51,8 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     const host='127.0.0.1:4176',origin='http://'+host;
     const pair=await app.inject({method:'POST',url:'/api/v1/auth/session',headers:{host,origin},payload:{pairingCode:'fixture'}});
     const headers={host,origin,cookie:String(pair.headers['set-cookie']).split(';')[0],'x-csrf-token':pair.json().data.csrfToken};
+    const outside=await app.inject({method:'POST',url:'/api/v1/chat/project',headers,payload:{directory:tmpdir()}});
+    assert.equal(outside.statusCode,403);
     for(failure of [401,403,404,503]){
       const rejected=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{directory:root}});
       assert.equal(rejected.json().error.code,'OPENCODE_HTTP_'+failure);

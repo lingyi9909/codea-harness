@@ -30,6 +30,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     if(!isAbsolute(input))throw new AuthProblem(400,'ABSOLUTE_DIRECTORY_REQUIRED');
     const path=await realpath(input).catch(()=>null);
     if(!path||!(await stat(path)).isDirectory())throw new AuthProblem(400,'DIRECTORY_NOT_FOUND');
+    if(!configured.length&&mayStart)return path; // Paired local-only workbench with no administrator-defined roots.
     for(const root of roots){
       const canonical=await realpath(root).catch(()=>null);
       if(canonical&&within(canonical,path))return path;
@@ -48,16 +49,22 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     auth.session(req);return wrap({configured:true,directories:roots});
   });
   async function project(input?:string){
-    if(!configured.length)await mkdir(roots[0],{recursive:true});
+    if(!configured.length&&(!input||input===roots[0]))await mkdir(roots[0],{recursive:true});
     return directory(input??roots[0]);
   }
   async function models(dir:string):Promise<ChatModel[]>{
     const result=await (await client()).model.list({location:{directory:dir}});
     return result.data.filter(m=>m.enabled).map(({id,providerID,name})=>({id,providerID,name}));
   }
-  app.post('/api/v1/chat/models',async req=>{
+  type ProjectInput={Body:{directory?:string}};
+  app.post<ProjectInput>('/api/v1/chat/project',{schema:body({directory:property(4096)})},async req=>{
+    auth.mutation(req);return wrap({directory:await project(req.body.directory)});
+  });
+  app.post<ProjectInput>('/api/v1/chat/models',async req=>{
     auth.mutation(req);
-    return wrap(await models(await project()));
+    const input=req.body?.directory;
+    if(input!==undefined&&(typeof input!=='string'||input.length>4096))throw new AuthProblem(400,'INVALID_DIRECTORY');
+    return wrap(await models(await project(input)));
   });
   type Selection={providerID:string;id:string};
   app.post<{Body:{directory?:string;model?:Selection}}>('/api/v1/chat/sessions',{schema:body({

@@ -54,7 +54,8 @@ export class HarnessApi {
   }
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
   chatAccess(){return this.request<ChatAccessEntry[]>('/chat/access-log');}
-  chatModels(){return this.request<ChatModel[]>('/chat/models',{method:'POST'});}
+  chatProject(directory:string){return this.request<{directory:string}>('/chat/project',{method:'POST',body:JSON.stringify({directory})});}
+  chatModels(directory?:string){return this.request<ChatModel[]>('/chat/models',{method:'POST',body:JSON.stringify({directory})});}
   newChat(directory?:string,model?:Pick<ChatModel,'id'|'providerID'>){return this.request<{id:string;directory:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory,model})});}
   chat(id:string){return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id));}
   chatAction(id:string,action:'messages'|'permission'|'interrupt',body:object={}){
