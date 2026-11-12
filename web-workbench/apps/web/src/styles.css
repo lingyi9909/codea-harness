@@ -114,6 +114,10 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
   .page .workbench h1, .task-page .detail-heading h1 { font-size: 18px; }
 }
 
+@media (min-width: 601px) {
+  .sidebar .brand { gap: 8px; margin-inline: 0; white-space: nowrap; }
+}
+
 /* OpenCode Desktop's neutral layers distinguish the conversation from its controls. */
 .scene-page:has(.chat-layout) {
   --chat-ink: #242424;
