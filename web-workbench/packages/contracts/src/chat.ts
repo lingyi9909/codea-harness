@@ -1,3 +1,4 @@
+export type ChatModel={providerID:string;id:string;name:string};
 export type ChatSettings={configured:boolean;directories:string[]};
 export type ChatMessage={id:string;role:'user'|'assistant';text:string;tools:{name:string;status:string}[];files:string[]};
 export type ChatStatus={id:string;directory:string;active:boolean;outcome?:string;messages:ChatMessage[];

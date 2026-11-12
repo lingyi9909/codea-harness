@@ -1,11 +1,12 @@
 import {useEffect,useState} from 'react';
 import {api,ApiError} from './api/client.ts';
-import type {ChatStatus,ChatSettings,ChatAccessEntry} from '../../../packages/contracts/src/chat.ts';
+import type {ChatStatus,ChatSettings,ChatAccessEntry,ChatModel} from '../../../packages/contracts/src/chat.ts';
 
 function explain(e:unknown){
   const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'请选择已配置的工作目录或其子目录。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
     SERVICE_UNAVAILABLE:'OpenCode 暂时无法响应，请检查内网服务地址和鉴权配置。',PERMISSION_CHANGED:'授权请求已改变，请查看最新请求。',CHAT_NOT_FOUND:'原会话不可用，请新建对话。'};
   Object.assign(labels,{
+    CHAT_MODEL_UNAVAILABLE:'此模型当前未启用，请刷新模型列表后重新选择。',
     OPENCODE_DISCOVERY_FAILED:'未能自动连接本机 OpenCode。请确认已安装的 opencode 在 PATH 中，并支持 serve --service。',
     OPENCODE_WORKBENCH_URL:'OpenCode 服务地址填成了工作台自身的地址。请重启工作台，填写 OpenCode 后台服务地址。',
     OPENCODE_CONNECTION_FAILED:'创建会话时无法连接 OpenCode。请核对后台服务地址、端口和 HTTPS 证书。',
@@ -21,6 +22,9 @@ function explain(e:unknown){
 }
 export function DirectChat(){
   const [settings,configure]=useState<ChatSettings|null>(null);
+  const [catalog,setCatalog]=useState<ChatModel[]|null>(null),[modelKey,setModelKey]=useState('');
+  const keyFor=(m:ChatModel)=>JSON.stringify([m.providerID,m.id]);
+  const chosen=catalog?.find(m=>keyFor(m)===modelKey);
   const [id,select]=useState(()=>sessionStorage.getItem('harness.chat')??'');
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(''),[refs,attach]=useState('');
   const [showFiles,toggleFiles]=useState(false),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
@@ -36,7 +40,7 @@ export function DirectChat(){
   const send=()=>run(async()=>{
     const text=draft.trim();if(!text)return;
     let session=id;
-    if(!session){const s=await api.newChat();session=s.id;select(session);}
+    if(!session){const s=await api.newChat(undefined,chosen?{id:chosen.id,providerID:chosen.providerID}:undefined);session=s.id;select(session);}
     await api.chatAction(session,'messages',{text,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
     write('');attach('');toggleFiles(false);
   });
@@ -58,7 +62,12 @@ export function DirectChat(){
         <div className="composer-actions"><button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {state?.active&&<button disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>中断执行</button>}
           <button className="primary" disabled={busy||!settings?.configured||!draft.trim()} onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
-      </div></div><aside className="context-box"><h2>后台访问日志</h2><AccessLog/>
+      </div></div><aside className="context-box">{!id&&<div><h2>会话模型</h2>
+        <button disabled={busy} onClick={()=>run(async()=>{const list=await api.chatModels();setCatalog(list);
+          if(!list.some(m=>keyFor(m)===modelKey))setModelKey('');})}>{catalog?'刷新模型列表':'选择模型'}</button>
+        {catalog&&<label>OpenCode 模型<select disabled={busy} value={modelKey} onChange={e=>setModelKey(e.target.value)}>
+          <option value="">使用 OpenCode 默认模型</option>{catalog.map(m=><option key={keyFor(m)} value={keyFor(m)}>{m.name} · {m.providerID}/{m.id}</option>)}
+        </select></label>}{catalog?.length===0&&<p>此目录下的 OpenCode 没有返回已启用模型。</p>}</div>}<h2>后台访问日志</h2><AccessLog/>
         <p>本次文件位置：<code>{state?.directory??settings?.directories[0]??'…'}</code></p>
         {state&&<p>{state.active?'正在执行':state.outcome==='failed'?'本轮执行失败':state.outcome==='interrupted'?'本轮已中断':'等待输入'}</p>}
       </aside></div></section>;
