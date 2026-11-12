@@ -60,6 +60,6 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await browser.close();await app.close();
     const registration=await readFile(file,'utf8').catch(()=>'');
     if(registration){try{process.kill(JSON.parse(registration).pid);}catch{}}
-    await rm(root,{recursive:true,force:true});
+    await rm(root,{recursive:true,force:true,maxRetries:12,retryDelay:150});
   }
 });
