@@ -1,6 +1,6 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,chmod,rm,readFile,realpath} from 'node:fs/promises';
+import {mkdir,mkdtemp,writeFile,chmod,rm,readFile,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {chromium,expect} from '@playwright/test';
@@ -50,6 +50,17 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.getByRole('navigation').getByRole('button',{name:'直接对话',exact:true}).click();
     await expect(page.getByRole('heading',{name:'后台访问日志'})).toBeVisible();
     await expect(page.getByPlaceholder('输入绝对路径')).toHaveCount(0);
+    const project=join(root,'业务项目');
+    await mkdir(project);
+    await page.getByRole('button',{name:'更改工作目录'}).click();
+    await page.getByLabel('项目文件夹路径').fill(join(project,'missing'));
+    await page.getByRole('button',{name:'使用此目录'}).click();
+    await expect(page.getByRole('alert')).toContainText('找不到');
+    await page.getByLabel('项目文件夹路径').fill(project);
+    await page.getByRole('button',{name:'使用此目录'}).click();
+    await expect(page.locator('.project-path')).toHaveText(await realpath(project));
+    await page.reload();
+    await expect(page.locator('.project-path')).toHaveText(await realpath(project));
     await page.getByRole('button',{name:'选择模型'}).click();
     await page.getByLabel('OpenCode 模型').selectOption({label:'Company fixture · company/intranet'});
     await page.getByLabel('对话内容').fill('fixture-only');
@@ -58,7 +69,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(page.locator('.access-log')).toContainText('工作台 · 502');
     const created=JSON.parse(await readFile(file+'.body','utf8'));
     assert.deepEqual(created.model,{id:'intranet',providerID:'company'});
-    assert.equal(created.location.directory,await realpath(join(root,'chat-files')));
+    assert.equal(created.location.directory,await realpath(project));
   }finally{
     process.chdir(cwd);
     for(const key of Object.keys(process.env))if(!(key in saved))delete process.env[key];

@@ -6,6 +6,7 @@ function explain(e:unknown){
   const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'请选择已配置的工作目录或其子目录。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
     SERVICE_UNAVAILABLE:'OpenCode 暂时无法响应，请检查内网服务地址和鉴权配置。',PERMISSION_CHANGED:'授权请求已改变，请查看最新请求。',CHAT_NOT_FOUND:'原会话不可用，请新建对话。'};
   Object.assign(labels,{
+    ABSOLUTE_DIRECTORY_REQUIRED:'请输入项目文件夹的绝对路径。',DIRECTORY_NOT_FOUND:'工作台找不到这个文件夹，请检查路径。',
     CHAT_MODEL_UNAVAILABLE:'此模型当前未启用，请刷新模型列表后重新选择。',
     OPENCODE_DISCOVERY_FAILED:'未能自动连接本机 OpenCode。请确认已安装的 opencode 在 PATH 中，并支持 serve --service。',
     OPENCODE_WORKBENCH_URL:'OpenCode 服务地址填成了工作台自身的地址。请重启工作台，填写 OpenCode 后台服务地址。',
@@ -22,6 +23,8 @@ function explain(e:unknown){
 }
 export function DirectChat(){
   const [settings,configure]=useState<ChatSettings|null>(null);
+  const [preferred,setPreferred]=useState(()=>localStorage.getItem('harness.chat.project')??'');
+  const [editing,edit]=useState(false),[pathText,typePath]=useState('');
   const [catalog,setCatalog]=useState<ChatModel[]|null>(null),[modelKey,setModelKey]=useState('');
   const keyFor=(m:ChatModel)=>JSON.stringify([m.providerID,m.id]);
   const chosen=catalog?.find(m=>keyFor(m)===modelKey);
@@ -37,15 +40,26 @@ export function DirectChat(){
     void poll();return()=>{live=false;clearTimeout(timer);};
   },[id,refresh]);
   async function run(fn:()=>Promise<void>){if(busy)return;wait(true);fail('');try{await fn();bump(n=>n+1);}catch(e){fail(explain(e));}finally{wait(false);}}
+  const directory=preferred||settings?.directories[0]||'';
+  const current=id?state?.directory:directory;
+  const saveProject=()=>run(async()=>{
+    const saved=await api.chatProject(pathText.trim().replace(/^"(.*)"$/,'$1'));
+    localStorage.setItem('harness.chat.project',saved.directory);setPreferred(saved.directory);
+    if(saved.directory!==current){
+      select('');update(null);setCatalog(null);setModelKey('');attach('');toggleFiles(false);
+      if(id)write('');
+    }
+    edit(false);
+  });
   const send=()=>run(async()=>{
-    const text=draft.trim();if(!text)return;
+    const text=draft.trim();if(!text||editing)return;
     let session=id;
-    if(!session){const s=await api.newChat(undefined,chosen?{id:chosen.id,providerID:chosen.providerID}:undefined);session=s.id;select(session);}
+    if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID}:undefined);session=s.id;select(session);}
     await api.chatAction(session,'messages',{text,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
     write('');attach('');toggleFiles(false);
   });
   return <section className="scene-page"><div className="scene-title"><div><h1>直接对话</h1><p>和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。</p></div>
-    {id&&<button className="secondary" disabled={busy} onClick={()=>{select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
+    {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
     <div className="chat-layout"><div className="chat-box">
       <div className="chat-feed" aria-live="polite">{!state?.messages.length&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>想在这个目录里做什么？</h2>
         <button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button></div>}
@@ -61,14 +75,23 @@ export function DirectChat(){
         {showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
         <div className="composer-actions"><button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {state?.active&&<button disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>中断执行</button>}
-          <button className="primary" disabled={busy||!settings?.configured||!draft.trim()} onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
-      </div></div><aside className="context-box">{!id&&<div><h2>会话模型</h2>
-        <button disabled={busy} onClick={()=>run(async()=>{const list=await api.chatModels();setCatalog(list);
+          <button className="primary" disabled={busy||editing||!settings?.configured||!draft.trim()} onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
+      </div></div><aside className="context-box"><h2>工作目录</h2>
+        {editing?<form onSubmit={e=>{e.preventDefault();void saveProject();}}>
+          <label>项目文件夹路径<input autoFocus value={pathText} list="chat-projects" disabled={busy}
+            placeholder="例如 D:\projects\order-service" onChange={e=>typePath(e.target.value)}/></label>
+          <datalist id="chat-projects">{Array.from(new Set([directory,...(settings?.directories??[])])).filter(Boolean).map(d=><option key={d} value={d}/>)}</datalist>
+          {id&&<p>更换目录后将新建对话，原会话仍使用原目录。</p>}
+          <button disabled={busy||!pathText.trim()}>使用此目录</button>
+          <button type="button" disabled={busy} onClick={()=>{edit(false);fail('');}}>取消</button>
+        </form>:<div><code className="project-path">{current??'加载中…'}</code>
+          <button disabled={busy||!settings} onClick={()=>{typePath(current??directory);edit(true);fail('');}}>更改工作目录</button></div>}
+        {!id&&<div><h2>会话模型</h2>
+        <button disabled={busy||editing} onClick={()=>run(async()=>{const list=await api.chatModels(directory||undefined);setCatalog(list);
           if(!list.some(m=>keyFor(m)===modelKey))setModelKey('');})}>{catalog?'刷新模型列表':'选择模型'}</button>
         {catalog&&<label>OpenCode 模型<select disabled={busy} value={modelKey} onChange={e=>setModelKey(e.target.value)}>
           <option value="">使用 OpenCode 默认模型</option>{catalog.map(m=><option key={keyFor(m)} value={keyFor(m)}>{m.name} · {m.providerID}/{m.id}</option>)}
         </select></label>}{catalog?.length===0&&<p>此目录下的 OpenCode 没有返回已启用模型。</p>}</div>}<h2>后台访问日志</h2><AccessLog/>
-        <p>本次文件位置：<code>{state?.directory??settings?.directories[0]??'…'}</code></p>
         {state&&<p>{state.active?'正在执行':state.outcome==='failed'?'本轮执行失败':state.outcome==='interrupted'?'本轮已中断':'等待输入'}</p>}
       </aside></div></section>;
 }
