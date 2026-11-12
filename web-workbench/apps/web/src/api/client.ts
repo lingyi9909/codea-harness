@@ -7,6 +7,7 @@ export class ApiError extends Error {
 }
 export class HarnessApi {
   private csrf = '';
+  private connecting?: Promise<Schema<'Bootstrap'>>;
   setCsrf(token: string): void { this.csrf = token; }
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('..'))
@@ -14,7 +15,7 @@ export class HarnessApi {
     const verb = init.method?.toUpperCase() ?? 'GET';
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (init.body) headers['Content-Type'] = 'application/json';
-    if (!['GET','HEAD'].includes(verb)) {
+    if (!['GET','HEAD'].includes(verb) && path!=='/auth/local-session') {
       if (!this.csrf) throw new ApiError(0, 'CSRF_REQUIRED', '本机会话未就绪，请重新连接');
       headers['X-CSRF-Token'] = this.csrf;
     }
@@ -64,7 +65,16 @@ export class HarnessApi {
   chatAction(id:string,action:'messages'|'permission'|'interrupt'|'model'|'form',body:object={}){
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
-  bootstrap() { return this.request<Schema<'Bootstrap'>>('/bootstrap'); }
+  bootstrap() {
+    if (!this.connecting) {
+      this.connecting=this.request<Schema<'Bootstrap'>>('/bootstrap').catch((e:unknown)=>{
+        if(e instanceof ApiError&&e.status===401&&e.code==='LOCAL_SESSION_REQUIRED')
+          return this.request<Schema<'Bootstrap'>>('/auth/local-session',{method:'POST'});
+        throw e;
+      }).finally(()=>{this.connecting=undefined;});
+    }
+    return this.connecting;
+  }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }
   register(name: string,path:string,operationId:string) {

@@ -15,7 +15,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   await writeFile(script,`
     const fs=require('node:fs');
     if(process.argv.slice(2).join(' ')!=='serve --service')process.exit(3);
-    let output,generated=false,answered=false,permitted=false;
+    let output,generated=false,answered=false,permitted=false,verified=false;
     const flag=process.env.HARNESS_OPENCODE_SERVICE_FILE;
     const until=async(name)=>{while(!fs.existsSync(flag+name))await new Promise(r=>setTimeout(r,20));};
     async function streamReply(){
@@ -59,12 +59,18 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
       const save=(suffix,done)=>{let body='';req.on('data',s=>body+=s);req.on('end',()=>{
         fs.writeFileSync(flag+suffix,body);done(JSON.parse(body));res.writeHead(204);res.end();});};
       if(req.url===logBase+'/model')return save('.model',body=>{logSession.model=body.model;});
+      if(req.url===logBase+'/form'&&permitted&&!verified)return res.end(JSON.stringify({data:[
+        {id:'frm_code',sessionID:'ses_logs_fixture',title:'验证本次查询',fields:[{
+          key:'q0',type:'string',title:'验证码',description:'输入测试页面给出的代码',required:true,custom:true,
+          options:[{value:'手动输入',label:'手动输入'}]}]}]}));
+      if(req.url===logBase+'/form/frm_code/reply')return save('.code',()=>{verified=true;});
       if(req.url===logBase+'/form')return res.end(JSON.stringify({data:!answered&&fs.existsSync(flag+'.ask')?[
         {id:'frm_trace',sessionID:'ses_logs_fixture',title:'选择排查范围',fields:[
           {key:'scope',title:'检查哪些记录？',type:'string',required:true,options:[
             {value:'trace',label:'当前 Trace',description:'只检查本次请求关联的日志'},
             {value:'service',label:'整个服务',description:'检查时间段内同服务的所有请求'}]},
-          {key:'service',title:'服务名称',type:'string',required:true}]}]:[]}));
+          {key:'service',title:'服务名称',type:'string',required:true},
+          {key:'note',title:'补充说明',type:'string',custom:true,options:[{value:'预设说明',label:'预设说明'}]}]}]:[]}));
       if(req.url===logBase+'/form/frm_trace/reply')return save('.answer',()=>{answered=true;});
       if(req.url===logBase+'/permission')return res.end(JSON.stringify({data:answered&&!permitted?[
         {id:'per_trace',sessionID:'ses_logs_fixture',action:'read',resources:['logs/orders.log']}]:[]}));
@@ -109,7 +115,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   process.env.HARNESS_OPENCODE_SERVICE_FILE=file;
   delete process.env.HARNESS_CHAT_ROOTS;delete process.env.HARNESS_REPOSITORY_ROOTS;delete process.env.HARNESS_OPENCODE_URL;
   const port=31881;
-  const app=await createApp({auth:new LocalAuth('pair-fixture',port),autoOpenCode:true});
+  const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,autoOpenCode:true});
   async function recorded(suffix:string){
     const text=await readFile(file+suffix,'utf8').catch((e:NodeJS.ErrnoException)=>{if(e.code!=='ENOENT')throw e;return '';});
     return text?JSON.parse(text):{};
@@ -117,9 +123,21 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   try{
     await app.listen({host:'127.0.0.1',port});
     const page=await browser.newPage();
+    let sessionRequests=0;
+    page.on('request',request=>{
+      if(new URL(request.url()).pathname==='/api/v1/auth/local-session')sessionRequests++;
+    });
     await page.goto('http://127.0.0.1:'+port);
-    await page.getByLabel('一次性配对码').fill('pair-fixture');
-    await page.getByRole('button',{name:'连接本地工作台'}).click();
+    await expect(page.getByRole('navigation')).toBeVisible();
+    await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
+    assert.equal(sessionRequests,1);
+    const sessionCookie=async()=>(await page.context().cookies()).find(c=>c.name==='harness_session')?.value;
+    const cookie=await sessionCookie();
+    assert.ok(cookie);
+    await page.reload();
+    await expect(page.getByRole('navigation')).toBeVisible();
+    assert.equal(sessionRequests,1);
+    assert.equal(await sessionCookie(),cookie);
     await page.getByRole('navigation').getByRole('button',{name:'直接对话',exact:true}).click();
     await expect(page.getByRole('heading',{name:'后台访问日志'})).toBeVisible();
     await expect(page.getByPlaceholder('输入绝对路径')).toHaveCount(0);
@@ -241,20 +259,47 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.getByRole('combobox',{name:'模型变体'}).selectOption('high');
     await page.getByRole('button',{name:'使用此模型'}).click();
     await expect.poll(async()=>(await recorded('.model')).model).toEqual({id:'analysis',providerID:'labs',variant:'high'});
+    await expect(page.getByLabel('对话内容')).toBeFocused();
+    await page.getByLabel('对话内容').fill('保存这份草稿');
+    await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
+    await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     await writeFile(file+'.ask','1');
     await expect(page.getByText('选择排查范围',{exact:true})).toBeVisible();
     await page.getByRole('radio',{name:/当前 Trace/}).check();
     await page.getByLabel('服务名称',{exact:false}).fill('orders');
-    await page.getByLabel('对话内容').fill('保存这份草稿');
-    await expect(page.getByRole('button',{name:/^发送/})).toBeDisabled();
+    await page.getByRole('textbox',{name:'补充说明'}).fill('手动说明');
+    await expect(page.getByLabel('对话内容')).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'提交回答'})).toBeEnabled();
     await expect(page).toHaveTitle(/等待你回应/);
     await page.getByRole('button',{name:'提交回答'}).click();
-    await expect.poll(async()=>(await recorded('.answer')).answer).toEqual({scope:'trace',service:'orders'});
+    await expect.poll(async()=>(await recorded('.answer')).answer).toEqual({scope:'trace',service:'orders',note:'手动说明'});
     await expect(page.getByText('logs/orders.log',{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'仅本次允许'}).click();
     await expect.poll(async()=>(await recorded('.permission')).decision).toBe('once');
-    await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
+    const codeForm=page.getByRole('form',{name:'验证本次查询'});
+    const codeInput=codeForm.getByRole('textbox',{name:/验证码/});
+    await expect(codeInput).toBeEditable();
+    await expect(page.getByLabel('对话内容')).toHaveCount(0);
+    await expect(codeInput).toHaveValue('');
+    await codeForm.getByText('可选回答',{exact:true}).click();
+    await codeForm.getByRole('button',{name:'手动输入'}).click();
+    await expect(codeInput).toHaveValue('手动输入');
+    const requests:string[]=[];
+    page.on('request',req=>{if(req.method()==='POST')requests.push(new URL(req.url()).pathname);});
+    const code='004831';
+    await codeInput.fill(code);
+    await codeInput.press('Enter');
+    await expect.poll(async()=>await recorded('.code')).toEqual({answer:{q0:code}});
     await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
+    assert.deepEqual(requests,['/api/v1/chat/sessions/ses_logs_fixture/form']);
+    await expect(feed).not.toContainText(code);
+    const access=await page.request.get(new URL('/api/v1/chat/access-log',page.url()).href);
+    assert.equal(access.status(),200);
+    const accessEntries=(await access.json()).data;
+    assert.ok(accessEntries.some((entry:{operation:string})=>entry.operation==='POST /api/v1/chat/sessions/:id/form'));
+    assert.ok(!JSON.stringify(accessEntries).includes(code));
+    assert.ok(!(await readFile(file+'.prompt','utf8')).includes(code));
+    await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
     for(const value of ['检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));

@@ -48,3 +48,9 @@
 .request-actions button:focus-visible,.request-fields :focus-visible {outline:2px solid #8c5c40;outline-offset:2px}
 .chat-requests {max-height:55vh}
 .chat-requests .request-actions {position:sticky;bottom:0;padding-block:5px;background:#fffcf7}
+
+.request-composer .chat-requests {margin:0;max-height:55vh;overflow:auto}
+.request-composer .composer-actions {margin-top:8px}
+.request-composer .request-fields input:not([type=checkbox]):not([type=radio]) {max-width:none}
+.answer-options summary {width:fit-content;cursor:pointer}
+.answer-options button {display:block;margin:.35rem 0;padding:.4rem .65rem;text-align:start}

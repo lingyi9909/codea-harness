@@ -53,7 +53,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
       catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,interval);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
   },[id,refresh,sessionKey,expanded,stream.requestsVersion]);
-  async function run(fn:()=>Promise<void>){if(busy)return;wait(true);fail('');try{await fn();bump(n=>n+1);}catch(e){fail(explain(e));}finally{wait(false);}}
+  async function run(fn:()=>Promise<void>){if(busy)return false;wait(true);fail('');try{await fn();bump(n=>n+1);return true;}catch(e){fail(explain(e));return false;}finally{wait(false);}}
   const directory=preferred||settings?.directories[0]||'';
   const current=id?state?.directory:directory;
   const saveProject=()=>run(async()=>{
@@ -98,6 +98,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
     if(follow.current&&feed.current)feed.current.scrollTop=feed.current.scrollHeight;
   },[state,stream.parts,stream.tools]);
   const messages=streamingMessages(state?.id===id?state.messages:[],stream.parts);
+  const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'使用项目的 log-query Skill 排查日志并继续追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
     {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{investigation?.reset();select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
     <div className="chat-layout"><div className="chat-box">
@@ -122,10 +123,12 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
           {stream.tools.map(row=><div key={row.id}><time>{new Date(row.at).toLocaleTimeString()}</time> {row.text}</div>)}</section>}
         {state?.active&&!pending&&<small role="status">OpenCode 正在处理本轮请求…</small>}
       </div>
-      {state?.id===id&&<ChatRequests key={id} state={state} busy={busy}
-        onAction={(action,payload)=>void run(async()=>{await api.chatAction(id,action,payload);})}/>}
       {error&&<p role="alert" className="notice">{error}</p>}
-      <div className="composer">{investigation&&<fieldset disabled={busy||editing} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
+      {pending&&state?<div className="composer request-composer">
+        <ChatRequests key={id} state={state} busy={busy||editing}
+          onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
+        {interrupt&&<div className="composer-actions">{interrupt}</div>}
+      </div>:<div className="composer">{investigation&&<fieldset disabled={busy||editing} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
@@ -137,9 +140,9 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
             disabled={busy||editing||!settings||Boolean(pending)||Boolean(id&&!state)}
             loadModels={()=>api.chatModels(current||undefined)} onSelect={selectModel} onApplied={()=>input.current?.focus()}/>
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
-          {state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>}
+          {interrupt}
           <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
-      </div></div><aside className="context-box"><h2>工作目录</h2>
+      </div>}</div><aside className="context-box"><h2>工作目录</h2>
         {editing?<form onSubmit={e=>{e.preventDefault();void saveProject();}}>
           <label>项目文件夹路径<input autoFocus value={pathText} list="chat-projects" disabled={busy}
             placeholder="例如 D:\projects\order-service" onChange={e=>typePath(e.target.value)}/></label>

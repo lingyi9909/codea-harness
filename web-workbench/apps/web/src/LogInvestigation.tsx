@@ -99,7 +99,9 @@ export function LogInvestigation(){
   }
   function prompt(question:string){
     if(!form)return question;
-    const lines=['请根据以下条件排查日志，列出证据、异常原因及下一步。','时间范围（起点含、终点不含）：'+new Date(from).toISOString()+' 至 '+new Date(to).toISOString(),
+    const lines=['请根据以下条件排查日志，列出证据、异常原因及下一步。',
+      '若 log-query 需要用户手工输入验证码，请使用当前会话的 OpenCode question 表单收集文本回答，保留前导零，再继续本次排查。网页无法向后台脚本的 stdin 输入。',
+      '时间范围（起点含、终点不含）：'+new Date(from).toISOString()+' 至 '+new Date(to).toISOString(),
       trace.trim()&&'Trace ID：'+trace.trim(),keyword.trim()&&'关键字：'+keyword.trim(),
       '日志级别：'+level,question&&'排查问题：'+question];
     if(file){

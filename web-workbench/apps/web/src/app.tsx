@@ -25,6 +25,9 @@ const operationId=()=>crypto.randomUUID();
 
 export function WorkbenchApp() {
   const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);
+  const [pairRequired,setPairRequired]=useState(false);
+  const [connectionAttempt,setConnectionAttempt]=useState(0);
+  const reconnect=()=>{setBootstrap(null);setPairRequired(false);setError('');setConnectionAttempt(n=>n+1);};
   const [pairingCode,setPairingCode]=useState('');
   const [repos,setRepos]=useState<Repository[]>([]);
   const [tasks,setTasks]=useState<Task[]>([]);
@@ -97,10 +100,14 @@ export function WorkbenchApp() {
         if(cancelled)return;
         api.setCsrf(boot.csrfToken);setBootstrap(boot);
         await refreshLists();
-      }catch(e){if(!cancelled)setError(text(e));}
+      }catch(e){
+        if(cancelled)return;
+        if(e instanceof ApiError&&e.status===401&&e.code==='AUTH_REQUIRED')setPairRequired(true);
+        else setError(text(e));
+      }
     })();
     return()=>{cancelled=true;};
-  },[refreshLists]);
+  },[refreshLists,connectionAttempt]);
   useEffect(()=>{
     if(!repoId){setRefs([]);setRefId('');setHead('');setBranch('');setPreview(null);return;}
     let active=true;setPreview(null);setRefId('');
@@ -112,7 +119,7 @@ export function WorkbenchApp() {
     if(!selected||!bootstrap){setDetail(null);setInteractions([]);setMessages([]);setArtifact(null);return;}
     let active=true,cleanup=()=>{};
     setDetail(null);setMessages([]);setArtifact(null);setInteractions([]);setGap('');setProgress([]);setDraft(sessionStorage.getItem('harness.draft.'+selected)??'');setQuote('');
-    const fail=(e:unknown)=>{if(active){setError(text(e));if(e instanceof ApiError&&e.status===401)setBootstrap(null);}};
+    const fail=(e:unknown)=>{if(active){setError(text(e));if(e instanceof ApiError&&e.status===401)reconnect();}};
     let refreshing=false,dirty=false;
     const refresh=async()=>{
       dirty=true;
@@ -145,7 +152,7 @@ export function WorkbenchApp() {
     try{await fn();}catch(e){
       if(e instanceof ApiError && [400,403,409,422,429].includes(e.status))setPendingOperation(null);
       if(e instanceof ApiError && ['SCOPE_CHANGED','PREVIEW_EXPIRED','PREVIEW_USED'].includes(e.code))setPreview(null);
-      if(e instanceof ApiError && e.status===401)setBootstrap(null);
+      if(e instanceof ApiError && e.status===401)reconnect();
       setError(text(e));
     }
     finally{setBusy(false);}
@@ -210,6 +217,9 @@ export function WorkbenchApp() {
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
+  if(!bootstrap&&!pairRequired)return <main className="pair-page"><div className="pair-card">
+    {error?<><p role="alert">{error}</p><button onClick={reconnect}>重新连接</button></>:<p role="status">正在连接本地工作台…</p>}
+  </div></main>;
   if(!bootstrap) return <div className="pair-page">
     <div className="pair-card"><div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>本地研发工作台</small></div></div>
       <div className="eyebrow">LOCAL WORKBENCH</div><h1>连接工作台<span className="accent">.</span></h1>
