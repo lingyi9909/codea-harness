@@ -1,5 +1,9 @@
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { it } from 'node:test';
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { delimiter, join, resolve } from 'node:path';
 import { createApp } from '../../apps/server/src/app.ts';
 import { LocalAuth } from '../../apps/server/src/auth.ts';
 
@@ -42,4 +46,58 @@ it('the default server requires the pairing code and does not register automatic
     const paired=await app.inject({method:'POST',url:'/api/v1/auth/session',headers:{host,origin},payload:{pairingCode:'fixture'}});
     assert.equal(paired.statusCode,200);
   }finally{await app.close();}
+});
+
+it('binds packaged operations to the one existing project selected at startup',async t=>{
+  const fixture=await realpath(await mkdtemp(join(tmpdir(),'local workspace ')));
+  t.after(()=>rm(fixture,{recursive:true,force:true}));
+  const project=join(fixture,'project A'),other=join(fixture,'project B'),child=join(project,'nested');
+  await mkdir(child,{recursive:true});
+  await mkdir(other);
+  const previous=process.env.HARNESS_CHAT_ROOTS;
+  process.env.HARNESS_CHAT_ROOTS=[other,project].join(delimiter);
+  t.after(()=>{if(previous===undefined)delete process.env.HARNESS_CHAT_ROOTS;else process.env.HARNESS_CHAT_ROOTS=previous;});
+  async function openWorkspace(workspace?:string){
+    const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,workspace});
+    t.after(()=>app.close());
+    const opened=await app.inject({method:'POST',url:open,headers:{host,origin}});
+    const headers={host,origin,cookie:String(opened.headers['set-cookie']).split(';')[0],'x-csrf-token':opened.json().data.csrfToken};
+    return {app,headers};
+  }
+  for(const [input,expected] of [[project,project],[undefined,other]] as const){
+    const {app,headers}=await openWorkspace(input);
+    const settings=await app.inject({url:'/api/v1/chat/settings',headers});
+    assert.deepEqual(settings.json().data.directories,[expected]);
+    const post=(path:string,payload:object)=>app.inject({method:'POST',url:'/api/v1/chat/'+path,headers,payload});
+    assert.equal((await post('project',{directory:expected})).statusCode,404);
+    for(const directory of [child,fixture]){
+      assert.equal((await post('history',{scenario:'direct-chat',directory})).statusCode,403);
+      assert.equal((await post('models',{directory})).statusCode,403);
+      assert.equal((await post('sessions',{directory})).statusCode,403);
+    }
+  }
+  const file=join(fixture,'plain file');
+  await writeFile(file,'fixture');
+  for(const path of [file,join(fixture,'missing')])
+    await assert.rejects(()=>openWorkspace(path),/Workspace directory.*does not exist or is not a directory/);
+});
+
+it('Windows launcher resolves quoted project paths before changing into the bundle',{skip:process.platform!=='win32'},async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'workbench-launch-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const bundle=join(dir,'bundle'),entry=join(bundle,'apps','server','src');
+  await mkdir(entry,{recursive:true});
+  await mkdir(join(dir,'project with spaces'));
+  await copyFile(new URL('../../start-chat.cmd',import.meta.url),join(bundle,'start-chat.cmd'));
+  await writeFile(join(entry,'start.ts'),"require('node:fs').writeFileSync('argv.json',JSON.stringify(process.argv.slice(2)))");
+  for(const arg of [' "project with spaces"','']){
+    const result=spawnSync('cmd.exe',['/d','/c','bundle\\start-chat.cmd'+arg],{
+      cwd:dir,encoding:'utf8',windowsVerbatimArguments:true,timeout:15000,
+    });
+    assert.equal(result.status,0,result.stderr+result.stdout);
+    const argv=JSON.parse(await readFile(join(bundle,'argv.json'),'utf8'));
+    assert.equal(argv[0],'--local-only');
+    if(arg){assert.equal(argv[1],'--workspace');assert.equal(resolve(argv[2]),join(dir,'project with spaces'));}
+    else assert.deepEqual(argv,['--local-only']);
+  }
 });

@@ -1,5 +1,4 @@
 import {activity,activityPreview} from './activity.ts';
-import {registerAccess} from './access.ts';
 import {chatConnection} from './connection.ts';
 import { mkdir,realpath,stat } from 'node:fs/promises';
 import {once} from 'node:events';
@@ -106,16 +105,28 @@ function upstreamProblem(error:unknown){
   return error instanceof Error&&error.cause instanceof AuthProblem?error.cause:error;
 }
 
-export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
-  const log=registerAccess(app,auth);
-  const client=chatConnection(log,mayStart);
+export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{mayStart?:boolean;localOnly:boolean;workspace?:string}){
+  const client=chatConnection(options.mayStart??false);
   const configured=(process.env.HARNESS_CHAT_ROOTS??process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean);
-  const roots=configured.length?configured:[resolve('chat-files')];
+  const defaultDirectory=resolve('chat-files');
+  let workspace:string|undefined;
+  if(options.localOnly){
+    const selected=options.workspace??configured[0]??defaultDirectory;
+    if(options.workspace===undefined&&!configured.length)await mkdir(defaultDirectory,{recursive:true});
+    workspace=await realpath(selected).catch(()=>undefined);
+    if(!workspace||!(await stat(workspace)).isDirectory())
+      throw new Error('Workspace directory does not exist or is not a directory: '+selected);
+  }
+  const roots=workspace?[workspace]:configured.length?configured:[defaultDirectory];
   async function directory(input:string){
     if(!isAbsolute(input))throw new AuthProblem(400,'ABSOLUTE_DIRECTORY_REQUIRED');
     const path=await realpath(input).catch(()=>null);
     if(!path||!(await stat(path)).isDirectory())throw new AuthProblem(400,'DIRECTORY_NOT_FOUND');
-    if(!configured.length&&mayStart)return path; // Paired local-only workbench with no administrator-defined roots.
+    if(workspace){
+      if(relative(workspace,path)!=='')throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
+      return workspace;
+    }
+    if(!configured.length&&options.mayStart)return path;
     for(const root of roots){
       const canonical=await realpath(root).catch(()=>null);
       if(canonical&&within(canonical,path))return path;
@@ -145,7 +156,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     auth.session(req);return wrap({configured:true,directories:roots});
   });
   async function project(input?:string){
-    if(!configured.length&&(!input||input===roots[0]))await mkdir(roots[0],{recursive:true});
+    if(!workspace&&!configured.length&&(!input||input===roots[0]))await mkdir(roots[0],{recursive:true});
     return directory(input??roots[0]);
   }
   async function models(dir:string):Promise<ChatModel[]>{
@@ -167,7 +178,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     return {id:matches[0].id};
   }
   type ProjectInput={Body:{directory?:string}};
-  app.post<ProjectInput>('/api/v1/chat/project',{schema:body({directory:property(4096)})},async req=>{
+  if(!workspace)app.post<ProjectInput>('/api/v1/chat/project',{schema:body({directory:property(4096)})},async req=>{
     auth.mutation(req);return wrap({directory:await project(req.body.directory)});
   });
   app.post<{Body:{directory?:string;scenario:ChatScenario;cursor?:string}}>('/api/v1/chat/history',{schema:body({
@@ -199,14 +210,15 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     if(!match||(model.variant!==undefined&&!match.variants?.includes(model.variant)))
       throw new AuthProblem(409,'CHAT_MODEL_UNAVAILABLE');
   }
-  app.post<{Body:{directory?:string;model?:Selection;scenario?:'log-inspection'|'direct-chat'}}>('/api/v1/chat/sessions',{schema:body({
-    directory:property(4096),scenario:{enum:['log-inspection','direct-chat']},model:{type:'object',additionalProperties:false,required:['providerID','id'],
+  app.post<{Body:{directory?:string;model?:Selection;title?:string;scenario?:'log-inspection'|'direct-chat'}}>('/api/v1/chat/sessions',{schema:body({
+    directory:property(4096),title:property(120),scenario:{enum:['log-inspection','direct-chat']},model:{type:'object',additionalProperties:false,required:['providerID','id'],
       properties:modelFields}},[])},async(req,reply)=>{
     const {ownerId}=auth.mutation(req);
     const dir=await project(req.body?.directory),model=req.body?.model;
     if(model)await validateModel(dir,model);
     if(req.body?.scenario==='log-inspection')await logQuerySkill(dir);
-    const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title:req.body?.scenario==='log-inspection'?'Code Harness · 日志排查':'Code Harness · 直接对话',
+    const title=req.body?.title?.trim()||(req.body?.scenario==='log-inspection'?'Code Harness · 日志排查':'Code Harness · 直接对话');
+    const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title,
       metadata:{harnessScenario:req.body?.scenario??'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
         if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
         if(error instanceof Error&&'reason' in error&&error.reason==='Transport'){
@@ -217,7 +229,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
       });
     if(!session?.id||typeof session.location?.directory!=='string')throw new AuthProblem(502,'OPENCODE_SESSION_RESPONSE');
     if(resolve(session.location.directory)!==dir)throw new AuthProblem(409,'SESSION_DIRECTORY_CHANGED');
-    return reply.code(201).send(wrap({id:session.id,directory:dir}));
+    return reply.code(201).send(wrap({id:session.id,directory:dir,title:session.title||title}));
   });
   const streams=new Set<AbortController>();
   app.addHook('preClose',async()=>{for(const stop of streams)stop.abort();});
@@ -291,7 +303,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     }
     for(const item of inbox)if(item.type==='user'&&!messages.some(m=>m.id===item.id))
       messages.push({id:item.id,role:'user',text:item.payload.text,files:item.payload.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
-    const result:ChatStatus={id:sessionID,forms:forms.map(visibleForm),directory:session.location.directory,messages,
+    const result:ChatStatus={id:sessionID,title:session.title,forms:forms.map(visibleForm),directory:session.location.directory,messages,
       ...(session.model?{model:{id:session.model.id,providerID:session.model.providerID,variant:session.model.variant}}:{}),
       active:Boolean(running[sessionID])||inbox.length>0,outcome:session.outcome,
       permissions:permissions.filter(p=>p.sessionID===sessionID).map(p=>({id:p.id,action:p.action,resources:p.resources,message:p.message,revision:revision(p)}))};

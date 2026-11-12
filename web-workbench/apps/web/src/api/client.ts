@@ -1,4 +1,4 @@
-import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatAccessEntry,ChatModel } from '../../../../packages/contracts/src/chat.ts';
+import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
@@ -54,13 +54,11 @@ export class HarnessApi {
     return body.data;
   }
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
-  chatAccess(){return this.request<ChatAccessEntry[]>('/chat/access-log');}
-  chatProject(directory:string){return this.request<{directory:string}>('/chat/project',{method:'POST',body:JSON.stringify({directory})});}
   chatHistory(directory:string|undefined,scenario:ChatScenario,cursor?:string){
     return this.request<ChatHistoryPage>('/chat/history',{method:'POST',body:JSON.stringify({directory,scenario,cursor})});
   }
   chatModels(directory?:string){return this.request<ChatModel[]>('/chat/models',{method:'POST',body:JSON.stringify({directory})});}
-  newChat(directory?:string,model?:Pick<ChatModel,'id'|'providerID'|'variant'>,scenario?:'log-inspection'){return this.request<{id:string;directory:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory,model,scenario})});}
+  newChat(directory?:string,model?:Pick<ChatModel,'id'|'providerID'|'variant'>,scenario?:'log-inspection',title?:string){return this.request<{id:string;directory:string;title:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory,model,scenario,title})});}
   chat(id:string,expanded?:{message:string;part:number}){
     const query=expanded?'?'+new URLSearchParams({message:expanded.message,part:String(expanded.part)}):'';
     return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id)+query);

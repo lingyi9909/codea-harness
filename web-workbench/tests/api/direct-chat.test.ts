@@ -45,7 +45,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     if(path==='/api/session'&&req.method==='GET'){
       const query=new URL(req.url!,'http://localhost').searchParams;
       assert.equal(query.get('directory'),root);
-      const item={id,title:'旧会话',location:{directory:root},time:{updated:17},metadata:{harnessOwner:'local-workbench',harnessScenario:'direct-chat'}};
+      const item={id,title:session.title??'旧会话',location:{directory:root},time:{updated:17},metadata:{harnessOwner:'local-workbench',harnessScenario:'direct-chat'}};
       const page=query.get('cursor')?[{...item,id:'ses_older'}]:[item,
         {...item,id:'ses_other',metadata:{...item.metadata,harnessOwner:'other'}},
         {...item,id:'ses_logs',metadata:{...item.metadata,harnessScenario:'log-inspection'}},
@@ -53,7 +53,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
         {...item,id:'ses_tui',metadata:{}},{...item,id:'ses_child',parentID:id}];
       return res.end(JSON.stringify({data:page,cursor:query.get('cursor')?{}:{next:'next-page'}}));
     }
-    if(path==='/api/session'){session={id,location:body.location,metadata:body.metadata};return data(session);}
+    if(path==='/api/session'){session={id,title:body.title,location:body.location,metadata:body.metadata};return data(session);}
     if(path===base)return data(session);
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
     if(path===base+'/message')return res.end(JSON.stringify({cursor:{},data:[{id:'msg_2',type:'assistant',content:[
@@ -91,28 +91,24 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       assert.ok(!rejected.body.includes('sensitive upstream detail'));
     }
     failure=0;
-    const logPath='/api/v1/chat/access-log';
-    assert.equal((await app.inject({url:logPath,headers:{host,origin}})).statusCode,401);
-    const logs=await app.inject({url:logPath,headers});
-    const upstream=logs.json().data.find((r:{source:string;result:string})=>r.source==='OpenCode'&&r.result==='503');
-    assert.ok(upstream);
-    assert.ok(logs.json().data.some((r:{source:string;result:string;requestId:string})=>r.source==='工作台'&&r.result==='502'&&r.requestId===upstream.requestId));
-    assert.ok(!logs.body.includes('fixture-sensitive')&&!logs.body.includes(root)&&!logs.body.includes('sensitive upstream detail'));
+    assert.equal((await app.inject({url:'/api/v1/chat/access-log',headers})).statusCode,404);
     const create=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{}});
     assert.equal(create.statusCode,201,create.body);assert.equal(create.json().data.directory,root);
     const history=(payload:object)=>app.inject({method:'POST',url:'/api/v1/chat/history',headers,payload});
     const historyRequest={directory:root,scenario:'direct-chat'};
     const firstPage=await history(historyRequest);
     assert.equal(firstPage.statusCode,200,firstPage.body);
-    assert.deepEqual(firstPage.json().data,{items:[{id,title:'旧会话',updated:17}],next:'next-page'});
-    assert.deepEqual((await history({...historyRequest,cursor:'next-page'})).json().data,{items:[{id:'ses_older',title:'旧会话',updated:17}]});
+    assert.deepEqual(firstPage.json().data,{items:[{id,title:'Code Harness · 直接对话',updated:17}],next:'next-page'});
+    assert.deepEqual((await history({...historyRequest,cursor:'next-page'})).json().data,{items:[{id:'ses_older',title:'Code Harness · 直接对话',updated:17}]});
     assert.equal((await history({...historyRequest,directory:tmpdir()})).statusCode,403);
     const options=await app.inject({method:'POST',url:'/api/v1/chat/models',headers});
     assert.deepEqual(options.json().data,[{id:'corp-alias',name:'Private',providerID:'corp'}]);
     const model={providerID:'corp',id:'corp-alias'};
-    const createWith=(id:string)=>app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{model:{...model,id}}});
+    const title='阅读项目说明并梳理启动步骤';
+    const createWith=(id:string)=>app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{title,model:{...model,id}}});
     assert.equal((await createWith('inactive')).statusCode,409);
-    assert.equal((await createWith(model.id)).statusCode,201);
+    const titled=await createWith(model.id);
+    assert.equal(titled.statusCode,201);assert.equal(titled.json().data.title,title);
     assert.deepEqual(received.filter(r=>r.path==='/api/session').at(-1)?.body.model,model);
     const url='/api/v1/chat/sessions/'+id;
     const post=(suffix:string,payload:object)=>app.inject({method:'POST',url:url+suffix,headers,payload});
@@ -124,6 +120,8 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     assert.equal((await post('/messages',{text:'查看父目录',files:['../']})).statusCode,400);
     const view=await app.inject({method:'GET',url,headers});
     assert.equal(view.statusCode,200,view.body);
+    assert.equal(view.json().data.title,title);
+    assert.equal((await history(historyRequest)).json().data.items[0].title,title);
     assert.equal(view.body.includes('private reasoning'),false);
     assert.deepEqual(view.json().data.messages[0].files,['notes.txt']);
     assert.deepEqual(view.json().data.messages[0].tools,[{name:'edit',status:'completed'}]);
