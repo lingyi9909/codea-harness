@@ -113,3 +113,43 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 @media (max-width: 600px) {
   .page .workbench h1, .task-page .detail-heading h1 { font-size: 18px; }
 }
+
+@media (min-width: 601px) {
+  .sidebar .brand { gap: 8px; margin-inline: 0; white-space: nowrap; }
+}
+
+/* OpenCode Desktop's neutral layers distinguish the conversation from its controls. */
+.scene-page:has(.chat-layout) {
+  --chat-ink: #242424;
+  --chat-muted: #5c5c5c;
+  --chat-surface: #fff;
+  --chat-surface-muted: #fafafa;
+  --chat-layer: #f2f2f2;
+  --chat-line: #dbdbdb;
+  --chat-accent: #2c47c8;
+  --chat-error: #97252b;
+  color: var(--chat-ink);
+}
+.scene-page:has(.chat-layout) .conversation-title { border-color: var(--chat-line); color: var(--chat-muted); }
+.chat-layout .chat-box { border-color: var(--chat-line); border-radius: 10px; }
+.chat-layout .composer { background: var(--chat-surface-muted); border-color: var(--chat-line); border-radius: 0 0 10px 10px; }
+.chat-layout .composer:first-child { border-radius: 10px; }
+.chat-layout .composer > textarea { color: var(--chat-ink); background: transparent; }
+.chat-layout .composer > textarea::placeholder { color: var(--chat-muted); }
+.chat-empty .chat-symbol { color: var(--chat-surface); background: var(--chat-ink); }
+.chat-empty button, .chat-layout .composer-actions button:not(.primary, .running-action) {
+  border-color: var(--chat-line);
+  color: var(--chat-muted);
+  background: var(--chat-surface);
+}
+.chat-empty button:hover, .chat-layout .composer-actions button:not(.primary, .running-action):enabled:hover { background: var(--chat-layer); color: var(--chat-ink); }
+.chat-layout .composer-actions .primary { padding: 8px 15px; background: var(--chat-ink); }
+.chat-layout .composer-actions .primary:enabled:hover { background: #3a3a3a; }
+.scene-page:has(.chat-layout) :is(button, summary, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--chat-accent);
+  outline-offset: 2px;
+}
+.chat-layout .notice[role="alert"] { color: var(--chat-error); background: #fceceb; border-color: #f6d5d3; }
+.scene-page:has(.chat-layout) .conversation-history { border-color: var(--chat-line); }
+.conversation-history li button:is(:hover,[aria-current]) { background: var(--chat-layer); }
+.conversation-history small, .conversation-history p { color: var(--chat-muted); }

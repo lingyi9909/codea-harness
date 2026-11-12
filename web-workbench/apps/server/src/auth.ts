@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
-type Session={ownerId:string;csrf:string;expires:number};
+type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string}};
 const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
@@ -51,19 +51,27 @@ export class LocalAuth {
     this.paired=true;
     return this.issue(reply,ownerId);
   }
-  openLocal(req:FastifyRequest,reply:FastifyReply,ownerId:string):Session{
+  requireLocalOrigin(req:FastifyRequest){
     if(!this.origin(req)||req.headers.origin!=='http://'+req.headers.host)
       throw new AuthProblem(403,'ORIGIN_INVALID');
+  }
+  openLocal(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string},save:()=>void):Session{
+    this.requireLocalOrigin(req);
+    const now=Date.now();
+    for(const [key,session] of this.sessions){
+      if(session.expires<=now)this.sessions.delete(key);
+      else if(session.profile?.key!==profile.key)throw new AuthProblem(409,'PROFILE_IN_USE');
+    }
+    // Saving and issuing are synchronous so overlapping logins cannot interleave.
+    save();
     try{return this.session(req);}catch(e){
       if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
     }
-    const now=Date.now();
-    for(const [key,session] of this.sessions)if(session.expires<=now)this.sessions.delete(key);
-    return this.issue(reply,ownerId);
+    return this.issue(reply,'local-workbench',profile);
   }
-  private issue(reply:FastifyReply,ownerId:string):Session{
+  private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile']):Session{
     const token=randomBytes(32).toString('base64url');
-    const session={ownerId,csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
+    const session={ownerId,profile,csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
     this.sessions.set(hash(token).toString('hex'),session);
     reply.header('Set-Cookie',COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
     return session;

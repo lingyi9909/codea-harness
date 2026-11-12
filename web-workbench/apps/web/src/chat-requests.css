@@ -5,7 +5,7 @@
 .request-item pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:.4rem 0}
 .request-fields,.request-choices{border:0;padding:0;margin:0;min-width:0}
 .request-fields>div,.request-choices{display:grid;gap:.25rem;margin:.55rem 0}
-.request-fields small{display:block;color:#4c5a55}
+.request-fields small{display:block;color:var(--chat-muted)}
 .request-fields input:not([type=checkbox]),.request-fields select,.request-fields textarea{box-sizing:border-box;width:100%;max-width:36rem}
 .request-fields .request-choices label{display:flex;gap:.45rem;align-items:center}
 .request-fields .request-choices label:has(textarea){display:grid}
@@ -15,42 +15,44 @@
 .request-radio-group{border:0;padding:0;margin:.55rem 0;min-width:0;display:grid;gap:.3rem}
 .request-radio-group legend{margin-bottom:.3rem}
 .request-radio-group .request-radio{display:flex;align-items:center;gap:.55rem;padding:.45rem .65rem;border:1px solid #ccd3ce;border-radius:.4rem;cursor:pointer}
-.request-radio-group .request-radio:has(input:checked){border-color:#39756b;background:#eef7f3}
-.request-radio-group .request-radio:focus-within{outline:2px solid #39756b;outline-offset:1px}
+.request-radio-group .request-radio:has(input:checked){border-color:var(--chat-accent);background:#ecf1fe}
+.request-radio-group .request-radio:focus-within{outline:2px solid var(--chat-accent);outline-offset:1px}
 .request-fields .request-radio input[type=radio]{width:auto;margin:0;flex:none}
 .request-radio-group button{justify-self:start}
 
 .chat-requests {
   margin:0 12px 10px;
-  border:1px solid #d9c4a4;
+  border:1px solid #c3d4fd;
   border-radius:10px;
-  background:#fffcf7;
+  background:#f5f8ff;
   padding:12px 14px;
 }
 .chat-requests>p[role=status] {
   display:flex;align-items:center;gap:7px;
-  color:#835723;font-size:12px;font-weight:600;
+  color:var(--chat-accent);font-size:12px;font-weight:600;
 }
 .chat-requests>p[role=status]::before {
-  content:"";width:7px;height:7px;border-radius:50%;background:#ab6e23;
+  content:"";width:7px;height:7px;border-radius:50%;background:var(--chat-accent);
 }
 .chat-requests .request-item>strong {font-size:15px}
 .request-fields legend,.request-fields label:not(.request-radio) {font-size:13px}
 .request-fields input:not([type=radio]):not([type=checkbox]),.request-fields select,.request-fields textarea {
-  padding:7px 10px;border:1px solid #ccc8c1;border-radius:6px;background:white;color:inherit;
+  padding:7px 10px;border:1px solid var(--chat-line);border-radius:6px;background:white;color:inherit;
 }
 .request-fields .request-radio {background:white}
 .request-actions {margin-top:10px}
 .request-actions button {
-  padding:6px 12px;border:1px solid #d2cdc4;border-radius:6px;background:white;color:#494640;font-size:13px;
+  padding:6px 12px;border:1px solid var(--chat-line);border-radius:6px;background:white;color:var(--chat-ink);font-size:13px;
 }
-.request-actions button:first-child {background:#4b443d;border-color:#4b443d;color:white}
-.request-actions button:focus-visible,.request-fields :focus-visible {outline:2px solid #8c5c40;outline-offset:2px}
+.request-actions button:first-child {background:var(--chat-ink);border-color:var(--chat-ink);color:white}
+.request-actions button:focus-visible,.request-fields :focus-visible {outline:2px solid var(--chat-accent);outline-offset:2px}
 .chat-requests {max-height:55vh}
-.chat-requests .request-actions {position:sticky;bottom:0;padding-block:5px;background:#fffcf7}
+.chat-requests .request-actions {position:sticky;bottom:0;padding-block:5px;background:#f5f8ff}
 
 .request-composer .chat-requests {margin:0;max-height:55vh;overflow:auto}
 .request-composer .composer-actions {margin-top:8px}
 .request-composer .request-fields input:not([type=checkbox]):not([type=radio]) {max-width:none}
 .answer-options summary {width:fit-content;cursor:pointer}
 .answer-options button {display:block;margin:.35rem 0;padding:.4rem .65rem;text-align:start}
+
+.request-fields input:is([type=checkbox],[type=radio]) {accent-color:var(--chat-accent)}

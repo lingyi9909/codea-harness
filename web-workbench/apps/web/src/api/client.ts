@@ -37,6 +37,7 @@ export class HarnessApi {
       throw new ApiError(response.status, error?.code ?? 'HTTP_' + response.status,
         error?.message ?? '服务请求失败');
     }
+    if (response.status===204 && verb==='DELETE' && path==='/auth/session') return undefined as T;
     if (typeof data !== 'object' || data === null || !('data' in data))
       throw new ApiError(response.status, 'CONTRACT_MISMATCH', '服务返回值不符合 OpenAPI 契约');
     return (data as {data:T}).data;
@@ -67,14 +68,19 @@ export class HarnessApi {
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() {
-    if (!this.connecting) {
-      this.connecting=this.request<Schema<'Bootstrap'>>('/bootstrap').catch((e:unknown)=>{
-        if(e instanceof ApiError&&e.status===401&&e.code==='LOCAL_SESSION_REQUIRED')
-          return this.request<Schema<'Bootstrap'>>('/auth/local-session',{method:'POST'});
-        throw e;
-      }).finally(()=>{this.connecting=undefined;});
-    }
+    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').finally(()=>{this.connecting=undefined;});
     return this.connecting;
+  }
+  async login(name:string,phone:string) {
+    const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
+      method:'POST',body:JSON.stringify({name,phone}),
+    });
+    this.setCsrf(session.csrfToken);
+    return session;
+  }
+  async logout() {
+    await this.request<void>('/auth/session',{method:'DELETE'});
+    this.setCsrf('');
   }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }

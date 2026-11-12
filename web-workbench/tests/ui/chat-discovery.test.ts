@@ -3,9 +3,19 @@ import assert from 'node:assert/strict';
 import {mkdir,mkdtemp,writeFile,chmod,rm,readFile,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {chromium,expect} from '@playwright/test';
+import {chromium,expect,type Page} from '@playwright/test';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
+
+async function login(page:Page){
+  await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
+  await expect(page.getByText('.workbench/user.json',{exact:true})).toBeVisible();
+  await page.getByLabel('姓名',{exact:true}).fill('测试同事');
+  await page.getByLabel('手机号',{exact:true}).fill('13800000000');
+  await page.getByRole('button',{name:'登录工作台',exact:true}).click();
+  await expect(page.getByRole('navigation')).toBeVisible();
+  await expect(page.getByText('测试同事',{exact:true})).toBeVisible();
+}
 
 it('browser uses the startup directory, starts the CLI fixture and shows upstream failure',{timeout:90000},async()=>{
   const root=await mkdtemp(join(tmpdir(),'harness cli ')),file=join(root,'service.json');
@@ -128,7 +138,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
   process.env.HARNESS_CHAT_ROOTS=project;
   delete process.env.HARNESS_REPOSITORY_ROOTS;delete process.env.HARNESS_OPENCODE_URL;
   const port=31881;
-  const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,autoOpenCode:true});
+  const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,workspace:project,autoOpenCode:true});
   async function recorded(suffix:string){
     const text=await readFile(file+suffix,'utf8').catch((e:NodeJS.ErrnoException)=>{if(e.code!=='ENOENT')throw e;return '';});
     return text?JSON.parse(text):{};
@@ -145,6 +155,16 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       if(path==='/api/v1/chat/access-log'||path==='/api/v1/chat/project')retiredRequests.push(path);
     });
     await page.goto('http://127.0.0.1:'+port);
+    await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
+    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await page.getByLabel('姓名',{exact:true}).fill('测试同事');
+    await page.getByLabel('手机号',{exact:true}).fill('12');
+    await page.getByRole('button',{name:'登录工作台',exact:true}).click();
+    await expect(page.getByRole('alert')).toContainText('请输入有效的手机号');
+    assert.equal(sessionRequests,0);
+    await login(page);
+    const contactCache=await page.evaluate(()=>JSON.stringify([localStorage,sessionStorage,document.cookie]));
+    for(const value of ['测试同事','13800000000'])assert.ok(!contactCache.includes(value));
     await expect(page.getByRole('navigation')).toBeVisible();
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
     assert.equal(sessionRequests,1);
@@ -373,6 +393,12 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(appliedRange).toContainText(expectedRange);
     assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
     assert.deepEqual(retiredRequests,[]);
+    await page.getByRole('button',{name:'退出登录'}).click();
+    await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
+    assert.equal(await sessionCookie(),undefined);
+    await page.reload();
+    await expect(page.getByLabel('手机号',{exact:true})).toHaveValue('');
+    assert.equal(sessionRequests,1);
   }finally{
     process.chdir(cwd);
     for(const key of Object.keys(process.env))if(!(key in saved))delete process.env[key];
@@ -386,9 +412,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
 
 it('groups a multi-step weather response and keeps verification output out of the answer',async()=>{
   const port=31882,id='ses_weather_example';
-  const app=await createApp({localOnly:true,auth:new LocalAuth('unused',port)});
+  const root=await realpath(await mkdtemp(join(tmpdir(),'harness weather ')));
+  const app=await createApp({localOnly:true,workspace:root,auth:new LocalAuth('unused',port)});
   const browser=await chromium.launch(process.env.HARNESS_TEST_CHROME?{channel:'chrome'}:{});
-  const root=await realpath('chat-files');
+
   try{
     await app.listen({host:'127.0.0.1',port});
     const page=await browser.newPage({viewport:{width:1280,height:800}});
@@ -407,6 +434,7 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.route('**/chat/sessions/'+id,route=>route.fulfill({json:{data:{
       id,directory:root,title:'北京明天的天气',active:false,messages,permissions:[],forms:[]},requestId:'fixture'}}));
     await page.goto('http://127.0.0.1:'+port);
+    await login(page);
     const response=page.getByRole('article',{name:'OpenCode 回答'});
     const body=response.getByRole('region',{name:'回答正文'});
     await expect(response).toHaveCount(1);
@@ -442,5 +470,5 @@ it('groups a multi-step weather response and keeps verification output out of th
     assert.ok(await page.locator('.chat-feed').evaluate(el=>el.scrollHeight>el.clientHeight+100));
     const pinned=await page.locator('.composer').boundingBox();
     assert.ok(pinned&&pinned.y+pinned.height<=800,'long history scrolls without displacing the composer');
-  }finally{await browser.close();await app.close();}
+  }finally{await browser.close();await app.close();await rm(root,{recursive:true,force:true});}
 });
