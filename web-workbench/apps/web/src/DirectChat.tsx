@@ -1,5 +1,6 @@
-import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {streamingMessages,useChatStream} from './chatStream.ts';
+import {useProgressiveMessages} from './progressiveMessages.ts';
 import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
 import {activateChat,displayChatTitle,summarizeFirstInput,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
 import {ModelPicker} from './ModelPicker.tsx';
@@ -55,7 +56,7 @@ function ChatWorkspace({investigation,directory,settings}:{
   const composerKey=draftKey(sessionKey,directory,id);
   const [initialDraft]=useState(()=>readDraft(composerKey));
   const stream=useChatStream(id);
-  const [expanded,expand]=useState<{session:string;message:string;part:number}>();
+  const createdSession=useRef('');
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(initialDraft.text),[refs,attach]=useState(initialDraft.files);
   const [showFiles,toggleFiles]=useState(Boolean(initialDraft.files)),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
   useEffect(()=>{
@@ -67,7 +68,7 @@ function ChatWorkspace({investigation,directory,settings}:{
     if(next===id)return;
     const saved=readDraft(draftKey(sessionKey,directory,next));
     setCachedTitle(readHistory(localStorage,sessionKey,directory).find(row=>row.id===next)?.title??'');
-    select(next);update(null);expand(undefined);write(saved.text);attach(saved.files);toggleFiles(Boolean(saved.files));
+    select(next);update(null);createdSession.current='';write(saved.text);attach(saved.files);toggleFiles(Boolean(saved.files));
     setChosen(undefined);fail('');migrating.current=false;restoreContext.current=true;
     activateChat(localStorage,sessionStorage,sessionKey,directory,next);
   }
@@ -79,7 +80,7 @@ function ChatWorkspace({investigation,directory,settings}:{
     }
     let live=true;let timer:ReturnType<typeof setTimeout>;
     const poll=async()=>{let interval=1800;try{
-      const value=await api.chat(id,expanded?.session===id?expanded:undefined);
+      const value=await api.chat(id);
       if(!live)return;
       if(value.active)interval=900;
       if(restoreContext.current){
@@ -104,7 +105,7 @@ function ChatWorkspace({investigation,directory,settings}:{
       else fail(explain(e));
     }finally{if(live)timer=setTimeout(poll,interval);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
-  },[id,refresh,sessionKey,directory,expanded,stream.requestsVersion]);
+  },[id,refresh,sessionKey,directory,stream.requestsVersion]);
   async function run(fn:()=>Promise<void>){if(busy)return false;wait(true);fail('');try{await fn();bump(n=>n+1);return true;}catch(e){fail(explain(e));return false;}finally{wait(false);}}
   const currentTitle=id?displayChatTitle(state?.id===id?state.title:undefined,cachedTitle):'';
   const input=useRef<HTMLTextAreaElement>(null);
@@ -131,7 +132,7 @@ function ChatWorkspace({investigation,directory,settings}:{
     if(!session){
       const title=draft.trim()?summarizeFirstInput(draft):summarizeFirstInput(text,Boolean(investigation));
       const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,investigation?'log-inspection':undefined,title);
-      session=s.id;setCachedTitle(s.title||title);
+      session=s.id;createdSession.current=session;setCachedTitle(s.title||title);
       rememberChat(localStorage,sessionKey,directory,{id:session,title:s.title||title,updated:Date.now()});
       activateChat(localStorage,sessionStorage,sessionKey,directory,session);
       restoreContext.current=false;sessionStorage.removeItem(composerKey);select(session);
@@ -143,11 +144,15 @@ function ChatWorkspace({investigation,directory,settings}:{
     investigation?.onSent(session);write('');attach('');toggleFiles(false);
   });
   const feed=useRef<HTMLDivElement>(null),follow=useRef(true);
-  useEffect(()=>{follow.current=true;},[id]);
-  useEffect(()=>{
+  const snapshot=state?.id===id?state:undefined;
+  const streamAhead=stream.parts.some(part=>!snapshot?.messages.some(m=>m.id===part.message));
+  const active=Boolean(!pending&&(snapshot?.active||streamAhead));
+  const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts),[snapshot,stream.parts]);
+  const messages=useProgressiveMessages(id,merged,snapshot?.messages,Boolean(snapshot?.active),createdSession.current===id);
+  useLayoutEffect(()=>{follow.current=true;},[id]);
+  useLayoutEffect(()=>{
     if(follow.current&&feed.current)feed.current.scrollTop=feed.current.scrollHeight;
-  },[state,stream.parts,stream.tools]);
-  const messages=streamingMessages(state?.id===id?state.messages:[],stream.parts);
+  },[messages,stream.tools]);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div className="thread-heading"><h1>{investigation?'日志排查':'直接对话'}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
@@ -161,8 +166,7 @@ function ChatWorkspace({investigation,directory,settings}:{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>想在这个目录里做什么？</h2>
         <button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button></div>}
-        <ConversationTranscript messages={messages} progress={stream.tools} active={Boolean(state?.active&&!pending)}
-          expanded={expanded?.session===id?expanded:undefined} onExpand={value=>expand(value?{session:id,...value}:undefined)}/>
+        <ConversationTranscript key={id} messages={messages} progress={stream.tools} active={active}/>
       </div>}
       {error&&<p role="alert" className="notice">{error}</p>}
       {pending&&state?<div className="composer request-composer">

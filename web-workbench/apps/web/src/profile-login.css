@@ -4,35 +4,35 @@
   padding: 32px 20px;
   display: grid;
   place-items: center;
-  background: #f7f7f5;
-  color: #26272e;
+  background: var(--wb-canvas);
+  color: var(--wb-ink);
 }
 .profile-card {
   width: min(100%, 414px);
   padding: clamp(25px, 5vw, 38px);
   background: #fff;
-  border: 1px solid #e1e0dc;
+  border: 1px solid var(--wb-line);
   border-radius: 18px;
-  box-shadow: 0 8px 28px #25253609;
+  box-shadow: 0 8px 28px #14394710;
 }
 .profile-brand { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 650; }
-.profile-brand span { display: grid; place-items: center; width: 31px; height: 31px; background: #403d65; color: white; border-radius: 9px; font-size: 22px; }
+.profile-brand span { display: grid; place-items: center; width: 31px; height: 31px; background: var(--wb-teal); color: white; border-radius: 9px; font-size: 22px; }
 .profile-card h1 { margin: 29px 0 24px; font-size: 28px; letter-spacing: -.04em; }
 .profile-card form, .profile-card label { display: grid; }
 .profile-card form { gap: 18px; }
 .profile-card label { gap: 8px; font-size: 14px; font-weight: 600; }
-.profile-card input { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid #cccbd1; border-radius: 8px; background: #fefefd; color: #292833; }
-.profile-card :focus-visible, .workbench-account button:focus-visible { outline: 2px solid #6860ad; outline-offset: 2px; }
+.profile-card input { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid #99b1b5; border-radius: 8px; background: #fbfdfd; color: var(--wb-ink); }
+.profile-card :focus-visible { outline: 2px solid var(--wb-blue); outline-offset: 2px; }
 .profile-disclosure, .profile-error { margin: 0; font-size: 13px; line-height: 1.65; }
-.profile-disclosure { color: #63616d; }
-.profile-disclosure code { color: #454254; overflow-wrap: anywhere; }
+.profile-disclosure { color: var(--wb-muted); }
+.profile-disclosure code { color: var(--wb-ink); overflow-wrap: anywhere; }
 .profile-error { color: #a33838; }
-.profile-submit { min-height: 44px; background: #514980; color: #fff; border: 0; border-radius: 8px; font-weight: 650; }
-.profile-submit:hover:enabled { background: #433d6f; }
-.workbench-account { margin-top: auto; padding: 12px 6px 0; border-top: 1px solid #deddd9; display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; }
+.profile-submit { min-height: 44px; background: var(--wb-teal); color: #fff; border: 0; border-radius: 8px; font-weight: 650; }
+.profile-submit:hover:enabled { background: var(--wb-teal-deep); }
+.workbench-account { margin-top: auto; padding: 12px 6px 0; border-top: 1px solid #37535f; display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; }
 .workbench-account span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workbench-account button { flex-shrink: 0; border: 0; border-radius: 6px; padding: 6px; background: transparent; color: #554e7e; }
-.workbench-account button:hover { background: #eae8f0; }
+.workbench-account button { flex-shrink: 0; border: 0; border-radius: 6px; padding: 6px; background: transparent; color: #a1e7d6; }
+.workbench-account button:hover { background: #234651; }
 @media(max-width:600px) {
   .sidebar .workbench-account { position: absolute; top: 12px; right: 16px; max-width: 45%; padding: 0; border: 0; }
   .app-shell > .sidebar { position: relative; }

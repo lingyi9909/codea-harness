@@ -118,15 +118,60 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
   .sidebar .brand { gap: 8px; margin-inline: 0; white-space: nowrap; }
 }
 
-/* OpenCode Desktop's neutral layers distinguish the conversation from its controls. */
+/* Shared workbench palette, including the login screen and native dialogs. */
+:root {
+  --wb-ink: #162e3b;
+  --wb-muted: #4d646e;
+  --wb-canvas: #eff5f5;
+  --wb-line: #cadadd;
+  --wb-teal: #096663;
+  --wb-teal-deep: #06524f;
+  --wb-mint: #daefea;
+  --wb-blue: #255d96;
+  --wb-navy: #162f3c;
+  color: var(--wb-ink);
+  background: var(--wb-canvas);
+}
+.sidebar {
+  color: #f0fbf9;
+  background: var(--wb-navy);
+  border-color: #234754;
+}
+.brand-icon, .chat-symbol { color: white; background: var(--wb-teal); }
+.sidebar .brand-icon { color: #123c43; background: #90e0c9; }
+.sidebar .side-link, .sidebar .history-item { color: #d5e6e8; }
+.sidebar .side-link > span { color: #85d3c5; }
+.sidebar :is(.side-link, .history-item):hover { background: #21434e; }
+.sidebar .selected {
+  color: white !important;
+  background: #22545a !important;
+  box-shadow: inset 3px 0 #86ddc3;
+}
+.sidebar :is(.side-section, .side-section button, .history-meta, .muted) { color: #afc9cd; }
+.sidebar :focus-visible { outline: 2px solid #98edd6; outline-offset: -2px; }
+.topbar { background: #f9fcfc; border-color: var(--wb-line); }
+.breadcrumb, .scene-title p, .scene-card p, .workbench .intro { color: var(--wb-muted); }
+.primary, .chat-hero b { background: var(--wb-teal); }
+.primary:hover:enabled { background: var(--wb-teal-deep); }
+.secondary, .scene-card, .file-panel, .form-panel, .detail-card { color: var(--wb-ink); border-color: var(--wb-line); }
+.secondary:enabled:hover { background: #eff8f6; border-color: #93b3b2; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outline-offset: 2px; }
+.chat-hero { background: var(--wb-mint); border-color: #abcec6; color: #154e4d; }
+.chat-hero > span:nth-of-type(2) { color: #3a615e; }
+.accent, .subtle, .report-actions button { color: var(--wb-teal); }
+.scope-hint { background: #edf8f5; border-color: var(--wb-teal); }
+.scope-hint span { color: var(--wb-muted); }
+.form-panel :is(input, select, textarea):focus, .detail-card textarea:focus {
+  border-color: var(--wb-teal); box-shadow: 0 0 0 3px #09666321;
+}
 .scene-page:has(.chat-layout) {
-  --chat-ink: #242424;
-  --chat-muted: #5c5c5c;
+  --chat-ink: var(--wb-ink);
+  --chat-muted: var(--wb-muted);
   --chat-surface: #fff;
-  --chat-surface-muted: #fafafa;
-  --chat-layer: #f2f2f2;
-  --chat-line: #dbdbdb;
-  --chat-accent: #2c47c8;
+  --chat-surface-muted: #f3f8f8;
+  --chat-layer: #e2efee;
+  --chat-line: var(--wb-line);
+  --chat-accent: var(--wb-blue);
   --chat-error: #97252b;
   color: var(--chat-ink);
 }
@@ -136,15 +181,15 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 .chat-layout .composer:first-child { border-radius: 10px; }
 .chat-layout .composer > textarea { color: var(--chat-ink); background: transparent; }
 .chat-layout .composer > textarea::placeholder { color: var(--chat-muted); }
-.chat-empty .chat-symbol { color: var(--chat-surface); background: var(--chat-ink); }
+.chat-empty .chat-symbol { color: var(--chat-surface); background: var(--wb-teal); }
 .chat-empty button, .chat-layout .composer-actions button:not(.primary, .running-action) {
   border-color: var(--chat-line);
   color: var(--chat-muted);
   background: var(--chat-surface);
 }
 .chat-empty button:hover, .chat-layout .composer-actions button:not(.primary, .running-action):enabled:hover { background: var(--chat-layer); color: var(--chat-ink); }
-.chat-layout .composer-actions .primary { padding: 8px 15px; background: var(--chat-ink); }
-.chat-layout .composer-actions .primary:enabled:hover { background: #3a3a3a; }
+.chat-layout .composer-actions .primary { padding: 8px 15px; background: var(--wb-teal); }
+.chat-layout .composer-actions .primary:enabled:hover { background: var(--wb-teal-deep); }
 .scene-page:has(.chat-layout) :is(button, summary, a, input, select, textarea):focus-visible {
   outline: 2px solid var(--chat-accent);
   outline-offset: 2px;

@@ -248,9 +248,15 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     const heartbeat=setInterval(()=>{if(!raw.write(': heartbeat\n\n'))stop.abort();},15000);
     try{
       let ready=false;
-      for await(const event of native.event.subscribe({signal:stop.signal})){
+      const signalReady=()=>{
+        if(ready||stop.signal.aborted)return;
+        ready=true;
+        raw.write('event: ready\ndata: {}\n\n');
+      };
+      // A quiet session can send only keepalives. The shared client also replays its connected event.
+      for await(const event of native.event.subscribe({signal:stop.signal,onActivity:signalReady})){
         if(stop.signal.aborted)break;
-        if(!ready){raw.write('event: ready\ndata: {}\n\n');ready=true;}
+        signalReady();
         const eventSession=event.type==='form.created'?event.data.form.sessionID:
           'sessionID' in event.data?event.data.sessionID:undefined;
         if(eventSession!==sessionID)continue;
@@ -262,8 +268,8 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
             const data=event.data;
             const fragment:ChatFragment={id:event.id,message:data.assistantMessageID,ordinal:data.ordinal,
               kind:event.type.startsWith('session.text.')?'text':'thinking',at:event.created,
-              phase:'delta' in data?'delta':'text' in data?'ended':'started',
-              text:'delta' in data?data.delta:'text' in data?data.text:''};
+              phase:event.type.endsWith('.delta')?'delta':event.type.endsWith('.ended')?'ended':'started',
+              text:'delta' in data&&typeof data.delta==='string'?data.delta:'text' in data&&typeof data.text==='string'?data.text:''};
             frame='event: fragment\ndata: '+JSON.stringify(fragment);
             break;
           }
@@ -297,7 +303,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     const messages:ChatMessage[]=[];
     for(const m of page.data.slice().reverse()){
       if(m.type==='user')messages.push({id:m.id,role:'user',text:m.text,files:m.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
-      const steps=activity(m,m.id===req.query.message?req.query.part:undefined);
+      const steps=activity(m);
       if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',text:'',files:[],tools:[],steps});
       if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length))messages.push({id:m.id,role:'assistant',
         toolCallTurn:m.finish==='tool-calls',complete:Boolean(m.time?.completed||m.finish||m.error),steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',

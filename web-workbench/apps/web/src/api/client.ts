@@ -60,9 +60,8 @@ export class HarnessApi {
   }
   chatModels(directory?:string){return this.request<ChatModel[]>('/chat/models',{method:'POST',body:JSON.stringify({directory})});}
   newChat(directory?:string,model?:Pick<ChatModel,'id'|'providerID'|'variant'>,scenario?:'log-inspection',title?:string){return this.request<{id:string;directory:string;title:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory,model,scenario,title})});}
-  chat(id:string,expanded?:{message:string;part:number}){
-    const query=expanded?'?'+new URLSearchParams({message:expanded.message,part:String(expanded.part)}):'';
-    return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id)+query);
+  chat(id:string){
+    return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id));
   }
   chatAction(id:string,action:'messages'|'permission'|'interrupt'|'model'|'form',body:object={}){
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
