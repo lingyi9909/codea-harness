@@ -52,27 +52,30 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 .scene-page:has(.chat-layout, .file-panel) .scene-title h1 { font-size: 21px; line-height: 1.35; margin: 0; letter-spacing: 0; }
 .scene-page:has(.chat-layout, .file-panel) .scene-title p { font-size: 12px; line-height: 1.5; margin-top: 2px; }
 .scene-title .secondary { flex-shrink: 0; }
-.chat-feed { padding: 14px 16px; }
+.chat-feed { padding: 12px 16px; }
 .chat-empty { margin: 8px 0; gap: 8px; }
-.conversation-title { margin: 0; padding: 10px 16px 8px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.thread-heading { display:flex; gap:12px; align-items:baseline; min-width:0; }
+.thread-heading h1 { flex-shrink:0; }
+.thread-heading .conversation-title { margin:0; padding-left:12px; border-left:1px solid #d4d7cf; color:#555b52; font-size:14px; font-weight:500; line-height:1.4; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.scene-title .chat-history-actions .secondary { padding:5px 10px; font-size:13px; }
 .chat-box > .composer:first-child { border-top: 0; }
 .chat-layout .composer { padding: 10px 12px; }
-.chat-layout .composer > textarea { display: block; min-height: 48px; margin: 0 0 6px; padding: 8px; }
+.chat-layout .composer > textarea { display: block; min-height: 38px; margin: 0 0 4px; padding: 5px 3px; }
 
 @media (min-width: 851px) {
   .app-shell:has(.chat-layout, .file-panel, .workbench, .task-page) > .sidebar { width: clamp(170px, 14vw, 210px); }
   .main:has(.chat-layout) { display: flex; flex-direction: column; height: 100dvh; }
   .page:has(.chat-layout) { display: flex; flex: 1; flex-direction: column; overflow: auto; }
-  .scene-page:has(.chat-layout) { display: flex; flex: 1; flex-direction: column; }
-  .chat-layout { flex: 1; }
-  .log-investigation .chat-layout:not(:has(.chat-feed)) { flex: none; }
-  .chat-box { display: flex; align-self: stretch; flex-direction: column; }
-  .chat-feed { flex: 1 1 0; min-height: 140px; max-height: none; }
+  .scene-page:has(.chat-layout) { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+  .chat-layout { display:flex; flex-direction:column; flex:0 1 auto; min-height:0; }
+  .chat-box { display:flex; width:100%; min-height:0; flex-direction:column; }
+  .chat-box > .composer { flex:none; }
+  .chat-feed { flex:0 1 auto; min-height:0; max-height:none; }
   .chat-empty:only-child { align-content: center; height: 100%; margin: 0; }
 }
 
 @media (max-width: 850px) {
-  .chat-feed { min-height: clamp(200px, 36dvh, 360px); }
+  .chat-feed { min-height:0; max-height:55dvh; }
   .chat-layout .composer-actions .primary { width: auto; }
 }
 
