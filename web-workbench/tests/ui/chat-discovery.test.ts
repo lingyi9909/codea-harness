@@ -7,6 +7,19 @@ import {chromium,expect,type Page} from '@playwright/test';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
 
+async function observePaintedText(page:Page){
+  return page.evaluateHandle(()=>{
+      const seen=new Set<string>();
+      new MutationObserver(()=>{
+        for(const el of Array.from(document.querySelectorAll('.turn-answer p, .turn-reasoning p'))){
+          const value=el.textContent??'';
+          if(value)seen.add(value);
+        }
+      }).observe(document.body,{subtree:true,childList:true,characterData:true});
+      return seen;
+    });
+}
+
 async function login(page:Page){
   await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
   await expect(page.getByText('.workbench/user.json',{exact:true})).toBeVisible();
@@ -20,6 +33,8 @@ async function login(page:Page){
 it('browser uses the startup directory, starts the CLI fixture and shows upstream failure',{timeout:90000},async()=>{
   const root=await mkdtemp(join(tmpdir(),'harness cli ')),file=join(root,'service.json');
   const win=process.platform==='win32',cli=join(root,win?'opencode.cmd':'opencode'),script=join(root,'fixture.cjs');
+  const firstReasoning='先核对本次查询的起止日期和时区，再按时间顺序检查每个匹配项。';
+  const finalAnswer='已找到两条记录，来自相同的服务，请对照这两条记录的请求时间。';
   const diagnosis=['## 排查结果','', '| 服务 | 耗时 |','| --- | ---: |','| 订单 | 120 ms |','',
     '> 已按 Trace ID 对齐。','','~~~json','{"count":2}','~~~','','- [x] 已核实时间区间'].join('\n');
   await writeFile(script,`
@@ -33,17 +48,17 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
         output?.write('data: '+JSON.stringify({id,type,created:Date.now(),data:{sessionID,assistantMessageID:'live-msg',ordinal,...fields}})+'\\n\\n');
       };
       emit('session.reasoning.started',0,{});
-      emit('session.reasoning.delta',0,{delta:'先核对'},'r1');
-      emit('session.reasoning.delta',0,{delta:'先核对'},'r1');
+      emit('session.reasoning.delta',0,{delta:${JSON.stringify(firstReasoning)}},'r1');
+      emit('session.reasoning.delta',0,{delta:${JSON.stringify(firstReasoning)}},'r1');
       emit('session.reasoning.delta',0,{delta:'foreign-secret'},'foreign','other');
       await until('.next');
       emit('session.reasoning.delta',0,{delta:'时间线'},'r2');
-      emit('session.reasoning.ended',0,{text:'先核对时间线',state:{opaque:'private-marker'}});
+      emit('session.reasoning.ended',0,{text:${JSON.stringify(firstReasoning+'时间线')},state:{opaque:'private-marker'}});
       emit('session.text.started',1,{});
       emit('session.text.delta',1,{delta:'已找到'},'t1');
       await until('.finish');
-      emit('session.text.delta',1,{delta:'两条记录'},'t2');
-      emit('session.text.ended',1,{text:'已找到两条记录'});
+      emit('session.text.delta',1,{delta:${JSON.stringify(finalAnswer.slice(3))}},'t2');
+      emit('session.text.ended',1,{text:${JSON.stringify(finalAnswer)}});
       generated=true;
     }
     let logSession,secondLog;const secondBase='/api/session/ses_second_log';const logBase='/api/session/ses_logs_fixture';
@@ -102,7 +117,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
         });return;
       }
       if(req.url.startsWith(logBase+'/message'))return res.end(JSON.stringify({cursor:{},data:[...(generated?[{type:'assistant',id:'live-msg',finish:'stop',content:[
-        {type:'reasoning',text:'先核对时间线'},{type:'text',text:'已找到两条记录'}]}]:[]),{type:'assistant',id:'assistant-log',content:[
+        {type:'reasoning',text:${JSON.stringify(firstReasoning+'时间线')}},{type:'text',text:${JSON.stringify(finalAnswer)}}]}]:[]),{type:'assistant',id:'assistant-log',content:[
         {type:'text',text:'开始核对匹配行。'},{type:'reasoning',text:'客户端可见的测试片段',state:{opaque:'private-marker'}},
         {type:'tool',name:'grep',state:{status:'completed',input:{pattern:'abc123'},content:[{type:'text',text:'命中第 2 行'}]}},
         {type:'text',text:'检查结束。'},{type:'text',text:${JSON.stringify(diagnosis)}}]}]}));
@@ -265,6 +280,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await submit.click();
     await expect(page.getByRole('alert')).toContainText('未加载自定义 Skill「log-query」');
     await expect(page.getByLabel('对话内容')).toHaveValue('检查超时原因');
+    const painted=await observePaintedText(page);
     await writeFile(file+'.skill','1');
     await submit.click();
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
@@ -288,24 +304,31 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await feed.getByText('调用参数',{exact:true}).click();
     await expect(feed.locator('.execution-tool pre').first()).toContainText('abc123');
     await expect(feed).not.toContainText('cross-session-marker');
-    const thought=processRow.getByRole('button',{name:/思考过程/}).first();
-    await expect(thought).toBeVisible();
-    await expect(feed).not.toContainText('客户端可见的测试片段');
-    await thought.click();await expect(feed).toContainText('客户端可见的测试片段');
+    const thought=feed.locator('.turn-reasoning');
+    await expect(thought.locator('summary')).toContainText('思考过程');
+    await expect(feed.getByText('客户端可见的测试片段',{exact:true})).toBeVisible();
+    await expect(feed.getByText(firstReasoning,{exact:true})).toBeVisible();
     await expect(feed).not.toContainText('private-marker');
-    await thought.click();await expect(feed).not.toContainText('客户端可见的测试片段');
-    await expect(feed.getByText('先核对',{exact:true})).toBeVisible();
+    await thought.locator('summary').click();
+    await expect(feed.getByText(firstReasoning,{exact:true})).not.toBeVisible();
+    await thought.locator('summary').focus();await page.keyboard.press('Enter');
+    await expect(feed.getByText(firstReasoning,{exact:true})).toBeVisible();
     await expect(feed).not.toContainText('已找到');
     await expect(feed).not.toContainText('foreign-secret');
     await writeFile(file+'.next','1');
-    await expect(feed.getByText('先核对时间线',{exact:true})).toBeVisible();
+    await expect(feed.getByText(firstReasoning+'时间线',{exact:true})).toBeVisible();
     await expect(feed.getByText('已找到',{exact:true})).toBeVisible();
     await expect(feed).not.toContainText('两条记录');
     await writeFile(file+'.finish','1');
-    await expect(feed.getByText('已找到两条记录',{exact:true})).toBeVisible();
+    await expect(feed.getByText(finalAnswer,{exact:true})).toBeVisible();
+    const observations=await painted.evaluate(prefixes=>[...prefixes]);
+    for(const chunk of [firstReasoning,finalAnswer]){
+      const partial=new Set(observations.filter(s=>s.length>=4&&s.length<chunk.length&&chunk.startsWith(s)));
+      assert.ok(partial.size>=3,'a whole upstream chunk produces multiple visible prefixes: '+chunk);
+    }
     await page.reload();
     await expect(appliedRange).toContainText(expectedRange);
-    await expect(feed.getByText('已找到两条记录',{exact:true})).toHaveCount(1);
+    await expect(feed.getByText(finalAnswer,{exact:true})).toHaveCount(1);
     await expect(running).toHaveCount(0);
     await expect(feed.locator('.turn-process').first()).not.toHaveAttribute('open','');
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
@@ -422,11 +445,11 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.addInitScript(id=>{sessionStorage.setItem('harness.scene','chat');sessionStorage.setItem('harness.chat',id);},id);
     const answer='北京明天晴，早晚温差较大。\n\n- **白天**：晴，最高 **15℃**\n- **夜间**：晴，最低 **3℃**\n\n数据来源：[中央气象台](https://www.nmc.cn/publish/forecast/ABJ/beijing.html)';
     const tool=(name:string,result:string)=>({kind:'tool',name,status:'completed',result});
-    const assistant=(id:string,steps:unknown[])=>({id,role:'assistant',text:'',steps,tools:[],files:[]});
+    const assistant=(id:string,steps:unknown[])=>({id,role:'assistant',text:'',steps,tools:[],files:[],complete:true});
     const messages=[
       {id:'q',role:'user',text:'北京明天的天气如何',files:[],tools:[]},
       assistant('search',[{kind:'text',text:'先查北京的预报。'},tool('websearch','搜索结果列表'),{kind:'thinking',hasText:false,complete:true}]),
-      assistant('fetch',[tool('webfetch','向右滑动填充拼图'),tool('webfetch','北京天气预报原始页面')]),
+      assistant('fetch',[{kind:'thinking',text:'正在核对预报的发布日期。',hasText:true,complete:true},{kind:'thinking',text:'预报地区与北京一致。',hasText:true,complete:true},tool('webfetch','向右滑动填充拼图'),tool('webfetch','北京天气预报原始页面')]),
       assistant('answer',[{kind:'text',text:answer}]),
       assistant('done',[{kind:'notice',text:'本轮已完成'}]),
     ];
@@ -447,6 +470,13 @@ it('groups a multi-step weather response and keeps verification output out of th
     assert.ok(composerBox.y-answerBox.y-answerBox.height<=40,'short replies leave the composer within reach');
     await expect(body).not.toContainText('拼图');
     await expect(page.getByText('向右滑动填充拼图',{exact:true})).not.toBeVisible();
+    const historyThought=response.locator('.turn-reasoning');
+    await expect(historyThought).not.toHaveAttribute('open','');
+    await expect(historyThought.locator('summary')).toContainText('2 段');
+    await historyThought.locator('summary').focus();await page.keyboard.press('Enter');
+    await expect(historyThought.getByText('正在核对预报的发布日期。')).toBeVisible();
+    await expect(historyThought.getByText('预报地区与北京一致。')).toBeVisible();
+    await historyThought.locator('summary').click();
     const processRow=response.locator('.turn-process > summary');
     await expect(processRow).toContainText('3 次工具调用');
     await processRow.focus();await page.keyboard.press('Enter');
@@ -470,5 +500,20 @@ it('groups a multi-step weather response and keeps verification output out of th
     assert.ok(await page.locator('.chat-feed').evaluate(el=>el.scrollHeight>el.clientHeight+100));
     const pinned=await page.locator('.composer').boundingBox();
     assert.ok(pinned&&pinned.y+pinned.height<=800,'long history scrolls without displacing the composer');
+    const fallbackAnswer='这里是通过轮询补齐的一整段回答，用来检查能否逐字显示。';
+    const nextQuestion='补充说明';
+    const painted=await observePaintedText(page);
+    await page.route('**/chat/sessions/'+id+'/messages',async route=>{
+      messages.push({id:'new-user',role:'user',text:nextQuestion,tools:[],files:[]},
+        {...assistant('only-snapshot',[{kind:'text',ordinal:0,text:fallbackAnswer}]),complete:true});
+      await route.fulfill({status:202,json:{data:{id:'new-user'},requestId:'fixture'}});
+    });
+    await page.getByLabel('对话内容').fill(nextQuestion);
+    await page.getByLabel('对话内容').press('Enter');
+    await expect(response.last().getByText(fallbackAnswer,{exact:true})).toBeVisible();
+    const prefixes=await painted.evaluate(seen=>[...seen]);
+    assert.ok(prefixes.filter(s=>s.length>1&&s.length<fallbackAnswer.length&&fallbackAnswer.startsWith(s)).length>=3,
+      'snapshot-only completion is paced for the new turn');
+
   }finally{await browser.close();await app.close();await rm(root,{recursive:true,force:true});}
 });

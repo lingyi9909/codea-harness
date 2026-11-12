@@ -13,15 +13,15 @@ function publicInput(input:unknown){
   const json=JSON.stringify(input,(key,value)=>sensitive.test(key)?'[隐藏]':value,2);
   return json==='{}'?undefined:activityPreview(json,1600);
 }
-export function activity(m:Message,expandedPart?:number):ChatStep[]{
+export function activity(m:Message):ChatStep[]{
   const steps:ChatStep[]=[];
   if(m.type==='assistant'){
     for(const [ordinal,p] of m.content.entries()){
       if(p.type==='reasoning'){
-        const expanded=steps.length===expandedPart;
+        const text=typeof p.text==='string'?p.text:'';
         steps.push({kind:'thinking',ordinal,detailPart:steps.length,at:p.time?.created,ended:p.time?.completed,
           complete:p.time?.completed!=null||m.time?.completed!=null||Boolean(m.finish),
-          hasText:Boolean(p.text?.trim()),...(expanded?{text:p.text??''}:{})});
+          hasText:Boolean(text.trim()),text});
       }
       if(p.type==='text'&&p.text)steps.push({kind:'text',ordinal,text:p.text});
       if(p.type!=='tool')continue;

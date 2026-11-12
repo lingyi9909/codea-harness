@@ -1,4 +1,4 @@
-import {lazy,Suspense} from 'react';
+import {lazy,Suspense,useEffect,useRef,useState} from 'react';
 import type {ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';
 import './conversation-transcript.css';
 
@@ -9,7 +9,7 @@ function Markdown({text}:{text:string}){
 
 type Entry={message:string;part:number;step:ChatStep;commentary:boolean};
 type Turn={id:string;question?:ChatMessage;response:ChatMessage[]};
-type Expanded={message:string;part:number};
+type ReasoningEntry=Entry & {step:Extract<ChatStep,{kind:'thinking'}>};
 const toolStates:Record<string,string>={streaming:'准备中',running:'执行中',completed:'已完成',error:'失败',exited:'已退出',timeout:'超时',killed:'已停止'};
 const toolNames:Record<string,string>={websearch:'搜索网页',webfetch:'读取网页',grep:'搜索内容',read:'读取文件',edit:'编辑文件',bash:'执行命令'};
 function groupMessages(messages:ChatMessage[]){
@@ -39,9 +39,24 @@ function ToolRow({step}:{step:Extract<ChatStep,{kind:'tool'}>}){
   </div>;
 }
 
-function Response({messages,progress,active,expanded,onExpand}:{
-  messages:ChatMessage[];progress:ToolProgress[];active:boolean;expanded?:Expanded;onExpand:(value?:Expanded)=>void;
-}){
+function Reasoning({entries,running}:{entries:ReasoningEntry[];running:boolean}){
+  const [open,setOpen]=useState(running);
+  const chosen=useRef(false);
+  useEffect(()=>{
+    if(running&&!chosen.current)setOpen(true);
+  },[running]);
+  return <details className="turn-reasoning" open={open}>
+    <summary onClick={event=>{event.preventDefault();chosen.current=true;setOpen(!open);}}>
+      <span className="process-chevron" aria-hidden="true">›</span>
+      <strong>思考过程</strong><small>{entries.length} 段</small>
+    </summary>
+    {open&&<div className="reasoning-body">{entries.map(({message,step,part})=>
+      <div className="reasoning-part" key={message+':'+(step.ordinal??part)}><Markdown text={step.text??''}/></div>
+    )}</div>}
+  </details>;
+}
+
+function Response({messages,progress,active}:{messages:ChatMessage[];progress:ToolProgress[];active:boolean}){
   const entries:Entry[]=[];
   const files=new Set<string>();
   let lastTool=-1;
@@ -60,7 +75,8 @@ function Response({messages,progress,active,expanded,onExpand}:{
       entries.push({message:m.id,part:-entries.length-1,commentary:false,step:{kind:'notice',at:event.at,text:event.text}});
     }
   }
-  const details=entries.filter((e,i)=>e.step.kind!=='text'||e.commentary||i<lastTool);
+  const thinking=entries.filter((entry):entry is ReasoningEntry=>entry.step.kind==='thinking'&&Boolean(entry.step.text?.trim()));
+  const details=entries.filter((e,i)=>e.step.kind!=='thinking'&&(e.step.kind!=='text'||e.commentary||i<lastTool));
   const answers=entries.filter((e,i)=>e.step.kind==='text'&&!e.commentary&&i>lastTool);
   const tools=details.filter(e=>e.step.kind==='tool');
   const failedTools=tools.filter(({step})=>step.kind==='tool'&&(step.status==='error'||step.status==='timeout'));
@@ -80,23 +96,19 @@ function Response({messages,progress,active,expanded,onExpand}:{
       if(step.kind==='tool')return <ToolRow key={key} step={step}/>;
       if(step.kind==='notice')return <div className={step.problem?'transcript-error':'process-note'} key={key}>{step.at!=null&&<time>{new Date(step.at).toLocaleTimeString()} </time>}{step.text}</div>;
       if(step.kind==='text')return <div className="process-comment" key={key}><Markdown text={step.text}/></div>;
-      if(step.live)return <div className="live-thinking" key={key}><strong>思考过程</strong><Markdown text={step.text??''}/></div>;
-      const detailPart=step.detailPart??part;
-      const open=expanded?.message===message&&expanded.part===detailPart;
-      return <div key={key} className="saved-thinking"><button type="button" aria-expanded={open}
-        onClick={()=>onExpand(open?undefined:{message,part:detailPart})}>思考过程 {open?'▾':'▸'}</button>
-        {open&&(step.text?<Markdown text={step.text}/>:<small>正在读取…</small>)}</div>;
+      return null;
     })}</div></details>}
+    {thinking.length>0&&<Reasoning entries={thinking} running={active||thinking.some(({step})=>step.live&&!step.complete)}/>}
     {status&&<p className="transcript-error" role="status">{status}</p>}
-    {working&&!details.length&&<p className="process-note" role="status">正在处理…</p>}
+    {working&&!details.length&&!thinking.length&&<p className="process-note" role="status">正在处理…</p>}
     {answers.length>0&&<section className="turn-answer" aria-label="回答正文">{answers.map(({message,part,step})=>
       step.kind==='text'&&<Markdown key={message+':'+part} text={step.text}/>)}</section>}
     {files.size>0&&<small className="turn-files">涉及文件 · {[...files].join('、')}</small>}
   </article>;
 }
 
-export function ConversationTranscript({messages,progress,active,expanded,onExpand}:{
-  messages:ChatMessage[];progress:ToolProgress[];active:boolean;expanded?:Expanded;onExpand:(value?:Expanded)=>void;
+export function ConversationTranscript({messages,progress,active}:{
+  messages:ChatMessage[];progress:ToolProgress[];active:boolean;
 }){
   const turns=groupMessages(messages);
   let activeIndex=turns.length-1;
@@ -104,7 +116,6 @@ export function ConversationTranscript({messages,progress,active,expanded,onExpa
   return <div className="conversation-transcript">{turns.map((turn,i)=><section className="conversation-exchange" key={turn.id}>
     {turn.question&&<div className="user-question" aria-label="你的消息"><p>{turn.question.text}</p>
       {turn.question.files.length>0&&<small>引用文件 · {turn.question.files.join('、')}</small>}</div>}
-    <Response messages={turn.response} progress={progress} active={active&&i===activeIndex}
-      expanded={expanded} onExpand={onExpand}/>
+    <Response messages={turn.response} progress={progress} active={active&&i===activeIndex}/>
   </section>)}{active&&!turns.length&&<p className="process-note" role="status">正在处理…</p>}</div>;
 }

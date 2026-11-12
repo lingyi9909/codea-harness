@@ -16,6 +16,8 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   let skillIDs:string[]=[],skillLookupFailure=false,skillDirectory=root;
   let failure=0,formMode='legacy',formTitle='选择下一步';
   const formID='frm_example';
+  const secondReasoning='第二段公开文字。'.repeat(650);
+  let eventFrames:object[]=[];
   const fields=[
     {key:'mode',type:'string',options:[{value:'trace',label:'日志',metadata:'opaque-field'}],default:'trace'},
     {key:'sources',type:'multiselect',options:[{value:'web',label:'网页'}],required:true,minItems:1},
@@ -32,6 +34,10 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     received.push({path,body});
     res.setHeader('content-type','application/json');
     const data=(value:unknown)=>res.end(JSON.stringify({data:value}));
+    if(path==='/api/event'){
+      res.setHeader('content-type','text/event-stream');
+      return res.end(': upstream connected\n\n'+eventFrames.map(frame=>'data: '+JSON.stringify(frame)+'\n\n').join(''));
+    }
     if(path==='/api/skill'){
       assert.equal(new URL(req.url!,'http://localhost').searchParams.get('location[directory]'),root);
       if(skillLookupFailure){res.statusCode=503;return data({});}
@@ -57,7 +63,8 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     if(path===base)return data(session);
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
     if(path===base+'/message')return res.end(JSON.stringify({cursor:{},data:[{id:'msg_2',type:'assistant',content:[
-      {type:'reasoning',text:'client-visible fixture note',state:{opaque:'private reasoning'}},{type:'text',text:'示例回执'},{type:'tool',name:'edit',state:{status:'completed',input:{path:'notes.txt',apiKey:'fixture-private-key'},content:[{type:'text',text:'文件已更新'}],metadata:{raw:'internal-only'}}}],snapshot:{files:['notes.txt']}}]}));
+      {type:'reasoning',text:'client-visible fixture note',state:{opaque:'private reasoning'}},{type:'text',text:'示例回执'},{type:'tool',name:'edit',state:{status:'completed',input:{path:'notes.txt',apiKey:'fixture-private-key'},content:[{type:'text',text:'文件已更新'}],metadata:{raw:'internal-only'}}},
+      {type:'reasoning',text:secondReasoning},{type:'reasoning',text:'',state:{opaque:'unavailable-only'}}],snapshot:{files:['notes.txt']}}]}));
     if(path===base+'/form'&&formMode!=='legacy')return data([
       {id:'other',sessionID:'unowned',title:'other session',fields},
       ...(formMode==='pending'?[{id:formID,sessionID:id,title:formTitle,fields,metadata:{private:'opaque-form'}}]:[])]);
@@ -126,11 +133,28 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     assert.deepEqual(view.json().data.messages[0].files,['notes.txt']);
     assert.deepEqual(view.json().data.messages[0].tools,[{name:'edit',status:'completed'}]);
     const steps=view.json().data.messages[0].steps;
-    assert.deepEqual(steps.map((s:{kind:string})=>s.kind),['thinking','text','tool']);
+    assert.deepEqual(steps.map((s:{kind:string})=>s.kind),['thinking','text','tool','thinking','thinking']);
     assert.match(steps[2].input,/notes.txt/);
     assert.equal(steps[2].result,'文件已更新');
     for(const secret of ['fixture-private-key','internal-only'])assert.ok(!view.body.includes(secret));
-    assert.ok(!view.body.includes('client-visible fixture note'));
+    assert.deepEqual(steps.filter((step:{kind:string})=>step.kind==='thinking').map(
+      (step:{ordinal:number;text:string;hasText:boolean})=>[step.ordinal,step.text,step.hasText]),
+      [[0,'client-visible fixture note',true],[3,secondReasoning,true],[4,'',false]]);
+    assert.ok(!view.body.includes('unavailable-only'));
+    const idleStream=await app.inject({url:url+'/activity',headers});
+    assert.match(idleStream.body,/event: ready/);
+    const fragmentData={sessionID:id,assistantMessageID:'msg_2',ordinal:3};
+    eventFrames=[
+      {id:'ev1',created:1,type:'session.reasoning.started',data:{...fragmentData,state:{opaque:'private event'}}},
+      {id:'ev2',created:2,type:'session.reasoning.delta',data:{...fragmentData,delta:'真实文字'}},
+      {id:'ev3',created:3,type:'session.reasoning.ended',data:{...fragmentData,text:'真实文字',state:{opaque:'private event'}}},
+      {id:'ev4',created:4,type:'session.reasoning.delta',data:{...fragmentData,sessionID:'other',delta:'other session content'}}];
+    const stream=await app.inject({url:url+'/activity',headers});
+    assert.equal(stream.body.split('event: ready').length-1,1);
+    const fragments=stream.body.split('\n\n').filter(block=>block.startsWith('event: fragment')).map(block=>JSON.parse(block.split('data: ')[1]));
+    assert.deepEqual(fragments.map(f=>[f.ordinal,f.kind,f.phase,f.text]),[
+      [3,'thinking','started',''],[3,'thinking','delta','真实文字'],[3,'thinking','ended','真实文字']]);
+    assert.ok(!stream.body.includes('private event')&&!stream.body.includes('other session content'));
     const expanded=await app.inject({url:url+'?message=msg_2&part=0',headers});
     assert.equal(expanded.json().data.messages[0].steps[0].text,'client-visible fixture note');
     assert.ok(!expanded.body.includes('private reasoning'));
