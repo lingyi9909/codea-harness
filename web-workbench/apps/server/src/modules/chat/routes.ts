@@ -114,7 +114,11 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     }catch{/* The message snapshot remains available if native event streaming is unavailable. */}
     finally{streams.delete(stop);stop.abort();clearInterval(heartbeat);clearTimeout(expiry);if(!raw.destroyed)raw.end();}
   });
-  app.get<{Params:Params}>('/api/v1/chat/sessions/:id',async(req)=>{
+  app.get<{Params:Params;Querystring:{message?:string;part?:number}}>('/api/v1/chat/sessions/:id',{
+    schema:{querystring:{type:'object',additionalProperties:false,properties:{
+      message:property(160),part:{type:'integer',minimum:0}}}}
+  },async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
     const {ownerId}=auth.session(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId);
     const [page,permissions,running,inbox]=await Promise.all([(await client()).message.list({sessionID,order:'desc',limit:100}),
@@ -122,7 +126,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     const messages:ChatMessage[]=[];
     for(const m of page.data.slice().reverse()){
       if(m.type==='user')messages.push({id:m.id,role:'user',text:m.text,files:m.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
-      const steps=activity(m);
+      const steps=activity(m,m.id===req.query.message?req.query.part:undefined);
       if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',text:'',files:[],tools:[],steps});
       if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length))messages.push({id:m.id,role:'assistant',
         steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
