@@ -63,6 +63,7 @@ function Response({messages,progress,active,expanded,onExpand}:{
   const details=entries.filter((e,i)=>e.step.kind!=='text'||e.commentary||i<lastTool);
   const answers=entries.filter((e,i)=>e.step.kind==='text'&&!e.commentary&&i>lastTool);
   const tools=details.filter(e=>e.step.kind==='tool');
+  const failedTools=tools.filter(({step})=>step.kind==='tool'&&(step.status==='error'||step.status==='timeout'));
   const problem=details.slice().reverse().find(e=>e.step.kind==='notice'&&e.step.problem);
   const runningTool=tools.find(e=>e.step.kind==='tool'&&['running','streaming'].includes(e.step.status))?.step;
   const status=problem?.step.kind==='notice'?problem.step.text:undefined;
@@ -72,11 +73,12 @@ function Response({messages,progress,active,expanded,onExpand}:{
     <header className="response-author"><span aria-hidden="true">✳</span>OpenCode</header>
     {!!details.length&&<details className="turn-process"><summary><span className="process-chevron" aria-hidden="true">›</span>
       <span>执行过程</span>{tools.length>0&&<small>{tools.length} 次工具调用</small>}
+      {failedTools.length>0&&<small className="process-issue">{failedTools.length} 次异常</small>}
       {working&&<small role="status">{runningTool?.kind==='tool'?'正在'+(toolNames[runningTool.name]??runningTool.name):'进行中'}</small>}
     </summary><div className="process-list">{details.map(({step,message,part})=>{
       const key=message+':'+part;
       if(step.kind==='tool')return <ToolRow key={key} step={step}/>;
-      if(step.kind==='notice')return <div className="process-note" key={key}>{step.at!=null&&<time>{new Date(step.at).toLocaleTimeString()} </time>}{step.text}</div>;
+      if(step.kind==='notice')return <div className={step.problem?'transcript-error':'process-note'} key={key}>{step.at!=null&&<time>{new Date(step.at).toLocaleTimeString()} </time>}{step.text}</div>;
       if(step.kind==='text')return <div className="process-comment" key={key}><Markdown text={step.text}/></div>;
       if(step.live)return <div className="live-thinking" key={key}><strong>思考过程</strong><Markdown text={step.text??''}/></div>;
       const detailPart=step.detailPart??part;

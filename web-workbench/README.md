@@ -34,7 +34,7 @@ The worker records control sends before contacting the native service. An uncert
 
 首页提供直接对话、代码审查、日志排查和数据分析。日志排查支持按时间区间和 Trace ID 或关键字查询，通过独立的 OpenCode 会话排查和追问。可导入 UTF-8 日志并预览按时间、级别和文本筛选的行；点击开始排查时发送匹配摘录。没有导入文件时由当前项目可用的日志工具提供数据。数据页在浏览器本地读取 CSV，按列统计数值。
 
-Windows 离线包解压后运行 `start-chat.cmd`，打开本机工作台地址即可进入“直接对话”。第一次发送消息时，工作台通过官方客户端发现同一用户已注册的 OpenCode 2.x 后台，并使用注册的认证信息。离线包在发现失败时尝试使用已安装的 `opencode serve --service` 启动后台。公司版本需要支持这个服务协议。已有部署仍可使用服务端的 `HARNESS_OPENCODE_URL` 和 `HARNESS_OPENCODE_AUTHORIZATION`。
+Windows 离线包解压后运行 `start-chat.cmd`，打开本机工作台地址，填写姓名和手机号后即可进入“直接对话”。第一次发送消息时，工作台通过官方客户端发现同一用户已注册的 OpenCode 2.x 后台，并使用注册的认证信息。离线包在发现失败时尝试使用已安装的 `opencode serve --service` 启动后台。公司版本需要支持这个服务协议。已有部署仍可使用服务端的 `HARNESS_OPENCODE_URL` 和 `HARNESS_OPENCODE_AUTHORIZATION`。
 
 启动智能工作台时指定已有项目文件夹。Windows 可运行 `start-chat.cmd "D:\projects\order-service"`，macOS 可在启动脚本旁运行 `./启动工作台.command "/Users/me/Projects/order-service"`。路径包含空格时保留引号。省略路径时使用已有的目录环境配置，未配置则使用包内的 `chat-files`。更换项目时关闭工作台，用新路径重新启动。直接对话、文件引用、模型列表、项目 Skill 和会话历史都使用启动目录。
 
@@ -42,7 +42,7 @@ Windows 离线包解压后运行 `start-chat.cmd`，打开本机工作台地址�
 
 `npm run test:chat` 使用临时注册文件和模拟 HTTP 服务验证发现、会话、文件引用、权限、中断和错误处理。
 
-直接对话和日志排查按用户提问组织回复。回答正文支持流式 Markdown。点击这轮的“执行过程”可以查看工具调用、公开思考片段、进度、重试与结束状态，再展开单个工具查看参数和结果。工具输出保留在对应轮次。执行失败或中断会在正文位置附近提示，待回答的表单仍显示在输入区。
+直接对话和日志排查按用户提问组织回复。回答正文支持流式 Markdown。点击这轮的“执行过程”可以查看工具调用、公开思考片段、进度、重试与结束状态，再展开单个工具查看参数和结果。提问使用浅色气泡，回答正文单独排版；执行行显示工具次数、运行状态及异常计数。布局与配色参考 [OpenCode Desktop 的会话组件](https://github.com/anomalyco/opencode/blob/fedc6f208aa2bd54c1019227214568083f6380ad/packages/session-ui/src/components/session-turn.css)。工具输出保留在对应轮次。执行失败或中断会在正文位置附近提示，待回答的表单仍显示在输入区。
 
 日志排查支持按最近 15 分钟、1 小时或 24 小时选取时间，也可手动指定本地起止时间。工作台将带时区偏移的起止时间传给 OpenCode，查询范围包含开始时刻，到结束时刻为止（不含）。发送后可核对本次使用的范围。对话框左下角可搜索、收藏、切换当前项目已启用的模型。网页的收藏与最近使用记录保存在当前浏览器。
 
@@ -52,4 +52,14 @@ Windows 离线包解压后运行 `start-chat.cmd`，打开本机工作台地址�
 
 日志排查绑定当前项目加载的自定义 Skill `log-query`。工作台按名称定位它，并在首轮及每次追问的 OpenCode prompt 的 `skills` 字段指定实际 ID。该 Skill 由内网项目提供。缺失、同名冲突或目录查询失败会保留用户输入并提示原因。
 
-使用打包版的本机启动脚本时，浏览器自动建立本机会话。日志排查中的验证码由内网业务发起，填写后提交给发起提问的 OpenCode 表单。
+### 登录资料供项目 Skill 读取
+
+使用打包版启动后，在登录页填写姓名和手机号。登录成功后，工作台把当前使用者的信息写入**启动项目目录**下的 `.workbench/user.json`。例如用 `start-chat.cmd "D:\projects\order-service"` 启动时，文件位于 `D:\projects\order-service\.workbench\user.json`。项目需要对当前系统用户可写。
+
+Skill 需要使用姓名或手机号时，从项目根目录按 UTF-8 读取该文件，解析 `name` 和 `phone` 两个字符串字段。以下为示例数据。
+
+```json
+{"name":"示例用户","phone":"+12025550123"}
+```
+
+这是本机使用者自行填写的资料。手机号不经过短信验证。退出登录会结束网页会话，文件保留供 Skill 使用；下次成功登录会更新文件。请将这份个人资料排除在项目提交和共享归档之外。日志排查中由内网业务发起的验证码仍在对应的 OpenCode 提问卡内提交。

@@ -1,4 +1,5 @@
-import { registerChat } from './modules/chat/routes.ts';
+import { parseProfile, profileKey, WorkspaceProfile } from './local-profile.ts';
+import { registerChat, resolveLocalWorkspace } from './modules/chat/routes.ts';
 import Fastify from 'fastify';
 import serveStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
@@ -69,14 +70,27 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     return reply.status(health.status==='READY'?200:503).send(result(health));
   });
   const localSession=opts.localOnly===true&&!opts.pool;
-  if(localSession){
-    app.post('/api/v1/auth/local-session',async(req,reply)=>{
-      const owner={id:'local-workbench',name:'Local Developer'};
-      const session=opts.auth.openLocal(req,reply,owner.id);
-      return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,owner)));
+  const workspace=localSession?await resolveLocalWorkspace(opts.workspace):undefined;
+  if(workspace){
+    const store=new WorkspaceProfile(workspace);
+    app.addHook('onRequest',async(req,reply)=>{
+      const route=req.routeOptions.url;
+      if(!route?.startsWith('/api/v1/')||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
+        (route==='/api/v1/auth/session'&&req.method==='DELETE'))return;
+      let session;
+      try{session=opts.auth.session(req);}catch(e){
+        if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
+      }
+      if(!session?.profile||!store.matches(session.profile.key))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+      reply.header('Cache-Control','no-store');
     });
-  }
-  app.post<{Body:{pairingCode:string}}>('/api/v1/auth/session',{schema:{
+    app.post('/api/v1/auth/local-session',async(req,reply)=>{
+      opts.auth.requireLocalOrigin(req);
+      const profile=parseProfile(req.body);
+      const session=opts.auth.openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
+      return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,{id:session.ownerId,name:profile.name})));
+    });
+  }else app.post<{Body:{pairingCode:string}}>('/api/v1/auth/session',{schema:{
     body:{type:'object',additionalProperties:false,required:['pairingCode'],
       properties:{pairingCode:{type:'string',minLength:1,maxLength:256}}},
   }},async(req,reply)=>{
@@ -88,17 +102,12 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     opts.auth.logout(req,reply);return reply.status(204).send();
   });
   app.get('/api/v1/bootstrap',async(req,reply)=>{
-    let session;
-    try{session=opts.auth.session(req);}catch(e){
-      if(localSession&&e instanceof AuthProblem&&e.code==='AUTH_REQUIRED')
-        throw new AuthProblem(401,'LOCAL_SESSION_REQUIRED');
-      throw e;
-    }
-    const owner=opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:'Local Developer'};
+    const session=opts.auth.session(req);
+    const owner=opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:session.profile?.name??'Local Developer'};
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
-  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,localOnly:localSession,workspace:opts.workspace});
+  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       opts.auth.session(req);return result({items:[],nextCursor:null});

@@ -3,6 +3,7 @@ import { api, ApiError } from './api/client.ts';
 import type { Schema } from './api/client.ts';
 import { subscribeTask } from './api/events.ts';
 import Markdown from 'react-markdown';
+import { ProfileLogin } from './ProfileLogin.tsx';
 import { DirectChat } from './DirectChat.tsx';
 import {LogInvestigation} from './LogInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
@@ -25,9 +26,9 @@ const operationId=()=>crypto.randomUUID();
 
 export function WorkbenchApp() {
   const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);
-  const [pairRequired,setPairRequired]=useState(false);
+  const [loginMode,setLoginMode]=useState<'profile'|'pair'|null>(null);
   const [connectionAttempt,setConnectionAttempt]=useState(0);
-  const reconnect=()=>{setBootstrap(null);setPairRequired(false);setError('');setConnectionAttempt(n=>n+1);};
+  const reconnect=()=>{setBootstrap(null);setLoginMode(null);setError('');setConnectionAttempt(n=>n+1);};
   const [pairingCode,setPairingCode]=useState('');
   const [repos,setRepos]=useState<Repository[]>([]);
   const [tasks,setTasks]=useState<Task[]>([]);
@@ -102,7 +103,8 @@ export function WorkbenchApp() {
         await refreshLists();
       }catch(e){
         if(cancelled)return;
-        if(e instanceof ApiError&&e.status===401&&e.code==='AUTH_REQUIRED')setPairRequired(true);
+        if(e instanceof ApiError&&e.status===401&&e.code==='PROFILE_LOGIN_REQUIRED')setLoginMode('profile');
+        else if(e instanceof ApiError&&e.status===401&&e.code==='AUTH_REQUIRED')setLoginMode('pair');
         else setError(text(e));
       }
     })();
@@ -217,7 +219,12 @@ export function WorkbenchApp() {
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
-  if(!bootstrap&&!pairRequired)return <main className="pair-page"><div className="pair-card">
+  if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
+    const session=await api.login(name,phone);
+    setBootstrap(session);
+    await refreshLists().catch(e=>setError(text(e)));
+  }}/>;
+  if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">
     {error?<><p role="alert">{error}</p><button onClick={reconnect}>重新连接</button></>:<p role="status">正在连接本地工作台…</p>}
   </div></main>;
   if(!bootstrap) return <div className="pair-page">
@@ -244,6 +251,12 @@ export function WorkbenchApp() {
           onClick={()=>setSelected(task.id)}>
           <span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}
         {!tasks.length&&<p className="muted small">暂无历史任务</p>}
+      </div>
+      <div className="workbench-account"><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
+        <button disabled={busy} onClick={()=>void act(async()=>{
+          await api.logout();
+          window.location.reload();
+        })}>退出登录</button>
       </div>
     </aside>
     <main className="main">

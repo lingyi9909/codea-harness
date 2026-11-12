@@ -105,18 +105,20 @@ function upstreamProblem(error:unknown){
   return error instanceof Error&&error.cause instanceof AuthProblem?error.cause:error;
 }
 
-export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{mayStart?:boolean;localOnly:boolean;workspace?:string}){
+const configuredRoots=()=>(process.env.HARNESS_CHAT_ROOTS??process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean);
+const defaultDirectory=resolve('chat-files');
+export async function resolveLocalWorkspace(input?:string){
+  const configured=configuredRoots();
+  const selected=input??configured[0]??defaultDirectory;
+  if(input===undefined&&!configured.length)await mkdir(defaultDirectory,{recursive:true});
+  const workspace=await realpath(selected).catch(()=>undefined);
+  if(!workspace||!(await stat(workspace)).isDirectory())
+    throw new Error('Workspace directory does not exist or is not a directory: '+selected);
+  return workspace;
+}
+export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{mayStart?:boolean;workspace?:string}){
   const client=chatConnection(options.mayStart??false);
-  const configured=(process.env.HARNESS_CHAT_ROOTS??process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean);
-  const defaultDirectory=resolve('chat-files');
-  let workspace:string|undefined;
-  if(options.localOnly){
-    const selected=options.workspace??configured[0]??defaultDirectory;
-    if(options.workspace===undefined&&!configured.length)await mkdir(defaultDirectory,{recursive:true});
-    workspace=await realpath(selected).catch(()=>undefined);
-    if(!workspace||!(await stat(workspace)).isDirectory())
-      throw new Error('Workspace directory does not exist or is not a directory: '+selected);
-  }
+  const configured=configuredRoots(),workspace=options.workspace;
   const roots=workspace?[workspace]:configured.length?configured:[defaultDirectory];
   async function directory(input:string){
     if(!isAbsolute(input))throw new AuthProblem(400,'ABSOLUTE_DIRECTORY_REQUIRED');
