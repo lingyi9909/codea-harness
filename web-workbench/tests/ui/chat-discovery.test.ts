@@ -412,6 +412,11 @@ it('groups a multi-step weather response and keeps verification output out of th
     await expect(response).toHaveCount(1);
     await expect(body.getByRole('link',{name:'中央气象台'})).toBeVisible();
     await expect(body).toContainText('15℃');
+    const answerBox=await body.boundingBox(),questionBox=await page.locator('.user-question').boundingBox();
+    const composerBox=await page.locator('.composer').boundingBox();
+    assert.ok(questionBox&&answerBox&&composerBox);
+    assert.ok(Math.abs(answerBox.x-questionBox.x)<=4,'question and reply share a reading edge');
+    assert.ok(composerBox.y-answerBox.y-answerBox.height<=40,'short replies leave the composer within reach');
     await expect(body).not.toContainText('拼图');
     await expect(page.getByText('向右滑动填充拼图',{exact:true})).not.toBeVisible();
     const processRow=response.locator('.turn-process > summary');
@@ -430,5 +435,12 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.reload();
     await expect(page.locator('.turn-process')).not.toHaveAttribute('open','');
     await expect(body).toContainText('15℃');
+    await page.setViewportSize({width:1280,height:800});
+    messages.push(assistant('long',[{kind:'text',text:Array.from({length:80},(_,i)=>'记录 '+i).join('\n\n')}]));
+    await page.reload();
+    await expect(body.getByText('记录 79',{exact:true})).toHaveCount(1);
+    assert.ok(await page.locator('.chat-feed').evaluate(el=>el.scrollHeight>el.clientHeight+100));
+    const pinned=await page.locator('.composer').boundingBox();
+    assert.ok(pinned&&pinned.y+pinned.height<=800,'long history scrolls without displacing the composer');
   }finally{await browser.close();await app.close();}
 });

@@ -149,14 +149,14 @@ function ChatWorkspace({investigation,directory,settings}:{
   },[state,stream.parts,stream.tools]);
   const messages=streamingMessages(state?.id===id?state.messages:[],stream.parts);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
-  return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'使用项目的 log-query Skill 排查日志并继续追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
+  return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div className="thread-heading"><h1>{investigation?'日志排查':'直接对话'}</h1>
+      {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary" disabled={busy} onClick={()=>switchTo('')}>新建对话</button>}</div></div>
     {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy} onSelect={row=>{
       rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
     }}/>}
     <div className="chat-layout"><div className="chat-box">
-      {currentTitle&&<h2 className="conversation-title">{currentTitle}</h2>}
       {(!investigation||messages.length>0||stream.tools.length>0||state?.active)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>想在这个目录里做什么？</h2>
@@ -169,7 +169,7 @@ function ChatWorkspace({investigation,directory,settings}:{
         <ChatRequests key={id} state={state} busy={busy}
           onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
         {interrupt&&<div className="composer-actions">{interrupt}</div>}
-      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
+      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={2} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
