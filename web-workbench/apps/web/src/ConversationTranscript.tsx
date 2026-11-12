@@ -1,4 +1,4 @@
-import {lazy,Suspense,useEffect,useRef,useState} from 'react';
+import {lazy,Suspense,useState} from 'react';
 import type {ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';
 import {api,ApiError} from './api/client.ts';
 import './conversation-transcript.css';
@@ -74,16 +74,28 @@ function TranslatableReasoning({session,message,ordinal,original,open}:{
   </>;
 }
 
-function Reasoning({session,entries,running}:{session:string;entries:ReasoningEntry[];running:boolean}){
-  const [open,setOpen]=useState(running);
-  const chosen=useRef(false);
-  useEffect(()=>{
-    if(running&&!chosen.current)setOpen(true);
-  },[running]);
+function formatSeconds(milliseconds:number){
+  return (milliseconds/1000).toFixed(1).replace(/\.0$/,'')+'s';
+}
+
+function reasoningDuration(entries:ReasoningEntry[]){
+  let duration=0;
+  for(const {step} of entries){
+    const {at,ended}=step;
+    if(at==null||ended==null||!Number.isFinite(at)||!Number.isFinite(ended)||ended<at)return;
+    duration+=ended-at;
+  }
+  return formatSeconds(duration);
+}
+
+function Reasoning({session,entries,expanded}:{session:string;entries:ReasoningEntry[];expanded:boolean}){
+  const [choice,setChoice]=useState<boolean>();
+  const open=choice??expanded;
+  const duration=reasoningDuration(entries);
   return <details className="turn-reasoning" open={open}>
-    <summary onClick={event=>{event.preventDefault();chosen.current=true;setOpen(!open);}}>
+    <summary onClick={event=>{event.preventDefault();setChoice(!open);}}>
+      <strong>思考</strong>{duration&&<small> · {duration}</small>}
       <span className="process-chevron" aria-hidden="true">›</span>
-      <strong>思考过程</strong><small>{entries.length} 段</small>
     </summary>
     <div className="reasoning-body">{entries.map(({message,step,part})=>{
       const original=step.text??'';
@@ -96,11 +108,14 @@ function Reasoning({session,entries,running}:{session:string;entries:ReasoningEn
   </details>;
 }
 
-function Response({session,messages,progress,active}:{session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean}){
+function Response({session,messages,progress,active,latest}:{session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean;latest:boolean}){
   const entries:Entry[]=[];
   const files=new Set<string>();
   let lastTool=-1;
+  let footer:ChatMessage['footer'];
+  let successNotice:ChatStep|undefined;
   for(const m of messages){
+    if(m.footer)footer=m.footer;
     for(const file of m.files)files.add(file);
     const steps=m.steps?.length?m.steps:[
       ...(m.text?[{kind:'text' as const,text:m.text}]:[]),
@@ -109,6 +124,7 @@ function Response({session,messages,progress,active}:{session:string;messages:Ch
     steps.forEach((step,part)=>{
       if(step.kind==='thinking'&&!step.hasText&&!step.text?.trim())return;
       if(step.kind==='tool')lastTool=entries.length;
+      if(step.kind==='notice'&&!step.problem&&(m.idleOutcome==='succeeded'||step.text==='本轮已完成'))successNotice=step;
       entries.push({message:m.id,part,step,commentary:!!m.toolCallTurn});
     });
     for(const event of progress.filter(p=>p.message===m.id)){
@@ -116,7 +132,11 @@ function Response({session,messages,progress,active}:{session:string;messages:Ch
     }
   }
   const thinking=entries.filter((entry):entry is ReasoningEntry=>entry.step.kind==='thinking'&&Boolean(entry.step.text?.trim()));
-  const details=entries.filter((e,i)=>e.step.kind!=='thinking'&&(e.step.kind!=='text'||e.commentary||i<lastTool));
+  const activity=entries.filter((e,i)=>e.step.kind!=='thinking'&&(e.step.kind!=='text'||e.commentary||i<lastTool));
+  const metrics=active?[]:[footer?.agent,footer?.model,
+    footer?.durationMs!=null?formatSeconds(footer.durationMs):undefined,
+    footer?.tokensPerSecond!=null?Number(footer.tokensPerSecond.toFixed(1))+' tok/s':undefined].filter(Boolean);
+  const details=activity.length===1&&activity[0].step===successNotice?[]:activity;
   const answers=entries.filter((e,i)=>e.step.kind==='text'&&!e.commentary&&i>lastTool);
   const tools=details.filter(e=>e.step.kind==='tool');
   const failedTools=tools.filter(({step})=>step.kind==='tool'&&(step.status==='error'||step.status==='timeout'));
@@ -124,9 +144,9 @@ function Response({session,messages,progress,active}:{session:string;messages:Ch
   const runningTool=tools.find(e=>e.step.kind==='tool'&&['running','streaming'].includes(e.step.status))?.step;
   const status=problem?.step.kind==='notice'?problem.step.text:undefined;
   const working=active&&!answers.length;
-  if(!entries.length&&!files.size&&!active)return null;
+  if(!answers.length&&!thinking.length&&!details.length&&!files.size&&!metrics.length&&!active)return null;
   return <article className="response-turn" aria-label="OpenCode 回答">
-    <header className="response-author"><span aria-hidden="true">✳</span>OpenCode</header>
+    {thinking.length>0&&<Reasoning session={session} entries={thinking} expanded={latest}/>}
     {!!details.length&&<details className="turn-process"><summary><span className="process-chevron" aria-hidden="true">›</span>
       <span>执行过程</span>{tools.length>0&&<small>{tools.length} 次工具调用</small>}
       {failedTools.length>0&&<small className="process-issue">{failedTools.length} 次异常</small>}
@@ -138,12 +158,12 @@ function Response({session,messages,progress,active}:{session:string;messages:Ch
       if(step.kind==='text')return <div className="process-comment" key={key}><Markdown text={step.text}/></div>;
       return null;
     })}</div></details>}
-    {thinking.length>0&&<Reasoning session={session} entries={thinking} running={active||thinking.some(({step})=>step.live&&!step.complete)}/>}
     {status&&<p className="transcript-error" role="status">{status}</p>}
     {working&&!details.length&&!thinking.length&&<p className="process-note" role="status">正在处理…</p>}
     {answers.length>0&&<section className="turn-answer" aria-label="回答正文">{answers.map(({message,part,step})=>
       step.kind==='text'&&<Markdown key={message+':'+part} text={step.text}/>)}</section>}
     {files.size>0&&<small className="turn-files">涉及文件 · {[...files].join('、')}</small>}
+    {metrics.length>0&&<footer className="turn-metrics" aria-label="本轮运行信息">{metrics.join(' · ')}</footer>}
   </article>;
 }
 
@@ -156,6 +176,6 @@ export function ConversationTranscript({session,messages,progress,active}:{
   return <div className="conversation-transcript">{turns.map((turn,i)=><section className="conversation-exchange" key={turn.id}>
     {turn.question&&<div className="user-question" aria-label="你的消息"><p>{turn.question.text}</p>
       {turn.question.files.length>0&&<small>引用文件 · {turn.question.files.join('、')}</small>}</div>}
-    <Response session={session} messages={turn.response} progress={progress} active={active&&i===activeIndex}/>
+    <Response session={session} messages={turn.response} progress={progress} active={active&&i===activeIndex} latest={i===activeIndex}/>
   </section>)}{active&&!turns.length&&<p className="process-note" role="status">正在处理…</p>}</div>;
 }

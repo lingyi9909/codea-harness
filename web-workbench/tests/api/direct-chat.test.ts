@@ -21,6 +21,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   let instructionStatus=204,translationStatus=200,translated='正在核对预报日期。';
   let echoPrompt:Record<string,unknown>|undefined;
   let eventFrames:object[]=[];
+  let nativeHistory:object[]|undefined;
   const fields=[
     {key:'mode',type:'string',options:[{value:'trace',label:'日志',metadata:'opaque-field'}],default:'trace'},
     {key:'sources',type:'multiselect',options:[{value:'web',label:'网页'}],required:true,minItems:1},
@@ -71,6 +72,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       content:[{type:'reasoning',text:'Checking the forecast date.',state:{opaque:'opaque-provider-data'}},{type:'text',text:'final'}]});
     if(path===base+'/generate'){res.statusCode=translationStatus;return data({text:translated});}
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
+    if(path===base+'/message'&&nativeHistory)return res.end(JSON.stringify({cursor:{},data:nativeHistory.slice().reverse()}));
     if(path===base+'/message')return res.end(JSON.stringify({cursor:{},data:[...(echoPrompt?[{...echoPrompt,id:'echo',type:'user'}]:[]),{id:'msg_2',type:'assistant',content:[
       {type:'reasoning',text:'client-visible fixture note',state:{opaque:'private reasoning'}},{type:'text',text:'示例回执'},{type:'tool',name:'edit',state:{status:'completed',input:{path:'notes.txt',apiKey:'fixture-private-key'},content:[{type:'text',text:'文件已更新'}],metadata:{raw:'internal-only'}}},
       {type:'reasoning',text:secondReasoning},{type:'reasoning',text:'',state:{opaque:'unavailable-only'}}],snapshot:{files:['notes.txt']}}]}));
@@ -155,6 +157,30 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       (step:{ordinal:number;text:string;hasText:boolean})=>[step.ordinal,step.text,step.hasText]),
       [[0,'client-visible fixture note',true],[3,secondReasoning,true],[4,'',false]]);
     assert.ok(!view.body.includes('unavailable-only'));
+    const assistant=(id:string,created:number,streamed:number|undefined,completed:number)=>({
+      id,type:'assistant',agent:'build',model:{id:'actual-step-model',providerID:'corp'},
+      content:[{type:'text',text:'回执'}],time:{created,streamed,completed},tokens:{input:600,output:70,reasoning:30},
+    });
+    nativeHistory=[
+      {id:'prompt',type:'user',text:'开始',time:{created:1000}},
+      assistant('step',2000,3000,6000),
+      {id:'follow-up',type:'user',text:'补充',time:{created:6500}},
+      assistant('end',7000,10000,15000),
+      {id:'idle',type:'idle',outcome:'succeeded',time:{created:16000}},
+      {id:'next',type:'user',text:'继续',time:{created:20000}},
+      assistant('partial',21000,undefined,22000),
+      {id:'interrupt',type:'idle',outcome:'interrupted',time:{created:22100}},
+    ];
+    const turns=(await app.inject({url,headers})).json().data.messages;
+    assert.deepEqual(turns[3].footer,{agent:'build',model:'actual-step-model',durationMs:14000,tokensPerSecond:50});
+    assert.equal(turns[4].idleOutcome,'succeeded');
+    assert.deepEqual(turns[6].footer,{agent:'build',model:'actual-step-model',durationMs:2000});
+    assert.equal(turns[7].idleOutcome,'interrupted');
+    nativeHistory=nativeHistory.slice(0,4);
+    const legacy=(await app.inject({url,headers})).json().data.messages;
+    assert.equal(legacy[3].footer.durationMs,8500);
+    assert.equal(legacy[3].footer.tokensPerSecond,100/3);
+    nativeHistory=undefined;
     const idleStream=await app.inject({url:url+'/activity',headers});
     assert.match(idleStream.body,/event: ready/);
     const fragmentData={sessionID:id,assistantMessageID:'msg_2',ordinal:3};

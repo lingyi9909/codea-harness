@@ -1,7 +1,42 @@
 import type {SessionMessagesResponse} from '@opencode/client';
-import type {ChatStep} from '../../../../../packages/contracts/src/chat.ts';
+import type {ChatFooter,ChatStep} from '../../../../../packages/contracts/src/chat.ts';
 
 type Message=SessionMessagesResponse['data'][number];
+// OpenCode v2.2.7 SessionTurn uses wall time for duration and provider-active
+// time (created to streamed) for speed. Tool execution and queue time do not add tokens.
+export function assistantFooters(messages:Message[],hasOlder:boolean){
+  const footers=new Map<string,ChatFooter>();
+  const legacy=!messages.some(m=>m.type==='idle');
+  let boundaryKnown=!hasOlder;
+  let promptSeen=false,promptTime:number|undefined;
+  let totalTokens=0,providerMs=0,validRate=true;
+  for(const m of messages){
+    const input=m.type==='user'||m.type==='synthetic';
+    if(m.type==='idle'||(input&&(legacy||!promptSeen))){
+      promptSeen=input;
+      promptTime=input?m.time?.created:undefined;
+      totalTokens=0;providerMs=0;validRate=true;
+      if(m.type==='idle')boundaryKnown=true;
+    }
+    if(m.type!=='assistant')continue;
+    const start=m.time?.created,end=m.time?.completed,streamed=m.time?.streamed;
+    if(Number.isFinite(start)&&streamed!==undefined&&Number.isFinite(streamed)&&streamed>=start&&
+      m.tokens&&Number.isFinite(m.tokens.output)&&m.tokens.output>=0&&Number.isFinite(m.tokens.reasoning)&&m.tokens.reasoning>=0){
+      totalTokens+=m.tokens.output+m.tokens.reasoning;
+      providerMs+=streamed-start;
+    }else validRate=false;
+    if(end===undefined&&!m.finish&&!m.error)continue;
+    const footer:ChatFooter={};
+    if(m.agent)footer.agent=m.agent;
+    if(m.model?.id)footer.model=m.model.id;
+    const from=promptSeen?promptTime:start;
+    if(boundaryKnown&&from!==undefined&&end!==undefined&&Number.isFinite(from)&&Number.isFinite(end)&&end>from)
+      footer.durationMs=end-from;
+    if(boundaryKnown&&validRate&&totalTokens>0&&providerMs>0)footer.tokensPerSecond=totalTokens*1000/providerMs;
+    if(Object.keys(footer).length)footers.set(m.id,footer);
+  }
+  return footers;
+}
 const sensitive=/password|passwd|secret|token|api.?key|authorization|cookie|credential|private.?key/i;
 export function activityPreview(value:string,limit=4000){
   const clean=value.replace(/\b(Bearer|Basic)\s+[A-Za-z0-9+/=_.-]+/gi,'$1 [隐藏]')

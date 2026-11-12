@@ -93,7 +93,7 @@ export function useChatStream(session:string){
       seen.add(f.id);
       if(seen.size>4096)seen.delete(seen.values().next().value!);
       const parts=[...current.parts];
-      const index=parts.findIndex(p=>p.message===f.message&&p.ordinal===f.ordinal);
+      const index=parts.findIndex(p=>p.message===f.message&&p.ordinal===f.ordinal&&p.kind===f.kind);
       const previous=parts[index];
       if(f.phase==='delta'&&previous?.ended!=null)return;
       if(f.phase==='started'&&previous)return;
@@ -109,7 +109,8 @@ export function useChatStream(session:string){
       const completed=new Map(messages.filter(m=>m.complete).map(m=>[m.id,m]));
       const parts=current.parts.filter(p=>{
         const message=completed.get(p.message);
-        const step=message?.steps?.find(s=>s.ordinal===p.ordinal&&s.kind===p.kind);
+        const step=message?.steps?.find(s=>s.ordinal===p.ordinal);
+        if(step&&step.kind!==p.kind)return false;
         const saved=step&&(step.kind==='thinking'||step.kind==='text')?step.text:undefined;
         // Keep public live content when a final snapshot omitted or truncated it.
         return !message||mergedText(p,saved??'',true)!==(saved??'');
@@ -129,6 +130,7 @@ export function useChatStream(session:string){
 export function streamingMessages(history:ChatMessage[],parts:Part[]):ChatMessage[]{
   if(!parts.length)return history;
   const messages=[...history];
+  const snapshots=new Map(history.map(m=>[m.id,m]));
   for(const part of parts){
     let index=messages.findIndex(m=>m.id===part.message);
     if(index<0){
@@ -139,14 +141,18 @@ export function streamingMessages(history:ChatMessage[],parts:Part[]):ChatMessag
     const message=messages[index];
 
     const steps=[...(message.steps??[])];
-    const slot=steps.findIndex(s=>s.ordinal===part.ordinal);
+    const canonical=snapshots.get(part.message)?.steps?.find(s=>s.ordinal===part.ordinal);
+    // A stale event must never relabel a typed native part as an answer.
+    if(canonical&&canonical.kind!==part.kind)continue;
+    const slot=steps.findIndex(s=>s.ordinal===part.ordinal&&s.kind===part.kind);
     const saved=steps[slot];
+    const timing=saved?.kind==='thinking'?saved:undefined;
     const snapshot=saved?.kind==='text'||saved?.kind==='thinking'?saved.text??'':'';
     // Prefer the longer compatible prefix, even if the poll beat the SSE flush.
     const text=mergedText(part,snapshot,Boolean(message.complete));
     const complete=Boolean(message.complete||part.ended!=null||(saved?.kind==='thinking'&&saved.complete));
     const step:ChatStep=part.kind==='text'?{kind:'text',ordinal:part.ordinal,text}:
-      {kind:'thinking',ordinal:part.ordinal,text,at:part.at,ended:part.ended,complete,hasText:!!text,live:true};
+      {kind:'thinking',ordinal:part.ordinal,text,at:timing?.at??part.at,ended:timing?.ended??part.ended,complete,hasText:!!text,live:true};
     if(slot>=0)steps[slot]=step;
     else{
       const after=steps.findIndex(s=>s.ordinal==null||s.ordinal>part.ordinal);
