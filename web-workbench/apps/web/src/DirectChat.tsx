@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {api,ApiError} from './api/client.ts';
-import type {ChatStatus,ChatSettings,ChatAccessEntry,ChatModel} from '../../../packages/contracts/src/chat.ts';
+import type {ChatStatus,ChatSettings,ChatAccessEntry,ChatModel,ChatStep} from '../../../packages/contracts/src/chat.ts';
 
 function explain(e:unknown){
   const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'请选择已配置的工作目录或其子目录。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
@@ -37,8 +37,8 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
   useEffect(()=>{
     sessionStorage.setItem(sessionKey,id);if(!id)return;
     let live=true;let timer:ReturnType<typeof setTimeout>;
-    const poll=async()=>{try{const value=await api.chat(id);if(live)update(value);}
-      catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,1800);}};
+    const poll=async()=>{let interval=1800;try{const value=await api.chat(id);if(value.active)interval=900;if(live)update(value);}
+      catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,interval);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
   },[id,refresh,sessionKey]);
   async function run(fn:()=>Promise<void>){if(busy)return;wait(true);fail('');try{await fn();bump(n=>n+1);}catch(e){fail(explain(e));}finally{wait(false);}}
@@ -74,11 +74,13 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
   return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'按请求和时间定位日志，在同一会话中追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
     {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{investigation?.reset();select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
     <div className="chat-layout"><div className="chat-box">
-      <div className="chat-feed" aria-live="polite">{!state?.messages.length&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>{investigation?'要排查哪次请求？':'想在这个目录里做什么？'}</h2>
+      <div className="chat-feed" aria-live="polite">{!state?.messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>{investigation?'要排查哪次请求？':'想在这个目录里做什么？'}</h2>
         {!investigation&&<button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button>}</div>}
         {state?.messages.map(m=><div key={m.id} className={'chat-turn '+m.role}><strong>{m.role==='user'?'你':'OpenCode'}</strong>
-          {m.text&&<p>{m.text}</p>}{m.tools.map((t,i)=><small key={i}>{t.name} · {t.status}</small>)}
+          {m.steps?.length?m.steps.map((step,i)=><ExecutionStep key={i} step={step}/>):<>{m.text&&<p>{m.text}</p>}{m.tools.map((t,i)=><small key={i}>{t.name} · {t.status}</small>)}</>}
           {m.files.length>0&&<small>{m.role==='user'?'引用文件':'涉及文件'} · {m.files.join('、')}</small>}</div>)}
+        {id&&<LiveToolProgress key={id} id={id}/>}
+        {state?.active&&<small role="status">{state.permissions.length?'等待工具授权':'OpenCode 正在处理本轮请求…'}</small>}
         {state?.permissions.map(p=><div className="chat-permission" key={p.id}><strong>OpenCode 请求授权 · {p.action}</strong><pre>{p.resources.join('\n')}</pre>
           {(['once','reject'] as const).map(d=><button key={d} disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'permission',{requestId:p.id,revision:p.revision,decision:d});})}>{d==='once'?'仅本次允许':'拒绝'}</button>)}</div>)}
       </div>
@@ -137,4 +139,35 @@ function AccessLog(){
   return <div className="access-log">{error&&<p role="alert">{error}</p>}{!rows.length&&<p>等待访问记录…</p>}
     {rows.map((row,i)=><div key={i}><strong>{row.source} · {row.result}</strong>
       <code>{row.operation}</code><small>{new Date(row.time).toLocaleTimeString()} · {row.ms} ms · {row.requestId}</small></div>)}</div>;
+}
+
+const toolStates:Record<string,string>={streaming:'正在准备调用',running:'执行中',completed:'已完成',error:'失败',exited:'已退出',timeout:'超时',killed:'已停止'};
+function ExecutionStep({step}:{step:ChatStep}){
+  if(step.kind==='text')return <p>{step.text}</p>;
+  const time=step.at?new Date(step.at).toLocaleTimeString():undefined;
+  if(step.kind==='notice')return <div className="execution-note">{time&&<time>{time} </time>}{step.text}</div>;
+  return <div className="execution-tool"><header><strong>{step.name}</strong><span>{toolStates[step.status]??step.status}</span>
+    {time&&<time>{time}</time>}</header>
+    {step.progress&&<p>{step.progress}</p>}
+    {step.input&&<details><summary>调用参数</summary><pre>{step.input}</pre></details>}
+    {step.result&&<><div className="tool-result">{step.result.length>180?step.result.slice(0,180)+'…':step.result}</div>
+      {step.result.length>180&&<details><summary>展开结果摘录</summary><pre>{step.result}</pre></details>}</>}
+    {step.error&&<p className="notice">工具错误 · {step.error}</p>}
+  </div>;
+}
+
+function LiveToolProgress({id}:{id:string}){
+  type Entry={id:string;at:number;text:string};
+  const [events,setEvents]=useState<Entry[]>([]);
+  useEffect(()=>{
+    const source=new EventSource('/api/v1/chat/sessions/'+encodeURIComponent(id)+'/activity');
+    source.onmessage=e=>{
+      const entry=JSON.parse(e.data) as Entry;
+      setEvents(rows=>rows.some(row=>row.id===entry.id)?rows:[...rows.slice(-11),entry]);
+    };
+    return ()=>source.close();
+  },[id]);
+  if(!events.length)return null;
+  return <section className="execution-note" aria-label="工具实时进度"><strong>工具实时进度</strong>
+    {events.map(row=><div key={row.id}><time>{new Date(row.at).toLocaleTimeString()}</time> {row.text}</div>)}</section>;
 }
