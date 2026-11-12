@@ -1,11 +1,12 @@
 import {useEffect,useState} from 'react';
 import {api,ApiError} from './api/client.ts';
-import type {ChatStatus,ChatSettings} from '../../../packages/contracts/src/chat.ts';
+import type {ChatStatus,ChatSettings,ChatAccessEntry} from '../../../packages/contracts/src/chat.ts';
 
 function explain(e:unknown){
   const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'请选择已配置的工作目录或其子目录。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
     SERVICE_UNAVAILABLE:'OpenCode 暂时无法响应，请检查内网服务地址和鉴权配置。',PERMISSION_CHANGED:'授权请求已改变，请查看最新请求。',CHAT_NOT_FOUND:'原会话不可用，请新建对话。'};
   Object.assign(labels,{
+    OPENCODE_DISCOVERY_FAILED:'未能自动连接本机 OpenCode。请确认已安装的 opencode 在 PATH 中，并支持 serve --service。',
     OPENCODE_WORKBENCH_URL:'OpenCode 服务地址填成了工作台自身的地址。请重启工作台，填写 OpenCode 后台服务地址。',
     OPENCODE_CONNECTION_FAILED:'创建会话时无法连接 OpenCode。请核对后台服务地址、端口和 HTTPS 证书。',
     OPENCODE_TIMEOUT:'创建会话等待 OpenCode 超过 25 秒，请查看 OpenCode 服务日志。',
@@ -19,11 +20,11 @@ function explain(e:unknown){
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
 export function DirectChat(){
-  const [settings,configure]=useState<ChatSettings|null>(null),[directory,choose]=useState('');
+  const [settings,configure]=useState<ChatSettings|null>(null);
   const [id,select]=useState(()=>sessionStorage.getItem('harness.chat')??'');
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(''),[refs,attach]=useState('');
   const [showFiles,toggleFiles]=useState(false),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
-  useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live){configure(s);choose(s.directories[0]??'');}}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
+  useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live){configure(s);}}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
   useEffect(()=>{
     sessionStorage.setItem('harness.chat',id);if(!id)return;
     let live=true;let timer:ReturnType<typeof setTimeout>;
@@ -35,7 +36,7 @@ export function DirectChat(){
   const send=()=>run(async()=>{
     const text=draft.trim();if(!text)return;
     let session=id;
-    if(!session){const s=await api.newChat(directory);session=s.id;select(session);}
+    if(!session){const s=await api.newChat();session=s.id;select(session);}
     await api.chatAction(session,'messages',{text,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
     write('');attach('');toggleFiles(false);
   });
@@ -52,15 +53,29 @@ export function DirectChat(){
       </div>
       {error&&<p role="alert" className="notice">{error}</p>}
       <div className="composer"><textarea aria-label="对话内容" rows={3} maxLength={16000} placeholder="输入问题，或让 OpenCode 修改当前目录中的文件…" value={draft} onChange={e=>write(e.target.value)}
-        onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&settings?.configured&&directory&&!busy)void send();}}/>
+        onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&settings?.configured&&!busy)void send();}}/>
         {showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
         <div className="composer-actions"><button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {state?.active&&<button disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>中断执行</button>}
-          <button className="primary" disabled={busy||!settings?.configured||!directory||!draft.trim()} onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
-      </div></div><aside className="context-box"><h2>工作目录</h2><label>OpenCode 运行位置<input list="chat-roots" value={state?.directory??directory} disabled={!!id||busy} onChange={e=>choose(e.target.value)} placeholder="输入绝对路径"/></label>
-        <datalist id="chat-roots">{settings?.directories.map(d=><option key={d} value={d}/>)}</datalist>
-        <p>文件修改会写入此目录。工具权限沿用 OpenCode 配置。</p>
-        {settings&&!settings.configured&&<p className="setup-note">待连接 OpenCode。请在服务端设置 HARNESS_OPENCODE_URL 和 HARNESS_CHAT_ROOTS。</p>}
+          <button className="primary" disabled={busy||!settings?.configured||!draft.trim()} onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
+      </div></div><aside className="context-box"><h2>后台访问日志</h2><AccessLog/>
+        <p>本次文件位置：<code>{state?.directory??settings?.directories[0]??'…'}</code></p>
         {state&&<p>{state.active?'正在执行':state.outcome==='failed'?'本轮执行失败':state.outcome==='interrupted'?'本轮已中断':'等待输入'}</p>}
       </aside></div></section>;
+}
+
+function AccessLog(){
+  const [rows,setRows]=useState<ChatAccessEntry[]>([]),[error,fail]=useState('');
+  useEffect(()=>{
+    let live=true,timer:ReturnType<typeof setTimeout>;
+    const poll=async()=>{
+      try{const value=await api.chatAccess();if(live){setRows(value);fail('');}}
+      catch(e){if(live)fail(explain(e));}
+      finally{if(live)timer=setTimeout(poll,2500);}
+    };
+    void poll();return()=>{live=false;clearTimeout(timer);};
+  },[]);
+  return <div className="access-log">{error&&<p role="alert">{error}</p>}{!rows.length&&<p>等待访问记录…</p>}
+    {rows.map((row,i)=><div key={i}><strong>{row.source} · {row.result}</strong>
+      <code>{row.operation}</code><small>{new Date(row.time).toLocaleTimeString()} · {row.ms} ms · {row.requestId}</small></div>)}</div>;
 }

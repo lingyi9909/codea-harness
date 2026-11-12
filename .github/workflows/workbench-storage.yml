@@ -44,3 +44,9 @@ jobs:
         run: npm run test:chat
       - name: T01 regression
         run: npm test
+      - name: Build direct chat and install browser
+        run: |
+          npm run web:build
+          npx playwright install chromium
+      - name: Windows browser and installed CLI discovery (offline fixture)
+        run: node --experimental-strip-types --test tests/ui/chat-discovery.test.ts

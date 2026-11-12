@@ -21,6 +21,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     received.push({path,body});
     res.setHeader('content-type','application/json');
     const data=(value:unknown)=>res.end(JSON.stringify({data:value}));
+    if(path==='/api/info')return res.end(JSON.stringify({version:'2.0.27',pid:process.pid}));
     if(path==='/api/session'&&failure){res.statusCode=failure;return data({message:'sensitive upstream detail'});}
     if(path==='/api/session'){session={id,location:body.location,metadata:body.metadata};return data(session);}
     if(path===base)return data(session);
@@ -36,7 +37,10 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   });
   await new Promise<void>(ok=>peer.listen(0,'127.0.0.1',ok));
   const address=peer.address();assert.ok(address&&typeof address==='object');
-  process.env.HARNESS_OPENCODE_URL='http://127.0.0.1:'+address.port;
+  delete process.env.HARNESS_OPENCODE_URL;
+  process.env.HARNESS_OPENCODE_SERVICE_FILE=join(root,'registration.json');
+  await writeFile(process.env.HARNESS_OPENCODE_SERVICE_FILE,JSON.stringify({pid:process.pid,version:'2.0.27',
+    url:'http://127.0.0.1:'+address.port,password:'fixture-sensitive'}));
   process.env.HARNESS_CHAT_ROOTS=root;
   const app=await createApp({auth:new LocalAuth('fixture',4176)});
   try{
@@ -50,7 +54,14 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       assert.ok(!rejected.body.includes('sensitive upstream detail'));
     }
     failure=0;
-    const create=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{directory:root}});
+    const logPath='/api/v1/chat/access-log';
+    assert.equal((await app.inject({url:logPath,headers:{host,origin}})).statusCode,401);
+    const logs=await app.inject({url:logPath,headers});
+    const upstream=logs.json().data.find((r:{source:string;result:string})=>r.source==='OpenCode'&&r.result==='503');
+    assert.ok(upstream);
+    assert.ok(logs.json().data.some((r:{source:string;result:string;requestId:string})=>r.source==='工作台'&&r.result==='502'&&r.requestId===upstream.requestId));
+    assert.ok(!logs.body.includes('fixture-sensitive')&&!logs.body.includes(root)&&!logs.body.includes('sensitive upstream detail'));
+    const create=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{}});
     assert.equal(create.statusCode,201,create.body);assert.equal(create.json().data.directory,root);
     const url='/api/v1/chat/sessions/'+id;
     const post=(suffix:string,payload:object)=>app.inject({method:'POST',url:url+suffix,headers,payload});
