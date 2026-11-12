@@ -78,7 +78,11 @@ export function streamingMessages(history:ChatMessage[],parts:Part[]):ChatMessag
   const messages=[...history];
   for(const part of parts){
     let index=messages.findIndex(m=>m.id===part.message);
-    if(index<0){index=messages.length;messages.push({id:part.message,role:'assistant',text:'',files:[],tools:[]});}
+    if(index<0){
+      const queued=messages.findIndex(m=>m.queued);
+      index=queued>0?queued:messages.length;
+      messages.splice(index,0,{id:part.message,role:'assistant',text:'',files:[],tools:[]});
+    }
     const message=messages[index];
     if(message.complete)continue;
     const steps=[...(message.steps??[])];

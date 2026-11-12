@@ -1,16 +1,14 @@
-import {lazy,Suspense,useEffect,useRef,useState,type ReactNode} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {streamingMessages,useChatStream} from './chatStream.ts';
 import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
 import {activateChat,displayChatTitle,summarizeFirstInput,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
 import {ModelPicker} from './ModelPicker.tsx';
 import {ChatRequests} from './ChatRequests.tsx';
 import {api,ApiError} from './api/client.ts';
-import type {ChatStatus,ChatSettings,ChatModel,ChatStep} from '../../../packages/contracts/src/chat.ts';
+import type {ChatStatus,ChatSettings,ChatModel} from '../../../packages/contracts/src/chat.ts';
 
-const MarkdownBody=lazy(()=>import('./ChatMarkdown.tsx').then(module=>({default:module.ChatMarkdown})));
-function ChatMarkdown({text}:{text:string}){
-  return <Suspense fallback={<p>{text}</p>}><MarkdownBody text={text}/></Suspense>;
-}
+import {ConversationTranscript} from './ConversationTranscript.tsx';
+
 function explain(e:unknown){
   const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'该目录不在启动时配置的工作范围内。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
     SERVICE_UNAVAILABLE:'OpenCode 暂时无法响应，请检查内网服务地址和鉴权配置。',PERMISSION_CHANGED:'授权请求已改变，请查看最新请求。',CHAT_NOT_FOUND:'原会话不可用，请新建对话。'};
@@ -163,22 +161,8 @@ function ChatWorkspace({investigation,directory,settings}:{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>想在这个目录里做什么？</h2>
         <button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button></div>}
-        {messages.map(m=><div key={m.id} className={'chat-turn '+m.role}><strong>{m.role==='user'?'你':'OpenCode'}</strong>
-          {m.steps?.length?m.steps.map((step,i)=>{
-            if(step.kind!=='thinking')return <ExecutionStep key={i} step={step}/>;
-            if(step.live)return <details key={i} open className="thinking-step"><summary>思考过程 · {step.complete?'已结束':'进行中'}</summary><ChatMarkdown text={step.text??''}/></details>;
-            const savedSteps=state?.messages.find(row=>row.id===m.id)?.steps;
-            const part=savedSteps?.indexOf(step)??i;
-            const open=expanded?.session===id&&expanded.message===m.id&&expanded.part===part;
-            return <div className="thinking-step" key={i}><button type="button" aria-expanded={open} onClick={()=>
-              expand(open?undefined:{session:id,message:m.id,part})}>思考过程 {open?'▾':'▸'}</button>
-              <small>{step.complete?'已结束':state?.active?'进行中':'已记录'}{step.at!=null&&step.ended!=null?' · '+Math.max(0,(step.ended-step.at)/1000).toFixed(1)+' 秒':''}</small>
-              {open&&(step.text?<ChatMarkdown text={step.text}/>:<p>{step.hasText?'正在读取…':'OpenCode 未提供可显示文本。'}</p>)}</div>;
-          }):<>{m.text&&(m.role==='assistant'?<ChatMarkdown text={m.text}/>:<p>{m.text}</p>)}{m.tools.map((t,i)=><small key={i}>{t.name} · {t.status}</small>)}</>}
-          {m.files.length>0&&<small>{m.role==='user'?'引用文件':'涉及文件'} · {m.files.join('、')}</small>}</div>)}
-        {stream.tools.length>0&&<section className="execution-note" aria-label="工具实时进度"><strong>工具实时进度</strong>
-          {stream.tools.map(row=><div key={row.id}><time>{new Date(row.at).toLocaleTimeString()}</time> {row.text}</div>)}</section>}
-        {state?.active&&!pending&&<small role="status">OpenCode 正在处理本轮请求…</small>}
+        <ConversationTranscript messages={messages} progress={stream.tools} active={Boolean(state?.active&&!pending)}
+          expanded={expanded?.session===id?expanded:undefined} onExpand={value=>expand(value?{session:id,...value}:undefined)}/>
       </div>}
       {error&&<p role="alert" className="notice">{error}</p>}
       {pending&&state?<div className="composer request-composer">
@@ -200,19 +184,4 @@ function ChatWorkspace({investigation,directory,settings}:{
           {interrupt}
           <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
       </div>}</div></div></section>;
-}
-
-const toolStates:Record<string,string>={streaming:'正在准备调用',running:'执行中',completed:'已完成',error:'失败',exited:'已退出',timeout:'超时',killed:'已停止'};
-function ExecutionStep({step}:{step:Exclude<ChatStep,{kind:'thinking'}>}){
-  if(step.kind==='text')return <ChatMarkdown text={step.text}/>;
-  const time=step.at?new Date(step.at).toLocaleTimeString():undefined;
-  if(step.kind==='notice')return <div className="execution-note">{time&&<time>{time} </time>}{step.text}</div>;
-  return <div className="execution-tool"><header><strong>{step.name}</strong><span>{toolStates[step.status]??step.status}</span>
-    {time&&<time>{time}</time>}</header>
-    {step.progress&&<p>{step.progress}</p>}
-    {step.input&&<details><summary>调用参数</summary><pre>{step.input}</pre></details>}
-    {step.result&&<><div className="tool-result">{step.result.length>180?step.result.slice(0,180)+'…':step.result}</div>
-      {step.result.length>180&&<details><summary>展开结果摘录</summary><pre>{step.result}</pre></details>}</>}
-    {step.error&&<p className="notice">工具错误 · {step.error}</p>}
-  </div>;
 }
