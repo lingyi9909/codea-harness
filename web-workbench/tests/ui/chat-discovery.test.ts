@@ -46,7 +46,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       if(req.url==='/api/event'){
         res.setHeader('Content-Type','text/event-stream');res.flushHeaders();
         output=res;
-        const progress=(sessionID,message)=>({type:'session.tool.progress',id:sessionID,created:Date.now(),data:{sessionID,metadata:{message}}});
+        const progress=(sessionID,message)=>({type:'session.tool.progress',id:sessionID,created:Date.now(),data:{sessionID,assistantMessageID:'assistant-log',metadata:{message}}});
         for(const e of [progress('other','cross-session-marker'),progress('ses_logs_fixture','已扫描两个文件')])
           res.write('data: '+JSON.stringify(e)+'\\n\\n');
         return;
@@ -259,12 +259,16 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(running).toBeVisible();
     await expect(running).toHaveCSS('background-color','rgb(170, 39, 46)');
     const feed=page.locator('.chat-feed');
+    const processRow=feed.locator('.turn-process').first();
+    await expect(processRow).toBeVisible();
+    await expect(feed.getByText('命中第 2 行',{exact:true})).not.toBeVisible();
+    await processRow.locator('> summary').click();
     await expect(feed).toContainText('已扫描两个文件');
     await expect(feed.locator('.execution-tool')).toContainText('命中第 2 行');
     await feed.getByText('调用参数',{exact:true}).click();
-    await expect(feed.locator('.execution-tool pre')).toContainText('abc123');
+    await expect(feed.locator('.execution-tool pre').first()).toContainText('abc123');
     await expect(feed).not.toContainText('cross-session-marker');
-    const thought=feed.locator('.chat-turn').filter({hasText:'检查结束。'}).getByRole('button',{name:/思考过程/});
+    const thought=processRow.getByRole('button',{name:/思考过程/}).first();
     await expect(thought).toBeVisible();
     await expect(feed).not.toContainText('客户端可见的测试片段');
     await thought.click();await expect(feed).toContainText('客户端可见的测试片段');
@@ -283,6 +287,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(appliedRange).toContainText(expectedRange);
     await expect(feed.getByText('已找到两条记录',{exact:true})).toHaveCount(1);
     await expect(running).toHaveCount(0);
+    await expect(feed.locator('.turn-process').first()).not.toHaveAttribute('open','');
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
     await expect(feed.getByRole('cell',{name:'120 ms'})).toBeVisible();
     await expect(feed.locator('pre code.language-json')).toContainText('"count"');
@@ -377,4 +382,53 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     if(registration){try{process.kill(JSON.parse(registration).pid);}catch{}}
     await rm(root,{recursive:true,force:true,maxRetries:12,retryDelay:150});
   }
+});
+
+it('groups a multi-step weather response and keeps verification output out of the answer',async()=>{
+  const port=31882,id='ses_weather_example';
+  const app=await createApp({localOnly:true,auth:new LocalAuth('unused',port)});
+  const browser=await chromium.launch(process.env.HARNESS_TEST_CHROME?{channel:'chrome'}:{});
+  const root=await realpath('chat-files');
+  try{
+    await app.listen({host:'127.0.0.1',port});
+    const page=await browser.newPage({viewport:{width:1280,height:800}});
+    await page.addInitScript(id=>{sessionStorage.setItem('harness.scene','chat');sessionStorage.setItem('harness.chat',id);},id);
+    const answer='北京明天晴，早晚温差较大。\n\n- **白天**：晴，最高 **15℃**\n- **夜间**：晴，最低 **3℃**\n\n数据来源：[中央气象台](https://www.nmc.cn/publish/forecast/ABJ/beijing.html)';
+    const tool=(name:string,result:string)=>({kind:'tool',name,status:'completed',result});
+    const assistant=(id:string,steps:unknown[])=>({id,role:'assistant',text:'',steps,tools:[],files:[]});
+    const messages=[
+      {id:'q',role:'user',text:'北京明天的天气如何',files:[],tools:[]},
+      assistant('search',[{kind:'text',text:'先查北京的预报。'},tool('websearch','搜索结果列表'),{kind:'thinking',hasText:false,complete:true}]),
+      assistant('fetch',[tool('webfetch','向右滑动填充拼图'),tool('webfetch','北京天气预报原始页面')]),
+      assistant('answer',[{kind:'text',text:answer}]),
+      assistant('done',[{kind:'notice',text:'本轮已完成'}]),
+    ];
+    await page.route('**/chat/sessions/'+id+'/activity',route=>route.fulfill({status:204}));
+    await page.route('**/chat/sessions/'+id,route=>route.fulfill({json:{data:{
+      id,directory:root,title:'北京明天的天气',active:false,messages,permissions:[],forms:[]},requestId:'fixture'}}));
+    await page.goto('http://127.0.0.1:'+port);
+    const response=page.getByRole('article',{name:'OpenCode 回答'});
+    const body=response.getByRole('region',{name:'回答正文'});
+    await expect(response).toHaveCount(1);
+    await expect(body.getByRole('link',{name:'中央气象台'})).toBeVisible();
+    await expect(body).toContainText('15℃');
+    await expect(body).not.toContainText('拼图');
+    await expect(page.getByText('向右滑动填充拼图',{exact:true})).not.toBeVisible();
+    const processRow=response.locator('.turn-process > summary');
+    await expect(processRow).toContainText('3 次工具调用');
+    await processRow.focus();await page.keyboard.press('Enter');
+    const fetches=response.locator('.execution-tool').filter({hasText:'webfetch'});
+    await expect(fetches).toHaveCount(2);
+    await expect(response.getByText('先查北京的预报。',{exact:true})).toBeVisible();
+    await expect(response.getByText(/OpenCode 未提供可显示文本/)).toHaveCount(0);
+    await fetches.first().getByText('查看工具结果').click();
+    await expect(fetches.first().getByText('向右滑动填充拼图')).toBeVisible();
+    await processRow.click();
+    await page.setViewportSize({width:390,height:844});
+    await expect(body).toBeVisible();
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.reload();
+    await expect(page.locator('.turn-process')).not.toHaveAttribute('open','');
+    await expect(body).toContainText('15℃');
+  }finally{await browser.close();await app.close();}
 });

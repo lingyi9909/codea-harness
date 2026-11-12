@@ -272,7 +272,8 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
           case 'session.tool.progress':{
             const meta=event.data.metadata;
             const label=[meta.title,meta.message,meta.status].find((v):v is string=>typeof v==='string'&&v.length>0);
-            frame='data: '+JSON.stringify({id:event.id,at:event.created,text:label?activityPreview(label,300):'工具报告了新的进度'});
+            if(!label||!event.data.assistantMessageID)continue;
+            frame='data: '+JSON.stringify({id:event.id,message:event.data.assistantMessageID,at:event.created,text:activityPreview(label,300)});
             break;
           }
           default:continue;
@@ -297,12 +298,12 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       const steps=activity(m,m.id===req.query.message?req.query.part:undefined);
       if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',text:'',files:[],tools:[],steps});
       if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length))messages.push({id:m.id,role:'assistant',
-        complete:Boolean(m.time?.completed||m.finish||m.error),steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
+        toolCallTurn:m.finish==='tool-calls',complete:Boolean(m.time?.completed||m.finish||m.error),steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
         tools:m.content.flatMap(p=>p.type==='tool'?[{name:p.name,status:p.state.status}]:[]),
         files:m.snapshot?.files??[]});
     }
     for(const item of inbox)if(item.type==='user'&&!messages.some(m=>m.id===item.id))
-      messages.push({id:item.id,role:'user',text:item.payload.text,files:item.payload.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
+      messages.push({id:item.id,role:'user',queued:true,text:item.payload.text,files:item.payload.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
     const result:ChatStatus={id:sessionID,title:session.title,forms:forms.map(visibleForm),directory:session.location.directory,messages,
       ...(session.model?{model:{id:session.model.id,providerID:session.model.providerID,variant:session.model.variant}}:{}),
       active:Boolean(running[sessionID])||inbox.length>0,outcome:session.outcome,

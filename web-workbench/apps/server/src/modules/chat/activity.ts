@@ -19,7 +19,7 @@ export function activity(m:Message,expandedPart?:number):ChatStep[]{
     for(const [ordinal,p] of m.content.entries()){
       if(p.type==='reasoning'){
         const expanded=steps.length===expandedPart;
-        steps.push({kind:'thinking',ordinal,at:p.time?.created,ended:p.time?.completed,
+        steps.push({kind:'thinking',ordinal,detailPart:steps.length,at:p.time?.created,ended:p.time?.completed,
           complete:p.time?.completed!=null||m.time?.completed!=null||Boolean(m.finish),
           hasText:Boolean(p.text?.trim()),...(expanded?{text:p.text??''}:{})});
       }
@@ -34,13 +34,13 @@ export function activity(m:Message,expandedPart?:number):ChatStep[]{
         progress,error:state.status==='error'&&state.error?.message?activityPreview(state.error.message):undefined});
     }
     if(m.retry)steps.push({kind:'notice',text:'重试 '+m.retry.attempt+' · '+activityPreview(m.retry.error.message),at:m.retry.at});
-    if(m.error)steps.push({kind:'notice',text:'执行失败 · '+activityPreview(m.error.message),at:m.time?.completed});
+    if(m.error)steps.push({kind:'notice',problem:true,text:'执行失败 · '+activityPreview(m.error.message),at:m.time?.completed});
   }
   if(m.type==='skill')steps.push({kind:'notice',text:'已加载 Skill · '+m.name,at:m.time?.created});
   if(m.type==='shell')steps.push({kind:'tool',name:'Shell',status:m.status,at:m.time?.created,ended:m.time?.completed,
     input:activityPreview(m.command,1600),result:m.output?activityPreview(m.output.output)+(m.output.truncated?'\n…（原始输出已截断）':''):undefined,
     progress:m.exit!=null?'退出码 '+m.exit:undefined});
   if(m.type==='compaction')steps.push({kind:'notice',text:'整理会话上下文 · '+m.status,at:m.time?.created});
-  if(m.type==='idle')steps.push({kind:'notice',text:({succeeded:'本轮已完成',failed:'本轮失败',interrupted:'本轮已中断'})[m.outcome]+(m.error?' · '+activityPreview(m.error.message):''),at:m.time?.created});
+  if(m.type==='idle')steps.push({kind:'notice',problem:m.outcome!=='succeeded',text:({succeeded:'本轮已完成',failed:'本轮失败',interrupted:'本轮已中断'})[m.outcome]+(m.error?' · '+activityPreview(m.error.message):''),at:m.time?.created});
   return steps;
 }

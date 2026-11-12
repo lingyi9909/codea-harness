@@ -245,7 +245,6 @@ export function WorkbenchApp() {
           <span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}
         {!tasks.length&&<p className="muted small">暂无历史任务</p>}
       </div>
-      <div className="side-bottom">Code Harness · 本地研发工作台</div>
     </aside>
     <main className="main">
       <header className="topbar"><div className="breadcrumb">研发场景 <span>/</span> {selected?'任务详情':scenes[scene]}</div>
