@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {streamingMessages,useChatStream} from './chatStream.ts';
 import {api,ApiError} from './api/client.ts';
 import type {ChatStatus,ChatSettings,ChatAccessEntry,ChatModel,ChatStep} from '../../../packages/contracts/src/chat.ts';
 
@@ -31,6 +32,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
   const keyFor=(m:ChatModel)=>JSON.stringify([m.providerID,m.id]);
   const chosen=catalog?.find(m=>keyFor(m)===modelKey);
   const [id,select]=useState(()=>sessionStorage.getItem(sessionKey)??'');
+  const stream=useChatStream(id);
   const [expanded,expand]=useState<{session:string;message:string;part:number}>();
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(''),[refs,attach]=useState('');
   const [showFiles,toggleFiles]=useState(false),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
@@ -38,7 +40,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
   useEffect(()=>{
     sessionStorage.setItem(sessionKey,id);if(!id)return;
     let live=true;let timer:ReturnType<typeof setTimeout>;
-    const poll=async()=>{let interval=1800;try{const value=await api.chat(id,expanded?.session===id?expanded:undefined);if(value.active)interval=900;if(live)update(value);}
+    const poll=async()=>{let interval=1800;try{const value=await api.chat(id,expanded?.session===id?expanded:undefined);if(value.active)interval=900;if(live){update(value);stream.prune.current(value.messages);}}
       catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,interval);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
   },[id,refresh,sessionKey,expanded]);
@@ -69,25 +71,38 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
     if(text.length>16000)throw Error('排查条件和问题合计过长，请缩短后再发送。');
     let session=id;
     if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID}:undefined,investigation?'log-inspection':undefined);session=s.id;select(session);}
+    await stream.connect(session);
     await api.chatAction(session,'messages',{text,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
     investigation?.onSent();write('');attach('');toggleFiles(false);
   });
+  const feed=useRef<HTMLDivElement>(null),follow=useRef(true);
+  useEffect(()=>{follow.current=true;},[id]);
+  useEffect(()=>{
+    if(follow.current&&feed.current)feed.current.scrollTop=feed.current.scrollHeight;
+  },[state,stream.parts,stream.tools]);
+  const messages=streamingMessages(state?.id===id?state.messages:[],stream.parts);
   return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'按请求和时间定位日志，在同一会话中追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
     {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{investigation?.reset();select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
     <div className="chat-layout"><div className="chat-box">
-      <div className="chat-feed" aria-live="polite">{!state?.messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>{investigation?'要排查哪次请求？':'想在这个目录里做什么？'}</h2>
+      <div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
+        const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
+      }}>{!messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>{investigation?'要排查哪次请求？':'想在这个目录里做什么？'}</h2>
         {!investigation&&<button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button>}</div>}
-        {state?.messages.map(m=><div key={m.id} className={'chat-turn '+m.role}><strong>{m.role==='user'?'你':'OpenCode'}</strong>
+        {messages.map(m=><div key={m.id} className={'chat-turn '+m.role}><strong>{m.role==='user'?'你':'OpenCode'}</strong>
           {m.steps?.length?m.steps.map((step,i)=>{
             if(step.kind!=='thinking')return <ExecutionStep key={i} step={step}/>;
-            const open=expanded?.session===id&&expanded.message===m.id&&expanded.part===i;
+            if(step.live)return <details key={i} open className="thinking-step"><summary>思考过程 · {step.complete?'已结束':'进行中'}</summary><p>{step.text}</p></details>;
+            const savedSteps=state?.messages.find(row=>row.id===m.id)?.steps;
+            const part=savedSteps?.indexOf(step)??i;
+            const open=expanded?.session===id&&expanded.message===m.id&&expanded.part===part;
             return <div className="thinking-step" key={i}><button type="button" aria-expanded={open} onClick={()=>
-              expand(open?undefined:{session:id,message:m.id,part:i})}>思考过程 {open?'▾':'▸'}</button>
-              <small>{step.complete?'已结束':state.active?'进行中':'已记录'}{step.at!=null&&step.ended!=null?' · '+Math.max(0,(step.ended-step.at)/1000).toFixed(1)+' 秒':''}</small>
+              expand(open?undefined:{session:id,message:m.id,part})}>思考过程 {open?'▾':'▸'}</button>
+              <small>{step.complete?'已结束':state?.active?'进行中':'已记录'}{step.at!=null&&step.ended!=null?' · '+Math.max(0,(step.ended-step.at)/1000).toFixed(1)+' 秒':''}</small>
               {open&&<p>{step.text||(!step.hasText?'OpenCode 未提供可显示文本。':'正在读取…')}</p>}</div>;
           }):<>{m.text&&<p>{m.text}</p>}{m.tools.map((t,i)=><small key={i}>{t.name} · {t.status}</small>)}</>}
           {m.files.length>0&&<small>{m.role==='user'?'引用文件':'涉及文件'} · {m.files.join('、')}</small>}</div>)}
-        {id&&<LiveToolProgress key={id} id={id}/>}
+        {stream.tools.length>0&&<section className="execution-note" aria-label="工具实时进度"><strong>工具实时进度</strong>
+          {stream.tools.map(row=><div key={row.id}><time>{new Date(row.at).toLocaleTimeString()}</time> {row.text}</div>)}</section>}
         {state?.active&&<small role="status">{state.permissions.length?'等待工具授权':'OpenCode 正在处理本轮请求…'}</small>}
         {state?.permissions.map(p=><div className="chat-permission" key={p.id}><strong>OpenCode 请求授权 · {p.action}</strong><pre>{p.resources.join('\n')}</pre>
           {(['once','reject'] as const).map(d=><button key={d} disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'permission',{requestId:p.id,revision:p.revision,decision:d});})}>{d==='once'?'仅本次允许':'拒绝'}</button>)}</div>)}
@@ -162,20 +177,4 @@ function ExecutionStep({step}:{step:Exclude<ChatStep,{kind:'thinking'}>}){
       {step.result.length>180&&<details><summary>展开结果摘录</summary><pre>{step.result}</pre></details>}</>}
     {step.error&&<p className="notice">工具错误 · {step.error}</p>}
   </div>;
-}
-
-function LiveToolProgress({id}:{id:string}){
-  type Entry={id:string;at:number;text:string};
-  const [events,setEvents]=useState<Entry[]>([]);
-  useEffect(()=>{
-    const source=new EventSource('/api/v1/chat/sessions/'+encodeURIComponent(id)+'/activity');
-    source.onmessage=e=>{
-      const entry=JSON.parse(e.data) as Entry;
-      setEvents(rows=>rows.some(row=>row.id===entry.id)?rows:[...rows.slice(-11),entry]);
-    };
-    return ()=>source.close();
-  },[id]);
-  if(!events.length)return null;
-  return <section className="execution-note" aria-label="工具实时进度"><strong>工具实时进度</strong>
-    {events.map(row=><div key={row.id}><time>{new Date(row.at).toLocaleTimeString()}</time> {row.text}</div>)}</section>;
 }

@@ -2,11 +2,12 @@ import {activity,activityPreview} from './activity.ts';
 import {registerAccess} from './access.ts';
 import {chatConnection} from './connection.ts';
 import { mkdir,realpath,stat } from 'node:fs/promises';
+import {once} from 'node:events';
 import { createHash,randomUUID } from 'node:crypto';
 import { delimiter,isAbsolute,relative,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { FastifyInstance } from 'fastify';
-import type { ChatMessage,ChatStatus,ChatModel } from '../../../../../packages/contracts/src/chat.ts';
+import type { ChatMessage,ChatStatus,ChatModel,ChatFragment } from '../../../../../packages/contracts/src/chat.ts';
 import { AuthProblem,type LocalAuth } from '../../auth.ts';
 
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
@@ -102,14 +103,33 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     const expiry=setTimeout(()=>stop.abort(),Math.max(1,session.expires-Date.now()));
     const heartbeat=setInterval(()=>{if(!raw.write(': heartbeat\n\n'))stop.abort();},15000);
     try{
+      let ready=false;
       for await(const event of native.event.subscribe({signal:stop.signal})){
         if(stop.signal.aborted)break;
-        if(event.type!=='session.tool.progress'||event.data.sessionID!==sessionID)continue;
+        if(!ready){raw.write('event: ready\ndata: {}\n\n');ready=true;}
+        if(!('sessionID' in event.data)||event.data.sessionID!==sessionID)continue;
         if(auth.session(req).csrf!==session.csrf)break;
-        const meta=event.data.metadata;
-        const label=[meta.title,meta.message,meta.status].find((v):v is string=>typeof v==='string'&&v.length>0);
-        const data={id:event.id,at:event.created,text:label?activityPreview(label,300):'工具报告了新的进度'};
-        if(!raw.write('data: '+JSON.stringify(data)+'\n\n'))break;
+        let frame:string;
+        switch(event.type){
+          case 'session.text.started':case 'session.text.delta':case 'session.text.ended':
+          case 'session.reasoning.started':case 'session.reasoning.delta':case 'session.reasoning.ended':{
+            const data=event.data;
+            const fragment:ChatFragment={id:event.id,message:data.assistantMessageID,ordinal:data.ordinal,
+              kind:event.type.startsWith('session.text.')?'text':'thinking',at:event.created,
+              phase:'delta' in data?'delta':'text' in data?'ended':'started',
+              text:'delta' in data?data.delta:'text' in data?data.text:''};
+            frame='event: fragment\ndata: '+JSON.stringify(fragment);
+            break;
+          }
+          case 'session.tool.progress':{
+            const meta=event.data.metadata;
+            const label=[meta.title,meta.message,meta.status].find((v):v is string=>typeof v==='string'&&v.length>0);
+            frame='data: '+JSON.stringify({id:event.id,at:event.created,text:label?activityPreview(label,300):'工具报告了新的进度'});
+            break;
+          }
+          default:continue;
+        }
+        if(!raw.write(frame+'\n\n'))await once(raw,'drain',{signal:stop.signal});
       }
     }catch{/* The message snapshot remains available if native event streaming is unavailable. */}
     finally{streams.delete(stop);stop.abort();clearInterval(heartbeat);clearTimeout(expiry);if(!raw.destroyed)raw.end();}
@@ -129,7 +149,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
       const steps=activity(m,m.id===req.query.message?req.query.part:undefined);
       if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',text:'',files:[],tools:[],steps});
       if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length))messages.push({id:m.id,role:'assistant',
-        steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
+        complete:Boolean(m.time?.completed||m.finish||m.error),steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
         tools:m.content.flatMap(p=>p.type==='tool'?[{name:p.name,status:p.state.status}]:[]),
         files:m.snapshot?.files??[]});
     }
