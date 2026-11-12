@@ -1,4 +1,4 @@
-import {activity,activityPreview} from './activity.ts';
+import {activity,activityPreview,assistantFooters} from './activity.ts';
 import {chatConnection} from './connection.ts';
 import { mkdir,realpath,stat } from 'node:fs/promises';
 import {once} from 'node:events';
@@ -312,11 +312,13 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     const [page,permissions,running,inbox,forms]=await Promise.all([(await client()).message.list({sessionID,order:'desc',limit:100}),
       (await client()).permission.list({sessionID}),(await client()).session.active(),(await client()).session.inbox.list({sessionID}),pendingForms(sessionID)]);
     const messages:ChatMessage[]=[];
-    for(const m of page.data.slice().reverse()){
+    const records=page.data.slice().reverse();
+    const footers=assistantFooters(records,Boolean(page.cursor?.next));
+    for(const m of records){
       if(m.type==='user')messages.push({id:m.id,role:'user',text:displayedUserText(m),files:m.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
       const steps=activity(m);
-      if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',text:'',files:[],tools:[],steps});
-      if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length))messages.push({id:m.id,role:'assistant',
+      if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',idleOutcome:m.type==='idle'?m.outcome:undefined,text:'',files:[],tools:[],steps});
+      if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length||footers.has(m.id)))messages.push({id:m.id,role:'assistant',footer:footers.get(m.id),
         toolCallTurn:m.finish==='tool-calls',complete:Boolean(m.time?.completed||m.finish||m.error),steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
         tools:m.content.flatMap(p=>p.type==='tool'?[{name:p.name,status:p.state.status}]:[]),
         files:m.snapshot?.files??[]});

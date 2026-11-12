@@ -80,3 +80,24 @@ it('shows delta-only text and fills transport gaps from overlapping snapshots wi
   assert.equal(texts(streamingMessages([], [reconnected]))[0],'准备…完成');
   assert.equal(texts(streamingMessages([assistant('reply','准备查找完成。',true)],[reconnected]))[0],'准备查找完成。');
 });
+
+it('keeps the native snapshot type and timing when live text reuses a reasoning ordinal',()=>{
+  const native=assistant('reply','公开摘要',true);
+  native.steps=[
+    {kind:'thinking',ordinal:0,text:'公开摘要',at:1000,ended:14250,complete:true,hasText:true},
+    {kind:'text',ordinal:1,text:'中文回答。'}
+  ];
+  const stale={message:'reply',ordinal:0,kind:'text' as const,text:'公开摘要',at:900,ended:13000};
+  const thinking={...stale,kind:'thinking' as const};
+  for(const complete of [false,true]){
+    const snapshot={...native,complete};
+    for(const fragments of [[thinking,stale],[stale,thinking],[stale]]){
+      const [merged]=streamingMessages([snapshot],fragments);
+      assert.deepEqual(merged.steps?.filter(s=>s.kind==='text').map(s=>s.text),['中文回答。']);
+      const thought=merged.steps?.find(s=>s.kind==='thinking');
+      assert.equal(thought?.text,'公开摘要');
+      assert.equal(thought?.at,1000);
+      assert.equal(thought?.ended,14250);
+    }
+  }
+});

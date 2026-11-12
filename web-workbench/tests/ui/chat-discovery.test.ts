@@ -308,7 +308,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(feed.locator('.execution-tool pre').first()).toContainText('abc123');
     await expect(feed).not.toContainText('cross-session-marker');
     const thought=feed.locator('.turn-reasoning');
-    await expect(thought.locator('summary')).toContainText('思考过程');
+    await expect(thought.locator('summary')).toContainText('思考');
     await expect(feed.getByText('客户端可见的测试片段',{exact:true})).toBeVisible();
     await expect(feed.getByText(firstReasoning,{exact:true})).toBeVisible();
     await expect(feed).not.toContainText('private-marker');
@@ -461,7 +461,7 @@ it('groups a multi-step weather response and keeps verification output out of th
     const messages=[
       {id:'q',role:'user',text:'北京明天的天气如何',files:[],tools:[]},
       assistant('search',[{kind:'text',text:'先查北京的预报。'},tool('websearch','搜索结果列表'),{kind:'thinking',hasText:false,complete:true}]),
-      assistant('fetch',[{kind:'thinking',ordinal:4,text:english,hasText:true,complete:true},{kind:'thinking',ordinal:5,text:'预报地区与北京一致。',hasText:true,complete:true},tool('webfetch','向右滑动填充拼图'),tool('webfetch','北京天气预报原始页面')]),
+      assistant('fetch',[{kind:'thinking',ordinal:4,text:english,at:1000,ended:9600,hasText:true,complete:true},{kind:'thinking',ordinal:5,text:'预报地区与北京一致。',hasText:true,complete:true},tool('webfetch','向右滑动填充拼图'),tool('webfetch','北京天气预报原始页面')]),
       assistant('answer',[{kind:'text',text:answer}]),
       assistant('done',[{kind:'notice',text:'本轮已完成'}]),
     ];
@@ -483,8 +483,11 @@ it('groups a multi-step weather response and keeps verification output out of th
     await expect(body).not.toContainText('拼图');
     await expect(page.getByText('向右滑动填充拼图',{exact:true})).not.toBeVisible();
     const historyThought=response.locator('.turn-reasoning');
+    await expect(historyThought).toHaveAttribute('open','');
+    await expect(historyThought.locator('summary')).toContainText('思考');
+    await expect(body).not.toContainText(english);
+    await historyThought.locator('summary').click();
     await expect(historyThought).not.toHaveAttribute('open','');
-    await expect(historyThought.locator('summary')).toContainText('2 段');
     await historyThought.locator('summary').focus();await page.keyboard.press('Enter');
     await expect(historyThought.getByText(english,{exact:true})).toBeVisible();
     const translate=historyThought.getByRole('button',{name:'译成中文',exact:true});
@@ -532,12 +535,22 @@ it('groups a multi-step weather response and keeps verification output out of th
     const painted=await observePaintedText(page);
     await page.route('**/chat/sessions/'+id+'/messages',async route=>{
       messages.push({id:'new-user',role:'user',text:nextQuestion,tools:[],files:[]},
-        {...assistant('only-snapshot',[{kind:'text',ordinal:0,text:fallbackAnswer}]),complete:true});
+        Object.assign(assistant('only-snapshot',[
+          {kind:'thinking',ordinal:0,text:english,at:1000,ended:9600,hasText:true,complete:true},
+          {kind:'text',ordinal:1,text:fallbackAnswer}
+        ]),{footer:{agent:'build',model:'fixture',durationMs:13900,tokensPerSecond:36.1}}),
+        Object.assign(assistant('finished',[{kind:'notice',text:'本轮已完成'}]),{idleOutcome:'succeeded'}));
       await route.fulfill({status:202,json:{data:{id:'new-user'},requestId:'fixture'}});
     });
     await page.getByLabel('对话内容').fill(nextQuestion);
     await page.getByLabel('对话内容').press('Enter');
     await expect(response.last().getByText(fallbackAnswer,{exact:true})).toBeVisible();
+    const latest=response.last();
+    await expect(latest.locator('.turn-reasoning > summary')).toContainText('8.6s');
+    await expect(latest.locator('.turn-reasoning')).toContainText(english);
+    await expect(latest.locator('.turn-answer')).not.toContainText(english);
+    await expect(latest.locator('.turn-process')).toHaveCount(0);
+    await expect(latest.locator('.turn-answer ~ .turn-metrics')).toHaveText('build · fixture · 13.9s · 36.1 tok/s');
     const prefixes=await painted.evaluate(seen=>[...seen]);
     assert.ok(prefixes.filter(s=>s.length>1&&s.length<fallbackAnswer.length&&fallbackAnswer.startsWith(s)).length>=3,
       'snapshot-only completion is paced for the new turn');
