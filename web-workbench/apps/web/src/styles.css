@@ -144,7 +144,7 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 .sidebar :is(.side-link, .history-item):hover { background: #21434e; }
 .sidebar .selected {
   color: white !important;
-  background: #22545a !important;
+  background: #214d53 !important;
   box-shadow: inset 3px 0 #86ddc3;
 }
 .sidebar :is(.side-section, .side-section button, .history-meta, .muted) { color: #afc9cd; }
@@ -198,3 +198,60 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outli
 .scene-page:has(.chat-layout) .conversation-history { border-color: var(--chat-line); }
 .conversation-history li button:is(:hover,[aria-current]) { background: var(--chat-layer); }
 .conversation-history small, .conversation-history p { color: var(--chat-muted); }
+
+/* Conversation reading surface and its persistent input. */
+.main:has(.chat-layout) { background: #fcfdfc; }
+.scene-page:has(.chat-layout) .scene-title {
+  padding-bottom: 10px;
+  margin-bottom: 0;
+  border-bottom: 1px solid #dee6e3;
+}
+.scene-page:has(.chat-layout) .thread-heading:has(.conversation-title) h1 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--chat-muted);
+}
+.scene-page:has(.chat-layout) .conversation-title {
+  color: var(--chat-ink);
+  font-size: clamp(15px, 1.3vw, 19px);
+  font-weight: 650;
+}
+.scene-title .chat-history-actions .secondary {
+  min-height: 32px;
+  background: transparent;
+  border-color: transparent;
+}
+.scene-title .chat-history-actions .new-conversation {
+  color: #135450;
+  background: #e5f2ed;
+  border-color: #c0d9d0;
+}
+.scene-title .chat-history-actions .secondary:enabled:hover { background: #dcebe6; }
+.scene-title .new-conversation span { font-weight: 500; }
+.chat-layout .chat-box { background: transparent; border: 0; }
+.chat-layout .chat-feed { padding-inline: 4px; }
+.chat-layout .composer, .chat-layout .composer:first-child {
+  margin: 4px 0 2px;
+  padding: 9px 12px;
+  background: #fff;
+  border: 1px solid #b5c9c2;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px #17393209;
+}
+.scene-page:has(.chat-layout) .composer:has(> textarea:focus-visible) {
+  border-color: #447a71;
+  box-shadow: 0 0 0 1px #447a71;
+}
+.scene-page:has(.chat-layout) .composer > textarea:focus-visible { outline: none; }
+.chat-layout .composer-actions button:not(.primary, .running-action) {
+  background: #f3f6f4;
+  border-color: transparent;
+}
+@media (min-width: 601px) {
+  .sidebar .brand { margin-bottom: 18px; }
+  .sidebar .side-link { align-items: center; padding: 9px 12px; font-size: 14px; font-weight: 500; }
+  .sidebar .side-link[aria-current] { font-weight: 650; }
+}
+@media (forced-colors: active) {
+  .scene-page:has(.chat-layout) .composer > textarea:focus-visible { outline: 2px solid Highlight; }
+}

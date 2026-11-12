@@ -243,15 +243,16 @@ export function WorkbenchApp() {
     <aside className="sidebar">
       <div className="brand"><span className="brand-icon">✧</span><div><strong>智能工作台</strong></div></div>
       <nav aria-label="场景导航" className="scene-nav">{(Object.keys(scenes) as Scene[]).map(key=>
-        <button key={key} className={'side-link '+(!selected&&scene===key?'selected':'')} onClick={()=>navigate(key)}>
+        <button key={key} aria-current={!selected&&scene===key?'page':undefined} className={'side-link '+(!selected&&scene===key?'selected':'')} onClick={()=>navigate(key)}>
           <span aria-hidden="true">{{home:'▦',chat:'✳',review:'⌘',logs:'≋',data:'▥'}[key]}</span>{scenes[key]}</button>)}</nav>
+      {(tasks.length>0||selected||scene==='review'||scene==='home')&&<>
       <div className="side-section">任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
       <div className="history">
         {tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')}
           onClick={()=>setSelected(task.id)}>
           <span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}
         {!tasks.length&&<p className="muted small">暂无历史任务</p>}
-      </div>
+      </div></>}
       <div className="workbench-account"><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
         <button disabled={busy} onClick={()=>void act(async()=>{
           await api.logout();
