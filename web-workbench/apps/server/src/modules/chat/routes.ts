@@ -40,7 +40,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
   async function owned(id:string,owner:string){
     if(!/^[\w-]{1,128}$/.test(id))throw new AuthProblem(400,'INVALID_SESSION');
     const session=await (await client()).session.get({sessionID:id});
-    if(session.id!==id||session.metadata?.harnessScenario!=='direct-chat'||session.metadata.harnessOwner!==owner)
+    if(session.id!==id||(session.metadata?.harnessScenario!=='direct-chat'&&session.metadata?.harnessScenario!=='log-inspection')||session.metadata.harnessOwner!==owner)
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
     await directory(session.location.directory);
     return session;
@@ -67,15 +67,15 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     return wrap(await models(await project(input)));
   });
   type Selection={providerID:string;id:string};
-  app.post<{Body:{directory?:string;model?:Selection}}>('/api/v1/chat/sessions',{schema:body({
-    directory:property(4096),model:{type:'object',additionalProperties:false,required:['providerID','id'],
+  app.post<{Body:{directory?:string;model?:Selection;scenario?:'log-inspection'|'direct-chat'}}>('/api/v1/chat/sessions',{schema:body({
+    directory:property(4096),scenario:{enum:['log-inspection','direct-chat']},model:{type:'object',additionalProperties:false,required:['providerID','id'],
       properties:{providerID:property(256),id:property(512)}}},[])},async(req,reply)=>{
     const {ownerId}=auth.mutation(req);
     const dir=await project(req.body?.directory),model=req.body?.model;
     if(model&&!(await models(dir)).some(m=>m.providerID===model.providerID&&m.id===model.id))
       throw new AuthProblem(409,'CHAT_MODEL_UNAVAILABLE');
-    const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title:'Code Harness · 直接对话',
-      metadata:{harnessScenario:'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
+    const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title:req.body?.scenario==='log-inspection'?'Code Harness · 日志排查':'Code Harness · 直接对话',
+      metadata:{harnessScenario:req.body?.scenario??'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
         if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
         if(error instanceof Error&&'reason' in error&&error.reason==='Transport'){
           const timedOut=error.cause instanceof Error&&error.cause.name==='TimeoutError';
@@ -109,7 +109,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     return wrap(result);
   });
   app.post<{Params:Params;Body:{text:string;files?:string[]}}>('/api/v1/chat/sessions/:id/messages',{
-    schema:body({text:property(16000),files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
+    bodyLimit:128*1024,schema:body({text:property(16000),files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
     const {ownerId}=auth.mutation(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId);
     const text=req.body.text.trim();

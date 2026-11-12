@@ -2,7 +2,7 @@ export const scenes={home:'工作台',chat:'直接对话',review:'代码审查',
 export type Scene=keyof typeof scenes;
 const cards=[
   {id:'review',icon:'{ }',desc:'固定 Git 版本，审查提交差异与代码风险。'},
-  {id:'logs',icon:'≋',desc:'按级别和关键词定位日志，保留原始行号。'},
+  {id:'logs',icon:'≋',desc:'按请求入参、时间和 Trace ID 排查异常。'},
   {id:'data',icon:'▥',desc:'读取 CSV，查看字段分布与数值统计。'},
 ] as const;
 export function ScenarioHome({open}:{open:(s:Scene)=>void}){

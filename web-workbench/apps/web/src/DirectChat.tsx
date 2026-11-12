@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {api,ApiError} from './api/client.ts';
 import type {ChatStatus,ChatSettings,ChatAccessEntry,ChatModel} from '../../../packages/contracts/src/chat.ts';
 
@@ -21,24 +21,26 @@ function explain(e:unknown){
     return '创建会话时，OpenCode 服务或其网关返回 HTTP '+e.code.slice(-3)+'。';
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
-export function DirectChat(){
+type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:()=>void;reset:()=>void};
+export function DirectChat({investigation}:{investigation?:Investigation}={}){
+  const sessionKey=investigation?'harness.logs':'harness.chat';
   const [settings,configure]=useState<ChatSettings|null>(null);
   const [preferred,setPreferred]=useState(()=>localStorage.getItem('harness.chat.project')??'');
   const [editing,edit]=useState(false),[pathText,typePath]=useState('');
   const [catalog,setCatalog]=useState<ChatModel[]|null>(null),[modelKey,setModelKey]=useState('');
   const keyFor=(m:ChatModel)=>JSON.stringify([m.providerID,m.id]);
   const chosen=catalog?.find(m=>keyFor(m)===modelKey);
-  const [id,select]=useState(()=>sessionStorage.getItem('harness.chat')??'');
+  const [id,select]=useState(()=>sessionStorage.getItem(sessionKey)??'');
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(''),[refs,attach]=useState('');
   const [showFiles,toggleFiles]=useState(false),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
   useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live){configure(s);}}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
   useEffect(()=>{
-    sessionStorage.setItem('harness.chat',id);if(!id)return;
+    sessionStorage.setItem(sessionKey,id);if(!id)return;
     let live=true;let timer:ReturnType<typeof setTimeout>;
     const poll=async()=>{try{const value=await api.chat(id);if(live)update(value);}
       catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,1800);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
-  },[id,refresh]);
+  },[id,refresh,sessionKey]);
   async function run(fn:()=>Promise<void>){if(busy)return;wait(true);fail('');try{await fn();bump(n=>n+1);}catch(e){fail(explain(e));}finally{wait(false);}}
   const directory=preferred||settings?.directories[0]||'';
   const current=id?state?.directory:directory;
@@ -46,6 +48,7 @@ export function DirectChat(){
     const saved=await api.chatProject(pathText.trim().replace(/^"(.*)"$/,'$1'));
     localStorage.setItem('harness.chat.project',saved.directory);setPreferred(saved.directory);
     if(saved.directory!==current){
+      investigation?.reset();
       select('');update(null);setCatalog(null);setModelKey('');attach('');toggleFiles(false);
       if(id)write('');
     }
@@ -53,24 +56,26 @@ export function DirectChat(){
   });
   const input=useRef<HTMLTextAreaElement>(null);
   const picker=useRef<HTMLDetailsElement>(null);
-  const maySend=Boolean(draft.trim()&&settings?.configured&&!busy&&!editing);
+  const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings?.configured&&!busy&&!editing);
   const modelLabel=state?.model?state.model.providerID+'/'+state.model.id:chosen?.name??(id&&!state?'会话模型':'默认模型');
   const loadModels=()=>run(async()=>{
     const list=await api.chatModels(directory||undefined);setCatalog(list);
     if(!list.some(m=>keyFor(m)===modelKey))setModelKey('');
   });
   const send=()=>run(async()=>{
-    const text=draft.trim();if(!text||editing)return;
+    if(!maySend)return;
+    const text=investigation?investigation.prompt(draft.trim()):draft.trim();
+    if(text.length>16000)throw Error('排查条件和问题合计过长，请缩短后再发送。');
     let session=id;
-    if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID}:undefined);session=s.id;select(session);}
+    if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID}:undefined,investigation?'log-inspection':undefined);session=s.id;select(session);}
     await api.chatAction(session,'messages',{text,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
-    write('');attach('');toggleFiles(false);
+    investigation?.onSent();write('');attach('');toggleFiles(false);
   });
-  return <section className="scene-page"><div className="scene-title"><div><h1>直接对话</h1><p>和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。</p></div>
-    {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
+  return <section className="scene-page"><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'按请求和时间定位日志，在同一会话中追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
+    {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{investigation?.reset();select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
     <div className="chat-layout"><div className="chat-box">
-      <div className="chat-feed" aria-live="polite">{!state?.messages.length&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>想在这个目录里做什么？</h2>
-        <button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button></div>}
+      <div className="chat-feed" aria-live="polite">{!state?.messages.length&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>{investigation?'要排查哪次请求？':'想在这个目录里做什么？'}</h2>
+        {!investigation&&<button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button>}</div>}
         {state?.messages.map(m=><div key={m.id} className={'chat-turn '+m.role}><strong>{m.role==='user'?'你':'OpenCode'}</strong>
           {m.text&&<p>{m.text}</p>}{m.tools.map((t,i)=><small key={i}>{t.name} · {t.status}</small>)}
           {m.files.length>0&&<small>{m.role==='user'?'引用文件':'涉及文件'} · {m.files.join('、')}</small>}</div>)}
@@ -78,7 +83,7 @@ export function DirectChat(){
           {(['once','reject'] as const).map(d=><button key={d} disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'permission',{requestId:p.id,revision:p.revision,decision:d});})}>{d==='once'?'仅本次允许':'拒绝'}</button>)}</div>)}
       </div>
       {error&&<p role="alert" className="notice">{error}</p>}
-      <div className="composer"><textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder="输入问题，或让 OpenCode 修改当前目录中的文件…" value={draft} onChange={e=>write(e.target.value)}
+      <div className="composer">{investigation&&<fieldset disabled={busy||editing} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
@@ -102,7 +107,7 @@ export function DirectChat(){
             </details>}
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {state?.active&&<button disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>中断执行</button>}
-          <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
+          <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
       </div></div><aside className="context-box"><h2>工作目录</h2>
         {editing?<form onSubmit={e=>{e.preventDefault();void saveProject();}}>
           <label>项目文件夹路径<input autoFocus value={pathText} list="chat-projects" disabled={busy}
