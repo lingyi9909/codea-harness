@@ -13,6 +13,27 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   await writeFile(script,`
     const fs=require('node:fs');
     if(process.argv.slice(2).join(' ')!=='serve --service')process.exit(3);
+    let output,generated=false;
+    const flag=process.env.HARNESS_OPENCODE_SERVICE_FILE;
+    const until=async(name)=>{while(!fs.existsSync(flag+name))await new Promise(r=>setTimeout(r,20));};
+    async function streamReply(){
+      const emit=(type,ordinal,fields,id=type,sessionID='ses_logs_fixture')=>{
+        output?.write('data: '+JSON.stringify({id,type,created:Date.now(),data:{sessionID,assistantMessageID:'live-msg',ordinal,...fields}})+'\\n\\n');
+      };
+      emit('session.reasoning.started',0,{});
+      emit('session.reasoning.delta',0,{delta:'先核对'},'r1');
+      emit('session.reasoning.delta',0,{delta:'先核对'},'r1');
+      emit('session.reasoning.delta',0,{delta:'foreign-secret'},'foreign','other');
+      await until('.next');
+      emit('session.reasoning.delta',0,{delta:'时间线'},'r2');
+      emit('session.reasoning.ended',0,{text:'先核对时间线',state:{opaque:'private-marker'}});
+      emit('session.text.started',1,{});
+      emit('session.text.delta',1,{delta:'已找到'},'t1');
+      await until('.finish');
+      emit('session.text.delta',1,{delta:'两条记录'},'t2');
+      emit('session.text.ended',1,{text:'已找到两条记录'});
+      generated=true;
+    }
     let logSession;const logBase='/api/session/ses_logs_fixture';
     const server=require('node:http').createServer((req,res)=>{
       res.setHeader('Content-Type','application/json');
@@ -21,6 +42,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
       if(req.url==='/api/info')return res.end(JSON.stringify({pid:process.pid,version:'2.0.27'}));
       if(req.url==='/api/event'){
         res.setHeader('Content-Type','text/event-stream');res.flushHeaders();
+        output=res;
         const progress=(sessionID,message)=>({type:'session.tool.progress',id:sessionID,created:Date.now(),data:{sessionID,metadata:{message}}});
         for(const e of [progress('other','cross-session-marker'),progress('ses_logs_fixture','已扫描两个文件')])
           res.write('data: '+JSON.stringify(e)+'\\n\\n');
@@ -29,11 +51,13 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
       if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
       if(req.url===logBase+'/prompt'){
         req.setEncoding('utf8');let body='';req.on('data',s=>body+=s);req.on('end',()=>{
-          fs.writeFileSync(process.env.HARNESS_OPENCODE_SERVICE_FILE+'.prompt',body);
+          if(!fs.existsSync(flag+'.prompt'))void streamReply();
+          fs.writeFileSync(flag+'.prompt',body);
           res.end(JSON.stringify({data:{id:'msg_fixture',sessionID:'ses_logs_fixture'}}));
         });return;
       }
-      if(req.url.startsWith(logBase+'/message'))return res.end(JSON.stringify({cursor:{},data:[{type:'assistant',id:'assistant-log',content:[
+      if(req.url.startsWith(logBase+'/message'))return res.end(JSON.stringify({cursor:{},data:[...(generated?[{type:'assistant',id:'live-msg',finish:'stop',content:[
+        {type:'reasoning',text:'先核对时间线'},{type:'text',text:'已找到两条记录'}]}]:[]),{type:'assistant',id:'assistant-log',content:[
         {type:'text',text:'开始核对匹配行。'},{type:'reasoning',text:'客户端可见的测试片段',state:{opaque:'private-marker'}},
         {type:'tool',name:'grep',state:{status:'completed',input:{pattern:'abc123'},content:[{type:'text',text:'命中第 2 行'}]}},
         {type:'text',text:'检查结束。'}]}]}));
@@ -131,12 +155,23 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await feed.getByText('调用参数',{exact:true}).click();
     await expect(feed.locator('.execution-tool pre')).toContainText('abc123');
     await expect(feed).not.toContainText('cross-session-marker');
-    const thought=feed.getByRole('button',{name:/思考过程/});
+    const thought=feed.locator('.chat-turn').filter({hasText:'检查结束。'}).getByRole('button',{name:/思考过程/});
     await expect(thought).toBeVisible();
     await expect(feed).not.toContainText('客户端可见的测试片段');
     await thought.click();await expect(feed).toContainText('客户端可见的测试片段');
     await expect(feed).not.toContainText('private-marker');
     await thought.click();await expect(feed).not.toContainText('客户端可见的测试片段');
+    await expect(feed.getByText('先核对',{exact:true})).toBeVisible();
+    await expect(feed).not.toContainText('已找到');
+    await expect(feed).not.toContainText('foreign-secret');
+    await writeFile(file+'.next','1');
+    await expect(feed.getByText('先核对时间线',{exact:true})).toBeVisible();
+    await expect(feed.getByText('已找到',{exact:true})).toBeVisible();
+    await expect(feed).not.toContainText('两条记录');
+    await writeFile(file+'.finish','1');
+    await expect(feed.getByText('已找到两条记录',{exact:true})).toBeVisible();
+    await page.reload();
+    await expect(feed.getByText('已找到两条记录',{exact:true})).toHaveCount(1);
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
     for(const value of ['A15','检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
     for(const value of ['wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));

@@ -46,3 +46,5 @@
 .execution-tool pre,.tool-result{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 monospace}.execution-tool pre{max-height:220px;overflow:auto}.tool-result{margin-top:6px}
 
 .thinking-step{padding:6px 10px;border-left:2px solid #c8beb1;color:#554e46}.thinking-step button{background:transparent;color:inherit;border:0;padding:4px 6px 4px 0;cursor:pointer;font:inherit}.thinking-step small{display:inline}.thinking-step p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}
+
+details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:none}

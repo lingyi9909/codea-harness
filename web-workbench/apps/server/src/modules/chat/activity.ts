@@ -16,20 +16,20 @@ function publicInput(input:unknown){
 export function activity(m:Message,expandedPart?:number):ChatStep[]{
   const steps:ChatStep[]=[];
   if(m.type==='assistant'){
-    for(const p of m.content){
+    for(const [ordinal,p] of m.content.entries()){
       if(p.type==='reasoning'){
         const expanded=steps.length===expandedPart;
-        steps.push({kind:'thinking',at:p.time?.created,ended:p.time?.completed,
+        steps.push({kind:'thinking',ordinal,at:p.time?.created,ended:p.time?.completed,
           complete:p.time?.completed!=null||m.time?.completed!=null||Boolean(m.finish),
           hasText:Boolean(p.text?.trim()),...(expanded?{text:p.text??''}:{})});
       }
-      if(p.type==='text'&&p.text)steps.push({kind:'text',text:p.text});
+      if(p.type==='text'&&p.text)steps.push({kind:'text',ordinal,text:p.text});
       if(p.type!=='tool')continue;
       const state=p.state;
       const result=state.status==='completed'||state.status==='error'?(state.content??[]).map(c=>
         c.type==='text'?c.text:(c.name??'文件附件')).join('\n'):'';
       const progress=state.status==='running'&&typeof state.metadata?.title==='string'?activityPreview(state.metadata.title,300):undefined;
-      steps.push({kind:'tool',name:p.name,status:state.status,at:p.time?.ran??p.time?.created,
+      steps.push({kind:'tool',ordinal,name:p.name,status:state.status,at:p.time?.ran??p.time?.created,
         ended:p.time?.completed,input:publicInput(state.input),result:result?activityPreview(result):undefined,
         progress,error:state.status==='error'&&state.error?.message?activityPreview(state.error.message):undefined});
     }
