@@ -1,5 +1,7 @@
 import {lazy,Suspense,useEffect,useRef,useState,type ReactNode} from 'react';
 import {streamingMessages,useChatStream} from './chatStream.ts';
+import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
+import {activateChat,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
 import {ModelPicker} from './ModelPicker.tsx';
 import {ChatRequests} from './ChatRequests.tsx';
 import {api,ApiError} from './api/client.ts';
@@ -33,39 +35,89 @@ function explain(e:unknown){
     return '创建会话时，OpenCode 服务或其网关返回 HTTP '+e.code.slice(-3)+'。';
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
-type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:()=>void;reset:()=>void};
+type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void};
 export function DirectChat({investigation}:{investigation?:Investigation}={}){
-  const sessionKey=investigation?'harness.logs':'harness.chat';
-  const [settings,configure]=useState<ChatSettings|null>(null);
+  const [settings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
   const [preferred,setPreferred]=useState(()=>localStorage.getItem('harness.chat.project')??'');
+  useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live)configure(s);}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
+  if(!settings)return <p role={error?'alert':'status'}>{error||'正在加载工作目录…'}</p>;
+  const directory=preferred||settings.directories[0]||'';
+  return <ChatWorkspace key={directory} directory={directory} settings={settings} investigation={investigation} onProject={path=>{
+    localStorage.setItem('harness.chat.project',path);setPreferred(path);
+  }}/>;
+}
+function ChatWorkspace({investigation,directory,settings,onProject}:{
+  investigation?:Investigation;directory:string;settings:ChatSettings;onProject:(directory:string)=>void;
+}){
+  const sessionKey:SceneKey=investigation?'harness.logs':'harness.chat';
   const [editing,edit]=useState(false),[pathText,typePath]=useState('');
   const [chosen,setChosen]=useState<ChatModel>();
-  const [id,select]=useState(()=>sessionStorage.getItem(sessionKey)??'');
+  const [id,select]=useState(()=>savedChat(localStorage,sessionStorage,sessionKey,directory));
+  const migrating=useRef(Boolean(id)&&!sessionStorage.getItem(sessionKey+'.scoped'));
+  const [history,showHistory]=useState(false);
+  const restoreContext=useRef(true),investigationRef=useRef(investigation);
+  investigationRef.current=investigation;
+  const composerKey=draftKey(sessionKey,directory,id);
+  const [initialDraft]=useState(()=>readDraft(composerKey));
   const stream=useChatStream(id);
   const [expanded,expand]=useState<{session:string;message:string;part:number}>();
-  const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(''),[refs,attach]=useState('');
-  const [showFiles,toggleFiles]=useState(false),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
-  useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live){configure(s);}}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
+  const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(initialDraft.text),[refs,attach]=useState(initialDraft.files);
+  const [showFiles,toggleFiles]=useState(Boolean(initialDraft.files)),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
   useEffect(()=>{
-    sessionStorage.setItem(sessionKey,id);if(!id)return;
+    if(draft||refs)sessionStorage.setItem(composerKey,JSON.stringify({text:draft,files:refs}));
+    else sessionStorage.removeItem(composerKey);
+  },[composerKey,draft,refs]);
+  function switchTo(next:string){
+    showHistory(false);
+    if(next===id)return;
+    const saved=readDraft(draftKey(sessionKey,directory,next));
+    select(next);update(null);expand(undefined);write(saved.text);attach(saved.files);toggleFiles(Boolean(saved.files));
+    setChosen(undefined);fail('');migrating.current=false;restoreContext.current=true;
+    activateChat(localStorage,sessionStorage,sessionKey,directory,next);
+  }
+  useEffect(()=>{
+    if(!id){
+      activateChat(localStorage,sessionStorage,sessionKey,directory,'');
+      if(restoreContext.current){restoreContext.current=false;investigationRef.current?.reset('');}
+      return;
+    }
     let live=true;let timer:ReturnType<typeof setTimeout>;
-    const poll=async()=>{let interval=1800;try{const value=await api.chat(id,expanded?.session===id?expanded:undefined);if(value.active)interval=900;if(live){update(value);stream.prune.current(value.messages);}}
-      catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,interval);}};
+    const poll=async()=>{let interval=1800;try{
+      const value=await api.chat(id,expanded?.session===id?expanded:undefined);
+      if(!live)return;
+      if(value.active)interval=900;
+      if(restoreContext.current){
+        if(migrating.current&&value.directory!==directory){
+          // The legacy tab has one session ID for all projects. Compare canonical paths before assigning it.
+          const project=await api.chatProject(directory);
+          if(!live)return;
+          if(project.directory!==value.directory){
+            rememberChat(localStorage,sessionKey,value.directory,{id,title:titleFor(value.messages.find(m=>m.role==='user')?.text),updated:Date.now()});
+            switchTo('');return;
+          }
+        }
+        migrating.current=false;restoreContext.current=false;
+        const first=value.messages.find(m=>m.role==='user')?.text;
+        const known=readHistory(localStorage,sessionKey,directory).find(row=>row.id===id);
+        if(!known||(!known.title&&first))rememberChat(localStorage,sessionKey,directory,{id,title:titleFor(first),updated:known?.updated??Date.now()});
+        activateChat(localStorage,sessionStorage,sessionKey,directory,id);
+        const rangePrompt=value.messages.slice().reverse().find(m=>m.role==='user'&&/^时间范围（起点含、终点不含）：/m.test(m.text));
+        investigationRef.current?.reset(id,rangePrompt?.text);
+      }
+      update(value);stream.prune.current(value.messages);
+    }catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,interval);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
-  },[id,refresh,sessionKey,expanded,stream.requestsVersion]);
+  },[id,refresh,sessionKey,directory,expanded,stream.requestsVersion]);
   async function run(fn:()=>Promise<void>){if(busy)return false;wait(true);fail('');try{await fn();bump(n=>n+1);return true;}catch(e){fail(explain(e));return false;}finally{wait(false);}}
-  const directory=preferred||settings?.directories[0]||'';
-  const current=id?state?.directory:directory;
+  const current=directory;
   const saveProject=()=>run(async()=>{
     const saved=await api.chatProject(pathText.trim().replace(/^"(.*)"$/,'$1'));
-    localStorage.setItem('harness.chat.project',saved.directory);setPreferred(saved.directory);
-    if(saved.directory!==current){
-      investigation?.reset();
-      select('');update(null);setChosen(undefined);attach('');toggleFiles(false);
-      if(id)write('');
-    }
-    edit(false);
+    edit(false);onProject(saved.directory);
   });
+  function titleFor(text?:string){
+    const display=investigation?text?.match(/^排查问题：(.+)$/m)?.[1]||text?.match(/^(?:Trace ID|关键字)：(.+)$/m)?.[1]:text;
+    return display?.trim().replace(/\s+/g,' ').slice(0,80)||'';
+  }
   const input=useRef<HTMLTextAreaElement>(null);
   const pending=state?.id===id&&Boolean(state.forms?.length||state.permissions.length);
   useEffect(()=>{
@@ -74,7 +126,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
     document.title='等待你回应 · '+(investigation?'日志排查':'直接对话');
     return ()=>{document.title=title;};
   },[pending,Boolean(investigation)]);
-  const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings?.configured&&!pending&&!busy&&!editing);
+  const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy&&!editing);
   async function selectModel(model:ChatModel|undefined){
     if(id&&model){
       await api.chatAction(id,'model',{id:model.id,providerID:model.providerID,variant:model.variant});
@@ -87,10 +139,16 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
     const text=investigation?investigation.prompt(draft.trim()):draft.trim();
     if(text.length>16000)throw Error('排查条件和问题合计过长，请缩短后再发送。');
     let session=id;
-    if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,investigation?'log-inspection':undefined);session=s.id;select(session);}
+    if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,investigation?'log-inspection':undefined);session=s.id;
+      rememberChat(localStorage,sessionKey,directory,{id:session,title:titleFor(text),updated:Date.now()});
+      activateChat(localStorage,sessionStorage,sessionKey,directory,session);
+      restoreContext.current=false;sessionStorage.removeItem(composerKey);select(session);
+    }
     await stream.connect(session);
     await api.chatAction(session,'messages',{text,scenario:investigation?'log-inspection':'direct-chat',files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
-    investigation?.onSent();write('');attach('');toggleFiles(false);
+    const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
+    rememberChat(localStorage,sessionKey,directory,{id:session,title:prior?.title||titleFor(text),updated:Date.now()});
+    investigation?.onSent(session);write('');attach('');toggleFiles(false);
   });
   const feed=useRef<HTMLDivElement>(null),follow=useRef(true);
   useEffect(()=>{follow.current=true;},[id]);
@@ -100,7 +158,11 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
   const messages=streamingMessages(state?.id===id?state.messages:[],stream.parts);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'使用项目的 log-query Skill 排查日志并继续追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
-    {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{investigation?.reset();select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
+    <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy||editing} onClick={()=>showHistory(!history)}>历史对话</button>
+      {id&&<button className="secondary" disabled={busy||editing} onClick={()=>switchTo('')}>新建对话</button>}</div></div>
+    {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy||editing} onSelect={row=>{
+      rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
+    }}/>}
     <div className="chat-layout"><div className="chat-box">
       <div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
@@ -128,7 +190,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
         <ChatRequests key={id} state={state} busy={busy||editing}
           onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
         {interrupt&&<div className="composer-actions">{interrupt}</div>}
-      </div>:<div className="composer">{investigation&&<fieldset disabled={busy||editing} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
+      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy||editing} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
@@ -147,7 +209,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
           <label>项目文件夹路径<input autoFocus value={pathText} list="chat-projects" disabled={busy}
             placeholder="例如 D:\projects\order-service" onChange={e=>typePath(e.target.value)}/></label>
           <datalist id="chat-projects">{Array.from(new Set([directory,...(settings?.directories??[])])).filter(Boolean).map(d=><option key={d} value={d}/>)}</datalist>
-          {id&&<p>更换目录后将新建对话，原会话仍使用原目录。</p>}
+          {id&&<p>切换目录后，可在原目录的历史对话中继续此会话。</p>}
           <button disabled={busy||!pathText.trim()}>使用此目录</button>
           <button type="button" disabled={busy} onClick={()=>{edit(false);fail('');}}>取消</button>
         </form>:<div><code className="project-path">{current??'加载中…'}</code>

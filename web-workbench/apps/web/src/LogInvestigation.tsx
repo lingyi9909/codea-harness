@@ -19,6 +19,13 @@ function localTime(instant:number){
   const date=new Date(instant);
   return new Date(instant-date.getTimezoneOffset()*60000).toISOString().slice(0,-1);
 }
+function offsetAt(instant:number){
+  const minutes=-new Date(instant).getTimezoneOffset(),absolute=Math.abs(minutes);
+  return (minutes<0?'-':'+')+String(Math.floor(absolute/60)).padStart(2,'0')+':'+String(absolute%60).padStart(2,'0');
+}
+function formatBounds({from,to}:Bounds){
+  return localTime(from)+offsetAt(from)+' 至 '+localTime(to)+offsetAt(to);
+}
 function rangeFromBounds({from,to}:Bounds,preset:number|null=null):TimeRange{
   return {start:localTime(from),end:localTime(to),from,to,preset};
 }
@@ -26,14 +33,31 @@ function recentRange(minutes:number){
   const to=Date.now();
   return rangeFromBounds({from:to-minutes*60000,to},minutes);
 }
-function readAppliedRange():Bounds|null{
-  const session=sessionStorage.getItem('harness.logs');
-  try{
-    const saved=JSON.parse(sessionStorage.getItem('harness.logs.range')??'null');
-    if(session&&saved?.session===session&&Number.isFinite(saved.from)&&Number.isFinite(saved.to)&&
-      Number.isFinite(new Date(saved.from).getTime())&&Number.isFinite(new Date(saved.to).getTime())&&saved.to>saved.from)
-      return {from:saved.from,to:saved.to};
-  }catch{/* Older sessions may have no saved range. */}
+function validBounds(from:unknown,to:unknown):Bounds|null{
+  return typeof from==='number'&&typeof to==='number'&&Number.isFinite(new Date(from).getTime())&&
+    Number.isFinite(new Date(to).getTime())&&from<to?{from,to}:null;
+}
+function readAppliedRange(session:string,rangePrompt?:string):Bounds|null{
+  if(!session)return null;
+  // Existing workbench prompts contain either offset-qualified bounds or UTC instants.
+  const line=rangePrompt?.match(/^时间范围（起点含、终点不含）：(\S+) 至 (\S+)$/m);
+  if(line&&line.slice(1).every(stamp=>/(?:Z|[+-]\d{2}:\d{2})$/.test(stamp))){
+    const bounds=validBounds(Date.parse(line[1]),Date.parse(line[2]));
+    if(bounds)return bounds;
+  }
+  const key='harness.logs.range.'+session;
+  for(const candidate of [key,'harness.logs.range']){
+    try{
+      const saved=JSON.parse(sessionStorage.getItem(candidate)??'null');
+      if(candidate===key||saved?.session===session){
+        const bounds=validBounds(saved?.from,saved?.to);
+        if(bounds){
+          if(candidate!==key)sessionStorage.setItem(key,JSON.stringify(bounds));
+          return bounds;
+        }
+      }
+    }catch{/* An older browser entry may be incomplete. */}
+  }
   return null;
 }
 function elapsed(ms:number){
@@ -49,13 +73,16 @@ function parseLocal(value:string){
 }
 type Row={number:number;text:string;time:number};
 function parseRow(text:string,i:number):Row{
-  const stamp=text.match(/\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d\d:\d\d)?/i)?.[0];
-  return {number:i+1,text,time:stamp?Date.parse(stamp.replace(' ','T').replace(',','.')):NaN};
+  const stamp=text.match(/\b(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?)(Z|[+-]\d{2}:?\d{2})?(?!\d|[:+-]\d)/i);
+  if(!stamp)return {number:i+1,text,time:NaN};
+  const wall=stamp[1].replace(' ','T').replace(',','.').replace(/(\.\d{3})\d+$/,'$1');
+  const time=stamp[2]?Date.parse(wall+stamp[2]):parseLocal(wall);
+  return {number:i+1,text,time};
 }
 export function LogInvestigation(){
   const [form,setForm]=useState(()=>!sessionStorage.getItem('harness.logs'));
   const [trace,setTrace]=useState(''),[keyword,setKeyword]=useState('');
-  const [applied,setApplied]=useState(readAppliedRange);
+  const [applied,setApplied]=useState(()=>readAppliedRange(sessionStorage.getItem('harness.logs')??''));
   const [range,setRange]=useState(()=>applied?rangeFromBounds(applied):recentRange(60));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
@@ -86,14 +113,15 @@ export function LogInvestigation(){
     }catch(e){if(gen===generation.current)setFileError(e instanceof Error?e.message:'日志读取失败');}
     finally{if(gen===generation.current)setReading(false);}
   }
-  function reset(){
-    setApplied(null);sessionStorage.removeItem('harness.logs.range');setRange(recentRange(60));
-    setForm(true);setTrace('');setKeyword('');setLevel('全部');void load();
+  function reset(session='',rangePrompt?:string){
+    const restored=readAppliedRange(session,rangePrompt);
+    setApplied(restored);setRange(restored?rangeFromBounds(restored):recentRange(60));
+    setForm(!session);setTrace('');setKeyword('');setLevel('全部');void load();
   }
-  function onSent(){
+  function onSent(session=sessionStorage.getItem('harness.logs')){
     if(form){
       setApplied({from,to});
-      sessionStorage.setItem('harness.logs.range',JSON.stringify({session:sessionStorage.getItem('harness.logs'),from,to}));
+      if(session)sessionStorage.setItem('harness.logs.range.'+session,JSON.stringify({from,to}));
       setForm(false);
     }
   }
@@ -101,7 +129,8 @@ export function LogInvestigation(){
     if(!form)return question;
     const lines=['请根据以下条件排查日志，列出证据、异常原因及下一步。',
       '若 log-query 需要用户手工输入验证码，请使用当前会话的 OpenCode question 表单收集文本回答，保留前导零，再继续本次排查。网页无法向后台脚本的 stdin 输入。',
-      '时间范围（起点含、终点不含）：'+new Date(from).toISOString()+' 至 '+new Date(to).toISOString(),
+      '查询时区：'+localZone+'。请按以下起止时刻查询；若工具需要无时区的本地时间，使用该时区对应的日期和时间。',
+      '时间范围（起点含、终点不含）：'+formatBounds({from,to}),
       trace.trim()&&'Trace ID：'+trace.trim(),keyword.trim()&&'关键字：'+keyword.trim(),
       '日志级别：'+level,question&&'排查问题：'+question];
     if(file){
@@ -114,7 +143,7 @@ export function LogInvestigation(){
   }
   const controls=form?<fieldset className="log-query"><legend>排查条件</legend>
     <section className="log-time-range" aria-labelledby="log-range-title">
-      <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">本地时区 · {localZone}</span></header>
+      <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">本地时区 · {localZone}{Number.isFinite(from)&&' · UTC'+offsetAt(from)}{Number.isFinite(to)&&(!Number.isFinite(from)||offsetAt(to)!==offsetAt(from))&&' → UTC'+offsetAt(to)}</span></header>
       <div className="range-presets" role="group" aria-label="快捷时间范围">
         {presets.map(p=><button key={p.minutes} type="button" aria-pressed={range.preset===p.minutes}
           onClick={()=>setRange(recentRange(p.minutes))}>{p.label}</button>)}
@@ -137,12 +166,12 @@ export function LogInvestigation(){
       <label>日志级别<select value={level} onChange={e=>setLevel(e.target.value)}>{['全部','ERROR','WARN','INFO','DEBUG'].map(l=><option key={l}>{l}</option>)}</select></label>
       <label>导入本地日志<input ref={fileInput} type="file" accept=".log,.txt,.jsonl" onChange={e=>void load(e.target.files?.[0])}/></label>
       {(file||fileError)&&<button type="button" onClick={()=>{if(fileInput.current)fileInput.current.value='';void load();}}>移除日志文件</button>}
-      <small>不导入时使用项目日志工具。导入后在本地筛选，发送时附最多 30 行、6000 字的摘录。</small>
+      <small>不导入时使用项目日志工具。无时区的日志时间按 {localZone} 解释。导入后在本地筛选，发送时附最多 30 行、6000 字的摘录。</small>
       {file&&<><p>匹配 {matches.length} 行 · 无可识别时间 {file.rows.filter(r=>!Number.isFinite(r.time)).length} 行</p>
         <pre>{matches.slice(0,200).map(r=>r.number+'  '+r.text).join('\n')}</pre></>}
     </details>{fileError&&<p role="alert">{fileError}</p>}{reading&&<small>读取中…</small>}
   </fieldset>:<div className="log-applied-range">
-    {applied&&<div><strong>上次排查范围</strong><span>{localTime(applied.from).replace('T',' ')} → {localTime(applied.to).replace('T',' ')} · {localZone}</span></div>}
+    {applied&&<div><strong>上次排查范围</strong><span>{formatBounds(applied)} · {localZone}</span></div>}
     <button type="button" className="secondary" onClick={()=>setForm(true)}>调整排查条件</button>
   </div>;
   return <DirectChat investigation={{controls,initial:form,ready,prompt,onSent,reset}}/>;

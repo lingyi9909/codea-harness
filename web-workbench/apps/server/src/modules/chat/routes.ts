@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import type {FormInfo,FormField} from '@opencode/client';
 import {activeFormFields,matchesFormCondition,formDefaults,type ChatForm,type ChatFormField,type FormAnswers,type FormValue} from '../../../../../packages/contracts/src/chat.ts';
 import type { FastifyInstance } from 'fastify';
-import type { ChatMessage,ChatStatus,ChatModel,ChatFragment } from '../../../../../packages/contracts/src/chat.ts';
+import type { ChatMessage,ChatStatus,ChatModel,ChatFragment,ChatHistoryPage,ChatScenario } from '../../../../../packages/contracts/src/chat.ts';
 import { AuthProblem,type LocalAuth } from '../../auth.ts';
 
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
@@ -169,6 +169,22 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
   type ProjectInput={Body:{directory?:string}};
   app.post<ProjectInput>('/api/v1/chat/project',{schema:body({directory:property(4096)})},async req=>{
     auth.mutation(req);return wrap({directory:await project(req.body.directory)});
+  });
+  app.post<{Body:{directory?:string;scenario:ChatScenario;cursor?:string}}>('/api/v1/chat/history',{schema:body({
+    directory:property(4096),scenario:{enum:['log-inspection','direct-chat']},cursor:property(4096),
+  },['scenario'])},async(req,reply)=>{
+    const {ownerId}=auth.mutation(req);
+    const {directory:input,scenario,cursor}=req.body;
+    const dir=await project(input);
+    const page=await (await client()).session.list({directory:dir,order:'desc',limit:50,cursor});
+    const items:ChatHistoryPage['items']=[];
+    for(const session of page.data){
+      if(session.parentID||session.metadata?.harnessOwner!==ownerId||session.metadata.harnessScenario!==scenario)continue;
+      const location=session.location?.directory;
+      if(!location||!isAbsolute(location)||relative(dir,location)!==''||!session.id)continue;
+      items.push({id:session.id,title:session.title??'',updated:session.time.updated});
+    }
+    return reply.header('Cache-Control','no-store').send(wrap({items,next:page.cursor?.next??undefined}));
   });
   app.post<ProjectInput>('/api/v1/chat/models',async req=>{
     auth.mutation(req);

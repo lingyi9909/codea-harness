@@ -36,7 +36,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
       emit('session.text.ended',1,{text:'已找到两条记录'});
       generated=true;
     }
-    let logSession;const logBase='/api/session/ses_logs_fixture';
+    let logSession,secondLog;const secondBase='/api/session/ses_second_log';const logBase='/api/session/ses_logs_fixture';
     const server=require('node:http').createServer((req,res)=>{
       res.setHeader('Content-Type','application/json');
       if(req.url.split('?')[0]==='/api/model')return res.end(JSON.stringify({data:[
@@ -58,6 +58,15 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
       if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
       const save=(suffix,done)=>{let body='';req.on('data',s=>body+=s);req.on('end',()=>{
         fs.writeFileSync(flag+suffix,body);done(JSON.parse(body));res.writeHead(204);res.end();});};
+      if(req.url===secondBase)return res.end(JSON.stringify({data:secondLog}));
+      if(req.url===secondBase+'/prompt'){
+        let body='';req.on('data',s=>body+=s);req.on('end',()=>{
+          fs.writeFileSync(flag+'.second-prompt',body);
+          res.end(JSON.stringify({data:{id:'msg_second',sessionID:'ses_second_log'}}));
+        });return;
+      }
+      if(req.url.startsWith(secondBase+'/message'))return res.end(JSON.stringify({cursor:{},data:[{id:'second-msg',type:'assistant',content:[{type:'text',text:'第二个会话的结果'}]}]}));
+      if(req.url.startsWith(secondBase+'/'))return res.end(JSON.stringify({data:[]}));
       if(req.url===logBase+'/model')return save('.model',body=>{logSession.model=body.model;});
       if(req.url===logBase+'/form'&&permitted&&!verified)return res.end(JSON.stringify({data:[
         {id:'frm_code',sessionID:'ses_logs_fixture',title:'验证本次查询',fields:[{
@@ -95,6 +104,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
           fs.writeFileSync(process.env.HARNESS_OPENCODE_SERVICE_FILE+'.body',body);
           const create=JSON.parse(body);
           if(create.metadata.harnessScenario==='log-inspection'){
+            if(logSession){secondLog={...create,id:'ses_second_log'};res.end(JSON.stringify({data:secondLog}));return;}
             logSession={...create,id:'ses_logs_fixture'};res.end(JSON.stringify({data:logSession}));return;
           }
           res.writeHead(503);res.end('{}');
@@ -122,7 +132,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   }
   try{
     await app.listen({host:'127.0.0.1',port});
-    const page=await browser.newPage();
+    const page=await browser.newPage({timezoneId:'Asia/Shanghai'});
     let sessionRequests=0;
     page.on('request',request=>{
       if(new URL(request.url()).pathname==='/api/v1/auth/local-session')sessionRequests++;
@@ -182,7 +192,12 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
+    await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
     await quarter.click();
+    await expect(page.getByLabel('开始时间',{exact:true})).toHaveValue('2026-11-11T23:50:43.125');
+    await expect(page.getByLabel('结束时间',{exact:true})).toHaveValue('2026-11-12T00:05:43.125');
+    await expect(page.locator('.range-zone')).toContainText('Asia/Shanghai');
+    await expect(page.locator('.range-zone')).toContainText('UTC+08:00');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
     await page.evaluate(()=>{
@@ -200,8 +215,8 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
         await page.keyboard.press('Escape');
       }
     }
-    await page.getByLabel('开始时间').fill('2026-11-12T10:00');
-    await page.getByLabel('结束时间').fill('2026-11-12T11:00');
+    await page.getByLabel('开始时间').fill('2026-11-11T23:57');
+    await page.getByLabel('结束时间').fill('2026-11-12T00:03');
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
     await expect(submit).toBeEnabled();
     await page.getByLabel('Trace ID',{exact:true}).fill('');
@@ -211,11 +226,15 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
     await page.getByText('日志来源与级别',{exact:true}).click();
     await page.getByLabel('导入本地日志').setInputFiles({name:'service.log',mimeType:'text/plain',buffer:Buffer.from([
-      '2026-11-12 09:59:59 ERROR abc123 timeout before-window','2026-11-12 10:20:00 ERROR abc123 timeout included',
-      '2026-11-12 10:20:00 INFO abc123 timeout wrong-level','2026-11-12 11:00:00 ERROR abc123 timeout at-end',
-      '2026-11-12 10:20:00 ERROR def timeout wrong-id'].join('\n'))});
+      '2026-11-11 23:56:59.999 ERROR abc123 timeout before-window','2026-11-11 23:57:00 ERROR abc123 timeout included',
+      '2026-11-11 23:59:59 INFO abc123 timeout wrong-level','2026-11-12 00:03:00 ERROR abc123 timeout at-end',
+      '2026-11-12 00:02:00 ERROR def timeout wrong-id','2026-11-11T16:02:59.999Z ERROR abc123 timeout last-ms',
+      '2026-11-12T05:29:00+13:30 ERROR abc123 timeout offset-row'].join('\n'))});
     await page.getByLabel('日志级别').selectOption('ERROR');
-    await expect(page.locator('.log-query pre')).toHaveText('2  2026-11-12 10:20:00 ERROR abc123 timeout included');
+    await expect(page.locator('.log-query pre')).toHaveText([
+      '2  2026-11-11 23:57:00 ERROR abc123 timeout included',
+      '6  2026-11-11T16:02:59.999Z ERROR abc123 timeout last-ms',
+      '7  2026-11-12T05:29:00+13:30 ERROR abc123 timeout offset-row'].join('\n'));
     await page.getByLabel('对话内容').fill('检查超时原因');
     await submit.click();
     await expect(page.getByRole('alert')).toContainText('未加载自定义 Skill「log-query」');
@@ -223,6 +242,13 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await writeFile(file+'.skill','1');
     await submit.click();
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
+    const expectedRange='2026-11-11T23:57:00.000+08:00 至 2026-11-12T00:03:00.000+08:00';
+    const appliedRange=page.locator('.log-applied-range');
+    await expect(appliedRange).toContainText(expectedRange);
+    await expect(appliedRange).toContainText('Asia/Shanghai');
+    const sentRange=(await recorded('.prompt')).text;
+    assert.ok(sentRange.includes(expectedRange));
+    assert.ok(sentRange.includes('Asia/Shanghai'));
     const running=page.getByRole('button',{name:'正在执行 · 中断执行'});
     await expect(running).toBeVisible();
     await expect(running).toHaveCSS('background-color','rgb(170, 39, 46)');
@@ -248,6 +274,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await writeFile(file+'.finish','1');
     await expect(feed.getByText('已找到两条记录',{exact:true})).toBeVisible();
     await page.reload();
+    await expect(appliedRange).toContainText(expectedRange);
     await expect(feed.getByText('已找到两条记录',{exact:true})).toHaveCount(1);
     await expect(running).toHaveCount(0);
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
@@ -264,6 +291,26 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     await writeFile(file+'.ask','1');
+    await expect(page.getByText('选择排查范围',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'新建对话'}).click();
+    await expect(page.getByLabel('对话内容')).toHaveValue('');
+    await expect(page.getByText('选择排查范围',{exact:true})).toHaveCount(0);
+    await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
+    await quarter.click();
+    await page.getByLabel('Trace ID',{exact:true}).fill('second-trace');
+    await page.getByLabel('对话内容').fill('第二次排查');
+    await submit.click();
+    await expect(feed).toContainText('第二个会话的结果');
+    await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
+    const presetBounds='2026-11-11T23:50:43.125+08:00 至 2026-11-12T00:05:43.125+08:00';
+    await expect(appliedRange).toContainText(presetBounds);
+    assert.ok((await recorded('.second-prompt')).text.includes(presetBounds));
+    await page.getByLabel('对话内容').fill('第二个会话草稿');
+    await page.getByRole('button',{name:'历史对话'}).click();
+    const history=page.getByRole('region',{name:'历史对话'});
+    await expect(history.getByRole('button',{name:/第二次排查/})).toHaveAttribute('aria-current','true');
+    await history.getByRole('button',{name:/检查超时原因/}).click();
+    await expect(feed).not.toContainText('第二个会话的结果');
     await expect(page.getByText('选择排查范围',{exact:true})).toBeVisible();
     await page.getByRole('radio',{name:/当前 Trace/}).check();
     await page.getByLabel('服务名称',{exact:false}).fill('orders');
@@ -308,6 +355,16 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.getByLabel('对话内容').press('Enter');
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
+    await expect(appliedRange).toContainText(expectedRange);
+    await page.getByRole('button',{name:'历史对话'}).click();
+    await history.getByRole('button',{name:/第二次排查/}).click();
+    await page.reload();
+    await expect(page.getByLabel('对话内容')).toHaveValue('第二个会话草稿');
+    await expect(feed).toContainText('第二个会话的结果');
+    await expect(appliedRange).not.toContainText(expectedRange);
+    await page.getByRole('button',{name:'历史对话'}).click();
+    await history.getByRole('button',{name:/检查超时原因/}).click();
+    await expect(appliedRange).toContainText(expectedRange);
     assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
   }finally{
     process.chdir(cwd);

@@ -1,4 +1,6 @@
 export type ChatModel={providerID:string;id:string;name:string;variant?:string;variants?:string[];context?:number};
+export type ChatScenario='direct-chat'|'log-inspection';
+export type ChatHistoryPage={items:{id:string;title:string;updated:number}[];next?:string};
 export type ChatSettings={configured:boolean;directories:string[]};
 export type ChatStep=({kind:'text';text:string}|{kind:'thinking';live?:boolean;at?:number;ended?:number;complete:boolean;hasText:boolean;text?:string}|{kind:'notice';text:string;at?:number}|
   {kind:'tool';name:string;status:string;at?:number;ended?:number;input?:string;progress?:string;result?:string;error?:string}) & {ordinal?:number};

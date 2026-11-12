@@ -42,3 +42,80 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 
 .composer-actions button.running-action:not(.primary){border-color:#a62329;color:#fff;background:#aa272e;font-weight:600}
 .composer-actions button.running-action:not(.primary):hover{background:#8d1f25}
+
+/* The scene heading already identifies the active conversation. */
+.main:has(.chat-layout, .file-panel) > .topbar { display: none; }
+.page:has(.chat-layout, .file-panel, .workbench, .task-page) {
+  max-width: none;
+  margin: 0;
+  padding: 16px clamp(12px, 1.5vw, 28px);
+}
+.scene-page:has(.chat-layout, .file-panel) { max-width: none; margin: 0; min-width: 0; }
+.scene-page:has(.chat-layout, .file-panel) .scene-title { gap: 12px; margin-bottom: 12px; }
+.scene-page:has(.chat-layout, .file-panel) .scene-title h1 { font-size: 21px; line-height: 1.35; margin: 0; letter-spacing: 0; }
+.scene-page:has(.chat-layout, .file-panel) .scene-title p { font-size: 12px; line-height: 1.5; margin-top: 2px; }
+.scene-title .secondary { flex-shrink: 0; }
+.chat-layout { gap: 12px; }
+.chat-feed { padding: 14px 16px; }
+.chat-empty { margin: 8px 0; gap: 8px; }
+.chat-layout .context-box { min-width: 0; padding: 14px; }
+.context-box h2 { font-size: 14px; margin-bottom: 8px; }
+.context-box h2:not(:first-child) { margin-top: 18px; }
+.chat-layout .composer { padding: 10px 12px; }
+.chat-layout .composer > textarea { display: block; min-height: 48px; margin: 0 0 6px; padding: 8px; }
+.log-investigation .chat-empty { display: flex; align-items: center; justify-content: center; }
+.log-investigation .chat-empty .chat-symbol { width: 28px; height: 28px; font-size: 18px; }
+.log-investigation .chat-feed:has(.chat-empty:only-child) { min-height: 64px; }
+
+@media (min-width: 851px) {
+  .app-shell:has(.chat-layout, .file-panel, .workbench, .task-page) > .sidebar { width: clamp(170px, 14vw, 210px); }
+  .main:has(.chat-layout) { display: flex; flex-direction: column; height: 100dvh; }
+  .page:has(.chat-layout) { display: flex; flex: 1; flex-direction: column; overflow: auto; }
+  .scene-page:has(.chat-layout) { display: flex; flex: 1; flex-direction: column; }
+  .chat-layout { flex: 1; grid-template-columns: minmax(0, 1fr) clamp(180px, 15vw, 260px); }
+  .chat-box { display: flex; align-self: stretch; flex-direction: column; }
+  .chat-feed { flex: 1 1 0; min-height: 140px; max-height: none; }
+  .chat-empty:only-child { align-content: center; height: 100%; margin: 0; }
+  .context-box { max-height: calc(100dvh - 100px); overflow: auto; }
+}
+
+@media (max-width: 850px) {
+  .chat-layout .context-box { grid-row: auto; }
+  .chat-feed { min-height: clamp(200px, 36dvh, 360px); }
+  .chat-layout .composer-actions .primary { width: auto; }
+}
+
+@media (max-width: 600px) {
+  .page:has(.chat-layout, .file-panel, .workbench, .task-page) { padding: 10px; }
+  .scene-page:has(.chat-layout, .file-panel) .scene-title { margin-bottom: 8px; }
+  .scene-page:has(.chat-layout, .file-panel) .scene-title h1 { font-size: 18px; }
+  .scene-page:has(.chat-layout) .scene-title p { display: none; }
+  .chat-feed { padding: 10px; }
+}
+
+/* Keep review service status available alongside the compact scene header. */
+.main:has(.workbench, .task-page) > .topbar {
+  height: 34px;
+  padding: 0 clamp(12px, 1.5vw, 28px);
+}
+.main:has(.workbench, .task-page) .state { padding: 3px 9px; }
+.page > .workbench { max-width: 1220px; margin: 0; }
+.workbench > .eyebrow { display: none; }
+.page .workbench h1, .task-page .detail-heading h1 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+.workbench .intro { margin: 2px 0 12px; font-size: 12px; line-height: 1.5; color: #626865; }
+.workbench .form-panel, .scene-page > .file-panel { padding: clamp(14px, 1.5vw, 22px); }
+.workbench .panel-head { margin-bottom: 16px; }
+.workbench .full-label, .workbench .scope-hint, .workbench .form-actions { margin-top: 14px; }
+.workbench .form-panel :is(input, select, textarea) { margin-top: 6px; padding: 9px 11px; }
+.task-page .back { margin-bottom: 10px; }
+.task-page .detail-grid { margin-top: 16px; }
+.file-pick input { max-width: 100%; }
+
+@media (max-width: 600px) {
+  .page .workbench h1, .task-page .detail-heading h1 { font-size: 18px; }
+}
