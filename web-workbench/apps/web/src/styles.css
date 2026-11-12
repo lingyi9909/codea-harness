@@ -21,6 +21,7 @@
 
 .project-path{display:block;overflow-wrap:anywhere;margin-bottom:8px}.context-box form button+button{margin-left:6px}
 
+.chat-box{align-self:start;min-width:0}
 .composer-actions{flex-wrap:wrap}
 .model-picker{position:relative;min-width:0;max-width:100%}
 .model-picker summary,.current-model{display:block;max-width:22ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#514e49;font-size:13px}
