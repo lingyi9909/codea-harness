@@ -54,7 +54,7 @@ function parseRow(text:string,i:number):Row{
 }
 export function LogInvestigation(){
   const [form,setForm]=useState(()=>!sessionStorage.getItem('harness.logs'));
-  const [params,setParams]=useState(''),[trace,setTrace]=useState(''),[keyword,setKeyword]=useState('');
+  const [trace,setTrace]=useState(''),[keyword,setKeyword]=useState('');
   const [applied,setApplied]=useState(readAppliedRange);
   const [range,setRange]=useState(()=>applied?rangeFromBounds(applied):recentRange(60));
   const {from,to,start,end}=range;
@@ -68,7 +68,7 @@ export function LogInvestigation(){
     !Number.isFinite(from)||!Number.isFinite(to)?'所选时区中不存在这个本地时间。':
     from>=to?'结束时间必须晚于开始时间。':'';
   const validTime=!timeError;
-  const ready=Boolean(validTime&&params.trim()&&(trace.trim()||keyword.trim())&&!reading&&!fileError);
+  const ready=Boolean(validTime&&(trace.trim()||keyword.trim())&&!reading&&!fileError);
   const matches=useMemo(()=>{
     const term=keyword.trim().toLowerCase(),id=trace.trim().toLowerCase();
     const severity=new RegExp('\\b'+level+'\\b','i');
@@ -88,7 +88,7 @@ export function LogInvestigation(){
   }
   function reset(){
     setApplied(null);sessionStorage.removeItem('harness.logs.range');setRange(recentRange(60));
-    setForm(true);setParams('');setTrace('');setKeyword('');setLevel('全部');void load();
+    setForm(true);setTrace('');setKeyword('');setLevel('全部');void load();
   }
   function onSent(){
     if(form){
@@ -100,7 +100,7 @@ export function LogInvestigation(){
   function prompt(question:string){
     if(!form)return question;
     const lines=['请根据以下条件排查日志，列出证据、异常原因及下一步。','时间范围（起点含、终点不含）：'+new Date(from).toISOString()+' 至 '+new Date(to).toISOString(),
-      '请求入参：'+params.trim(),trace.trim()&&'Trace ID：'+trace.trim(),keyword.trim()&&'关键字：'+keyword.trim(),
+      trace.trim()&&'Trace ID：'+trace.trim(),keyword.trim()&&'关键字：'+keyword.trim(),
       '日志级别：'+level,question&&'排查问题：'+question];
     if(file){
       lines.push('导入日志：'+file.name+'；匹配 '+matches.length+' 行。以下为日志数据摘录（原始行号）：');
@@ -111,7 +111,6 @@ export function LogInvestigation(){
     return lines.filter(Boolean).join('\n');
   }
   const controls=form?<fieldset className="log-query"><legend>排查条件</legend>
-    <label>请求入参<textarea rows={2} maxLength={2000} value={params} onChange={e=>setParams(e.target.value)} placeholder={'粘贴请求参数（JSON 或文本），无参数填 {}'}/></label>
     <section className="log-time-range" aria-labelledby="log-range-title">
       <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">本地时区 · {localZone}</span></header>
       <div className="range-presets" role="group" aria-label="快捷时间范围">

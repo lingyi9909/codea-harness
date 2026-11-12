@@ -32,7 +32,7 @@ The worker records control sends before contacting the native service. An uncert
 
 ## 内网使用多场景工作台与 OpenCode 对话
 
-首页提供直接对话、代码审查、日志排查和数据分析。日志排查支持输入请求入参、时间区间和 Trace ID 或关键字，通过独立的 OpenCode 会话排查和追问。可导入 UTF-8 日志并预览按时间、级别和文本筛选的行；点击开始排查时发送匹配摘录。没有导入文件时由当前项目可用的日志工具提供数据。数据页在浏览器本地读取 CSV，按列统计数值。
+首页提供直接对话、代码审查、日志排查和数据分析。日志排查支持按时间区间和 Trace ID 或关键字查询，通过独立的 OpenCode 会话排查和追问。可导入 UTF-8 日志并预览按时间、级别和文本筛选的行；点击开始排查时发送匹配摘录。没有导入文件时由当前项目可用的日志工具提供数据。数据页在浏览器本地读取 CSV，按列统计数值。
 
 Windows 离线包解压后运行 `start-chat.cmd`，在浏览器配对并进入“直接对话”。第一次发送消息时，工作台通过官方客户端发现同一用户已注册的 OpenCode 2.x 后台，并使用注册的认证信息。离线包在发现失败时尝试使用已安装的 `opencode serve --service` 启动后台。公司版本需要支持这个服务协议。已有部署仍可使用服务端的 `HARNESS_OPENCODE_URL` 和 `HARNESS_OPENCODE_AUTHORIZATION`。
 

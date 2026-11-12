@@ -162,7 +162,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.getByRole('navigation').getByRole('button',{name:'日志排查',exact:true}).click();
     const submit=page.getByRole('button',{name:'开始排查'});
     await expect(submit).toBeDisabled();
-    await page.getByLabel('请求入参').fill('{"order":"A15"}');
+    await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
     await quarter.click();
     await expect(quarter).toHaveAttribute('aria-pressed','true');
@@ -185,7 +185,12 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.getByLabel('开始时间').fill('2026-11-12T10:00');
     await page.getByLabel('结束时间').fill('2026-11-12T11:00');
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
+    await expect(submit).toBeEnabled();
+    await page.getByLabel('Trace ID',{exact:true}).fill('');
+    await expect(submit).toBeDisabled();
     await page.getByLabel('关键字',{exact:true}).fill('timeout');
+    await expect(submit).toBeEnabled();
+    await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
     await page.getByText('日志来源与级别',{exact:true}).click();
     await page.getByLabel('导入本地日志').setInputFiles({name:'service.log',mimeType:'text/plain',buffer:Buffer.from([
       '2026-11-12 09:59:59 ERROR abc123 timeout before-window','2026-11-12 10:20:00 ERROR abc123 timeout included',
@@ -252,8 +257,8 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
-    for(const value of ['A15','检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
-    for(const value of ['wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));
+    for(const value of ['检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
+    for(const value of ['请求入参','wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));
     await page.getByLabel('对话内容').fill('下一步怎么查？');
     await page.getByLabel('对话内容').press('Enter');
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
