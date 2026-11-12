@@ -31,3 +31,11 @@
 .model-picker[open] summary::after{content:' ▾'}
 .model-options{position:absolute;bottom:calc(100% + 6px);left:0;width:min(315px,65vw);z-index:3;padding:12px;background:white;border:1px solid #dedfd9;border-radius:8px;box-shadow:0 4px 18px #26251f24}
 .model-options select{width:100%;margin:6px 0 10px}
+
+.investigation-controls,.log-query{border:0;margin:0;padding:0;min-width:0}.log-query legend{font-weight:650;margin-bottom:8px}.log-query label{display:grid;gap:4px}.log-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.log-grid input{min-width:0;width:100%}.log-query details{margin:10px 0}.log-query summary{cursor:pointer;font-size:13px}.log-query pre{max-height:180px;overflow:auto;white-space:pre-wrap}.log-query small{color:#625e56}.log-query details label{margin:6px 0}
+@media(max-width:620px){.log-grid{grid-template-columns:1fr}}
+
+.log-investigation .chat-feed:has(.chat-empty:only-child){min-height:134px}
+.log-grid input,.log-query select{padding:7px 9px;border:1px solid #d9dad3;border-radius:7px;background:#fff;color:inherit;font:inherit;font-weight:400}
+.log-grid input:focus-visible,.log-query select:focus-visible{outline:2px solid #86513d;outline-offset:1px}
+.log-query textarea{font-weight:400}.log-query details{padding:8px 0;border-top:1px solid #ebeae6;border-bottom:1px solid #ebeae6}

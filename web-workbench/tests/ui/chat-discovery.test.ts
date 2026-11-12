@@ -13,15 +13,30 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   await writeFile(script,`
     const fs=require('node:fs');
     if(process.argv.slice(2).join(' ')!=='serve --service')process.exit(3);
+    let logSession;const logBase='/api/session/ses_logs_fixture';
     const server=require('node:http').createServer((req,res)=>{
       res.setHeader('Content-Type','application/json');
       if(req.url.split('?')[0]==='/api/model')return res.end(JSON.stringify({data:[
         {id:'intranet',providerID:'company',name:'Company fixture',enabled:true}]}));
       if(req.url==='/api/info')return res.end(JSON.stringify({pid:process.pid,version:'2.0.27'}));
+      if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
+      if(req.url===logBase+'/prompt'){
+        req.setEncoding('utf8');let body='';req.on('data',s=>body+=s);req.on('end',()=>{
+          fs.writeFileSync(process.env.HARNESS_OPENCODE_SERVICE_FILE+'.prompt',body);
+          res.end(JSON.stringify({data:{id:'msg_fixture',sessionID:'ses_logs_fixture'}}));
+        });return;
+      }
+      if(req.url.startsWith(logBase+'/message'))return res.end(JSON.stringify({cursor:{},data:[]}));
+      if(req.url===logBase+'/inbox'||req.url===logBase+'/permission')return res.end(JSON.stringify({data:[]}));
+      if(req.url==='/api/session/active')return res.end(JSON.stringify({data:{}}));
       if(req.url==='/api/session'&&req.method==='POST'){
         req.setEncoding('utf8');let body='';
         req.on('data',s=>body+=s);req.on('end',()=>{
           fs.writeFileSync(process.env.HARNESS_OPENCODE_SERVICE_FILE+'.body',body);
+          const create=JSON.parse(body);
+          if(create.metadata.harnessScenario==='log-inspection'){
+            logSession={...create,id:'ses_logs_fixture'};res.end(JSON.stringify({data:logSession}));return;
+          }
           res.writeHead(503);res.end('{}');
         });return;
       }
@@ -82,6 +97,31 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     const created=JSON.parse(await readFile(file+'.body','utf8'));
     assert.deepEqual(created.model,{id:'intranet',providerID:'company'});
     assert.equal(created.location.directory,await realpath(project));
+    await page.getByRole('navigation').getByRole('button',{name:'日志排查',exact:true}).click();
+    const submit=page.getByRole('button',{name:'开始排查'});
+    await expect(submit).toBeDisabled();
+    await page.getByLabel('请求入参').fill('{"order":"A15"}');
+    await page.getByLabel('开始时间').fill('2026-11-12T10:00');
+    await page.getByLabel('结束时间').fill('2026-11-12T11:00');
+    await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
+    await page.getByLabel('关键字',{exact:true}).fill('timeout');
+    await page.getByText('日志来源与级别',{exact:true}).click();
+    await page.getByLabel('导入本地日志').setInputFiles({name:'service.log',mimeType:'text/plain',buffer:Buffer.from([
+      '2026-11-12 09:59:59 ERROR abc123 timeout before-window','2026-11-12 10:20:00 ERROR abc123 timeout included',
+      '2026-11-12 10:20:00 INFO abc123 timeout wrong-level','2026-11-12 11:00:00 ERROR abc123 timeout at-end',
+      '2026-11-12 10:20:00 ERROR def timeout wrong-id'].join('\n'))});
+    await page.getByLabel('日志级别').selectOption('ERROR');
+    await expect(page.locator('.log-query pre')).toHaveText('2  2026-11-12 10:20:00 ERROR abc123 timeout included');
+    await page.getByLabel('对话内容').fill('检查超时原因');
+    await submit.click();
+    await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
+    const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
+    for(const value of ['A15','检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
+    for(const value of ['wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));
+    await page.getByLabel('对话内容').fill('下一步怎么查？');
+    await page.getByLabel('对话内容').press('Enter');
+    await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
+    assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
   }finally{
     process.chdir(cwd);
     for(const key of Object.keys(process.env))if(!(key in saved))delete process.env[key];

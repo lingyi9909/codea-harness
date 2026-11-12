@@ -4,6 +4,7 @@ import type { Schema } from './api/client.ts';
 import { subscribeTask } from './api/events.ts';
 import Markdown from 'react-markdown';
 import { DirectChat } from './DirectChat.tsx';
+import {LogInvestigation} from './LogInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
 import { ScenarioHome, scenes, type Scene } from './ScenarioHome.tsx';
 import { SourceView } from './SourceView.tsx';
@@ -245,7 +246,7 @@ export function WorkbenchApp() {
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
       {!selected&&scene==='home'?<ScenarioHome open={navigate}/>:!selected&&scene==='chat'?<DirectChat/>:
-       !selected&&(scene==='logs'||scene==='data')?<FileScene key={scene} mode={scene}/>:!selected?<section className="workbench">
+       !selected&&scene==='logs'?<LogInvestigation/>:!selected&&scene==='data'?<FileScene/>:!selected?<section className="workbench">
         <div className="eyebrow">SCENARIO / CODE REVIEW</div>
         <h1>代码审查工作台<span className="accent">.</span></h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
