@@ -14,6 +14,10 @@ function explain(e:unknown){
     SERVICE_UNAVAILABLE:'OpenCode 暂时无法响应，请检查内网服务地址和鉴权配置。',PERMISSION_CHANGED:'授权请求已改变，请查看最新请求。',CHAT_NOT_FOUND:'原会话不可用，请新建对话。'};
   Object.assign(labels,{
     ABSOLUTE_DIRECTORY_REQUIRED:'请输入项目文件夹的绝对路径。',DIRECTORY_NOT_FOUND:'工作台找不到这个文件夹，请检查路径。',
+    LOG_QUERY_SKILL_MISSING:'当前工作目录的 OpenCode 未加载自定义 Skill「log-query」。请选择已配置该 Skill 的内网项目目录后重试。',
+    LOG_QUERY_SKILL_AMBIGUOUS:'当前目录有多个同名的 log-query，请在 OpenCode 中保留要用于排查的那一个后重试。',
+    LOG_QUERY_CATALOG_UNAVAILABLE:'无法读取当前工作目录的 OpenCode Skill 列表。请检查后台访问日志后重试。',
+    CHAT_SCENARIO_MISMATCH:'这个会话属于其他场景，请在当前页新建对话。',
     FORM_CHANGED:'这个问题已更新或已经处理，请查看当前请求。',FORM_ANSWER_INVALID:'这份回答不符合问题要求，请检查后再提交。',FORM_SERVICE_UNAVAILABLE:'暂时无法读取待处理问题，请检查 OpenCode 连接。',
     CHAT_MODEL_UNAVAILABLE:'此模型当前未启用，请刷新模型列表后重新选择。',
     OPENCODE_DISCOVERY_FAILED:'未能自动连接本机 OpenCode。请确认已安装的 opencode 在 PATH 中，并支持 serve --service。',
@@ -85,7 +89,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
     let session=id;
     if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,investigation?'log-inspection':undefined);session=s.id;select(session);}
     await stream.connect(session);
-    await api.chatAction(session,'messages',{text,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
+    await api.chatAction(session,'messages',{text,scenario:investigation?'log-inspection':'direct-chat',files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
     investigation?.onSent();write('');attach('');toggleFiles(false);
   });
   const feed=useRef<HTMLDivElement>(null),follow=useRef(true);
@@ -94,7 +98,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
     if(follow.current&&feed.current)feed.current.scrollTop=feed.current.scrollHeight;
   },[state,stream.parts,stream.tools]);
   const messages=streamingMessages(state?.id===id?state.messages:[],stream.parts);
-  return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'按请求和时间定位日志，在同一会话中追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
+  return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'使用项目的 log-query Skill 排查日志并继续追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
     {id&&<button className="secondary" disabled={busy||editing} onClick={()=>{investigation?.reset();select('');update(null);write('');attach('');fail('');}}>新建对话</button>}</div>
     <div className="chat-layout"><div className="chat-box">
       <div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
@@ -133,7 +137,7 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
             disabled={busy||editing||!settings||Boolean(pending)||Boolean(id&&!state)}
             loadModels={()=>api.chatModels(current||undefined)} onSelect={selectModel} onApplied={()=>input.current?.focus()}/>
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
-          {state?.active&&<button disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>中断执行</button>}
+          {state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>}
           <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
       </div></div><aside className="context-box"><h2>工作目录</h2>
         {editing?<form onSubmit={e=>{e.preventDefault();void saveProject();}}>

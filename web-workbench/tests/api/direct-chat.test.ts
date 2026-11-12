@@ -13,6 +13,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   const id='ses_chat_fixture',per='per_fixture',base='/api/session/'+id;
   const received:Array<{path:string;body:Record<string,unknown>}>=[];
   let session:Record<string,unknown>={},pending=true;
+  let skillIDs:string[]=[],skillLookupFailure=false,skillDirectory=root;
   let failure=0,formMode='legacy',formTitle='选择下一步';
   const formID='frm_example';
   const fields=[
@@ -31,6 +32,11 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     received.push({path,body});
     res.setHeader('content-type','application/json');
     const data=(value:unknown)=>res.end(JSON.stringify({data:value}));
+    if(path==='/api/skill'){
+      assert.equal(new URL(req.url!,'http://localhost').searchParams.get('location[directory]'),root);
+      if(skillLookupFailure){res.statusCode=503;return data({});}
+      return res.end(JSON.stringify({location:{directory:skillDirectory},data:skillIDs.map(id=>({id,name:'log-query',content:'private fixture instructions'}))}));
+    }
     if(path==='/api/model')return res.end(JSON.stringify({data:[
       {id:'corp-alias',modelID:'vendor-model',name:'Private',providerID:'corp',enabled:true,headers:{authorization:'fixture-secret'}},
       {id:'inactive',providerID:'corp',name:'Inactive',enabled:false}]}));
@@ -136,9 +142,32 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     formMode='pending';
     assert.equal((await post('/form',{requestId:formID,revision:form.revision,decision:'cancel'})).statusCode,200);
     assert.equal(formMode,'done');
+    const logCreate=()=>app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{scenario:'log-inspection'}});
+    assert.ok(!received.some(r=>r.path==='/api/skill'));
+    assert.ok(calls.every(call=>!('skills' in call.body)));
+    assert.equal((await post('/messages',{text:'日志页',scenario:'log-inspection'})).statusCode,409);
+    assert.equal((await logCreate()).json().error.code,'LOG_QUERY_SKILL_MISSING');
+    skillIDs=['intranet-skill-7'];
+    assert.equal((await logCreate()).statusCode,201);
+    const ask=()=>post('/messages',{text:'查订单链路',files:['notes.txt']});
+    assert.equal((await ask()).statusCode,202);
+    const promptCalls=()=>received.filter(r=>r.path===base+'/prompt');
+    assert.deepEqual(promptCalls().at(-1)?.body.skills,[{id:'intranet-skill-7'}]);
+    assert.deepEqual(promptCalls().at(-1)?.body.files,calls[0].body.files);
+    skillIDs=['updated-id'];
+    assert.equal((await ask()).statusCode,202);
+    assert.deepEqual(promptCalls().at(-1)?.body.skills,[{id:'updated-id'}]);
+    skillIDs=[];
+    assert.equal((await ask()).json().error.code,'LOG_QUERY_SKILL_MISSING');
+    skillIDs=['one','two'];
+    assert.equal((await ask()).json().error.code,'LOG_QUERY_SKILL_AMBIGUOUS');
+    skillDirectory=tmpdir();
+    assert.equal((await ask()).json().error.code,'LOG_QUERY_CATALOG_UNAVAILABLE');
+    skillLookupFailure=true;
+    assert.equal((await ask()).json().error.code,'LOG_QUERY_CATALOG_UNAVAILABLE');
     session.metadata={harnessScenario:'code-review'};
     assert.equal((await post('/form',submit)).statusCode,404);
     assert.equal((await post('/messages',{text:'hello'})).statusCode,404);
-    assert.equal(received.filter(r=>r.path===base+'/prompt').length,2);
+    assert.equal(received.filter(r=>r.path===base+'/prompt').length,4);
   }finally{await app.close();await new Promise<void>(ok=>peer.close(()=>ok()));await rm(root,{recursive:true,force:true});}
 });

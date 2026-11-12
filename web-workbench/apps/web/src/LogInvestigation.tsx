@@ -1,4 +1,4 @@
-import {useMemo,useRef,useState} from 'react';
+import {useMemo,useRef,useState,type MouseEvent} from 'react';
 import {DirectChat} from './DirectChat.tsx';
 
 import './log-time-range.css';
@@ -7,6 +7,14 @@ const presets=[{minutes:15,label:'最近 15 分钟'},{minutes:60,label:'最近 1
 const localZone=Intl.DateTimeFormat().resolvedOptions().timeZone;
 type Bounds={from:number;to:number};
 type TimeRange={start:string;end:string;from:number;to:number;preset:number|null};
+function openTimePicker(event:MouseEvent<HTMLInputElement>){
+  const field=event.currentTarget;
+  if(!field.showPicker)return;
+  try{
+    field.showPicker();
+    event.preventDefault();
+  }catch{/* Keep the browser's native activation when programmatic opening is unavailable. */}
+}
 function localTime(instant:number){
   const date=new Date(instant);
   return new Date(instant-date.getTimezoneOffset()*60000).toISOString().slice(0,-1);
@@ -111,10 +119,10 @@ export function LogInvestigation(){
           onClick={()=>setRange(recentRange(p.minutes))}>{p.label}</button>)}
       </div>
       <div className="range-fields">
-        <label>开始时间<input type="datetime-local" step="any" value={start} onChange={e=>editTime('start',e.target.value)}
+        <label>开始时间<input type="datetime-local" step="any" onClick={openTimePicker} value={start} onChange={e=>editTime('start',e.target.value)}
           aria-invalid={!Number.isFinite(from)} aria-describedby="log-range-feedback"/></label>
         <span className="range-direction" aria-hidden="true">→</span>
-        <label>结束时间<input type="datetime-local" step="any" value={end} onChange={e=>editTime('end',e.target.value)}
+        <label>结束时间<input type="datetime-local" step="any" onClick={openTimePicker} value={end} onChange={e=>editTime('end',e.target.value)}
           aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
       </div>
       <div className="range-footer" id="log-range-feedback">

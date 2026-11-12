@@ -153,6 +153,19 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     return result.data.filter(m=>m.enabled).map(({id,providerID,name,variants,limit})=>({id,providerID,name,
       ...(variants?.length?{variants:variants.map(v=>v.id)}:{}),...(limit?.context?{context:limit.context}:{})}));
   }
+  async function logQuerySkill(dir:string){
+    const native=await client();
+    const catalog=await native.skill.list({location:{directory:dir}}).catch(()=>{
+      throw new AuthProblem(502,'LOG_QUERY_CATALOG_UNAVAILABLE');
+    });
+    if(!Array.isArray(catalog?.data)||typeof catalog.location?.directory!=='string'||
+      relative(dir,catalog.location.directory)!=='')throw new AuthProblem(502,'LOG_QUERY_CATALOG_UNAVAILABLE');
+    const matches=catalog.data.filter(skill=>skill.name==='log-query');
+    if(!matches.length)throw new AuthProblem(409,'LOG_QUERY_SKILL_MISSING');
+    if(matches.length>1)throw new AuthProblem(409,'LOG_QUERY_SKILL_AMBIGUOUS');
+    if(!matches[0].id)throw new AuthProblem(502,'LOG_QUERY_CATALOG_UNAVAILABLE');
+    return {id:matches[0].id};
+  }
   type ProjectInput={Body:{directory?:string}};
   app.post<ProjectInput>('/api/v1/chat/project',{schema:body({directory:property(4096)})},async req=>{
     auth.mutation(req);return wrap({directory:await project(req.body.directory)});
@@ -176,6 +189,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     const {ownerId}=auth.mutation(req);
     const dir=await project(req.body?.directory),model=req.body?.model;
     if(model)await validateModel(dir,model);
+    if(req.body?.scenario==='log-inspection')await logQuerySkill(dir);
     const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title:req.body?.scenario==='log-inspection'?'Code Harness · 日志排查':'Code Harness · 直接对话',
       metadata:{harnessScenario:req.body?.scenario??'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
         if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
@@ -275,10 +289,12 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     await (await client()).session.switchModel({sessionID,model});
     return wrap({model});
   });
-  app.post<{Params:Params;Body:{text:string;files?:string[]}}>('/api/v1/chat/sessions/:id/messages',{
-    bodyLimit:128*1024,schema:body({text:property(16000),files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
+  app.post<{Params:Params;Body:{text:string;files?:string[];scenario?:'log-inspection'|'direct-chat'}}>('/api/v1/chat/sessions/:id/messages',{
+    bodyLimit:128*1024,schema:body({text:property(16000),scenario:{enum:['direct-chat','log-inspection']},files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
     const {ownerId}=auth.mutation(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId);
+    const scenario=session.metadata?.harnessScenario;
+    if(req.body.scenario&&req.body.scenario!==scenario)throw new AuthProblem(409,'CHAT_SCENARIO_MISMATCH');
     const text=req.body.text.trim();
     if(!text)throw new AuthProblem(400,'EMPTY_MESSAGE');
     const root=await directory(session.location.directory);
@@ -288,7 +304,8 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
       if(!target||!within(root,target)||!(await stat(target)).isFile())throw new AuthProblem(400,'FILE_OUTSIDE_WORKSPACE_OR_MISSING');
       return {uri:pathToFileURL(target).href,name};
     }));
-    const accepted=await (await client()).session.prompt({sessionID,text,files,delivery:'queue'});
+    const skills=scenario==='log-inspection'?[await logQuerySkill(root)]:undefined;
+    const accepted=await (await client()).session.prompt({sessionID,text,files,skills,delivery:'queue'});
     return reply.code(202).send(wrap({id:accepted.id}));
   });
   app.post<{Params:Params;Body:{requestId:string;revision:string;decision:'cancel'|'reply';answer?:FormAnswers}}>('/api/v1/chat/sessions/:id/form',{

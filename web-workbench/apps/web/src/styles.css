@@ -39,3 +39,6 @@
 .thinking-step{padding:6px 10px;border-left:2px solid #c8beb1;color:#554e46}.thinking-step button{background:transparent;color:inherit;border:0;padding:4px 6px 4px 0;cursor:pointer;font:inherit}.thinking-step small{display:inline}.thinking-step p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}
 
 details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:none}
+
+.composer-actions button.running-action:not(.primary){border-color:#a62329;color:#fff;background:#aa272e;font-weight:600}
+.composer-actions button.running-action:not(.primary):hover{background:#8d1f25}
