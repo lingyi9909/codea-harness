@@ -13,7 +13,17 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   const id='ses_chat_fixture',per='per_fixture',base='/api/session/'+id;
   const received:Array<{path:string;body:Record<string,unknown>}>=[];
   let session:Record<string,unknown>={},pending=true;
-  let failure=0;
+  let failure=0,formMode='legacy',formTitle='选择下一步';
+  const formID='frm_example';
+  const fields=[
+    {key:'mode',type:'string',options:[{value:'trace',label:'日志',metadata:'opaque-field'}],default:'trace'},
+    {key:'sources',type:'multiselect',options:[{value:'web',label:'网页'}],required:true,minItems:1},
+    {key:'count',type:'integer',minimum:1,when:[{key:'mode',op:'eq',value:'trace'}]},
+    {key:'confirm',type:'boolean',required:true},
+    {key:'ack',type:'external',url:'https://example.com/'},
+    {key:'token',type:'string',hidden:true,default:'server-only-default'},
+    {key:'extra',type:'string',when:[{key:'token',op:'eq',value:'server-only-default'},{key:'sources',op:'eq',value:'web'}]}];
+
   const peer=createServer(async(req,res)=>{
     const path=new URL(req.url!,'http://localhost').pathname;
     let bytes='';for await(const chunk of req)bytes+=chunk;
@@ -31,6 +41,11 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
     if(path===base+'/message')return res.end(JSON.stringify({cursor:{},data:[{id:'msg_2',type:'assistant',content:[
       {type:'reasoning',text:'client-visible fixture note',state:{opaque:'private reasoning'}},{type:'text',text:'示例回执'},{type:'tool',name:'edit',state:{status:'completed',input:{path:'notes.txt',apiKey:'fixture-private-key'},content:[{type:'text',text:'文件已更新'}],metadata:{raw:'internal-only'}}}],snapshot:{files:['notes.txt']}}]}));
+    if(path===base+'/form'&&formMode!=='legacy')return data([
+      {id:'other',sessionID:'unowned',title:'other session',fields},
+      ...(formMode==='pending'?[{id:formID,sessionID:id,title:formTitle,fields,metadata:{private:'opaque-form'}}]:[])]);
+    if(path===base+'/form/'+formID+'/reply'||(path===base+'/form/'+formID&&req.method==='DELETE')){
+      formMode='done';res.statusCode=204;return res.end();}
     if(path===base+'/inbox')return data([]);
     if(path==='/api/session/active')return data({});
     if(path===base+'/permission')return data(pending?[{id:per,sessionID:id,action:'edit',resources:['notes.txt']}]:[]);
@@ -102,7 +117,27 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     assert.equal((await post('/permission',{...answer,revision:'stale'})).statusCode,409);
     assert.equal((await post('/permission',answer)).statusCode,200);
     assert.equal((await post('/interrupt',{})).statusCode,200);
+    assert.deepEqual(view.json().data.forms,[]);
+    formMode='pending';
+    const pendingView=await app.inject({url,headers});
+    const [form]=pendingView.json().data.forms;
+    assert.equal(pendingView.json().data.forms.length,1);
+    assert.ok(!pendingView.body.includes('opaque-field')&&!pendingView.body.includes('opaque-form')&&!pendingView.body.includes('server-only-default'));
+    const submit={requestId:formID,revision:form.revision,decision:'reply',answer:{mode:'trace',sources:['web'],count:2,confirm:false,ack:true,extra:'visible'}};
+    assert.equal((await post('/form',{...submit,requestId:'other'})).statusCode,409);
+    assert.equal((await post('/form',{...submit,answer:{...submit.answer,count:0}})).statusCode,400);
+    assert.equal((await post('/form',{...submit,answer:{...submit.answer,ack:false}})).statusCode,400);
+    formTitle='更新后的问题';
+    assert.equal((await post('/form',submit)).statusCode,409);
+    formTitle='选择下一步';
+    assert.equal((await post('/form',submit)).statusCode,200);
+    assert.deepEqual(received.find(r=>r.path===base+'/form/'+formID+'/reply')?.body,{answer:{...submit.answer,token:'server-only-default'}});
+    assert.equal((await post('/form',submit)).statusCode,409);
+    formMode='pending';
+    assert.equal((await post('/form',{requestId:formID,revision:form.revision,decision:'cancel'})).statusCode,200);
+    assert.equal(formMode,'done');
     session.metadata={harnessScenario:'code-review'};
+    assert.equal((await post('/form',submit)).statusCode,404);
     assert.equal((await post('/messages',{text:'hello'})).statusCode,404);
     assert.equal(received.filter(r=>r.path===base+'/prompt').length,2);
   }finally{await app.close();await new Promise<void>(ok=>peer.close(()=>ok()));await rm(root,{recursive:true,force:true});}

@@ -23,15 +23,6 @@
 
 .chat-box{align-self:start;min-width:0}
 .composer-actions{flex-wrap:wrap}
-.model-picker{position:relative;min-width:0;max-width:100%}
-.model-picker summary,.current-model{display:block;max-width:22ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#514e49;font-size:13px}
-.model-picker summary{cursor:pointer;border-radius:6px;padding:8px;background:#f4f3ee;list-style:none}
-.model-picker summary::-webkit-details-marker{display:none}
-.model-picker summary::after{content:' ▴'}
-.model-picker[open] summary::after{content:' ▾'}
-.model-options{position:absolute;bottom:calc(100% + 6px);left:0;width:min(315px,65vw);z-index:3;padding:12px;background:white;border:1px solid #dedfd9;border-radius:8px;box-shadow:0 4px 18px #26251f24}
-.model-options select{width:100%;margin:6px 0 10px}
-
 .investigation-controls,.log-query{border:0;margin:0;padding:0;min-width:0}.log-query legend{font-weight:650;margin-bottom:8px}.log-query label{display:grid;gap:4px}.log-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.log-grid input{min-width:0;width:100%}.log-query details{margin:10px 0}.log-query summary{cursor:pointer;font-size:13px}.log-query pre{max-height:180px;overflow:auto;white-space:pre-wrap}.log-query small{color:#625e56}.log-query details label{margin:6px 0}
 @media(max-width:620px){.log-grid{grid-template-columns:1fr}}
 

@@ -6,6 +6,7 @@ type Frame={session:string;parts:Part[];tools:ToolProgress[]};
 type Connection={session:string;ready:Promise<void>;close:()=>void};
 
 export function useChatStream(session:string){
+  const [requestsVersion,refreshRequests]=useState(0);
   const connection=useRef<Connection|null>(null);
   const [frame,setFrame]=useState<Frame>({session:'',parts:[],tools:[]});
   const prune=useRef<(messages:ChatMessage[])=>void>(()=>{});
@@ -26,6 +27,7 @@ export function useChatStream(session:string){
     const timeout=setTimeout(release,2000);
     const connected=()=>{clearTimeout(timeout);release();};
     source.addEventListener('ready',connected);
+    source.addEventListener('requests',()=>refreshRequests(n=>n+1));
     source.onerror=()=>{
       connected();
       for(const part of current.parts)if(part.ended==null)interrupted.add(part);
@@ -68,7 +70,7 @@ export function useChatStream(session:string){
     if(session)void connect(session);
     return ()=>{if(connection.current?.session===session){connection.current.close();connection.current=null;}};
   },[session,connect]);
-  return {connect,prune,parts:frame.session===session?frame.parts:[],tools:frame.session===session?frame.tools:[]};
+  return {connect,prune,requestsVersion,parts:frame.session===session?frame.parts:[],tools:frame.session===session?frame.tools:[]};
 }
 
 export function streamingMessages(history:ChatMessage[],parts:Part[]):ChatMessage[]{
