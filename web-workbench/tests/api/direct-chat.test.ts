@@ -17,6 +17,9 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   let failure=0,formMode='legacy',formTitle='选择下一步';
   const formID='frm_example';
   const secondReasoning='第二段公开文字。'.repeat(650);
+  const instructionPath='/api/experimental/session/'+id+'/instructions/entries/workbench-language';
+  let instructionStatus=204,translationStatus=200,translated='正在核对预报日期。';
+  let echoPrompt:Record<string,unknown>|undefined;
   let eventFrames:object[]=[];
   const fields=[
     {key:'mode',type:'string',options:[{value:'trace',label:'日志',metadata:'opaque-field'}],default:'trace'},
@@ -61,8 +64,14 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     }
     if(path==='/api/session'){session={id,title:body.title,location:body.location,metadata:body.metadata};return data(session);}
     if(path===base)return data(session);
+    if(path===instructionPath){
+      assert.equal(req.method,'PUT');res.statusCode=instructionStatus;return res.end();
+    }
+    if(path===base+'/message/msg_2')return data({id:'msg_2',type:'assistant',
+      content:[{type:'reasoning',text:'Checking the forecast date.',state:{opaque:'opaque-provider-data'}},{type:'text',text:'final'}]});
+    if(path===base+'/generate'){res.statusCode=translationStatus;return data({text:translated});}
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
-    if(path===base+'/message')return res.end(JSON.stringify({cursor:{},data:[{id:'msg_2',type:'assistant',content:[
+    if(path===base+'/message')return res.end(JSON.stringify({cursor:{},data:[...(echoPrompt?[{...echoPrompt,id:'echo',type:'user'}]:[]),{id:'msg_2',type:'assistant',content:[
       {type:'reasoning',text:'client-visible fixture note',state:{opaque:'private reasoning'}},{type:'text',text:'示例回执'},{type:'tool',name:'edit',state:{status:'completed',input:{path:'notes.txt',apiKey:'fixture-private-key'},content:[{type:'text',text:'文件已更新'}],metadata:{raw:'internal-only'}}},
       {type:'reasoning',text:secondReasoning},{type:'reasoning',text:'',state:{opaque:'unavailable-only'}}],snapshot:{files:['notes.txt']}}]}));
     if(path===base+'/form'&&formMode!=='legacy')return data([
@@ -70,7 +79,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       ...(formMode==='pending'?[{id:formID,sessionID:id,title:formTitle,fields,metadata:{private:'opaque-form'}}]:[])]);
     if(path===base+'/form/'+formID+'/reply'||(path===base+'/form/'+formID&&req.method==='DELETE')){
       formMode='done';res.statusCode=204;return res.end();}
-    if(path===base+'/inbox')return data([]);
+    if(path===base+'/inbox')return data(echoPrompt?[{id:'queued',type:'user',payload:echoPrompt}]:[]);
     if(path==='/api/session/active')return data({});
     if(path===base+'/permission')return data(pending?[{id:per,sessionID:id,action:'edit',resources:['notes.txt']}]:[]);
     if(path===base+'/permission/'+per+'/reply'){pending=false;res.statusCode=204;return res.end();}
@@ -121,8 +130,13 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     const post=(suffix:string,payload:object)=>app.inject({method:'POST',url:url+suffix,headers,payload});
     assert.equal((await post('/messages',{text:'阅读这个文件',files:['notes.txt']})).statusCode,202);
     assert.equal((await post('/messages',{text:'继续整理文档'})).statusCode,202);
+    const languageEntries=received.filter(r=>r.path===instructionPath);
+    assert.equal(languageEntries.length,2);
+    assert.match(String(languageEntries[0].body.value),/简体中文.*思考摘要/);
+    assert.equal(received.filter(r=>r.path===base+'/generate').length,0);
     const calls=received.filter(r=>r.path===base+'/prompt');
     assert.equal(calls.length,2);
+    assert.deepEqual(calls.map(call=>call.body.text),['阅读这个文件','继续整理文档']);
     assert.deepEqual(calls[0].body.files,[{uri:pathToFileURL(join(root,'notes.txt')).href,name:'notes.txt'}]);
     assert.equal((await post('/messages',{text:'查看父目录',files:['../']})).statusCode,400);
     const view=await app.inject({method:'GET',url,headers});
@@ -158,6 +172,17 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     const expanded=await app.inject({url:url+'?message=msg_2&part=0',headers});
     assert.equal(expanded.json().data.messages[0].steps[0].text,'client-visible fixture note');
     assert.ok(!expanded.body.includes('private reasoning'));
+    const translate=(ordinal:number)=>post('/reasoning/translation',{message:'msg_2',ordinal});
+    assert.equal((await translate(1)).statusCode,404);
+    assert.equal((await translate(99)).statusCode,404);
+    assert.equal(received.filter(r=>r.path===base+'/generate').length,0);
+    assert.deepEqual((await translate(0)).json().data,{text:translated});
+    const translation=String(received.filter(r=>r.path===base+'/generate').at(-1)?.body.prompt);
+    assert.ok(translation.includes('Checking the forecast date.')&&!translation.includes('opaque-provider-data'));
+    translationStatus=404;
+    assert.equal((await translate(0)).json().error.code,'REASONING_TRANSLATION_UNAVAILABLE');
+    translationStatus=200;translated='Checking the forecast date.';
+    assert.equal((await translate(0)).json().error.code,'REASONING_TRANSLATION_FAILED');
     const permission=view.json().data.permissions[0];
     const answer={requestId:per,revision:permission.revision,decision:'once'};
     assert.equal((await post('/permission',{...answer,revision:'stale'})).statusCode,409);
@@ -197,6 +222,17 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     skillIDs=['updated-id'];
     assert.equal((await ask()).statusCode,202);
     assert.deepEqual(promptCalls().at(-1)?.body.skills,[{id:'updated-id'}]);
+    assert.equal(received.filter(r=>r.path===instructionPath).length,4);
+    instructionStatus=404;
+    assert.equal((await ask()).statusCode,202);
+    const fallback=promptCalls().at(-1)!.body;
+    assert.deepEqual(fallback.skills,[{id:'updated-id'}]);
+    assert.deepEqual(fallback.metadata,{workbenchLanguageSuffix:1});
+    assert.match(String(fallback.text),/^查订单链路[\s\S]+简体中文/);
+    echoPrompt=fallback;
+    const echoed=(await app.inject({url,headers})).json().data.messages;
+    assert.deepEqual(echoed.filter((m:{role:string})=>m.role==='user').map((m:{text:string})=>m.text),['查订单链路','查订单链路']);
+    echoPrompt=undefined;
     skillIDs=[];
     assert.equal((await ask()).json().error.code,'LOG_QUERY_SKILL_MISSING');
     skillIDs=['one','two'];
@@ -208,6 +244,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     session.metadata={harnessScenario:'code-review'};
     assert.equal((await post('/form',submit)).statusCode,404);
     assert.equal((await post('/messages',{text:'hello'})).statusCode,404);
-    assert.equal(received.filter(r=>r.path===base+'/prompt').length,4);
+    assert.equal(received.filter(r=>r.path===base+'/prompt').length,5);
+    assert.equal((await translate(0)).statusCode,404);
   }finally{await app.close();await new Promise<void>(ok=>peer.close(()=>ok()));await rm(root,{recursive:true,force:true});}
 });

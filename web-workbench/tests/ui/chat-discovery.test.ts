@@ -80,6 +80,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
         const directory=new URL(req.url,'http://localhost').searchParams.get('location[directory]');
         return res.end(JSON.stringify({location:{directory},data:fs.existsSync(flag+'.skill')?[{id:'corp-logs-v1',name:'log-query'}]:[]}));
       }
+      if(req.method==='PUT'&&req.url.startsWith('/api/experimental/session/')&&req.url.endsWith('/instructions/entries/workbench-language')){
+        req.resume();res.writeHead(204);return res.end();
+      }
       if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
       const save=(suffix,done)=>{let body='';req.on('data',s=>body+=s);req.on('end',()=>{
         fs.writeFileSync(flag+suffix,body);done(JSON.parse(body));res.writeHead(204);res.end();});};
@@ -446,10 +449,19 @@ it('groups a multi-step weather response and keeps verification output out of th
     const answer='北京明天晴，早晚温差较大。\n\n- **白天**：晴，最高 **15℃**\n- **夜间**：晴，最低 **3℃**\n\n数据来源：[中央气象台](https://www.nmc.cn/publish/forecast/ABJ/beijing.html)';
     const tool=(name:string,result:string)=>({kind:'tool',name,status:'completed',result});
     const assistant=(id:string,steps:unknown[])=>({id,role:'assistant',text:'',steps,tools:[],files:[],complete:true});
+    const english='Check the date on the weather report.';
+    const chinese='核对天气预报的发布日期。';
+    const translations:{message:string;ordinal:number}[]=[];
+    await page.route('**/chat/sessions/'+id+'/reasoning/translation',async route=>{
+      assert.equal(route.request().method(),'POST');
+      translations.push(route.request().postDataJSON());
+      if(translations.length===1)return route.fulfill({status:502,json:{error:{code:'REASONING_TRANSLATION_FAILED'}}});
+      return route.fulfill({json:{data:{text:chinese},requestId:'fixture'}});
+    });
     const messages=[
       {id:'q',role:'user',text:'北京明天的天气如何',files:[],tools:[]},
       assistant('search',[{kind:'text',text:'先查北京的预报。'},tool('websearch','搜索结果列表'),{kind:'thinking',hasText:false,complete:true}]),
-      assistant('fetch',[{kind:'thinking',text:'正在核对预报的发布日期。',hasText:true,complete:true},{kind:'thinking',text:'预报地区与北京一致。',hasText:true,complete:true},tool('webfetch','向右滑动填充拼图'),tool('webfetch','北京天气预报原始页面')]),
+      assistant('fetch',[{kind:'thinking',ordinal:4,text:english,hasText:true,complete:true},{kind:'thinking',ordinal:5,text:'预报地区与北京一致。',hasText:true,complete:true},tool('webfetch','向右滑动填充拼图'),tool('webfetch','北京天气预报原始页面')]),
       assistant('answer',[{kind:'text',text:answer}]),
       assistant('done',[{kind:'notice',text:'本轮已完成'}]),
     ];
@@ -474,8 +486,23 @@ it('groups a multi-step weather response and keeps verification output out of th
     await expect(historyThought).not.toHaveAttribute('open','');
     await expect(historyThought.locator('summary')).toContainText('2 段');
     await historyThought.locator('summary').focus();await page.keyboard.press('Enter');
-    await expect(historyThought.getByText('正在核对预报的发布日期。')).toBeVisible();
+    await expect(historyThought.getByText(english,{exact:true})).toBeVisible();
+    const translate=historyThought.getByRole('button',{name:'译成中文',exact:true});
+    await expect(translate).toHaveCount(1);
+    assert.deepEqual(translations,[]);
+    await translate.click();
+    await expect(historyThought.getByRole('status')).toContainText('翻译失败，请重试');
+    await expect(historyThought.getByText(english,{exact:true})).toBeVisible();
+    await translate.click();
+    await expect(historyThought.getByText(chinese,{exact:true})).toBeVisible();
     await expect(historyThought.getByText('预报地区与北京一致。')).toBeVisible();
+    await historyThought.locator('summary').click();
+    await historyThought.locator('summary').click();
+    await historyThought.getByRole('button',{name:'查看原文'}).click();
+    await expect(historyThought.getByText(english,{exact:true})).toBeVisible();
+    await historyThought.getByRole('button',{name:'查看译文'}).click();
+    await expect(historyThought.getByText(chinese,{exact:true})).toBeVisible();
+    assert.deepEqual(translations,[{message:'fetch',ordinal:4},{message:'fetch',ordinal:4}]);
     await historyThought.locator('summary').click();
     const processRow=response.locator('.turn-process > summary');
     await expect(processRow).toContainText('3 次工具调用');

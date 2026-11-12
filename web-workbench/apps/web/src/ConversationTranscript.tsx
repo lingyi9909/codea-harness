@@ -1,5 +1,6 @@
 import {lazy,Suspense,useEffect,useRef,useState} from 'react';
 import type {ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';
+import {api,ApiError} from './api/client.ts';
 import './conversation-transcript.css';
 
 const Body=lazy(()=>import('./ChatMarkdown.tsx').then(module=>({default:module.ChatMarkdown})));
@@ -39,7 +40,41 @@ function ToolRow({step}:{step:Extract<ChatStep,{kind:'tool'}>}){
   </div>;
 }
 
-function Reasoning({entries,running}:{entries:ReasoningEntry[];running:boolean}){
+function hasEnglishProse(text:string){
+  const words=text.match(/\b[a-z]+(?:['’-][a-z]+)*\b/gi)?.length??0;
+  const han=text.match(/\p{Script=Han}/gu)?.length??0;
+  return words>0&&(han===0||words>Math.max(3,han));
+}
+
+function TranslatableReasoning({session,message,ordinal,original,open}:{
+  session:string;message:string;ordinal:number;original:string;open:boolean;
+}){
+  const [translated,setTranslated]=useState('');
+  const [showChinese,setShowChinese]=useState(false);
+  const [pending,setPending]=useState(false);
+  const [error,setError]=useState('');
+  async function translate(){
+    if(translated){setShowChinese(!showChinese);return;}
+    setError('');setPending(true);
+    try{
+      const {text}=await api.translateReasoning(session,message,ordinal);
+      setTranslated(text);setShowChinese(true);
+    }catch(e){
+      if(e instanceof ApiError&&e.code==='REASONING_TRANSLATION_UNAVAILABLE')setError('当前 OpenCode 版本不支持翻译。');
+      else if(e instanceof ApiError&&e.code==='REASONING_NOT_FOUND')setError('找不到这段思考原文。');
+      else setError('翻译失败，请重试。');
+    }finally{setPending(false);}
+  }
+  if(!open)return null;
+  return <><Markdown text={showChinese?translated:original}/>
+    <button className="reasoning-translate" type="button" disabled={pending}
+      title={translated?'切换原文和译文':'使用 OpenCode 将这段思考译成中文'} onClick={translate}>
+      {pending?'翻译中…':showChinese?'查看原文':translated?'查看译文':'译成中文'}
+    </button>{error&&<small role="status" className="transcript-error">{error}</small>}
+  </>;
+}
+
+function Reasoning({session,entries,running}:{session:string;entries:ReasoningEntry[];running:boolean}){
   const [open,setOpen]=useState(running);
   const chosen=useRef(false);
   useEffect(()=>{
@@ -50,13 +85,18 @@ function Reasoning({entries,running}:{entries:ReasoningEntry[];running:boolean})
       <span className="process-chevron" aria-hidden="true">›</span>
       <strong>思考过程</strong><small>{entries.length} 段</small>
     </summary>
-    {open&&<div className="reasoning-body">{entries.map(({message,step,part})=>
-      <div className="reasoning-part" key={message+':'+(step.ordinal??part)}><Markdown text={step.text??''}/></div>
-    )}</div>}
+    <div className="reasoning-body">{entries.map(({message,step,part})=>{
+      const original=step.text??'';
+      return <div className="reasoning-part" key={message+':'+(step.ordinal??part)}>
+        {step.complete&&step.ordinal!=null&&hasEnglishProse(original)
+          ?<TranslatableReasoning key={original} session={session} message={message} ordinal={step.ordinal} original={original} open={open}/>
+          :open&&<Markdown text={original}/>}
+      </div>;
+    })}</div>
   </details>;
 }
 
-function Response({messages,progress,active}:{messages:ChatMessage[];progress:ToolProgress[];active:boolean}){
+function Response({session,messages,progress,active}:{session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean}){
   const entries:Entry[]=[];
   const files=new Set<string>();
   let lastTool=-1;
@@ -98,7 +138,7 @@ function Response({messages,progress,active}:{messages:ChatMessage[];progress:To
       if(step.kind==='text')return <div className="process-comment" key={key}><Markdown text={step.text}/></div>;
       return null;
     })}</div></details>}
-    {thinking.length>0&&<Reasoning entries={thinking} running={active||thinking.some(({step})=>step.live&&!step.complete)}/>}
+    {thinking.length>0&&<Reasoning session={session} entries={thinking} running={active||thinking.some(({step})=>step.live&&!step.complete)}/>}
     {status&&<p className="transcript-error" role="status">{status}</p>}
     {working&&!details.length&&!thinking.length&&<p className="process-note" role="status">正在处理…</p>}
     {answers.length>0&&<section className="turn-answer" aria-label="回答正文">{answers.map(({message,part,step})=>
@@ -107,8 +147,8 @@ function Response({messages,progress,active}:{messages:ChatMessage[];progress:To
   </article>;
 }
 
-export function ConversationTranscript({messages,progress,active}:{
-  messages:ChatMessage[];progress:ToolProgress[];active:boolean;
+export function ConversationTranscript({session,messages,progress,active}:{
+  session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean;
 }){
   const turns=groupMessages(messages);
   let activeIndex=turns.length-1;
@@ -116,6 +156,6 @@ export function ConversationTranscript({messages,progress,active}:{
   return <div className="conversation-transcript">{turns.map((turn,i)=><section className="conversation-exchange" key={turn.id}>
     {turn.question&&<div className="user-question" aria-label="你的消息"><p>{turn.question.text}</p>
       {turn.question.files.length>0&&<small>引用文件 · {turn.question.files.join('、')}</small>}</div>}
-    <Response messages={turn.response} progress={progress} active={active&&i===activeIndex}/>
+    <Response session={session} messages={turn.response} progress={progress} active={active&&i===activeIndex}/>
   </section>)}{active&&!turns.length&&<p className="process-note" role="status">正在处理…</p>}</div>;
 }

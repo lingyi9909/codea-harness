@@ -63,6 +63,11 @@ export class HarnessApi {
   chat(id:string){
     return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id));
   }
+  translateReasoning(id:string,message:string,ordinal:number){
+    return this.request<{text:string}>('/chat/sessions/'+encodeURIComponent(id)+'/reasoning/translation',{
+      method:'POST',body:JSON.stringify({message,ordinal}),
+    });
+  }
   chatAction(id:string,action:'messages'|'permission'|'interrupt'|'model'|'form',body:object={}){
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
