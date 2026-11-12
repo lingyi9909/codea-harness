@@ -13,7 +13,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   const pairingCode=randomBytes(32).toString('base64url');
   const printCode=(code:string)=>process.stdout.write('Code Harness local pairing code (valid 5 min, one use): '+code+'\n');
   const auth=new LocalAuth(pairingCode,config.port,process.env.HARNESS_DEV_ORIGIN,printCode);
-  const app=await createApp({pool,auth,native});
+  const app=await createApp({pool,auth,native,autoOpenCode:localOnly});
   const shutdown=async()=>{await app.close();await pool?.end();};
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});

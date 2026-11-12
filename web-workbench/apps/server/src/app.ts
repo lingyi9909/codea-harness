@@ -21,7 +21,7 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{pool?:Pool;auth:LocalAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -85,7 +85,7 @@ export async function createApp(opts:{pool?:Pool;auth:LocalAuth;native?:Omit<Sch
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
-  registerChat(app,opts.auth);
+  registerChat(app,opts.auth,opts.autoOpenCode);
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       opts.auth.session(req);return result({items:[],nextCursor:null});

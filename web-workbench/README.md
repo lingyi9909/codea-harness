@@ -34,18 +34,10 @@ The worker records control sends before contacting the native service. An uncert
 
 首页提供直接对话、代码审查、日志排查和数据分析。日志页按关键词与级别筛选本地 UTF-8 文本；数据页读取 CSV，按列统计数值。两个页面在浏览器中处理所选文件。
 
-直接对话使用官方 `@opencode/client@2.0.27`。在能访问同一工作目录的机器上运行工作台和公司 OpenCode 服务，配置原生服务使用公司的 Agent、模型和工具权限。以下 PowerShell 示例在 `web-workbench` 目录执行，地址和路径换成实际值。
+Windows 离线包解压后运行 `start-chat.cmd`，在浏览器配对并进入“直接对话”。第一次发送消息时，工作台通过官方客户端发现同一用户已注册的 OpenCode 2.x 后台，并使用注册的认证信息。离线包在发现失败时尝试使用已安装的 `opencode serve --service` 启动后台。公司版本需要支持这个服务协议。已有部署仍可使用服务端的 `HARNESS_OPENCODE_URL` 和 `HARNESS_OPENCODE_AUTHORIZATION`。
 
-```powershell
-$env:HARNESS_OPENCODE_URL = "http://127.0.0.1:4096"
-$env:HARNESS_CHAT_ROOTS = "D:\projects\demo;D:\projects\service"
-npm ci --ignore-scripts --no-audit --no-fund
-npm run web:build
-npm run server:start -- --local-only
-```
+相对路径和引用文件默认位于启动包的 `chat-files` 子目录。已有配置优先使用 `HARNESS_CHAT_ROOTS` 或 `HARNESS_REPOSITORY_ROOTS` 的首个目录。OpenCode 继续执行公司的文件权限策略。可把测试文件放入该目录，让 OpenCode 读取或修改。
 
-OpenCode 要求鉴权时，通过服务端环境变量 `HARNESS_OPENCODE_AUTHORIZATION` 提供完整的 Authorization 请求头值。远程地址使用 HTTPS。工作台和 OpenCode 需要看到同一绝对路径。控制台会显示网页地址和一次性配对码。`--local-only` 支持直接对话和两个本地分析页面，已有 MySQL 的完整部署沿用 `npm run server:start`。
+“后台访问日志”显示当前工作台进程最近 300 条记录，包含服务发现、工作台请求、OpenCode 请求、状态、耗时和关联编号。重启清空记录。认证信息、聊天正文与文件内容不写入访问日志。网页每 2.5 秒刷新一次。源码启动仍需先安装依赖并构建网页。
 
-配对后打开“直接对话”，选择工作目录，输入“请读取 README 并总结启动步骤”。“引用文件”支持当前目录内的相对路径，每行一个。工作台将规范文件 URI 传给 OpenCode；读取、编辑、写入均由 OpenCode 在原生会话中执行。工作台展示公开回复、工具状态、涉及的文件及待审批资源。选择“仅本次允许”或“拒绝”会答复该会话的原生权限请求。目录列表限制工作台可以绑定的目录及显式引用；工具实际能访问的位置由公司 OpenCode 的权限策略决定。
-
-内网验收建议使用一个临时工作目录。先建一份文本文件，让 OpenCode 读出其中一个值，再要求它修改该值，直接打开磁盘文件核对。刷新网页后继续在同一会话追问；最后验证拒绝授权和中断执行。`npm run test:chat` 用临时 HTTP 对端检查官方客户端的协议调用，不启动模型。
+`npm run test:chat` 使用临时注册文件和模拟 HTTP 服务验证发现、会话、文件引用、权限、中断和错误日志。
