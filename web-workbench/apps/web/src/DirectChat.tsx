@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {api,ApiError} from './api/client.ts';
 import type {ChatStatus,ChatSettings,ChatAccessEntry,ChatModel} from '../../../packages/contracts/src/chat.ts';
 
@@ -51,6 +51,14 @@ export function DirectChat(){
     }
     edit(false);
   });
+  const input=useRef<HTMLTextAreaElement>(null);
+  const picker=useRef<HTMLDetailsElement>(null);
+  const maySend=Boolean(draft.trim()&&settings?.configured&&!busy&&!editing);
+  const modelLabel=state?.model?state.model.providerID+'/'+state.model.id:chosen?.name??(id&&!state?'会话模型':'默认模型');
+  const loadModels=()=>run(async()=>{
+    const list=await api.chatModels(directory||undefined);setCatalog(list);
+    if(!list.some(m=>keyFor(m)===modelKey))setModelKey('');
+  });
   const send=()=>run(async()=>{
     const text=draft.trim();if(!text||editing)return;
     let session=id;
@@ -70,12 +78,31 @@ export function DirectChat(){
           {(['once','reject'] as const).map(d=><button key={d} disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'permission',{requestId:p.id,revision:p.revision,decision:d});})}>{d==='once'?'仅本次允许':'拒绝'}</button>)}</div>)}
       </div>
       {error&&<p role="alert" className="notice">{error}</p>}
-      <div className="composer"><textarea aria-label="对话内容" rows={3} maxLength={16000} placeholder="输入问题，或让 OpenCode 修改当前目录中的文件…" value={draft} onChange={e=>write(e.target.value)}
-        onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&settings?.configured&&!busy)void send();}}/>
+      <div className="composer"><textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder="输入问题，或让 OpenCode 修改当前目录中的文件…" value={draft} onChange={e=>write(e.target.value)}
+        onKeyDown={e=>{
+          if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
+          e.preventDefault();
+          if(maySend&&!e.repeat)void send();
+        }}/>
         {showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
-        <div className="composer-actions"><button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
+        <div className="composer-actions">
+          {id?<span className="current-model" title={modelLabel}>{modelLabel}</span>:
+            <details className="model-picker" ref={picker}
+              onToggle={e=>{if(e.currentTarget.open&&!catalog&&!busy&&!editing)void loadModels();}}
+              onBlur={e=>{if(e.relatedTarget&&!e.currentTarget.contains(e.relatedTarget))e.currentTarget.open=false;}}
+              onKeyDown={e=>{if(e.key==='Escape'){e.currentTarget.open=false;input.current?.focus();}}}>
+              <summary aria-label="选择模型" title={modelLabel} onClick={e=>{if(editing||busy||!settings)e.preventDefault();}}>{chosen?.name??'选择模型'}</summary>
+              <div className="model-options">
+                <label>OpenCode 模型<select disabled={busy||editing||!catalog} value={modelKey} onChange={e=>{
+                  setModelKey(e.target.value);if(picker.current)picker.current.open=false;input.current?.focus();
+                }}><option value="">使用 OpenCode 默认模型</option>{catalog?.map(m=><option key={keyFor(m)} value={keyFor(m)}>{m.name} · {m.providerID}/{m.id}</option>)}</select></label>
+                {catalog?.length===0&&<small>当前项目没有已启用的模型。</small>}
+                <button type="button" disabled={busy||editing} onClick={loadModels}>{busy?'加载中…':'刷新模型列表'}</button>
+              </div>
+            </details>}
+          <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {state?.active&&<button disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>中断执行</button>}
-          <button className="primary" disabled={busy||editing||!settings?.configured||!draft.trim()} onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
+          <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':'发送 ↑'}</button></div>
       </div></div><aside className="context-box"><h2>工作目录</h2>
         {editing?<form onSubmit={e=>{e.preventDefault();void saveProject();}}>
           <label>项目文件夹路径<input autoFocus value={pathText} list="chat-projects" disabled={busy}
@@ -86,12 +113,7 @@ export function DirectChat(){
           <button type="button" disabled={busy} onClick={()=>{edit(false);fail('');}}>取消</button>
         </form>:<div><code className="project-path">{current??'加载中…'}</code>
           <button disabled={busy||!settings} onClick={()=>{typePath(current??directory);edit(true);fail('');}}>更改工作目录</button></div>}
-        {!id&&<div><h2>会话模型</h2>
-        <button disabled={busy||editing} onClick={()=>run(async()=>{const list=await api.chatModels(directory||undefined);setCatalog(list);
-          if(!list.some(m=>keyFor(m)===modelKey))setModelKey('');})}>{catalog?'刷新模型列表':'选择模型'}</button>
-        {catalog&&<label>OpenCode 模型<select disabled={busy} value={modelKey} onChange={e=>setModelKey(e.target.value)}>
-          <option value="">使用 OpenCode 默认模型</option>{catalog.map(m=><option key={keyFor(m)} value={keyFor(m)}>{m.name} · {m.providerID}/{m.id}</option>)}
-        </select></label>}{catalog?.length===0&&<p>此目录下的 OpenCode 没有返回已启用模型。</p>}</div>}<h2>后台访问日志</h2><AccessLog/>
+        <h2>后台访问日志</h2><AccessLog/>
         {state&&<p>{state.active?'正在执行':state.outcome==='failed'?'本轮执行失败':state.outcome==='interrupted'?'本轮已中断':'等待输入'}</p>}
       </aside></div></section>;
 }

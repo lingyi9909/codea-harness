@@ -20,3 +20,13 @@
 .access-log{max-height:55vh;overflow:auto}.access-log>div{padding:8px 0;border-bottom:1px solid #dce0e4}.access-log code,.access-log small{display:block;overflow-wrap:anywhere}.access-log small{color:#565e69}
 
 .project-path{display:block;overflow-wrap:anywhere;margin-bottom:8px}.context-box form button+button{margin-left:6px}
+
+.composer-actions{flex-wrap:wrap}
+.model-picker{position:relative;min-width:0;max-width:100%}
+.model-picker summary,.current-model{display:block;max-width:22ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#514e49;font-size:13px}
+.model-picker summary{cursor:pointer;border-radius:6px;padding:8px;background:#f4f3ee;list-style:none}
+.model-picker summary::-webkit-details-marker{display:none}
+.model-picker summary::after{content:' ▴'}
+.model-picker[open] summary::after{content:' ▾'}
+.model-options{position:absolute;bottom:calc(100% + 6px);left:0;width:min(315px,65vw);z-index:3;padding:12px;background:white;border:1px solid #dedfd9;border-radius:8px;box-shadow:0 4px 18px #26251f24}
+.model-options select{width:100%;margin:6px 0 10px}

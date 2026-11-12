@@ -103,6 +103,7 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     for(const item of inbox)if(item.type==='user'&&!messages.some(m=>m.id===item.id))
       messages.push({id:item.id,role:'user',text:item.payload.text,files:item.payload.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
     const result:ChatStatus={id:sessionID,directory:session.location.directory,messages,
+      ...(session.model?{model:{id:session.model.id,providerID:session.model.providerID}}:{}),
       active:Boolean(running[sessionID])||inbox.length>0,outcome:session.outcome,
       permissions:permissions.filter(p=>p.sessionID===sessionID).map(p=>({id:p.id,action:p.action,resources:p.resources,revision:revision(p)}))};
     return wrap(result);
