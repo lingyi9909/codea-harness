@@ -7,7 +7,7 @@ import {chromium,expect} from '@playwright/test';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
 
-it('browser sends without a directory, starts installed CLI fixture and shows upstream failure',{timeout:90000},async()=>{
+it('browser uses the startup directory, starts the CLI fixture and shows upstream failure',{timeout:90000},async()=>{
   const root=await mkdtemp(join(tmpdir(),'harness cli ')),file=join(root,'service.json');
   const win=process.platform==='win32',cli=join(root,win?'opencode.cmd':'opencode'),script=join(root,'fixture.cjs');
   const diagnosis=['## 排查结果','', '| 服务 | 耗时 |','| --- | ---: |','| 订单 | 120 ms |','',
@@ -123,7 +123,10 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   process.chdir(root);
   process.env.PATH=root;
   process.env.HARNESS_OPENCODE_SERVICE_FILE=file;
-  delete process.env.HARNESS_CHAT_ROOTS;delete process.env.HARNESS_REPOSITORY_ROOTS;delete process.env.HARNESS_OPENCODE_URL;
+  const project=join(root,'业务项目');
+  await mkdir(project);
+  process.env.HARNESS_CHAT_ROOTS=project;
+  delete process.env.HARNESS_REPOSITORY_ROOTS;delete process.env.HARNESS_OPENCODE_URL;
   const port=31881;
   const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,autoOpenCode:true});
   async function recorded(suffix:string){
@@ -133,9 +136,13 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   try{
     await app.listen({host:'127.0.0.1',port});
     const page=await browser.newPage({timezoneId:'Asia/Shanghai'});
+    await page.addInitScript(()=>localStorage.setItem('harness.chat.project','/stale-project'));
+    const retiredRequests:string[]=[];
     let sessionRequests=0;
     page.on('request',request=>{
-      if(new URL(request.url()).pathname==='/api/v1/auth/local-session')sessionRequests++;
+      const path=new URL(request.url()).pathname;
+      if(path==='/api/v1/auth/local-session')sessionRequests++;
+      if(path==='/api/v1/chat/access-log'||path==='/api/v1/chat/project')retiredRequests.push(path);
     });
     await page.goto('http://127.0.0.1:'+port);
     await expect(page.getByRole('navigation')).toBeVisible();
@@ -149,19 +156,16 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     assert.equal(sessionRequests,1);
     assert.equal(await sessionCookie(),cookie);
     await page.getByRole('navigation').getByRole('button',{name:'直接对话',exact:true}).click();
-    await expect(page.getByRole('heading',{name:'后台访问日志'})).toBeVisible();
-    await expect(page.getByPlaceholder('输入绝对路径')).toHaveCount(0);
-    const project=join(root,'业务项目');
-    await mkdir(project);
-    await page.getByRole('button',{name:'更改工作目录'}).click();
-    await page.getByLabel('项目文件夹路径').fill(join(project,'missing'));
-    await page.getByRole('button',{name:'使用此目录'}).click();
-    await expect(page.getByRole('alert')).toContainText('找不到');
-    await page.getByLabel('项目文件夹路径').fill(project);
-    await page.getByRole('button',{name:'使用此目录'}).click();
-    await expect(page.locator('.project-path')).toHaveText(await realpath(project));
-    await page.reload();
-    await expect(page.locator('.project-path')).toHaveText(await realpath(project));
+    await expect(page.locator('.sidebar .brand')).toHaveText(/智能工作台/);
+    await expect(page).toHaveTitle('智能工作台');
+    async function checkChatLayout(){
+      await expect(page.getByLabel('对话内容')).toBeVisible();
+      await expect(page.getByRole('button',{name:'更改工作目录'})).toHaveCount(0);
+      await expect(page.getByRole('heading',{name:'后台访问日志'})).toHaveCount(0);
+      const layout=await page.locator('.chat-layout').boundingBox(),box=await page.locator('.chat-box').boundingBox();
+      assert.ok(layout&&box&&Math.abs(layout.width-box.width)<1);
+    }
+    await checkChatLayout();
     await page.locator('.composer-actions').getByLabel('选择模型').click();
     const search=page.getByRole('combobox',{name:'搜索模型'});
     await search.fill('company');
@@ -181,14 +185,16 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(composer).toHaveValue('第一行\nfixture');
     assert.equal(sends,0);
     await composer.press('Enter');
-    await expect(page.locator('.access-log')).toContainText('OpenCode · 503',{timeout:60000});
-    await expect(page.locator('.access-log')).toContainText('工作台 · 502');
+    await expect(page.getByRole('alert')).toContainText('HTTP 503',{timeout:60000});
     assert.equal(sends,1);
     const created=JSON.parse(await readFile(file+'.body','utf8'));
     assert.deepEqual(created.model,{id:'intranet',providerID:'company'});
     assert.equal(created.location.directory,await realpath(project));
     await page.getByRole('navigation').getByRole('button',{name:'日志排查',exact:true}).click();
     const submit=page.getByRole('button',{name:'开始排查'});
+    await checkChatLayout();
+    await expect(page.getByText('要排查哪次请求？')).toHaveCount(0);
+    await expect(page.locator('.chat-feed')).toHaveCount(0);
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
@@ -340,11 +346,6 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
     assert.deepEqual(requests,['/api/v1/chat/sessions/ses_logs_fixture/form']);
     await expect(feed).not.toContainText(code);
-    const access=await page.request.get(new URL('/api/v1/chat/access-log',page.url()).href);
-    assert.equal(access.status(),200);
-    const accessEntries=(await access.json()).data;
-    assert.ok(accessEntries.some((entry:{operation:string})=>entry.operation==='POST /api/v1/chat/sessions/:id/form'));
-    assert.ok(!JSON.stringify(accessEntries).includes(code));
     assert.ok(!(await readFile(file+'.prompt','utf8')).includes(code));
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
@@ -366,6 +367,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await history.getByRole('button',{name:/检查超时原因/}).click();
     await expect(appliedRange).toContainText(expectedRange);
     assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
+    assert.deepEqual(retiredRequests,[]);
   }finally{
     process.chdir(cwd);
     for(const key of Object.keys(process.env))if(!(key in saved))delete process.env[key];

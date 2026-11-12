@@ -41,3 +41,28 @@ export function readDraft(key:string):{text:string;files:string}{
   }catch{/* The composer is empty when there is no usable saved draft. */}
   return {text:'',files:''};
 }
+
+export function displayChatTitle(native?:string,cached?:string){
+  const title=native?.trim();
+  return title&&!/^Code Harness · (直接对话|日志排查)$/.test(title)?title:cached??'';
+}
+
+export function summarizeFirstInput(text='',logInspection=false){
+  if(logInspection){
+    const criteria=text.split(/^导入日志：|^请用当前项目可用的日志工具/m,1)[0];
+    const question=criteria.match(/^排查问题：([\s\S]*)/m)?.[1];
+    const keyword=criteria.match(/^关键字：(.+)$/m)?.[1],trace=criteria.match(/^Trace ID：(.+)$/m)?.[1];
+    if(question)text=question;
+    else if(keyword||trace)text='排查'+[keyword,trace].filter(Boolean).join(' · ');
+  }
+  const clean=text.trim().replace(/^(?:你好[，,！!。\s]+|您好[，,！!。\s]+|(?:hi|hello)[!,\s]+)+/i,'')
+    .replace(/((?:请(?:帮我)?|帮我|please))\s*\n\s*/gi,'$1 ');
+  const clauses=clean.split(/\n+|[。！？!?]+(?:\s|$)?|\.\s+|\.$/).map(line=>line.trim()).filter(Boolean);
+  const request=clauses.find(line=>/^(?:请|帮我|麻烦|希望|需求[：:]|目标[：:]|please\b|can you\b|could you\b)/i.test(line));
+  const main=request??clauses[0]??text.trim();
+  const title=main.replace(/^(?:请(?:问|你)?(?:帮我|协助我)?|麻烦(?:你)?(?:帮我)?|帮我|需求[：:]|目标[：:])\s*/,'')
+    .replace(/^(?:(?:can|could) you (?:please )?|please )([a-z])/i,(_,first:string)=>first.toUpperCase())
+    .replace(/\s+/g,' ').trim()||main;
+  const points=Array.from(title);
+  return points.length>48?points.slice(0,47).join('').trimEnd()+'…':title;
+}

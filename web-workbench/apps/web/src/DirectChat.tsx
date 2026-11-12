@@ -1,24 +1,24 @@
 import {lazy,Suspense,useEffect,useRef,useState,type ReactNode} from 'react';
 import {streamingMessages,useChatStream} from './chatStream.ts';
 import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
-import {activateChat,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
+import {activateChat,displayChatTitle,summarizeFirstInput,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
 import {ModelPicker} from './ModelPicker.tsx';
 import {ChatRequests} from './ChatRequests.tsx';
 import {api,ApiError} from './api/client.ts';
-import type {ChatStatus,ChatSettings,ChatAccessEntry,ChatModel,ChatStep} from '../../../packages/contracts/src/chat.ts';
+import type {ChatStatus,ChatSettings,ChatModel,ChatStep} from '../../../packages/contracts/src/chat.ts';
 
 const MarkdownBody=lazy(()=>import('./ChatMarkdown.tsx').then(module=>({default:module.ChatMarkdown})));
 function ChatMarkdown({text}:{text:string}){
   return <Suspense fallback={<p>{text}</p>}><MarkdownBody text={text}/></Suspense>;
 }
 function explain(e:unknown){
-  const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'请选择已配置的工作目录或其子目录。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
+  const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'该目录不在启动时配置的工作范围内。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
     SERVICE_UNAVAILABLE:'OpenCode 暂时无法响应，请检查内网服务地址和鉴权配置。',PERMISSION_CHANGED:'授权请求已改变，请查看最新请求。',CHAT_NOT_FOUND:'原会话不可用，请新建对话。'};
   Object.assign(labels,{
     ABSOLUTE_DIRECTORY_REQUIRED:'请输入项目文件夹的绝对路径。',DIRECTORY_NOT_FOUND:'工作台找不到这个文件夹，请检查路径。',
-    LOG_QUERY_SKILL_MISSING:'当前工作目录的 OpenCode 未加载自定义 Skill「log-query」。请选择已配置该 Skill 的内网项目目录后重试。',
+    LOG_QUERY_SKILL_MISSING:'当前工作目录的 OpenCode 未加载自定义 Skill「log-query」。请在启动时指定已配置该 Skill 的内网项目目录。',
     LOG_QUERY_SKILL_AMBIGUOUS:'当前目录有多个同名的 log-query，请在 OpenCode 中保留要用于排查的那一个后重试。',
-    LOG_QUERY_CATALOG_UNAVAILABLE:'无法读取当前工作目录的 OpenCode Skill 列表。请检查后台访问日志后重试。',
+    LOG_QUERY_CATALOG_UNAVAILABLE:'无法读取当前工作目录的 OpenCode Skill 列表。请检查 OpenCode 服务连接后重试。',
     CHAT_SCENARIO_MISMATCH:'这个会话属于其他场景，请在当前页新建对话。',
     FORM_CHANGED:'这个问题已更新或已经处理，请查看当前请求。',FORM_ANSWER_INVALID:'这份回答不符合问题要求，请检查后再提交。',FORM_SERVICE_UNAVAILABLE:'暂时无法读取待处理问题，请检查 OpenCode 连接。',
     CHAT_MODEL_UNAVAILABLE:'此模型当前未启用，请刷新模型列表后重新选择。',
@@ -38,21 +38,18 @@ function explain(e:unknown){
 type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void};
 export function DirectChat({investigation}:{investigation?:Investigation}={}){
   const [settings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
-  const [preferred,setPreferred]=useState(()=>localStorage.getItem('harness.chat.project')??'');
   useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live)configure(s);}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
   if(!settings)return <p role={error?'alert':'status'}>{error||'正在加载工作目录…'}</p>;
-  const directory=preferred||settings.directories[0]||'';
-  return <ChatWorkspace key={directory} directory={directory} settings={settings} investigation={investigation} onProject={path=>{
-    localStorage.setItem('harness.chat.project',path);setPreferred(path);
-  }}/>;
+  const directory=settings.directories[0]??'';
+  return <ChatWorkspace key={directory} directory={directory} settings={settings} investigation={investigation}/>;
 }
-function ChatWorkspace({investigation,directory,settings,onProject}:{
-  investigation?:Investigation;directory:string;settings:ChatSettings;onProject:(directory:string)=>void;
+function ChatWorkspace({investigation,directory,settings}:{
+  investigation?:Investigation;directory:string;settings:ChatSettings;
 }){
   const sessionKey:SceneKey=investigation?'harness.logs':'harness.chat';
-  const [editing,edit]=useState(false),[pathText,typePath]=useState('');
   const [chosen,setChosen]=useState<ChatModel>();
   const [id,select]=useState(()=>savedChat(localStorage,sessionStorage,sessionKey,directory));
+  const [cachedTitle,setCachedTitle]=useState(()=>readHistory(localStorage,sessionKey,directory).find(row=>row.id===id)?.title??'');
   const migrating=useRef(Boolean(id)&&!sessionStorage.getItem(sessionKey+'.scoped'));
   const [history,showHistory]=useState(false);
   const restoreContext=useRef(true),investigationRef=useRef(investigation);
@@ -71,6 +68,7 @@ function ChatWorkspace({investigation,directory,settings,onProject}:{
     showHistory(false);
     if(next===id)return;
     const saved=readDraft(draftKey(sessionKey,directory,next));
+    setCachedTitle(readHistory(localStorage,sessionKey,directory).find(row=>row.id===next)?.title??'');
     select(next);update(null);expand(undefined);write(saved.text);attach(saved.files);toggleFiles(Boolean(saved.files));
     setChosen(undefined);fail('');migrating.current=false;restoreContext.current=true;
     activateChat(localStorage,sessionStorage,sessionKey,directory,next);
@@ -88,36 +86,29 @@ function ChatWorkspace({investigation,directory,settings,onProject}:{
       if(value.active)interval=900;
       if(restoreContext.current){
         if(migrating.current&&value.directory!==directory){
-          // The legacy tab has one session ID for all projects. Compare canonical paths before assigning it.
-          const project=await api.chatProject(directory);
-          if(!live)return;
-          if(project.directory!==value.directory){
-            rememberChat(localStorage,sessionKey,value.directory,{id,title:titleFor(value.messages.find(m=>m.role==='user')?.text),updated:Date.now()});
-            switchTo('');return;
-          }
+          rememberChat(localStorage,sessionKey,value.directory,{id,title:displayChatTitle(value.title,summarizeFirstInput(value.messages.find(m=>m.role==='user')?.text,Boolean(investigationRef.current))),updated:Date.now()});
+          switchTo('');return;
         }
         migrating.current=false;restoreContext.current=false;
         const first=value.messages.find(m=>m.role==='user')?.text;
         const known=readHistory(localStorage,sessionKey,directory).find(row=>row.id===id);
-        if(!known||(!known.title&&first))rememberChat(localStorage,sessionKey,directory,{id,title:titleFor(first),updated:known?.updated??Date.now()});
+        const title=displayChatTitle(value.title,known?.title||summarizeFirstInput(first,Boolean(investigationRef.current)));
+        if(known?.title!==title)rememberChat(localStorage,sessionKey,directory,{id,title,updated:known?.updated??Date.now()});
+        setCachedTitle(title);
         activateChat(localStorage,sessionStorage,sessionKey,directory,id);
         const rangePrompt=value.messages.slice().reverse().find(m=>m.role==='user'&&/^时间范围（起点含、终点不含）：/m.test(m.text));
         investigationRef.current?.reset(id,rangePrompt?.text);
       }
       update(value);stream.prune.current(value.messages);
-    }catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,interval);}};
+    }catch(e){
+      if(!live)return;
+      if(migrating.current&&e instanceof ApiError&&e.code==='DIRECTORY_OUTSIDE_CHAT_ROOTS')switchTo('');
+      else fail(explain(e));
+    }finally{if(live)timer=setTimeout(poll,interval);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
   },[id,refresh,sessionKey,directory,expanded,stream.requestsVersion]);
   async function run(fn:()=>Promise<void>){if(busy)return false;wait(true);fail('');try{await fn();bump(n=>n+1);return true;}catch(e){fail(explain(e));return false;}finally{wait(false);}}
-  const current=directory;
-  const saveProject=()=>run(async()=>{
-    const saved=await api.chatProject(pathText.trim().replace(/^"(.*)"$/,'$1'));
-    edit(false);onProject(saved.directory);
-  });
-  function titleFor(text?:string){
-    const display=investigation?text?.match(/^排查问题：(.+)$/m)?.[1]||text?.match(/^(?:Trace ID|关键字)：(.+)$/m)?.[1]:text;
-    return display?.trim().replace(/\s+/g,' ').slice(0,80)||'';
-  }
+  const currentTitle=id?displayChatTitle(state?.id===id?state.title:undefined,cachedTitle):'';
   const input=useRef<HTMLTextAreaElement>(null);
   const pending=state?.id===id&&Boolean(state.forms?.length||state.permissions.length);
   useEffect(()=>{
@@ -126,7 +117,7 @@ function ChatWorkspace({investigation,directory,settings,onProject}:{
     document.title='等待你回应 · '+(investigation?'日志排查':'直接对话');
     return ()=>{document.title=title;};
   },[pending,Boolean(investigation)]);
-  const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy&&!editing);
+  const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy);
   async function selectModel(model:ChatModel|undefined){
     if(id&&model){
       await api.chatAction(id,'model',{id:model.id,providerID:model.providerID,variant:model.variant});
@@ -139,15 +130,18 @@ function ChatWorkspace({investigation,directory,settings,onProject}:{
     const text=investigation?investigation.prompt(draft.trim()):draft.trim();
     if(text.length>16000)throw Error('排查条件和问题合计过长，请缩短后再发送。');
     let session=id;
-    if(!session){const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,investigation?'log-inspection':undefined);session=s.id;
-      rememberChat(localStorage,sessionKey,directory,{id:session,title:titleFor(text),updated:Date.now()});
+    if(!session){
+      const title=draft.trim()?summarizeFirstInput(draft):summarizeFirstInput(text,Boolean(investigation));
+      const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,investigation?'log-inspection':undefined,title);
+      session=s.id;setCachedTitle(s.title||title);
+      rememberChat(localStorage,sessionKey,directory,{id:session,title:s.title||title,updated:Date.now()});
       activateChat(localStorage,sessionStorage,sessionKey,directory,session);
       restoreContext.current=false;sessionStorage.removeItem(composerKey);select(session);
     }
     await stream.connect(session);
     await api.chatAction(session,'messages',{text,scenario:investigation?'log-inspection':'direct-chat',files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
-    rememberChat(localStorage,sessionKey,directory,{id:session,title:prior?.title||titleFor(text),updated:Date.now()});
+    rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);write('');attach('');toggleFiles(false);
   });
   const feed=useRef<HTMLDivElement>(null),follow=useRef(true);
@@ -158,16 +152,17 @@ function ChatWorkspace({investigation,directory,settings,onProject}:{
   const messages=streamingMessages(state?.id===id?state.messages:[],stream.parts);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div><h1>{investigation?'日志排查':'直接对话'}</h1><p>{investigation?'使用项目的 log-query Skill 排查日志并继续追问。':'和 OpenCode 在同一工作目录里读代码、改文件，或继续上一轮讨论。'}</p></div>
-    <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy||editing} onClick={()=>showHistory(!history)}>历史对话</button>
-      {id&&<button className="secondary" disabled={busy||editing} onClick={()=>switchTo('')}>新建对话</button>}</div></div>
-    {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy||editing} onSelect={row=>{
+    <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
+      {id&&<button className="secondary" disabled={busy} onClick={()=>switchTo('')}>新建对话</button>}</div></div>
+    {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy} onSelect={row=>{
       rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
     }}/>}
     <div className="chat-layout"><div className="chat-box">
-      <div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
+      {currentTitle&&<h2 className="conversation-title">{currentTitle}</h2>}
+      {(!investigation||messages.length>0||stream.tools.length>0||state?.active)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
-      }}>{!messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>{investigation?'要排查哪次请求？':'想在这个目录里做什么？'}</h2>
-        {!investigation&&<button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button>}</div>}
+      }}>{!investigation&&!messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>想在这个目录里做什么？</h2>
+        <button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button></div>}
         {messages.map(m=><div key={m.id} className={'chat-turn '+m.role}><strong>{m.role==='user'?'你':'OpenCode'}</strong>
           {m.steps?.length?m.steps.map((step,i)=>{
             if(step.kind!=='thinking')return <ExecutionStep key={i} step={step}/>;
@@ -184,13 +179,13 @@ function ChatWorkspace({investigation,directory,settings,onProject}:{
         {stream.tools.length>0&&<section className="execution-note" aria-label="工具实时进度"><strong>工具实时进度</strong>
           {stream.tools.map(row=><div key={row.id}><time>{new Date(row.at).toLocaleTimeString()}</time> {row.text}</div>)}</section>}
         {state?.active&&!pending&&<small role="status">OpenCode 正在处理本轮请求…</small>}
-      </div>
+      </div>}
       {error&&<p role="alert" className="notice">{error}</p>}
       {pending&&state?<div className="composer request-composer">
-        <ChatRequests key={id} state={state} busy={busy||editing}
+        <ChatRequests key={id} state={state} busy={busy}
           onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
         {interrupt&&<div className="composer-actions">{interrupt}</div>}
-      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy||editing} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
+      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={3} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
@@ -198,41 +193,13 @@ function ChatWorkspace({investigation,directory,settings,onProject}:{
         }}/>
         {showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
         <div className="composer-actions">
-          <ModelPicker key={JSON.stringify([current,id])} value={id?state?.model:chosen} allowDefault={!id}
-            disabled={busy||editing||!settings||Boolean(pending)||Boolean(id&&!state)}
-            loadModels={()=>api.chatModels(current||undefined)} onSelect={selectModel} onApplied={()=>input.current?.focus()}/>
+          <ModelPicker key={JSON.stringify([directory,id])} value={id?state?.model:chosen} allowDefault={!id}
+            disabled={busy||!settings||Boolean(pending)||Boolean(id&&!state)}
+            loadModels={()=>api.chatModels(directory||undefined)} onSelect={selectModel} onApplied={()=>input.current?.focus()}/>
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {interrupt}
           <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
-      </div>}</div><aside className="context-box"><h2>工作目录</h2>
-        {editing?<form onSubmit={e=>{e.preventDefault();void saveProject();}}>
-          <label>项目文件夹路径<input autoFocus value={pathText} list="chat-projects" disabled={busy}
-            placeholder="例如 D:\projects\order-service" onChange={e=>typePath(e.target.value)}/></label>
-          <datalist id="chat-projects">{Array.from(new Set([directory,...(settings?.directories??[])])).filter(Boolean).map(d=><option key={d} value={d}/>)}</datalist>
-          {id&&<p>切换目录后，可在原目录的历史对话中继续此会话。</p>}
-          <button disabled={busy||!pathText.trim()}>使用此目录</button>
-          <button type="button" disabled={busy} onClick={()=>{edit(false);fail('');}}>取消</button>
-        </form>:<div><code className="project-path">{current??'加载中…'}</code>
-          <button disabled={busy||!settings} onClick={()=>{typePath(current??directory);edit(true);fail('');}}>更改工作目录</button></div>}
-        <h2>后台访问日志</h2><AccessLog/>
-        {state&&<p>{pending?'等待你回应':state.active?'正在执行':state.outcome==='failed'?'本轮执行失败':state.outcome==='interrupted'?'本轮已中断':'等待输入'}</p>}
-      </aside></div></section>;
-}
-
-function AccessLog(){
-  const [rows,setRows]=useState<ChatAccessEntry[]>([]),[error,fail]=useState('');
-  useEffect(()=>{
-    let live=true,timer:ReturnType<typeof setTimeout>;
-    const poll=async()=>{
-      try{const value=await api.chatAccess();if(live){setRows(value);fail('');}}
-      catch(e){if(live)fail(explain(e));}
-      finally{if(live)timer=setTimeout(poll,2500);}
-    };
-    void poll();return()=>{live=false;clearTimeout(timer);};
-  },[]);
-  return <div className="access-log">{error&&<p role="alert">{error}</p>}{!rows.length&&<p>等待访问记录…</p>}
-    {rows.map((row,i)=><div key={i}><strong>{row.source} · {row.result}</strong>
-      <code>{row.operation}</code><small>{new Date(row.time).toLocaleTimeString()} · {row.ms} ms · {row.requestId}</small></div>)}</div>;
+      </div>}</div></div></section>;
 }
 
 const toolStates:Record<string,string>={streaming:'正在准备调用',running:'执行中',completed:'已完成',error:'失败',exited:'已退出',timeout:'超时',killed:'已停止'};

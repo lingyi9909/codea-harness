@@ -221,7 +221,7 @@ export function WorkbenchApp() {
     {error?<><p role="alert">{error}</p><button onClick={reconnect}>重新连接</button></>:<p role="status">正在连接本地工作台…</p>}
   </div></main>;
   if(!bootstrap) return <div className="pair-page">
-    <div className="pair-card"><div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>本地研发工作台</small></div></div>
+    <div className="pair-card"><div className="brand"><span className="brand-icon">✧</span><div><strong>智能工作台</strong></div></div>
       <div className="eyebrow">LOCAL WORKBENCH</div><h1>连接工作台<span className="accent">.</span></h1>
       <p className="intro">输入 Windows 服务启动时显示的一次性配对码。此操作只连接本机服务，不启动 OpenCode。</p>
       {error&&<div className="alert" role="alert">{error}</div>}
@@ -234,7 +234,7 @@ export function WorkbenchApp() {
   </div>;
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><span className="brand-icon">✧</span><div><strong>Code Harness</strong><small>AI 研发工作台</small></div></div>
+      <div className="brand"><span className="brand-icon">✧</span><div><strong>智能工作台</strong></div></div>
       <nav aria-label="场景导航" className="scene-nav">{(Object.keys(scenes) as Scene[]).map(key=>
         <button key={key} className={'side-link '+(!selected&&scene===key?'selected':'')} onClick={()=>navigate(key)}>
           <span aria-hidden="true">{{home:'▦',chat:'✳',review:'⌘',logs:'≋',data:'▥'}[key]}</span>{scenes[key]}</button>)}</nav>

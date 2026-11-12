@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';
-import {readHistory,type HistoryRow,type SceneKey} from './chatHistory.ts';
+import {displayChatTitle,readHistory,type HistoryRow,type SceneKey} from './chatHistory.ts';
 import './chat-history.css';
 
 export function ChatHistoryPanel({scene,directory,active,disabled,onSelect}:{
@@ -25,9 +25,7 @@ export function ChatHistoryPanel({scene,directory,active,disabled,onSelect}:{
   const rows=new Map(local.map(row=>[row.id,row]));
   for(const row of remote){
     const known=rows.get(row.id);
-    const nativeTitle=row.title?.trim();
-    const meaningful=nativeTitle&&!/^Code Harness · (直接对话|日志排查)$/.test(nativeTitle);
-    rows.set(row.id,{id:row.id,title:meaningful?nativeTitle:known?.title||'',updated:Math.max(row.updated||0,known?.updated??0)});
+    rows.set(row.id,{id:row.id,title:displayChatTitle(row.title,known?.title),updated:Math.max(row.updated||0,known?.updated??0)});
   }
   const sorted=Array.from(rows.values()).sort((a,b)=>b.updated-a.updated);
   return <section className="conversation-history" aria-label="历史对话" id="conversation-history">
