@@ -42,6 +42,17 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       {id:'inactive',providerID:'corp',name:'Inactive',enabled:false}]}));
     if(path==='/api/info')return res.end(JSON.stringify({version:'2.0.27',pid:process.pid}));
     if(path==='/api/session'&&failure){res.statusCode=failure;return data({message:'sensitive upstream detail'});}
+    if(path==='/api/session'&&req.method==='GET'){
+      const query=new URL(req.url!,'http://localhost').searchParams;
+      assert.equal(query.get('directory'),root);
+      const item={id,title:'旧会话',location:{directory:root},time:{updated:17},metadata:{harnessOwner:'local-workbench',harnessScenario:'direct-chat'}};
+      const page=query.get('cursor')?[{...item,id:'ses_older'}]:[item,
+        {...item,id:'ses_other',metadata:{...item.metadata,harnessOwner:'other'}},
+        {...item,id:'ses_logs',metadata:{...item.metadata,harnessScenario:'log-inspection'}},
+        {...item,id:'ses_folder',location:{directory:join(root,'another')}},
+        {...item,id:'ses_tui',metadata:{}},{...item,id:'ses_child',parentID:id}];
+      return res.end(JSON.stringify({data:page,cursor:query.get('cursor')?{}:{next:'next-page'}}));
+    }
     if(path==='/api/session'){session={id,location:body.location,metadata:body.metadata};return data(session);}
     if(path===base)return data(session);
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
@@ -89,6 +100,13 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     assert.ok(!logs.body.includes('fixture-sensitive')&&!logs.body.includes(root)&&!logs.body.includes('sensitive upstream detail'));
     const create=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{}});
     assert.equal(create.statusCode,201,create.body);assert.equal(create.json().data.directory,root);
+    const history=(payload:object)=>app.inject({method:'POST',url:'/api/v1/chat/history',headers,payload});
+    const historyRequest={directory:root,scenario:'direct-chat'};
+    const firstPage=await history(historyRequest);
+    assert.equal(firstPage.statusCode,200,firstPage.body);
+    assert.deepEqual(firstPage.json().data,{items:[{id,title:'旧会话',updated:17}],next:'next-page'});
+    assert.deepEqual((await history({...historyRequest,cursor:'next-page'})).json().data,{items:[{id:'ses_older',title:'旧会话',updated:17}]});
+    assert.equal((await history({...historyRequest,directory:tmpdir()})).statusCode,403);
     const options=await app.inject({method:'POST',url:'/api/v1/chat/models',headers});
     assert.deepEqual(options.json().data,[{id:'corp-alias',name:'Private',providerID:'corp'}]);
     const model={providerID:'corp',id:'corp-alias'};
