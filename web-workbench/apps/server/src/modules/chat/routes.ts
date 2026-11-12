@@ -31,7 +31,12 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth){
       throw new Error('INVALID_OPENCODE_URL');
   }
   const native=endpoint?OpenCode.make({baseUrl:endpoint,headers:token?{authorization:token}:{},
-    fetch:(input,init)=>fetch(input,{...init,redirect:'error',signal:AbortSignal.timeout(25000)})}):null;
+    fetch:async(input,init)=>{
+      const response=await fetch(input,{...init,redirect:'manual',signal:AbortSignal.timeout(25000)});
+      if(response.ok)return response;
+      await response.body?.cancel();
+      throw new AuthProblem(502,'OPENCODE_HTTP_'+response.status);
+    }}):null;
   const client=()=>{if(!native)throw new AuthProblem(503,'OPENCODE_CHAT_NOT_CONFIGURED');return native;};
   async function directory(input:string){
     if(!isAbsolute(input))throw new AuthProblem(400,'ABSOLUTE_DIRECTORY_REQUIRED');
@@ -57,8 +62,21 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth){
   app.post<{Body:{directory:string}}>('/api/v1/chat/sessions',{schema:body({directory:property(4096)})},async(req,reply)=>{
     const {ownerId}=auth.mutation(req);
     const dir=await directory(req.body.directory);
+    if(endpoint){
+      const target=new URL(endpoint),host=new URL('http://'+req.headers.host);
+      if(target.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(target.hostname)&&target.port===host.port)
+        throw new AuthProblem(400,'OPENCODE_WORKBENCH_URL');
+    }
     const session=await client().session.create({location:{directory:dir},title:'Code Harness · 直接对话',
-      metadata:{harnessScenario:'direct-chat',harnessOwner:ownerId}});
+      metadata:{harnessScenario:'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
+        if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
+        if(error instanceof Error&&'reason' in error&&error.reason==='Transport'){
+          const timedOut=error.cause instanceof Error&&error.cause.name==='TimeoutError';
+          throw new AuthProblem(timedOut?504:502,timedOut?'OPENCODE_TIMEOUT':'OPENCODE_CONNECTION_FAILED');
+        }
+        throw new AuthProblem(502,'OPENCODE_SESSION_RESPONSE');
+      });
+    if(!session?.id||typeof session.location?.directory!=='string')throw new AuthProblem(502,'OPENCODE_SESSION_RESPONSE');
     if(resolve(session.location.directory)!==dir)throw new AuthProblem(409,'SESSION_DIRECTORY_CHANGED');
     return reply.code(201).send(wrap({id:session.id,directory:dir}));
   });
