@@ -15,6 +15,8 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     if(process.argv.slice(2).join(' ')!=='serve --service')process.exit(3);
     const server=require('node:http').createServer((req,res)=>{
       res.setHeader('Content-Type','application/json');
+      if(req.url.split('?')[0]==='/api/model')return res.end(JSON.stringify({data:[
+        {id:'intranet',providerID:'company',name:'Company fixture',enabled:true}]}));
       if(req.url==='/api/info')return res.end(JSON.stringify({pid:process.pid,version:'2.0.27'}));
       if(req.url==='/api/session'&&req.method==='POST'){
         req.setEncoding('utf8');let body='';
@@ -48,11 +50,15 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.getByRole('navigation').getByRole('button',{name:'直接对话',exact:true}).click();
     await expect(page.getByRole('heading',{name:'后台访问日志'})).toBeVisible();
     await expect(page.getByPlaceholder('输入绝对路径')).toHaveCount(0);
+    await page.getByRole('button',{name:'选择模型'}).click();
+    await page.getByLabel('OpenCode 模型').selectOption({label:'Company fixture · company/intranet'});
     await page.getByLabel('对话内容').fill('fixture-only');
     await page.getByRole('button',{name:'发送 ↑'}).click();
     await expect(page.locator('.access-log')).toContainText('OpenCode · 503',{timeout:60000});
     await expect(page.locator('.access-log')).toContainText('工作台 · 502');
-    assert.equal(JSON.parse(await readFile(file+'.body','utf8')).location.directory,await realpath(join(root,'chat-files')));
+    const created=JSON.parse(await readFile(file+'.body','utf8'));
+    assert.deepEqual(created.model,{id:'intranet',providerID:'company'});
+    assert.equal(created.location.directory,await realpath(join(root,'chat-files')));
   }finally{
     process.chdir(cwd);
     for(const key of Object.keys(process.env))if(!(key in saved))delete process.env[key];

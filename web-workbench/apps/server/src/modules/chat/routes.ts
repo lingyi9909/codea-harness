@@ -5,7 +5,7 @@ import { createHash,randomUUID } from 'node:crypto';
 import { delimiter,isAbsolute,relative,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { FastifyInstance } from 'fastify';
-import type { ChatMessage,ChatStatus } from '../../../../../packages/contracts/src/chat.ts';
+import type { ChatMessage,ChatStatus,ChatModel } from '../../../../../packages/contracts/src/chat.ts';
 import { AuthProblem,type LocalAuth } from '../../auth.ts';
 
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
@@ -47,11 +47,27 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
   app.get('/api/v1/chat/settings',async(req)=>{
     auth.session(req);return wrap({configured:true,directories:roots});
   });
-  app.post<{Body:{directory?:string}}>('/api/v1/chat/sessions',{schema:body({directory:property(4096)},[])},async(req,reply)=>{
-    const {ownerId}=auth.mutation(req);
+  async function project(input?:string){
     if(!configured.length)await mkdir(roots[0],{recursive:true});
-    const dir=await directory(req.body?.directory??roots[0]);
-    const session=await (await client()).session.create({location:{directory:dir},title:'Code Harness · 直接对话',
+    return directory(input??roots[0]);
+  }
+  async function models(dir:string):Promise<ChatModel[]>{
+    const result=await (await client()).model.list({location:{directory:dir}});
+    return result.data.filter(m=>m.enabled).map(({id,providerID,name})=>({id,providerID,name}));
+  }
+  app.post('/api/v1/chat/models',async req=>{
+    auth.mutation(req);
+    return wrap(await models(await project()));
+  });
+  type Selection={providerID:string;id:string};
+  app.post<{Body:{directory?:string;model?:Selection}}>('/api/v1/chat/sessions',{schema:body({
+    directory:property(4096),model:{type:'object',additionalProperties:false,required:['providerID','id'],
+      properties:{providerID:property(256),id:property(512)}}},[])},async(req,reply)=>{
+    const {ownerId}=auth.mutation(req);
+    const dir=await project(req.body?.directory),model=req.body?.model;
+    if(model&&!(await models(dir)).some(m=>m.providerID===model.providerID&&m.id===model.id))
+      throw new AuthProblem(409,'CHAT_MODEL_UNAVAILABLE');
+    const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title:'Code Harness · 直接对话',
       metadata:{harnessScenario:'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
         if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
         if(error instanceof Error&&'reason' in error&&error.reason==='Transport'){

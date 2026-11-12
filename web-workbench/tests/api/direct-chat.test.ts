@@ -21,6 +21,9 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     received.push({path,body});
     res.setHeader('content-type','application/json');
     const data=(value:unknown)=>res.end(JSON.stringify({data:value}));
+    if(path==='/api/model')return res.end(JSON.stringify({data:[
+      {id:'corp-alias',modelID:'vendor-model',name:'Private',providerID:'corp',enabled:true,headers:{authorization:'fixture-secret'}},
+      {id:'inactive',providerID:'corp',name:'Inactive',enabled:false}]}));
     if(path==='/api/info')return res.end(JSON.stringify({version:'2.0.27',pid:process.pid}));
     if(path==='/api/session'&&failure){res.statusCode=failure;return data({message:'sensitive upstream detail'});}
     if(path==='/api/session'){session={id,location:body.location,metadata:body.metadata};return data(session);}
@@ -63,6 +66,13 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     assert.ok(!logs.body.includes('fixture-sensitive')&&!logs.body.includes(root)&&!logs.body.includes('sensitive upstream detail'));
     const create=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{}});
     assert.equal(create.statusCode,201,create.body);assert.equal(create.json().data.directory,root);
+    const options=await app.inject({method:'POST',url:'/api/v1/chat/models',headers});
+    assert.deepEqual(options.json().data,[{id:'corp-alias',name:'Private',providerID:'corp'}]);
+    const model={providerID:'corp',id:'corp-alias'};
+    const createWith=(id:string)=>app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{model:{...model,id}}});
+    assert.equal((await createWith('inactive')).statusCode,409);
+    assert.equal((await createWith(model.id)).statusCode,201);
+    assert.deepEqual(received.filter(r=>r.path==='/api/session').at(-1)?.body.model,model);
     const url='/api/v1/chat/sessions/'+id;
     const post=(suffix:string,payload:object)=>app.inject({method:'POST',url:url+suffix,headers,payload});
     assert.equal((await post('/messages',{text:'阅读这个文件',files:['notes.txt']})).statusCode,202);

@@ -1,4 +1,4 @@
-import type { ChatStatus,ChatSettings,ChatAccessEntry } from '../../../../packages/contracts/src/chat.ts';
+import type { ChatStatus,ChatSettings,ChatAccessEntry,ChatModel } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
@@ -54,7 +54,8 @@ export class HarnessApi {
   }
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
   chatAccess(){return this.request<ChatAccessEntry[]>('/chat/access-log');}
-  newChat(directory?:string){return this.request<{id:string;directory:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory})});}
+  chatModels(){return this.request<ChatModel[]>('/chat/models',{method:'POST'});}
+  newChat(directory?:string,model?:Pick<ChatModel,'id'|'providerID'>){return this.request<{id:string;directory:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory,model})});}
   chat(id:string){return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id));}
   chatAction(id:string,action:'messages'|'permission'|'interrupt',body:object={}){
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
