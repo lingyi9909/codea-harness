@@ -13,6 +13,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   const id='ses_chat_fixture',per='per_fixture',base='/api/session/'+id;
   const received:Array<{path:string;body:Record<string,unknown>}>=[];
   let session:Record<string,unknown>={},pending=true;
+  let failure=0;
   const peer=createServer(async(req,res)=>{
     const path=new URL(req.url!,'http://localhost').pathname;
     let bytes='';for await(const chunk of req)bytes+=chunk;
@@ -20,6 +21,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     received.push({path,body});
     res.setHeader('content-type','application/json');
     const data=(value:unknown)=>res.end(JSON.stringify({data:value}));
+    if(path==='/api/session'&&failure){res.statusCode=failure;return data({message:'sensitive upstream detail'});}
     if(path==='/api/session'){session={id,location:body.location,metadata:body.metadata};return data(session);}
     if(path===base)return data(session);
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
@@ -42,6 +44,12 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     const host='127.0.0.1:4176',origin='http://'+host;
     const pair=await app.inject({method:'POST',url:'/api/v1/auth/session',headers:{host,origin},payload:{pairingCode:'fixture'}});
     const headers={host,origin,cookie:String(pair.headers['set-cookie']).split(';')[0],'x-csrf-token':pair.json().data.csrfToken};
+    for(failure of [401,403,404,503]){
+      const rejected=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{directory:root}});
+      assert.equal(rejected.json().error.code,'OPENCODE_HTTP_'+failure);
+      assert.ok(!rejected.body.includes('sensitive upstream detail'));
+    }
+    failure=0;
     const create=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,payload:{directory:root}});
     assert.equal(create.statusCode,201,create.body);assert.equal(create.json().data.directory,root);
     const url='/api/v1/chat/sessions/'+id;
