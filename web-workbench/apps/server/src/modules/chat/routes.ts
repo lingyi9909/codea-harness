@@ -1,3 +1,4 @@
+import {activity,activityPreview} from './activity.ts';
 import {registerAccess} from './access.ts';
 import {chatConnection} from './connection.ts';
 import { mkdir,realpath,stat } from 'node:fs/promises';
@@ -87,6 +88,32 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     if(resolve(session.location.directory)!==dir)throw new AuthProblem(409,'SESSION_DIRECTORY_CHANGED');
     return reply.code(201).send(wrap({id:session.id,directory:dir}));
   });
+  const streams=new Set<AbortController>();
+  app.addHook('preClose',async()=>{for(const stop of streams)stop.abort();});
+  app.get<{Params:Params}>('/api/v1/chat/sessions/:id/activity',async(req,reply)=>{
+    const session=auth.session(req),sessionID=req.params.id;
+    await owned(sessionID,session.ownerId);
+    const native=await client();
+    const stop=new AbortController(),raw=reply.raw;
+    reply.hijack();
+    raw.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store','x-accel-buffering':'no'});
+    raw.write('retry: 5000\n\n');
+    streams.add(stop);raw.once('close',()=>stop.abort());
+    const expiry=setTimeout(()=>stop.abort(),Math.max(1,session.expires-Date.now()));
+    const heartbeat=setInterval(()=>{if(!raw.write(': heartbeat\n\n'))stop.abort();},15000);
+    try{
+      for await(const event of native.event.subscribe({signal:stop.signal})){
+        if(stop.signal.aborted)break;
+        if(event.type!=='session.tool.progress'||event.data.sessionID!==sessionID)continue;
+        if(auth.session(req).csrf!==session.csrf)break;
+        const meta=event.data.metadata;
+        const label=[meta.title,meta.message,meta.status].find((v):v is string=>typeof v==='string'&&v.length>0);
+        const data={id:event.id,at:event.created,text:label?activityPreview(label,300):'工具报告了新的进度'};
+        if(!raw.write('data: '+JSON.stringify(data)+'\n\n'))break;
+      }
+    }catch{/* The message snapshot remains available if native event streaming is unavailable. */}
+    finally{streams.delete(stop);stop.abort();clearInterval(heartbeat);clearTimeout(expiry);if(!raw.destroyed)raw.end();}
+  });
   app.get<{Params:Params}>('/api/v1/chat/sessions/:id',async(req)=>{
     const {ownerId}=auth.session(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId);
@@ -95,8 +122,10 @@ export function registerChat(app:FastifyInstance,auth:LocalAuth,mayStart=false){
     const messages:ChatMessage[]=[];
     for(const m of page.data.slice().reverse()){
       if(m.type==='user')messages.push({id:m.id,role:'user',text:m.text,files:m.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
-      if(m.type==='assistant')messages.push({id:m.id,role:'assistant',
-        text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
+      const steps=activity(m);
+      if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',text:'',files:[],tools:[],steps});
+      if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length))messages.push({id:m.id,role:'assistant',
+        steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
         tools:m.content.flatMap(p=>p.type==='tool'?[{name:p.name,status:p.state.status}]:[]),
         files:m.snapshot?.files??[]});
     }

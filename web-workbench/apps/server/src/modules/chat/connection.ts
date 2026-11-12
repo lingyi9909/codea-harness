@@ -56,7 +56,7 @@ export function chatConnection(log:Log,mayStart:boolean){
       const begin=Date.now(),pathname=new URL(String(input)).pathname.slice(url.pathname.replace(/\/$/,'').length);
       const operation=(init?.method??'GET')+' '+pathname.replace(/(\/session\/)(?!active(?:\/|$))[^/]+/,'$1:id').replace(/(\/permission\/)[^/]+/,'$1:id');
       let response:Response;
-      try{response=await fetch(input,{...init,redirect:'manual',signal:AbortSignal.timeout(25000)});}
+      try{response=await fetch(input,{...init,redirect:'manual',signal:pathname==='/api/event'&&init?.signal?init.signal:AbortSignal.timeout(25000)});}
       catch(e){
         cached=undefined;
         const cause=e instanceof Error?e.cause:null;
