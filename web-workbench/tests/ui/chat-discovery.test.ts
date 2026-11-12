@@ -34,7 +34,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
         });return;
       }
       if(req.url.startsWith(logBase+'/message'))return res.end(JSON.stringify({cursor:{},data:[{type:'assistant',id:'assistant-log',content:[
-        {type:'text',text:'开始核对匹配行。'},{type:'reasoning',text:'private-marker'},
+        {type:'text',text:'开始核对匹配行。'},{type:'reasoning',text:'客户端可见的测试片段',state:{opaque:'private-marker'}},
         {type:'tool',name:'grep',state:{status:'completed',input:{pattern:'abc123'},content:[{type:'text',text:'命中第 2 行'}]}},
         {type:'text',text:'检查结束。'}]}]}));
       if(req.url===logBase+'/inbox'||req.url===logBase+'/permission')return res.end(JSON.stringify({data:[]}));
@@ -131,7 +131,12 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await feed.getByText('调用参数',{exact:true}).click();
     await expect(feed.locator('.execution-tool pre')).toContainText('abc123');
     await expect(feed).not.toContainText('cross-session-marker');
+    const thought=feed.getByRole('button',{name:/思考过程/});
+    await expect(thought).toBeVisible();
+    await expect(feed).not.toContainText('客户端可见的测试片段');
+    await thought.click();await expect(feed).toContainText('客户端可见的测试片段');
     await expect(feed).not.toContainText('private-marker');
+    await thought.click();await expect(feed).not.toContainText('客户端可见的测试片段');
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
     for(const value of ['A15','检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
     for(const value of ['wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));

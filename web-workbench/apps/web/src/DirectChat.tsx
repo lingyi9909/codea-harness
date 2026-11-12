@@ -31,16 +31,17 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
   const keyFor=(m:ChatModel)=>JSON.stringify([m.providerID,m.id]);
   const chosen=catalog?.find(m=>keyFor(m)===modelKey);
   const [id,select]=useState(()=>sessionStorage.getItem(sessionKey)??'');
+  const [expanded,expand]=useState<{session:string;message:string;part:number}>();
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(''),[refs,attach]=useState('');
   const [showFiles,toggleFiles]=useState(false),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
   useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live){configure(s);}}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
   useEffect(()=>{
     sessionStorage.setItem(sessionKey,id);if(!id)return;
     let live=true;let timer:ReturnType<typeof setTimeout>;
-    const poll=async()=>{let interval=1800;try{const value=await api.chat(id);if(value.active)interval=900;if(live)update(value);}
+    const poll=async()=>{let interval=1800;try{const value=await api.chat(id,expanded?.session===id?expanded:undefined);if(value.active)interval=900;if(live)update(value);}
       catch(e){if(live)fail(explain(e));}finally{if(live)timer=setTimeout(poll,interval);}};
     void poll();return()=>{live=false;clearTimeout(timer);};
-  },[id,refresh,sessionKey]);
+  },[id,refresh,sessionKey,expanded]);
   async function run(fn:()=>Promise<void>){if(busy)return;wait(true);fail('');try{await fn();bump(n=>n+1);}catch(e){fail(explain(e));}finally{wait(false);}}
   const directory=preferred||settings?.directories[0]||'';
   const current=id?state?.directory:directory;
@@ -77,7 +78,14 @@ export function DirectChat({investigation}:{investigation?:Investigation}={}){
       <div className="chat-feed" aria-live="polite">{!state?.messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>{investigation?'要排查哪次请求？':'想在这个目录里做什么？'}</h2>
         {!investigation&&<button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button>}</div>}
         {state?.messages.map(m=><div key={m.id} className={'chat-turn '+m.role}><strong>{m.role==='user'?'你':'OpenCode'}</strong>
-          {m.steps?.length?m.steps.map((step,i)=><ExecutionStep key={i} step={step}/>):<>{m.text&&<p>{m.text}</p>}{m.tools.map((t,i)=><small key={i}>{t.name} · {t.status}</small>)}</>}
+          {m.steps?.length?m.steps.map((step,i)=>{
+            if(step.kind!=='thinking')return <ExecutionStep key={i} step={step}/>;
+            const open=expanded?.session===id&&expanded.message===m.id&&expanded.part===i;
+            return <div className="thinking-step" key={i}><button type="button" aria-expanded={open} onClick={()=>
+              expand(open?undefined:{session:id,message:m.id,part:i})}>思考过程 {open?'▾':'▸'}</button>
+              <small>{step.complete?'已结束':state.active?'进行中':'已记录'}{step.at!=null&&step.ended!=null?' · '+Math.max(0,(step.ended-step.at)/1000).toFixed(1)+' 秒':''}</small>
+              {open&&<p>{step.text||(!step.hasText?'OpenCode 未提供可显示文本。':'正在读取…')}</p>}</div>;
+          }):<>{m.text&&<p>{m.text}</p>}{m.tools.map((t,i)=><small key={i}>{t.name} · {t.status}</small>)}</>}
           {m.files.length>0&&<small>{m.role==='user'?'引用文件':'涉及文件'} · {m.files.join('、')}</small>}</div>)}
         {id&&<LiveToolProgress key={id} id={id}/>}
         {state?.active&&<small role="status">{state.permissions.length?'等待工具授权':'OpenCode 正在处理本轮请求…'}</small>}
@@ -142,7 +150,7 @@ function AccessLog(){
 }
 
 const toolStates:Record<string,string>={streaming:'正在准备调用',running:'执行中',completed:'已完成',error:'失败',exited:'已退出',timeout:'超时',killed:'已停止'};
-function ExecutionStep({step}:{step:ChatStep}){
+function ExecutionStep({step}:{step:Exclude<ChatStep,{kind:'thinking'}>}){
   if(step.kind==='text')return <p>{step.text}</p>;
   const time=step.at?new Date(step.at).toLocaleTimeString():undefined;
   if(step.kind==='notice')return <div className="execution-note">{time&&<time>{time} </time>}{step.text}</div>;

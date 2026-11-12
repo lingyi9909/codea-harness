@@ -30,7 +30,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     if(path===base)return data(session);
     if(path===base+'/prompt')return data({id:'msg_1',sessionID:id});
     if(path===base+'/message')return res.end(JSON.stringify({cursor:{},data:[{id:'msg_2',type:'assistant',content:[
-      {type:'reasoning',text:'private reasoning'},{type:'text',text:'示例回执'},{type:'tool',name:'edit',state:{status:'completed',input:{path:'notes.txt',apiKey:'fixture-private-key'},content:[{type:'text',text:'文件已更新'}],metadata:{raw:'internal-only'}}}],snapshot:{files:['notes.txt']}}]}));
+      {type:'reasoning',text:'client-visible fixture note',state:{opaque:'private reasoning'}},{type:'text',text:'示例回执'},{type:'tool',name:'edit',state:{status:'completed',input:{path:'notes.txt',apiKey:'fixture-private-key'},content:[{type:'text',text:'文件已更新'}],metadata:{raw:'internal-only'}}}],snapshot:{files:['notes.txt']}}]}));
     if(path===base+'/inbox')return data([]);
     if(path==='/api/session/active')return data({});
     if(path===base+'/permission')return data(pending?[{id:per,sessionID:id,action:'edit',resources:['notes.txt']}]:[]);
@@ -89,10 +89,14 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     assert.deepEqual(view.json().data.messages[0].files,['notes.txt']);
     assert.deepEqual(view.json().data.messages[0].tools,[{name:'edit',status:'completed'}]);
     const steps=view.json().data.messages[0].steps;
-    assert.deepEqual(steps.map((s:{kind:string})=>s.kind),['text','tool']);
-    assert.match(steps[1].input,/notes.txt/);
-    assert.equal(steps[1].result,'文件已更新');
+    assert.deepEqual(steps.map((s:{kind:string})=>s.kind),['thinking','text','tool']);
+    assert.match(steps[2].input,/notes.txt/);
+    assert.equal(steps[2].result,'文件已更新');
     for(const secret of ['fixture-private-key','internal-only'])assert.ok(!view.body.includes(secret));
+    assert.ok(!view.body.includes('client-visible fixture note'));
+    const expanded=await app.inject({url:url+'?message=msg_2&part=0',headers});
+    assert.equal(expanded.json().data.messages[0].steps[0].text,'client-visible fixture note');
+    assert.ok(!expanded.body.includes('private reasoning'));
     const permission=view.json().data.permissions[0];
     const answer={requestId:per,revision:permission.revision,decision:'once'};
     assert.equal((await post('/permission',{...answer,revision:'stale'})).statusCode,409);
