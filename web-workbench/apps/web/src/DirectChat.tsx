@@ -166,7 +166,7 @@ function ChatWorkspace({investigation,directory,settings}:{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!messages.length&&!state?.active&&<div className="chat-empty"><span className="chat-symbol" aria-hidden="true">✳</span><h2>想在这个目录里做什么？</h2>
         <button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>阅读 README，梳理启动步骤 ↗</button></div>}
-        <ConversationTranscript key={id} messages={messages} progress={stream.tools} active={active}/>
+        <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
       </div>}
       {error&&<p role="alert" className="notice">{error}</p>}
       {pending&&state?<div className="composer request-composer">

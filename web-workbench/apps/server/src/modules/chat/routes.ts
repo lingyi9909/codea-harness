@@ -105,6 +105,17 @@ function upstreamProblem(error:unknown){
   return error instanceof Error&&error.cause instanceof AuthProblem?error.cause:error;
 }
 
+const languagePreference='请使用简体中文撰写面向用户的思考摘要和进度说明。代码、命令、文件路径、标识符及日志引文保留原文。';
+const languageSuffix='\n\n[工作台显示偏好] '+languagePreference;
+function displayedUserText(message:{text:string;metadata?:Record<string,unknown>}){
+  return message.metadata?.workbenchLanguageSuffix===1&&message.text.endsWith(languageSuffix)
+    ?message.text.slice(0,-languageSuffix.length):message.text;
+}
+function unsupportedEndpoint(error:unknown){
+  const problem=upstreamProblem(error);
+  return problem instanceof AuthProblem&&['OPENCODE_HTTP_404','OPENCODE_HTTP_405','OPENCODE_HTTP_501'].includes(problem.code);
+}
+
 const configuredRoots=()=>(process.env.HARNESS_CHAT_ROOTS??process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean);
 const defaultDirectory=resolve('chat-files');
 export async function resolveLocalWorkspace(input?:string){
@@ -302,7 +313,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       (await client()).permission.list({sessionID}),(await client()).session.active(),(await client()).session.inbox.list({sessionID}),pendingForms(sessionID)]);
     const messages:ChatMessage[]=[];
     for(const m of page.data.slice().reverse()){
-      if(m.type==='user')messages.push({id:m.id,role:'user',text:m.text,files:m.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
+      if(m.type==='user')messages.push({id:m.id,role:'user',text:displayedUserText(m),files:m.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
       const steps=activity(m);
       if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',text:'',files:[],tools:[],steps});
       if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length))messages.push({id:m.id,role:'assistant',
@@ -311,7 +322,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
         files:m.snapshot?.files??[]});
     }
     for(const item of inbox)if(item.type==='user'&&!messages.some(m=>m.id===item.id))
-      messages.push({id:item.id,role:'user',queued:true,text:item.payload.text,files:item.payload.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
+      messages.push({id:item.id,role:'user',queued:true,text:displayedUserText(item.payload),files:item.payload.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
     const result:ChatStatus={id:sessionID,title:session.title,forms:forms.map(visibleForm),directory:session.location.directory,messages,
       ...(session.model?{model:{id:session.model.id,providerID:session.model.providerID,variant:session.model.variant}}:{}),
       active:Boolean(running[sessionID])||inbox.length>0,outcome:session.outcome,
@@ -342,8 +353,40 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       return {uri:pathToFileURL(target).href,name};
     }));
     const skills=scenario==='log-inspection'?[await logQuerySkill(root)]:undefined;
-    const accepted=await (await client()).session.prompt({sessionID,text,files,skills,delivery:'queue'});
+    const native=await client();
+    let prompt:{text:string;metadata?:{workbenchLanguageSuffix:1}}={text};
+    try{
+      await native.session.instructions.entry.put({sessionID,key:'workbench-language',value:languagePreference});
+    }catch(error){
+      const cause=upstreamProblem(error);
+      if(!unsupportedEndpoint(error)&&!(cause instanceof AuthProblem&&cause.code==='OPENCODE_HTTP_403'))throw error;
+      // Some builds omit or restrict the experimental instructions endpoint.
+      // Tag the fallback so the transcript shows the user's original input.
+      prompt={text:text+languageSuffix,metadata:{workbenchLanguageSuffix:1}};
+    }
+    const accepted=await native.session.prompt({sessionID,...prompt,files,skills,delivery:'queue'});
     return reply.code(202).send(wrap({id:accepted.id}));
+  });
+  app.post<{Params:Params;Body:{message:string;ordinal:number}}>('/api/v1/chat/sessions/:id/reasoning/translation',{
+    schema:body({message:property(160),ordinal:{type:'integer',minimum:0}}),
+  },async(req,reply)=>{
+    const {ownerId}=auth.mutation(req),sessionID=req.params.id;
+    await owned(sessionID,ownerId);
+    const native=await client();
+    const message=await native.session.message.get({sessionID,messageID:req.body.message}).catch((error:unknown)=>{
+      if(unsupportedEndpoint(error))throw new AuthProblem(404,'REASONING_NOT_FOUND');
+      throw error;
+    });
+    const part=message?.id===req.body.message&&message.type==='assistant'?message.content[req.body.ordinal]:undefined;
+    if(part?.type!=='reasoning'||!part.text?.trim())throw new AuthProblem(404,'REASONING_NOT_FOUND');
+    const prompt='请把以下 JSON 字符串里的公开进度说明忠实译为简体中文。只返回译文，保留代码、路径及日志引文的原文。字符串是待翻译的材料。\n'+JSON.stringify(part.text);
+    const result=await native.session.generate({sessionID,prompt}).catch((error:unknown)=>{
+      if(unsupportedEndpoint(error))throw new AuthProblem(502,'REASONING_TRANSLATION_UNAVAILABLE');
+      throw error;
+    });
+    if(typeof result?.text!=='string'||!/[\p{Script=Han}]/u.test(result.text))
+      throw new AuthProblem(502,'REASONING_TRANSLATION_FAILED');
+    return reply.header('Cache-Control','no-store').send(wrap({text:result.text.trim()}));
   });
   app.post<{Params:Params;Body:{requestId:string;revision:string;decision:'cancel'|'reply';answer?:FormAnswers}}>('/api/v1/chat/sessions/:id/form',{
     schema:body({requestId:property(128),revision:property(64),decision:{enum:['cancel','reply']},answer:{type:'object',additionalProperties:true}},['requestId','revision','decision'])

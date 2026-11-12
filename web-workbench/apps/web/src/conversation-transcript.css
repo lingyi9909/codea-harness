@@ -81,6 +81,18 @@
   --chat-muted: #625473;
 }
 .reasoning-part + .reasoning-part { margin-top: 6px; }
+.reasoning-translate {
+  margin: 4px 8px 0 0;
+  padding: 2px 6px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #c8b8dd;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.reasoning-translate:hover { background: #e7dbf5; }
+.reasoning-translate:disabled { cursor: wait; }
 .turn-process summary .process-issue { color: var(--chat-error); }
 .turn-process summary [role="status"] { color: var(--chat-accent); }
 .process-chevron { font: 18px/1 system-ui, sans-serif; }
