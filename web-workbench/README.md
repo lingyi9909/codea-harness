@@ -34,7 +34,7 @@ The worker records control sends before contacting the native service. An uncert
 
 首页提供直接对话、代码审查、日志排查和数据分析。日志排查支持按时间区间和 Trace ID 或关键字查询，通过独立的 OpenCode 会话排查和追问。可导入 UTF-8 日志并预览按时间、级别和文本筛选的行；点击开始排查时发送匹配摘录。没有导入文件时由当前项目可用的日志工具提供数据。数据页在浏览器本地读取 CSV，按列统计数值。
 
-Windows 离线包解压后运行 `start-chat.cmd`，在浏览器配对并进入“直接对话”。第一次发送消息时，工作台通过官方客户端发现同一用户已注册的 OpenCode 2.x 后台，并使用注册的认证信息。离线包在发现失败时尝试使用已安装的 `opencode serve --service` 启动后台。公司版本需要支持这个服务协议。已有部署仍可使用服务端的 `HARNESS_OPENCODE_URL` 和 `HARNESS_OPENCODE_AUTHORIZATION`。
+Windows 离线包解压后运行 `start-chat.cmd`，打开本机工作台地址即可进入“直接对话”。第一次发送消息时，工作台通过官方客户端发现同一用户已注册的 OpenCode 2.x 后台，并使用注册的认证信息。离线包在发现失败时尝试使用已安装的 `opencode serve --service` 启动后台。公司版本需要支持这个服务协议。已有部署仍可使用服务端的 `HARNESS_OPENCODE_URL` 和 `HARNESS_OPENCODE_AUTHORIZATION`。
 
 相对路径和引用文件默认位于启动包的 `chat-files` 子目录。已有配置优先使用 `HARNESS_CHAT_ROOTS` 或 `HARNESS_REPOSITORY_ROOTS` 的首个目录。OpenCode 继续执行公司的文件权限策略。可把测试文件放入该目录，让 OpenCode 读取或修改。
 
@@ -59,3 +59,5 @@ Windows 离线包解压后运行 `start-chat.cmd`，在浏览器配对并进入�
 助手回复与思考文本支持 Markdown 标题、引用、表格、任务列表和代码块。排版样式取自 [OpenCode Desktop v2.2.7](https://github.com/anomalyco/opencode/blob/v2.2.7/packages/session-ui/src/components/markdown.css)，React 渲染层适配本工作台，代码高亮及样式随网页离线分发。
 
 日志排查绑定当前项目加载的自定义 Skill `log-query`。工作台按名称定位它，并在首轮及每次追问的 OpenCode prompt 的 `skills` 字段指定实际 ID。该 Skill 由内网项目提供。缺失、同名冲突或目录查询失败会保留用户输入并提示原因。
+
+使用打包版的本机启动脚本时，浏览器自动建立本机会话。日志排查中的验证码由内网业务发起，填写后提交给发起提问的 OpenCode 表单。

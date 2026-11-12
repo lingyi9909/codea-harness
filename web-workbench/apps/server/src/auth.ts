@@ -49,8 +49,21 @@ export class LocalAuth {
     if(this.paired||now-this.createdAt>300000||!safeEqual(hash(provided),this.pairingHash))
       throw new AuthProblem(401,'PAIRING_INVALID');
     this.paired=true;
+    return this.issue(reply,ownerId);
+  }
+  openLocal(req:FastifyRequest,reply:FastifyReply,ownerId:string):Session{
+    if(!this.origin(req)||req.headers.origin!=='http://'+req.headers.host)
+      throw new AuthProblem(403,'ORIGIN_INVALID');
+    try{return this.session(req);}catch(e){
+      if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
+    }
+    const now=Date.now();
+    for(const [key,session] of this.sessions)if(session.expires<=now)this.sessions.delete(key);
+    return this.issue(reply,ownerId);
+  }
+  private issue(reply:FastifyReply,ownerId:string):Session{
     const token=randomBytes(32).toString('base64url');
-    const session={ownerId,csrf:randomBytes(32).toString('base64url'),expires:now+43200000};
+    const session={ownerId,csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
     this.sessions.set(hash(token).toString('hex'),session);
     reply.header('Set-Cookie',COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
     return session;

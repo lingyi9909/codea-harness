@@ -1,9 +1,9 @@
-import {useId,useState} from 'react';
+import {useId,useRef,useState} from 'react';
 import type {FormEvent} from 'react';
 import {activeFormFields,formDefaults,type ChatForm,type ChatFormField,type ChatStatus,type FormValue} from '../../../packages/contracts/src/chat.ts';
 import './chat-requests.css';
 
-type RequestAction=(kind:'permission'|'form',payload:Record<string,unknown>)=>void;
+type RequestAction=(kind:'permission'|'form',payload:Record<string,unknown>)=>Promise<boolean>;
 export function ChatRequests({state,busy,onAction}:{state:ChatStatus;busy:boolean;onAction:RequestAction}){
   const forms=state.forms??[];
   if(!forms.length&&!state.permissions.length)return null;
@@ -20,8 +20,15 @@ export function ChatRequests({state,busy,onAction}:{state:ChatStatus;busy:boolea
 function RequestForm({form,busy,onAction}:{form:ChatForm;busy:boolean;onAction:RequestAction}){
   const [answers,setAnswers]=useState(()=>formDefaults(form));
   const [message,setMessage]=useState('');
+  const sending=useRef(false),[submitted,setSubmitted]=useState(false);
   const fields=activeFormFields(form,answers).filter(f=>!f.hidden);
   const identity={requestId:form.id,revision:form.revision};
+  async function respond(payload:Record<string,unknown>){
+    if(busy||sending.current)return;
+    sending.current=true;
+    if(await onAction('form',{...identity,...payload}))setSubmitted(true);
+    else sending.current=false;
+  }
   const submit=(event:FormEvent)=>{
     event.preventDefault();
     if(busy)return;
@@ -33,10 +40,12 @@ function RequestForm({form,busy,onAction}:{form:ChatForm;busy:boolean;onAction:R
       }
     }
     const answer=Object.fromEntries(fields.filter(f=>Object.hasOwn(answers,f.key)).map(f=>[f.key,answers[f.key]]));
-    onAction('form',{...identity,decision:'reply',answer});
+    void respond({decision:'reply',answer});
   };
-  return <form aria-label={form.title} className="request-item" onSubmit={submit}><strong>{form.title}</strong>
-    <fieldset className="request-fields" disabled={busy}>{fields.map(field=>
+  return <form aria-label={form.title} className="request-item" autoComplete="off" onSubmit={submit} onKeyDown={event=>{
+    if(event.key==='Enter'&&(event.repeat||event.nativeEvent.isComposing||event.nativeEvent.keyCode===229))event.preventDefault();
+  }}><strong>{form.title}</strong>
+    <fieldset className="request-fields" disabled={busy||submitted}>{fields.map(field=>
       <Field key={field.key} field={field} value={Object.hasOwn(answers,field.key)?answers[field.key]:undefined}
         change={value=>{setMessage('');setAnswers(previous=>{
           const next={...previous};
@@ -44,8 +53,8 @@ function RequestForm({form,busy,onAction}:{form:ChatForm;busy:boolean;onAction:R
           return next;
         });}}/>)}</fieldset>
     {message&&<p role="alert">{message}</p>}
-    <div className="request-actions"><button type="submit" disabled={busy}>提交回答</button>
-      <button type="button" disabled={busy} onClick={()=>onAction('form',{...identity,decision:'cancel'})}>取消请求</button></div>
+    <div className="request-actions"><button type="submit" disabled={busy||submitted}>{submitted?'已处理':'提交回答'}</button>
+      <button type="button" disabled={busy||submitted} onClick={()=>void respond({decision:'cancel'})}>取消请求</button></div>
   </form>;
 }
 function Field({field,value,change}:{field:ChatFormField;value?:FormValue;change:(v?:FormValue)=>void}){
@@ -56,7 +65,7 @@ function Field({field,value,change}:{field:ChatFormField;value?:FormValue;change
     {field.url?<a href={field.url} target="_blank" rel="noopener noreferrer">打开外部页面 ↗</a>:<span>外部页面链接不可用</span>}
     <label><input type="checkbox" required checked={value===true} onChange={e=>change(e.target.checked||undefined)}/>我已完成此步骤</label></div>;
   if(field.type==='multiselect')return <MultiChoice field={field} title={title} values={Array.isArray(value)?value:[]} change={change}/>;
-  if(field.type==='string'&&field.options?.length&&field.options.length<=6)
+  if(field.type==='string'&&field.options?.length&&field.options.length<=6&&!field.custom)
     return <SingleChoice field={field} title={title} value={typeof value==='string'?value:undefined} change={change}/>;
   let control;
   if(field.type==='boolean'){
@@ -73,26 +82,21 @@ function Field({field,value,change}:{field:ChatFormField;value?:FormValue;change
     }else{
       const kind=field.format==='uri'?'url':field.format==='date-time'?'text':field.format??'text';
       control=<><input {...input} type={kind} value={typeof value==='string'?value:''} placeholder={field.placeholder??(field.format==='date-time'?'2026-01-01T12:00:00+08:00':undefined)}
-        minLength={field.minLength} maxLength={field.maxLength} pattern={field.pattern} onChange={e=>change(e.target.value)}
-        list={field.options?.length?id+'-choices':undefined}/>
-        {field.options?.length?<datalist id={id+'-choices'}>{field.options.map(o=><option value={o.value} key={o.value}>{o.label}</option>)}</datalist>:null}</>;
+        minLength={field.minLength} maxLength={field.maxLength} pattern={field.pattern} onChange={e=>change(e.target.value||(field.options?.length?undefined:''))}/>
+        {field.options?.length?<details className="answer-options"><summary>可选回答</summary>
+          {field.options.map(o=><button key={o.value} type="button" onClick={()=>change(o.value)}>{o.label}{o.description&&<small>{o.description}</small>}</button>)}
+        </details>:null}</>;
     }
   }
   return <div><label htmlFor={id}>{title}</label>{description}{control}</div>;
 }
 function SingleChoice({field,title,value,change}:{field:Extract<ChatFormField,{type:'string'}>;title:string;value?:string;change:(v?:string)=>void}){
   const name=useId(),options=field.options??[];
-  const [custom,setCustom]=useState(value!==undefined&&!options.some(o=>o.value===value));
-  const [draft,setDraft]=useState(custom?value??'':'');
   return <fieldset className="request-radio-group"><legend>{title}</legend>{field.description&&<small>{field.description}</small>}
     {options.map(o=><label key={o.value} className="request-radio"><input type="radio" name={name} required={field.required}
-      checked={!custom&&value===o.value} onChange={()=>{setCustom(false);change(o.value);}}/>
+      checked={value===o.value} onChange={()=>change(o.value)}/>
       <span>{o.label}{o.description&&<small>{o.description}</small>}</span></label>)}
-    {field.custom&&<><label className="request-radio"><input type="radio" name={name} required={field.required} checked={custom}
-      onChange={()=>{setCustom(true);change(draft||undefined);}}/>其他回答</label>
-      {custom&&<input aria-label={title+' · 其他回答'} required={field.required} value={draft} minLength={field.minLength} maxLength={field.maxLength}
-        placeholder={field.placeholder} onChange={e=>{setDraft(e.target.value);change(e.target.value||undefined);}}/>}</>}
-    {!field.required&&(custom||value!==undefined)&&<button type="button" onClick={()=>{setCustom(false);change(undefined);}}>清除选择</button>}
+    {!field.required&&value!==undefined&&<button type="button" onClick={()=>change(undefined)}>清除选择</button>}
   </fieldset>;
 }
 function MultiChoice({field,title,values,change}:{field:Extract<ChatFormField,{type:'multiselect'}>;title:string;values:string[];change:(v:string[])=>void}){

@@ -21,7 +21,7 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{localOnly?:boolean;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -68,6 +68,14 @@ export async function createApp(opts:{autoOpenCode?:boolean;pool?:Pool;auth:Loca
     };
     return reply.status(health.status==='READY'?200:503).send(result(health));
   });
+  const localSession=opts.localOnly===true&&!opts.pool;
+  if(localSession){
+    app.post('/api/v1/auth/local-session',async(req,reply)=>{
+      const owner={id:'local-workbench',name:'Local Developer'};
+      const session=opts.auth.openLocal(req,reply,owner.id);
+      return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,owner)));
+    });
+  }
   app.post<{Body:{pairingCode:string}}>('/api/v1/auth/session',{schema:{
     body:{type:'object',additionalProperties:false,required:['pairingCode'],
       properties:{pairingCode:{type:'string',minLength:1,maxLength:256}}},
@@ -80,7 +88,12 @@ export async function createApp(opts:{autoOpenCode?:boolean;pool?:Pool;auth:Loca
     opts.auth.logout(req,reply);return reply.status(204).send();
   });
   app.get('/api/v1/bootstrap',async(req,reply)=>{
-    const session=opts.auth.session(req);
+    let session;
+    try{session=opts.auth.session(req);}catch(e){
+      if(localSession&&e instanceof AuthProblem&&e.code==='AUTH_REQUIRED')
+        throw new AuthProblem(401,'LOCAL_SESSION_REQUIRED');
+      throw e;
+    }
     const owner=opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:'Local Developer'};
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
