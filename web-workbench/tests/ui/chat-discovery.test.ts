@@ -10,10 +10,12 @@ import {LocalAuth} from '../../apps/server/src/auth.ts';
 it('browser sends without a directory, starts installed CLI fixture and shows upstream failure',{timeout:90000},async()=>{
   const root=await mkdtemp(join(tmpdir(),'harness cli ')),file=join(root,'service.json');
   const win=process.platform==='win32',cli=join(root,win?'opencode.cmd':'opencode'),script=join(root,'fixture.cjs');
+  const diagnosis=['## 排查结果','', '| 服务 | 耗时 |','| --- | ---: |','| 订单 | 120 ms |','',
+    '> 已按 Trace ID 对齐。','','~~~json','{"count":2}','~~~','','- [x] 已核实时间区间'].join('\n');
   await writeFile(script,`
     const fs=require('node:fs');
     if(process.argv.slice(2).join(' ')!=='serve --service')process.exit(3);
-    let output,generated=false;
+    let output,generated=false,answered=false,permitted=false;
     const flag=process.env.HARNESS_OPENCODE_SERVICE_FILE;
     const until=async(name)=>{while(!fs.existsSync(flag+name))await new Promise(r=>setTimeout(r,20));};
     async function streamReply(){
@@ -38,7 +40,8 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     const server=require('node:http').createServer((req,res)=>{
       res.setHeader('Content-Type','application/json');
       if(req.url.split('?')[0]==='/api/model')return res.end(JSON.stringify({data:[
-        {id:'intranet',providerID:'company',name:'Company fixture',enabled:true}]}));
+        {id:'intranet',providerID:'company',name:'Company fixture',enabled:true},
+        {id:'analysis',providerID:'labs',name:'Analysis fixture',enabled:true,limit:{context:200000},variants:[{id:'high',headers:{token:'private-marker'}}]}]}));
       if(req.url==='/api/info')return res.end(JSON.stringify({pid:process.pid,version:'2.0.27'}));
       if(req.url==='/api/event'){
         res.setHeader('Content-Type','text/event-stream');res.flushHeaders();
@@ -49,6 +52,19 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
         return;
       }
       if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
+      const save=(suffix,done)=>{let body='';req.on('data',s=>body+=s);req.on('end',()=>{
+        fs.writeFileSync(flag+suffix,body);done(JSON.parse(body));res.writeHead(204);res.end();});};
+      if(req.url===logBase+'/model')return save('.model',body=>{logSession.model=body.model;});
+      if(req.url===logBase+'/form')return res.end(JSON.stringify({data:!answered&&fs.existsSync(flag+'.ask')?[
+        {id:'frm_trace',sessionID:'ses_logs_fixture',title:'选择排查范围',fields:[
+          {key:'scope',title:'检查哪些记录？',type:'string',required:true,options:[
+            {value:'trace',label:'当前 Trace',description:'只检查本次请求关联的日志'},
+            {value:'service',label:'整个服务',description:'检查时间段内同服务的所有请求'}]},
+          {key:'service',title:'服务名称',type:'string',required:true}]}]:[]}));
+      if(req.url===logBase+'/form/frm_trace/reply')return save('.answer',()=>{answered=true;});
+      if(req.url===logBase+'/permission')return res.end(JSON.stringify({data:answered&&!permitted?[
+        {id:'per_trace',sessionID:'ses_logs_fixture',action:'read',resources:['logs/orders.log']}]:[]}));
+      if(req.url===logBase+'/permission/per_trace/reply')return save('.permission',()=>{permitted=true;});
       if(req.url===logBase+'/prompt'){
         req.setEncoding('utf8');let body='';req.on('data',s=>body+=s);req.on('end',()=>{
           if(!fs.existsSync(flag+'.prompt'))void streamReply();
@@ -60,8 +76,8 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
         {type:'reasoning',text:'先核对时间线'},{type:'text',text:'已找到两条记录'}]}]:[]),{type:'assistant',id:'assistant-log',content:[
         {type:'text',text:'开始核对匹配行。'},{type:'reasoning',text:'客户端可见的测试片段',state:{opaque:'private-marker'}},
         {type:'tool',name:'grep',state:{status:'completed',input:{pattern:'abc123'},content:[{type:'text',text:'命中第 2 行'}]}},
-        {type:'text',text:'检查结束。'}]}]}));
-      if(req.url===logBase+'/inbox'||req.url===logBase+'/permission')return res.end(JSON.stringify({data:[]}));
+        {type:'text',text:'检查结束。'},{type:'text',text:${JSON.stringify(diagnosis)}}]}]}));
+      if(req.url===logBase+'/inbox')return res.end(JSON.stringify({data:[]}));
       if(req.url==='/api/session/active')return res.end(JSON.stringify({data:{}}));
       if(req.url==='/api/session'&&req.method==='POST'){
         req.setEncoding('utf8');let body='';
@@ -78,7 +94,7 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     });
     server.listen(0,'127.0.0.1',()=>fs.writeFileSync(process.env.HARNESS_OPENCODE_SERVICE_FILE,
       JSON.stringify({url:'http://127.0.0.1:'+server.address().port,pid:process.pid,version:'2.0.27'})));
-    setTimeout(()=>process.exit(0),25000);
+    setTimeout(()=>process.exit(0),90000);
   `);
   await writeFile(cli,win?'@echo off\r\n"'+process.execPath+'" "%~dp0fixture.cjs" %*\r\n':'#!/bin/sh\nexec "'+process.execPath+'" "'+script+'" "$@"\n');
   await chmod(cli,0o755);
@@ -90,6 +106,10 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
   delete process.env.HARNESS_CHAT_ROOTS;delete process.env.HARNESS_REPOSITORY_ROOTS;delete process.env.HARNESS_OPENCODE_URL;
   const port=31881;
   const app=await createApp({auth:new LocalAuth('pair-fixture',port),autoOpenCode:true});
+  async function recorded(suffix:string){
+    const text=await readFile(file+suffix,'utf8').catch((e:NodeJS.ErrnoException)=>{if(e.code!=='ENOENT')throw e;return '';});
+    return text?JSON.parse(text):{};
+  }
   try{
     await app.listen({host:'127.0.0.1',port});
     const page=await browser.newPage();
@@ -111,7 +131,11 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await page.reload();
     await expect(page.locator('.project-path')).toHaveText(await realpath(project));
     await page.locator('.composer-actions').getByLabel('选择模型').click();
-    await page.getByLabel('OpenCode 模型').selectOption({label:'Company fixture · company/intranet'});
+    const search=page.getByRole('combobox',{name:'搜索模型'});
+    await search.fill('company');
+    await expect(page.getByRole('option',{name:/Analysis fixture/})).toHaveCount(0);
+    await expect(page.getByRole('option',{name:/Company fixture/})).toBeVisible();
+    await search.press('Enter');
     const composer=page.getByLabel('对话内容');
     await composer.fill('第一行');
     await composer.press('Shift+Enter');
@@ -135,6 +159,10 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     const submit=page.getByRole('button',{name:'开始排查'});
     await expect(submit).toBeDisabled();
     await page.getByLabel('请求入参').fill('{"order":"A15"}');
+    const quarter=page.getByRole('button',{name:'最近 15 分钟'});
+    await quarter.click();
+    await expect(quarter).toHaveAttribute('aria-pressed','true');
+    await expect(page.locator('.range-footer')).toContainText('15 分钟');
     await page.getByLabel('开始时间').fill('2026-11-12T10:00');
     await page.getByLabel('结束时间').fill('2026-11-12T11:00');
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
@@ -172,6 +200,29 @@ it('browser sends without a directory, starts installed CLI fixture and shows up
     await expect(feed.getByText('已找到两条记录',{exact:true})).toBeVisible();
     await page.reload();
     await expect(feed.getByText('已找到两条记录',{exact:true})).toHaveCount(1);
+    await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
+    await expect(feed.getByRole('cell',{name:'120 ms'})).toBeVisible();
+    await expect(feed.locator('pre code.language-json')).toContainText('"count"');
+    await page.getByRole('button',{name:'选择模型'}).click();
+    await page.getByRole('combobox',{name:'搜索模型'}).fill('analysis');
+    await page.getByRole('option',{name:/Analysis fixture/}).click();
+    await page.getByRole('combobox',{name:'模型变体'}).selectOption('high');
+    await page.getByRole('button',{name:'使用此模型'}).click();
+    await expect.poll(async()=>(await recorded('.model')).model).toEqual({id:'analysis',providerID:'labs',variant:'high'});
+    await writeFile(file+'.ask','1');
+    await expect(page.getByText('选择排查范围',{exact:true})).toBeVisible();
+    await page.getByRole('radio',{name:/当前 Trace/}).check();
+    await page.getByLabel('服务名称',{exact:false}).fill('orders');
+    await page.getByLabel('对话内容').fill('保存这份草稿');
+    await expect(page.getByRole('button',{name:/^发送/})).toBeDisabled();
+    await expect(page).toHaveTitle(/等待你回应/);
+    await page.getByRole('button',{name:'提交回答'}).click();
+    await expect.poll(async()=>(await recorded('.answer')).answer).toEqual({scope:'trace',service:'orders'});
+    await expect(page.getByText('logs/orders.log',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'仅本次允许'}).click();
+    await expect.poll(async()=>(await recorded('.permission')).decision).toBe('once');
+    await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
+    await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
     for(const value of ['A15','检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
     for(const value of ['wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));

@@ -56,12 +56,12 @@ export class HarnessApi {
   chatAccess(){return this.request<ChatAccessEntry[]>('/chat/access-log');}
   chatProject(directory:string){return this.request<{directory:string}>('/chat/project',{method:'POST',body:JSON.stringify({directory})});}
   chatModels(directory?:string){return this.request<ChatModel[]>('/chat/models',{method:'POST',body:JSON.stringify({directory})});}
-  newChat(directory?:string,model?:Pick<ChatModel,'id'|'providerID'>,scenario?:'log-inspection'){return this.request<{id:string;directory:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory,model,scenario})});}
+  newChat(directory?:string,model?:Pick<ChatModel,'id'|'providerID'|'variant'>,scenario?:'log-inspection'){return this.request<{id:string;directory:string}>('/chat/sessions',{method:'POST',body:JSON.stringify({directory,model,scenario})});}
   chat(id:string,expanded?:{message:string;part:number}){
     const query=expanded?'?'+new URLSearchParams({message:expanded.message,part:String(expanded.part)}):'';
     return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id)+query);
   }
-  chatAction(id:string,action:'messages'|'permission'|'interrupt',body:object={}){
+  chatAction(id:string,action:'messages'|'permission'|'interrupt'|'model'|'form',body:object={}){
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() { return this.request<Schema<'Bootstrap'>>('/bootstrap'); }

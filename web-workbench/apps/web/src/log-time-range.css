@@ -1,0 +1,44 @@
+.log-time-range {
+  margin: 10px 0 12px;
+  padding: 14px;
+  border: 1px solid #dedbd5;
+  border-radius: 10px;
+  background: #faf9f6;
+  container-type: inline-size;
+}
+.log-time-range header, .log-time-range .range-footer, .log-applied-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 14px;
+}
+.log-time-range h2 { margin: 0; font-size: 14px; }
+.log-time-range .range-zone, .log-time-range .range-footer, .log-applied-range span { font-size: 12px; color: #625d57; }
+.log-time-range .range-presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.log-time-range .range-presets button {
+  background: #fff; color: #494540; border: 1px solid #d7d3cc;
+  border-radius: 6px; padding: 5px 10px; font-size: 12px; line-height: 1.4;
+}
+.log-time-range .range-presets button[aria-pressed="true"] { background: #f4e7de; border-color: #b4775e; color: #763e2b; }
+.log-time-range .range-presets button:hover { border-color: #a0654c; }
+.log-time-range :focus-visible { outline: 2px solid #86513d; outline-offset: 2px; }
+.log-time-range .range-fields { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 8px; align-items: end; }
+.log-time-range .range-fields label { min-width: 0; font-size: 12px; }
+.log-time-range .range-fields input {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; padding: 6px 8px;
+  background: white; color: #302f2c; border: 1px solid #cfcac3; border-radius: 6px;
+  font: inherit; font-weight: 400; font-variant-numeric: tabular-nums;
+}
+.log-time-range .range-fields input[aria-invalid="true"] { border-color: #aa4838; }
+.log-time-range .range-direction { align-self: end; line-height: 36px; color: #886851; }
+.log-time-range .range-footer { margin-top: 10px; }
+.log-time-range .range-footer [role="alert"] { color: #963a2c; }
+.log-applied-range { margin-bottom: 8px; }
+.log-applied-range strong, .log-applied-range span { display: block; }
+.log-applied-range strong { font-size: 13px; }
+.log-applied-range span { margin-top: 4px; overflow-wrap: anywhere; }
+@container (max-width: 480px) {
+  .log-time-range .range-fields { grid-template-columns: 1fr; gap: 6px; }
+  .log-time-range .range-direction { justify-self: start; margin-left: 8px; line-height: 1; transform: rotate(90deg); }
+}
