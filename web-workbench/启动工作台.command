@@ -11,7 +11,7 @@ if (( $# == 1 )); then
 fi
 cd "${0:A:h}"
 export PATH="$HOME/.opencode/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-node_bin="$(command -v node)" || { print -u2 '找不到 Node.js，请安装项目要求的 Node.js 22.16+。'; exit 1; }
+node_bin="$(command -v node)" || { print -u2 '找不到 Node.js，请安装项目要求的 Node.js 22.16+、24 或 26。'; exit 1; }
 port="${HARNESS_HTTP_PORT:-4176}"
 if /usr/sbin/lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
   print -u2 "端口 $port 已被使用。如果工作台已启动，请使用原来的窗口。"
