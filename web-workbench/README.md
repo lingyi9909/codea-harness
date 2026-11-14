@@ -2,9 +2,22 @@
 
 The local review workbench serves the React application and Fastify API on the same loopback port. It stores tasks, runs, messages, native checkpoints, permissions and report metadata in MySQL 8.4. Git snapshots and archived report files live under the configured data directory.
 
+## Node.js and npm compatibility
+
+The workbench supports Node.js 22.16+ (22.x), 24.x and 26.x, with npm 10 or 11. On macOS, the local-only chat launcher does **not** need MySQL, but the React assets **must** be built before launch:
+
+```sh
+cd web-workbench
+npm ci --ignore-scripts --no-audit --no-fund
+npm run web:build
+./启动工作台.command                  # optional: pass an existing project directory
+```
+
+Visit http://127.0.0.1:4176/. A missing build now produces `FRONTEND_BUILD_MISSING` instead of the misleading `Route GET:/ not found`. To verify the local HTTP homepage without OpenCode or MySQL, run `npm run smoke:local` after building. CI tests this on macOS and Windows with Node 22, 24 and 26. Real company OpenCode, model and MySQL integration remain separate acceptance requirements.
+
 ## Start the local workbench
 
-Use Node 22 and the locked npm dependencies. Set `HARNESS_MYSQL_HOST`, `HARNESS_MYSQL_PORT`, `HARNESS_MYSQL_DATABASE`, `HARNESS_MYSQL_USER` and `HARNESS_MYSQL_PASSWORD` for the workbench database. Set `HARNESS_REPOSITORY_ROOTS` to the allowed repository locations, `HARNESS_DATA_DIR` to writable storage, and `HARNESS_REF_KEY` and `HARNESS_CURSOR_KEY` to stable secret values of at least 32 characters.
+Use one of the supported Node.js versions and the locked npm dependencies. Set `HARNESS_MYSQL_HOST`, `HARNESS_MYSQL_PORT`, `HARNESS_MYSQL_DATABASE`, `HARNESS_MYSQL_USER` and `HARNESS_MYSQL_PASSWORD` for the workbench database. Set `HARNESS_REPOSITORY_ROOTS` to the allowed repository locations, `HARNESS_DATA_DIR` to writable storage, and `HARNESS_REF_KEY` and `HARNESS_CURSOR_KEY` to stable secret values of at least 32 characters.
 
 ```text
 npm ci --ignore-scripts --no-audit --no-fund

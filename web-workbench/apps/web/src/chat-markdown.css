@@ -370,11 +370,16 @@
 .chat-turn.assistant {background:transparent}
 
 
-.turn-answer [data-component="markdown"] :is(h1,h2,h3,h4,h5,h6,strong,b) {
-  color: var(--transcript-amber);
+.turn-answer [data-component="markdown"] :is(strong,b) {
+  color: inherit;
+  font-weight: 650;
 }
 .turn-answer [data-component="markdown"] :is(h1,h2,h3,h4,h5,h6) {
-  margin-block: 1em .25em;
+  color: #164d4a;
+  font-size: 1.1em;
+  font-weight: 700;
+  line-height: 1.45;
+  margin-block: 1.15em .35em;
 }
 .turn-answer [data-component="markdown"] :first-child:is(h1,h2,h3,h4,h5,h6) { margin-top: 0; }
 .turn-answer [data-component="markdown"] :not(pre) > code {
@@ -386,3 +391,5 @@
 .turn-answer [data-component="markdown"] li { margin-block: .08em; }
 .turn-answer [data-component="markdown"] li > :is(ul,ol) { margin-block: .1em; }
 .reasoning-body [data-component="markdown"] { font-size: 14px; line-height: 1.55; }
+.turn-answer [data-component="markdown"] :is(h1,h2) { font-size: 1.23em; }
+.turn-answer [data-component="markdown"] li::marker { color: #65827e; }

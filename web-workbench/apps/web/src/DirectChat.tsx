@@ -157,7 +157,7 @@ function ChatWorkspace({investigation,directory,settings}:{
   return <section className={investigation?"scene-page log-investigation":"scene-page"}><div className="scene-title"><div className="thread-heading"><h1>{investigation?'日志排查':'直接对话'}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
-      {id&&<button className="secondary" disabled={busy} onClick={()=>switchTo('')}>新建对话</button>}</div></div>
+      {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
     {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy} onSelect={row=>{
       rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
     }}/>}
