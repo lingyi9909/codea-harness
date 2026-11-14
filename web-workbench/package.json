@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.16.0 <23"
+    "node": "^22.16.0 || ^24.0.0 || ^26.0.0",
+    "npm": ">=10 <12"
   },
   "workspaces": [
     "apps/*",
@@ -28,6 +29,7 @@
     "test:lease": "node --experimental-strip-types --test tests/workers/lease.test.ts",
     "web:dev": "npm run dev --workspace @codea/web",
     "web:build": "npm run build --workspace @codea/web",
+    "smoke:local": "node scripts/smoke-local.mjs",
     "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit",
     "test:chat": "node --experimental-strip-types --test tests/api/direct-chat.test.ts tests/api/local-session.test.ts tests/ui/chat-history-storage.test.ts tests/ui/progressive-messages.test.ts",
     "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts",

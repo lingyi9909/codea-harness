@@ -1,4 +1,5 @@
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import type { SchedulerConfig } from './workers/scheduler.ts';
 import { randomBytes } from 'node:crypto';
@@ -9,6 +10,8 @@ import { createApp } from './app.ts';
 
 export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal'>,localOnly=false,workspace?:string){
   if(workspace!==undefined&&!localOnly)throw new Error('--workspace requires --local-only');
+  if(localOnly&&!existsSync(fileURLToPath(new URL('../../web/dist/index.html',import.meta.url))))
+    throw new Error('FRONTEND_BUILD_MISSING: run npm run web:build from web-workbench before starting the local app.');
   const config=localOnly?{port:Number(process.env.HARNESS_HTTP_PORT??4176),mysql:null}:runtimeConfig();
   if(!Number.isInteger(config.port)||config.port<1024||config.port>65535)throw new Error('INVALID_LOOPBACK_PORT');
   const pool=config.mysql?await createPool(config.mysql):undefined;
