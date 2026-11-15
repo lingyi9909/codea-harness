@@ -202,6 +202,11 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   }
   type Execution={kind:'skill';skills:{id:string}[]}|{kind:'command';name:string}|{kind:'subagent';agents:{name:string}[]}|{kind:'direct'};
   async function execution(dir:string,binding:Binding):Promise<Execution>{
+    // These are native Workbench actions, not custom commands or Skills.
+    // /models only opens the interactive selector; it must never be passed
+    // to session.command() as an executable diagnosis workflow.
+    if(binding.executor.type==='builtin'&&binding.executor.name==='chat')return {kind:'direct'};
+    if(binding.executor.type==='command'&&binding.executor.name==='models')return {kind:'direct'};
     const native=await client();
     if(binding.executor.type==='skill'){
       const catalog=await native.skill.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
