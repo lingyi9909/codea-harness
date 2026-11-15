@@ -6,7 +6,6 @@ import {join} from 'node:path';
 import {chromium,expect,type Page} from '@playwright/test';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
-import {profileKey} from '../../apps/server/src/local-profile.ts';
 
 async function observePaintedText(page:Page){
   return page.evaluateHandle(()=>{
@@ -223,7 +222,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('button',{name:'保存场景配置'})).toHaveCount(0);
     await page.screenshot({path:join(shots,'09-scene-config-readonly.png')});
     await writeFile(join(settingsDir,'config-access.json'),
-      JSON.stringify({version:1,editors:[profileKey({name:'测试同事',phone:'13800000000'})]}));
+      JSON.stringify({version:1,editors:['测试同事']}));
     await page.reload();
     await expect(page.getByRole('button',{name:'保存场景配置'})).toBeVisible();
     await page.getByRole('button',{name:'保存场景配置'}).click();
