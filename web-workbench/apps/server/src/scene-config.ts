@@ -6,12 +6,22 @@ import { AuthProblem } from './auth.ts';
 /** Configuration lives in the *startup* workspace; per-scene directories are separate. */
 export const SCENE_KEYS=['logs','message','data'] as const;
 export type SceneKey=typeof SCENE_KEYS[number];
-export type Executor={type:'skill'|'subagent'|'command';name:string};
+export type Executor={type:'skill'|'subagent'|'command'|'builtin';name:string};
 export type Binding={directory:string;executor:Executor};
 export type SceneConfiguration={version:1;scenes:Partial<Record<SceneKey,Binding>>};
 export const SCENE_CONFIG_PATH='.workbench/scenarios.json';
 export const SCENE_ACCESS_PATH='.workbench/config-access.json';
 const EMPTY:SceneConfiguration={version:1,scenes:{}};
+// Defaults do not install any external Skill. The public brainstorming skill
+// must already be loaded by OpenCode. /models opens the model selector, not
+// the custom-command execution endpoint.
+export function defaultSceneConfiguration(root:string):SceneConfiguration{
+  return {version:1,scenes:{
+    logs:{directory:root,executor:{type:'skill',name:'brainstorming'}},
+    message:{directory:root,executor:{type:'command',name:'models'}},
+    data:{directory:root,executor:{type:'builtin',name:'chat'}},
+  }};
+}
 // Current workbench owner. This is a UI-level allowance; local profile names are not verified.
 const DEFAULT_EDITORS=['zhangzhanhui'];
 const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
@@ -32,10 +42,10 @@ export class SceneConfigStore {
   /** Initialize safe config files on first startup with the explicitly selected test editor.
    * The login profile is intentionally created only after a successful login.
    * Existing files are never overwritten. */
-  initialize(){
+  async initialize(){
     this.directory(true);
     const defaults=[
-      {path:this.file,text:JSON.stringify({version:1,scenes:{}},null,2)+'\n'},
+      {path:this.file,text:JSON.stringify(defaultSceneConfiguration(this.root),null,2)+'\n'},
       {path:this.accessFile,text:JSON.stringify({version:1,editors:DEFAULT_EDITORS},null,2)+'\n'},
     ];
     for(const file of defaults){
@@ -51,7 +61,14 @@ export class SceneConfigStore {
       }finally{if(fd!==undefined)closeSync(fd);}
       this.readFile(file.path);
     }
-    this.read(); // Invalid preexisting scene configuration blocks startup rather than being replaced.
+    const current=this.read(); // Invalid preexisting configuration blocks startup.
+    const defaults=defaultSceneConfiguration(this.root);
+    const missing=SCENE_KEYS.filter(key=>!current.config.scenes[key]);
+    if(missing.length){
+      const scenes={...current.config.scenes};
+      for(const key of missing)scenes[key]=defaults.scenes[key];
+      await this.save({version:1,scenes},current.revision);
+    }
   }
   /** Never follow symlinks to config or the editor ACL. */
   private directory(create=false){
@@ -81,8 +98,9 @@ export class SceneConfigStore {
       if(!SCENE_KEYS.includes(key as SceneKey)||!plain(value)||Object.keys(value).some(k=>!['directory','executor'].includes(k)))throw invalid();
       if(typeof value.directory!=='string'||!isAbsolute(value.directory)||value.directory.length>4096||!plain(value.executor))throw invalid();
       const {type,name}=value.executor;
-      if(!['skill','subagent','command'].includes(String(type))||typeof name!=='string'||
-        !/^[a-zA-Z][a-zA-Z0-9._-]{0,127}$/.test(name)||Object.keys(value.executor).some(k=>!['type','name'].includes(k)))throw invalid();
+      if(!['skill','subagent','command','builtin'].includes(String(type))||typeof name!=='string'||
+        !/^[a-zA-Z][a-zA-Z0-9._-]{0,127}$/.test(name)||Object.keys(value.executor).some(k=>!['type','name'].includes(k))||
+        (type==='builtin'&&name!=='chat'))throw invalid();
       scenes[key as SceneKey]={directory:value.directory,executor:{type:type as Executor['type'],name}};
     }
     return {version:1,scenes};
