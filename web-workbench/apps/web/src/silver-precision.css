@@ -348,3 +348,30 @@ body{background:#fff;color:var(--silver-ink);}
   .silver-chat-home .composer,.main .primary{border:1px solid CanvasText!important;}
   .silver-chat-home .composer > textarea:focus-visible{outline:2px solid Highlight!important;}
 }
+
+/* Final acceptance details: keep long answers readable and small screens usable. */
+.silver-chat-home.silver-chat-active .conversation-transcript{
+  width:100%;max-width:920px;margin-inline:auto;overflow-wrap:anywhere;
+}
+.sidebar .scene-nav .mobile-history-link{display:none;}
+.pair-login-card .profile-form-pane{gap:0;}
+.pair-login-card .profile-form-pane > label{
+  display:grid;gap:9px;margin:0 0 24px;
+  font-size:14px;font-weight:620;color:#414750;
+}
+.pair-login-card .profile-form-pane > label input{margin:0;}
+.pair-login-card .profile-error{margin-bottom:18px;}
+.pair-login-card .profile-submit:disabled{opacity:.55;cursor:not-allowed;}
+@media(max-width:620px){
+  .sidebar .scene-nav .mobile-history-link{display:flex;align-items:center;}
+  .sidebar .brand{max-width:calc(100% - 178px);}
+  .sidebar .workbench-account{
+    display:flex;position:absolute;right:12px;top:10px;
+    margin:0;min-height:0;padding:3px 0;gap:5px;
+    border:0;font-size:11px;max-width:170px;
+  }
+  .sidebar .workbench-account .account-avatar{display:none;}
+  .sidebar .workbench-account > span:nth-child(2){max-width:80px;}
+  .sidebar .workbench-account button{padding:5px 3px;}
+  .silver-chat-home.silver-chat-active .conversation-transcript{max-width:100%;}
+}
