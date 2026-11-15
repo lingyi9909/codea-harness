@@ -86,10 +86,10 @@ it('routes each configured subscene through its own native executor and director
   assert.equal(data.statusCode,201,data.body);
   const dataResult=await send(data.json().data.id,'data-analysis','汇总数据趋势');
   assert.equal(dataResult.statusCode,202,dataResult.body);
-  const command=observed.filter(row=>row.url.endsWith('/command')).at(-1)?.body;
+  const command=observed.filter(row=>/^\/api\/session\/ses_scene_\d+\/command$/.test(row.url)).at(-1)?.body;
   assert.equal(command.name,'analyse-data');
   assert.match(command.text,/汇总数据趋势/);
-  assert.equal(observed.filter(row=>row.url.endsWith('/command')).length,1);
+  assert.equal(observed.filter(row=>/^\/api\/session\/ses_scene_\d+\/command$/.test(row.url)).length,1);
 
   const fake=await send(log.json().data.id,'data-analysis','wrong scene');
   assert.equal(fake.statusCode,409);
