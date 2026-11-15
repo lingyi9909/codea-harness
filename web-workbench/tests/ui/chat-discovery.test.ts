@@ -501,6 +501,8 @@ it('groups a multi-step weather response and keeps verification output out of th
     const answerBox=await body.boundingBox(),questionBox=await page.locator('.user-question').boundingBox();
     const composerBox=await page.locator('.composer').boundingBox();
     assert.ok(questionBox&&answerBox&&composerBox);
+    const readingWidth=await page.locator('.conversation-transcript').boundingBox();
+    assert.ok(readingWidth&&readingWidth.width<=921,'active assistant transcript has a comfortable max width');
     assert.ok(Math.abs(answerBox.x-questionBox.x)<=4,'question and reply share a reading edge');
     // Silver Precision keeps the composer docked at the bottom instead of directly beneath short replies.
     assert.ok(composerBox.y>=answerBox.y+answerBox.height,'composer does not cover the response');
@@ -545,6 +547,12 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.setViewportSize({width:390,height:844});
     await expect(body).toBeVisible();
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    // Mobile must not hide history recovery or logout behind the compact sidebar.
+    await expect(page.getByRole('button',{name:'退出登录'})).toBeVisible();
+    await page.getByRole('navigation',{name:'场景导航'}).getByRole('button',{name:'历史对话'}).click();
+    await expect(page.getByRole('region',{name:'历史对话'})).toBeVisible();
+    await page.getByRole('main').getByRole('button',{name:'历史对话',exact:true}).click();
+    await expect(page.getByRole('region',{name:'历史对话'})).toHaveCount(0);
     await page.reload();
     await expect(page.locator('.turn-process')).not.toHaveAttribute('open','');
     await expect(body).toContainText('15℃');
