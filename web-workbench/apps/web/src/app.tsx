@@ -254,7 +254,7 @@ export function WorkbenchApp() {
         <p className="profile-subtitle">输入 Windows 服务启动时显示的一次性配对码。连接本机服务不会启动 OpenCode。</p>
         {error&&<p className="profile-error" role="alert">{error}</p>}
         <label>一次性配对码<input type="password" autoComplete="off" maxLength={256}
-          placeholder="请输入终端显示的配对码" value={pairingCode}
+          placeholder="请输入本地终端显示的配对码" value={pairingCode}
           onChange={e=>setPairingCode(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&pairingCode.trim())void pair();}}/></label>
         <button className="profile-submit" disabled={busy||!pairingCode.trim()} onClick={pair}>
           {busy?'正在连接…':'连接本地工作台'}<span aria-hidden="true">↗</span>
