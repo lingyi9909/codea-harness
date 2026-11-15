@@ -164,10 +164,11 @@ it('Windows launcher resolves quoted project paths before changing into the bund
     const result=spawnSync('cmd.exe',['/d','/c','bundle\\start-chat.cmd'+arg],{
       cwd:dir,encoding:'utf8',windowsVerbatimArguments:true,timeout:15000,
     });
+    if(!arg){assert.equal(result.status,2,result.stderr+result.stdout);continue;}
     assert.equal(result.status,0,result.stderr+result.stdout);
     const argv=JSON.parse(await readFile(join(bundle,'argv.json'),'utf8'));
     assert.equal(argv[0],'--local-only');
-    if(arg){assert.equal(argv[1],'--workspace');assert.equal(resolve(argv[2]),join(dir,'project with spaces'));}
-    else assert.deepEqual(argv,['--local-only']);
+    assert.equal(argv[1],'--workspace');
+    assert.equal(resolve(argv[2]),join(dir,'project with spaces'));
   }
 });
