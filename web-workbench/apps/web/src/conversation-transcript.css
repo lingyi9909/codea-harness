@@ -1,5 +1,5 @@
 .conversation-transcript {
-  --transcript-amber: #855500;
+  --transcript-amber: #806025;
   min-width: 0;
   color: var(--chat-ink);
   font-size: 14px;
@@ -12,9 +12,9 @@
 .user-question {
   margin: 0 0 12px;
   padding: 8px 12px;
-  border-inline-start: 3px solid #95b9af;
-  background: #f2f6f4;
-  color: #202725;
+  border-inline-start: 2px solid #a5adb7;
+  background: #f3f5f7;
+  color: #2d3238;
   overflow-wrap: anywhere;
 }
 .user-question p { margin: 0; white-space: pre-wrap; line-height: 1.6; unicode-bidi: plaintext; }
@@ -62,8 +62,8 @@
   margin: 4px 0 6px 2px;
   padding: 0 0 2px 10px;
   border-inline-start: 2px solid #d9ddd9;
-  --chat-ink: #626963;
-  --chat-muted: #686e69;
+  --chat-ink: #616a75;
+  --chat-muted: #6c7680;
   color: var(--chat-ink);
 }
 .reasoning-part + .reasoning-part { margin-top: 6px; }
@@ -107,7 +107,7 @@
 .transcript-error { margin: 4px 0; padding: 7px 10px; border-inline-start: 2px solid #d92e3c; border-radius: 4px; font-size: 13px; white-space: pre-wrap; }
 .process-note, .turn-files, .user-question small { font-size: 12px; line-height: 1.55; color: var(--chat-muted); }
 .turn-files, .user-question small { display: block; margin-top: 3px; }
-.turn-answer { --chat-ink: #191c1a; min-width: 0; padding-block: 2px; color: var(--chat-ink); }
+.turn-answer { --chat-ink: #252a30; min-width: 0; padding-block: 2px; color: var(--chat-ink); }
 .turn-metrics { color: var(--chat-muted); font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 .turn-answer [data-component="markdown"] { font-size: 15px; line-height: 1.7; }
 .turn-answer [data-component="markdown"] + [data-component="markdown"] { margin-top: .65rem; }
