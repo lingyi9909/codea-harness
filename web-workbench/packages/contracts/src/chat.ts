@@ -1,5 +1,9 @@
 export type ChatModel={providerID:string;id:string;name:string;variant?:string;variants?:string[];context?:number};
-export type ChatScenario='direct-chat'|'log-inspection';
+export type ChatScenario='direct-chat'|'log-inspection'|'message-inspection'|'data-analysis';
+export type SceneId='logs'|'message'|'data';
+export type SceneBinding={directory:string;executor:{type:'skill'|'subagent'|'command';name:string}};
+export type SceneConfigValue={version:1;scenes:Partial<Record<SceneId,SceneBinding>>};
+export type SceneConfigResponse={workspace:string;configPath:string;accessPath:string;config:SceneConfigValue;revision:string;canEdit:boolean;identity:string|null};
 export type ChatHistoryPage={items:{id:string;title:string;updated:number}[];next?:string};
 export type ChatSettings={configured:boolean;directories:string[]};
 export type ChatStep=({kind:'text';text:string}|{kind:'thinking';detailPart?:number;live?:boolean;at?:number;ended?:number;complete:boolean;hasText:boolean;text?:string}|{kind:'notice';text:string;at?:number;problem?:boolean}|
