@@ -42,6 +42,11 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   assert.equal(saved.statusCode,200,JSON.stringify(saved.json()));
   assert.deepEqual(JSON.parse(await readFile(join(folder,'scenarios.json'),'utf8')).scenes,config.scenes);
   assert.equal(saved.json().data.config.scenes.logs.directory,realOutside);
+  // Bound subscene directories must not become arbitrary direct-chat workspaces.
+  const directOutside=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers,
+    payload:{scenario:'direct-chat',directory:realOutside}});
+  assert.equal(directOutside.statusCode,403,directOutside.body);
+  assert.equal(directOutside.json().error.code,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
   const stale=await write(config,before.json().data.revision);
   assert.equal(stale.statusCode,409);
   assert.equal(stale.json().error.code,'SCENE_CONFIG_STALE');
