@@ -5,7 +5,6 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
-import {profileKey} from '../../apps/server/src/local-profile.ts';
 
 it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=>{
   const project=await mkdtemp(join(tmpdir(),'workbench-scenes-'));
@@ -17,7 +16,7 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   const configDir=join(project,'.workbench');
   // Startup creates both empty files without granting editing privileges.
   assert.deepEqual(JSON.parse(await readFile(join(configDir,'scenarios.json'),'utf8')),{version:1,scenes:{}});
-  assert.deepEqual(JSON.parse(await readFile(join(configDir,'config-access.json'),'utf8')),{version:1,editors:[]});
+  assert.deepEqual(JSON.parse(await readFile(join(configDir,'config-access.json'),'utf8')),{version:1,editors:['zhangzhanhui']});
   await assert.rejects(readFile(join(configDir,'user.json'),'utf8'),{code:'ENOENT'});
   const profile={name:'业务开发',phone:'13800000000'};
   const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',headers:{host,origin},payload:profile});
@@ -34,11 +33,11 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   assert.equal(before.json().data.configPath,join(await realpath(project),'.workbench','scenarios.json'));
   assert.equal(before.json().data.accessPath,join(await realpath(project),'.workbench','config-access.json'));
   assert.equal(before.json().data.canEdit,false);
-  assert.equal(before.json().data.identity,profileKey(profile));
+  assert.equal(before.json().data.username,'业务开发');
   assert.equal((await write({version:1,scenes:{}},before.json().data.revision)).statusCode,403);
   const folder=join(project,'.workbench');
   await mkdir(folder,{recursive:true});
-  await writeFile(join(folder,'config-access.json'),JSON.stringify({version:1,editors:[profileKey(profile)]}));
+  await writeFile(join(folder,'config-access.json'),JSON.stringify({version:1,editors:['业务开发']}));
   assert.equal((await read()).json().data.canEdit,true);
   const realProject=await realpath(project),realOutside=await realpath(outside);
   const config={version:1,scenes:{
@@ -67,7 +66,7 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   assert.equal((await read()).json().data.canEdit,true);
 });
 
-it('paired sessions can be granted scene editor access only through the ACL file',async t=>{
+it('paired sessions without a login username stay read-only despite editor ACL',async t=>{
   const workspace=await realpath(await mkdtemp(join(tmpdir(),'paired-scene-')));
   t.after(()=>rm(workspace,{recursive:true,force:true}));
   const port=4189,host='127.0.0.1:'+port,origin='http://'+host;
@@ -80,14 +79,45 @@ it('paired sessions can be granted scene editor access only through the ACL file
     'x-csrf-token':pair.json().data.csrfToken};
   const before=await app.inject({url:'/api/v1/scene-config',headers});
   assert.equal(before.statusCode,200);
-  const identity=before.json().data.identity;
-  assert.match(identity,/^[a-f0-9]{64}$/);
+  assert.equal(before.json().data.username,null);
   assert.equal(before.json().data.canEdit,false);
-  await mkdir(join(workspace,'.workbench'),{recursive:true});
-  await writeFile(join(workspace,'.workbench','config-access.json'),JSON.stringify({version:1,editors:[identity]}));
-  const after=await app.inject({url:'/api/v1/scene-config',headers});
-  assert.equal(after.json().data.canEdit,true);
+  // Even when the file names an editor, a pairing-only session has no login
+  // username and must not gain configuration permissions.
+  assert.deepEqual(JSON.parse(await readFile(join(workspace,'.workbench','config-access.json'),'utf8')),
+    {version:1,editors:['zhangzhanhui']});
   const saved=await app.inject({method:'PUT',url:'/api/v1/scene-config',headers,
-    payload:{config:{version:1,scenes:{}},revision:after.json().data.revision}});
+    payload:{config:{version:1,scenes:{}},revision:before.json().data.revision}});
+  assert.equal(saved.statusCode,403,saved.body);
+  assert.equal(saved.json().error.code,'SCENE_CONFIG_EDIT_FORBIDDEN');
+});
+
+it('only the exact configured login username can edit without hashes or phone coupling',async t=>{
+  const workspace=await realpath(await mkdtemp(join(tmpdir(),'named-scene-')));
+  t.after(()=>rm(workspace,{recursive:true,force:true}));
+  const port=4195,host='127.0.0.1:'+port,origin='http://'+host;
+  const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,workspace});
+  t.after(()=>app.close());
+  const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',headers:{host,origin},
+    payload:{name:'zhangzhanhui',phone:'13900000000'}});
+  assert.equal(login.statusCode,200,login.body);
+  const headers={host,origin,cookie:String(login.headers['set-cookie']).split(';')[0],
+    'x-csrf-token':login.json().data.csrfToken};
+  const state=await app.inject({url:'/api/v1/scene-config',headers});
+  assert.equal(state.statusCode,200);
+  assert.equal(state.json().data.username,'zhangzhanhui');
+  assert.equal(state.json().data.canEdit,true);
+  const saved=await app.inject({method:'PUT',url:'/api/v1/scene-config',headers,
+    payload:{config:{version:1,scenes:{}},revision:state.json().data.revision}});
   assert.equal(saved.statusCode,200,saved.body);
+  // ACL matching is case-sensitive. A username typo or another user cannot edit.
+  await writeFile(join(workspace,'.workbench','config-access.json'),
+    JSON.stringify({version:1,editors:['ZhangZhanHui']}));
+  assert.equal((await app.inject({url:'/api/v1/scene-config',headers})).json().data.canEdit,false);
+  const forbidden=await app.inject({method:'PUT',url:'/api/v1/scene-config',headers,
+    payload:{config:{version:1,scenes:{}},revision:saved.json().data.revision}});
+  assert.equal(forbidden.statusCode,403);
+  // No wildcard, malformed editor name or unapproved hash permits access.
+  await writeFile(join(workspace,'.workbench','config-access.json'),
+    JSON.stringify({version:1,editors:['*','zhangzhanhui']}));
+  assert.equal((await app.inject({url:'/api/v1/scene-config',headers})).json().data.canEdit,false);
 });
