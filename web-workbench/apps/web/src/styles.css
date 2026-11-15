@@ -462,3 +462,25 @@ body{background:#fff;color:var(--silver-ink)}
   .local-connection{font-size:0}
   .local-connection:before{width:8px;height:8px}
 }
+
+/* Current workspace header: directory and service state come from existing APIs. */
+.topbar .workspace-heading{display:flex;align-items:center;gap:0;min-width:0;max-width:100%}
+.topbar .workspace-heading>strong{font-size:23px;line-height:1.2;color:#20242a;letter-spacing:-.7px;font-weight:740;white-space:nowrap}
+.topbar .heading-divider{display:block;flex:0 0 auto;height:25px;width:1px;background:#d2d7de;margin:0 24px}
+.topbar .workspace-pill{display:inline-flex;align-items:center;max-width:260px;min-height:36px;padding:6px 14px;border:1px solid #d6dce4;border-radius:6px;background:#fff;color:#333941;font-size:14px;font-weight:570;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar .workspace-context{display:inline-block;font-size:14px;color:#737b85;white-space:nowrap}
+.topbar .workbench-connection{display:inline-flex;align-items:center;gap:10px;color:#5b636d;font-size:13px;white-space:nowrap}
+.topbar .connection-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#636c76}
+.topbar .state{font-weight:550;font-size:12px;background:#f2f4f6;border:1px solid #dbe0e6;color:#4c5663;padding:7px 12px}
+.topbar .state-warn{color:#9a5b24;background:#fcf5e8;border-color:#f3e3c8}
+@media(max-width:850px){
+  .topbar .workspace-heading>strong{font-size:19px}
+  .topbar .heading-divider{margin:0 12px}
+  .topbar .workspace-pill{max-width:155px}
+  .topbar .workbench-connection{font-size:11px}
+}
+@media(max-width:620px){
+  .topbar .workspace-pill{max-width:110px;padding:6px 9px}
+  .topbar .workbench-connection{font-size:0}
+  .topbar .connection-dot{width:8px;height:8px}
+}
