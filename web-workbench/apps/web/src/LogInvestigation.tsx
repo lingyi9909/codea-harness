@@ -106,7 +106,7 @@ export function LogInvestigation({mode='public'}:{mode?:'public'|'message'}={}){
       mode==='message'?
         '排查场景：报文问题排查。关注报文收发、字段校验与处理链路；仅使用可验证的数据源，缺少报文查询工具时说明证据不足。':
         '排查场景：公管问题排查。关注公管业务操作及上下游链路，使用当前可用日志证据，不臆测数据库或服务状态。',
-      '若 log-query 需要用户手工输入验证码，请使用当前会话的 OpenCode question 表单收集文本回答，保留前导零，再继续本次排查。网页无法向后台脚本的 stdin 输入。',
+      '若当前配置的执行入口需要验证码等补充信息，请使用当前会话的 OpenCode question 表单收集回答，保留前导零，再继续排查。网页无法向后台脚本的 stdin 输入。',
       '查询时区：'+localZone+'。请按以下起止时刻查询；若工具需要无时区的本地时间，使用该时区对应的日期和时间。',
       '时间范围（起点含、终点不含）：'+formatBounds({from,to}),
       trace.trim()&&'Trace ID：'+trace.trim(),keyword.trim()&&'关键字：'+keyword.trim(),
