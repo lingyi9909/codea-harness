@@ -65,20 +65,27 @@ export function SceneConfigPage(){
           return <section className="form-panel scene-config-row" key={row.id}>
             <h2>{row.name}</h2>
             <p className="muted">{row.description}</p>
+            {row.id==='logs'&&binding.executor.type==='skill'&&binding.executor.name==='brainstorming'&&
+              <p className="muted">默认 brainstorming 只是能力引用；本工作台不安装 Superpowers。OpenCode 未加载该 Skill 时会明确提示不可执行。</p>}
+            {row.id==='message'&&binding.executor.type==='command'&&binding.executor.name==='models'&&
+              <p className="muted">默认 /models 是 OpenCode 内置模型选择器，不是报文分析命令；进入场景时打开模型选择，之后使用普通对话排查。</p>}
             <div className="scene-config-fields">
               <label>工作目录
                 <input aria-label={row.name+'工作目录'} value={binding.directory} readOnly={!loaded.canEdit}
-                  placeholder="例如 D:\\projects\\business-service" onChange={e=>update(row.id,{directory:e.target.value})}/>
+                  placeholder={loaded.workspace} onChange={e=>update(row.id,{directory:e.target.value})}/>
               </label>
               <label>执行类型
                 <select aria-label={row.name+'执行类型'} value={binding.executor.type} disabled={!loaded.canEdit}
-                  onChange={e=>update(row.id,{executor:{...binding.executor,type:e.target.value as SceneBinding['executor']['type']}})}>
+                  onChange={e=>{const type=e.target.value as SceneBinding['executor']['type'];
+                    update(row.id,{executor:{type,name:type==='builtin'?'chat':binding.executor.type==='builtin'?'':binding.executor.name}});
+                  }}>
                   <option value="skill">Skill</option><option value="subagent">Subagent</option><option value="command">OpenCode Command</option>
+                  <option value="builtin">内置对话</option>
                 </select>
               </label>
               <label>入口名称
-                <input aria-label={row.name+'入口名称'} value={binding.executor.name} readOnly={!loaded.canEdit}
-                  placeholder={binding.executor.type==='skill'?'例如 log-query':binding.executor.type==='subagent'?'例如 business-diagnoser':'例如 codea-review'}
+                <input aria-label={row.name+'入口名称'} value={binding.executor.name} readOnly={!loaded.canEdit||binding.executor.type==='builtin'}
+                  placeholder={binding.executor.type==='skill'?'例如 log-query':binding.executor.type==='subagent'?'例如 business-diagnoser':binding.executor.type==='builtin'?'chat':'例如 models 或 codea-review'}
                   onChange={e=>update(row.id,{executor:{...binding.executor,name:e.target.value}})}/>
               </label>
             </div>
