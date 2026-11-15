@@ -610,6 +610,12 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.getByRole('button',{name:'北京明天的天气',exact:true}).click();
     await expect(response.last()).toContainText(fallbackAnswer);
     assert.deepEqual(createdSessions,[],'restoring a sidebar history item reuses its native session');
+    await page.getByRole('complementary').getByRole('button',{name:'全部',exact:true}).click();
+    const sidebarHistory=page.getByRole('region',{name:'历史对话'});
+    await expect(sidebarHistory).toBeVisible();
+    await page.getByRole('main').getByRole('button',{name:'历史对话',exact:true}).click();
+    await expect(sidebarHistory).toHaveCount(0);
+
 
 
   }finally{await browser.close();await app.close();await rm(root,{recursive:true,force:true});}
