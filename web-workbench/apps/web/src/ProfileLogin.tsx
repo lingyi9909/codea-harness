@@ -37,11 +37,11 @@ export function ProfileLogin({onLogin}:{onLogin:(name:string,phone:string)=>Prom
   return <main className="profile-page">
     <section className="profile-card" aria-labelledby="profile-title">
       <aside className="profile-side">
-        <div className="profile-brand"><strong>Code Harness</strong><span>智能研发工作台</span></div>
+        <div className="profile-brand"><strong>智能工作台</strong><span>智能研发场景协作</span></div>
         <div className="profile-side-copy">
           <span className="profile-overline">LOCAL AI WORKSPACE</span>
           <h2>让研发工作<br/>更专注、更清晰</h2>
-          <p>在同一个工作台中连接 OpenCode 对话、代码审查、日志排查和数据分析。</p>
+          <p>在同一个工作台中连接 OpenCode 对话、代码审查、问题排查和数据分析。</p>
         </div>
         <span className="profile-side-footer">本地运行 · 资源随项目使用</span>
       </aside>
