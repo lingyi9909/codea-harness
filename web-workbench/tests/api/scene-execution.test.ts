@@ -101,12 +101,12 @@ it('routes each configured subscene through its own native executor and director
 
   // Stock /models is an interactive model picker, never a custom task command.
   await writeFile(join(conf,'scenarios.json'),JSON.stringify(defaultSceneConfiguration(root)));
-  const callsBefore=observed.filter(row=>/^\\/api\\/session\\/ses_scene_\\d+\\/command$/.test(row.url)).length;
+  const callsBefore=observed.filter(row=>row.url.includes('/ses_scene_')&&row.url.endsWith('/command')).length;
   const modelsScene=await create('message-inspection');
   assert.equal(modelsScene.statusCode,201,modelsScene.body);
   const modelsSend=await send(modelsScene.json().data.id,'message-inspection','排查报文');
   assert.equal(modelsSend.statusCode,202,modelsSend.body);
-  assert.equal(observed.filter(row=>/^\\/api\\/session\\/ses_scene_\\d+\\/command$/.test(row.url)).length,callsBefore);
+  assert.equal(observed.filter(row=>row.url.includes('/ses_scene_')&&row.url.endsWith('/command')).length,callsBefore);
   assert.equal(observed.filter(row=>row.url.endsWith('/prompt')).at(-1)?.body.text,'排查报文');
   const builtinData=await create('data-analysis');
   assert.equal(builtinData.statusCode,201,builtinData.body);
