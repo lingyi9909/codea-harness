@@ -193,8 +193,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('navigation')).toBeVisible();
     assert.equal(sessionRequests,1);
     assert.equal(await sessionCookie(),cookie);
-    await page.getByRole('navigation').getByRole('button',{name:'直接对话',exact:true}).click();
-    await expect(page.locator('.sidebar .brand')).toHaveText(/智能工作台/);
+    // The home is already the native OpenCode chat; do not navigate to a separate scene.
+    await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
+    await expect(page.locator('.sidebar .brand')).toContainText('Code Harness');
+    await expect(page.locator('.chat-hero,.scene-cards')).toHaveCount(0);
     await expect(page).toHaveTitle('智能工作台');
     async function checkChatLayout(){
       await expect(page.getByLabel('对话内容')).toBeVisible();
@@ -479,7 +481,9 @@ it('groups a multi-step weather response and keeps verification output out of th
     const composerBox=await page.locator('.composer').boundingBox();
     assert.ok(questionBox&&answerBox&&composerBox);
     assert.ok(Math.abs(answerBox.x-questionBox.x)<=4,'question and reply share a reading edge');
-    assert.ok(composerBox.y-answerBox.y-answerBox.height<=40,'short replies leave the composer within reach');
+    // Silver Precision keeps the composer docked at the bottom instead of directly beneath short replies.
+    assert.ok(composerBox.y>=answerBox.y+answerBox.height,'composer does not cover the response');
+    assert.ok(composerBox.y+composerBox.height<=800+2,'composer remains visible in the viewport');
     await expect(body).not.toContainText('拼图');
     await expect(page.getByText('向右滑动填充拼图',{exact:true})).not.toBeVisible();
     const historyThought=response.locator('.turn-reasoning');
