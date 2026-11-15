@@ -588,6 +588,11 @@ it('groups a multi-step weather response and keeps verification output out of th
     await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
     await expect(response.last()).toContainText(fallbackAnswer);
     await expect(page.getByLabel('对话内容')).toBeVisible();
+    await page.getByLabel('对话内容').fill('跨场景保存这份草稿');
+    await navigation.getByRole('button',{name:'代码审查',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'代码审查',exact:true})).toBeVisible();
+    await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
+    await expect(page.getByLabel('对话内容')).toHaveValue('跨场景保存这份草稿');
     assert.deepEqual(createdSessions,[],'navigating never creates a native OpenCode session');
     await page.getByRole('complementary').getByRole('button',{name:'新建对话'}).click();
     await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toBeVisible();
