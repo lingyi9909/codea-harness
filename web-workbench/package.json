@@ -31,7 +31,7 @@
     "web:build": "npm run build --workspace @codea/web",
     "smoke:local": "node scripts/smoke-local.mjs",
     "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit",
-    "test:chat": "node --experimental-strip-types --test tests/api/direct-chat.test.ts tests/api/local-session.test.ts tests/ui/chat-history-storage.test.ts tests/ui/progressive-messages.test.ts",
+    "test:chat": "node --experimental-strip-types --test tests/api/direct-chat.test.ts tests/api/local-session.test.ts tests/api/scene-config.test.ts tests/ui/chat-history-storage.test.ts tests/ui/progressive-messages.test.ts",
     "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts",
     "test:continuations": "node --experimental-strip-types --test tests/api/continuations.test.ts",
     "test:reports": "node --experimental-strip-types --test tests/reports/collect.test.ts",
