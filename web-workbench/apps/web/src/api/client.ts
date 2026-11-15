@@ -26,7 +26,9 @@ export class HarnessApi {
         headers: { ...headers, ...(init.headers ?? {}) }, cache: 'no-store',
       });
     } catch {
-      throw new ApiError(0, 'OFFLINE', '连接已中断，操作是否受理尚不确定；请查询操作状态');
+      throw new ApiError(0, 'OFFLINE', ['GET','HEAD'].includes(verb)
+        ? '无法连接本地工作台服务，请确认启动终端仍在运行，然后重试。'
+        : '连接已中断，操作是否受理尚不确定；请查询操作状态');
     }
     const raw = await response.text();
     let data: unknown;
