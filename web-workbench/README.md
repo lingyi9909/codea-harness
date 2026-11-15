@@ -59,7 +59,7 @@ The worker records control sends before contacting the native service. An uncert
 
 ### 配置文件与安全边界
 
-启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（初始 `{"version":1,"scenes":{}}`）和 **`.workbench/config-access.json`**（初始 `{"version":1,"editors":[]}`），**不会自动授予编辑权限**。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
+启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（初始 `{"version":1,"scenes":{}}`）和 **`.workbench/config-access.json`**（新目录初始 `{"version":1,"editors":["zhangzhanhui"]}`，仅允许该登录用户名编辑）。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
 
 通过「场景配置」页面保存 `.workbench/scenarios.json`。此文件将子场景 ID 映射到**绝对路径**工作目录和原生执行入口，示例如下（名称只是示例，须在对应目录的 OpenCode 2.x 中真实可用）：
 
@@ -85,16 +85,16 @@ The worker records control sends before contacting the native service. An uncert
 
 三个配置键：`logs` 对应公管问题排查，`message` 对应报文问题排查，`data` 对应公管数据分析。可以分别绑定不同目录。**未配置场景不允许执行**，不会默认跑到首页目录。所有绑定必须为已存在的绝对目录；服务端按实际文件解析路径并检查。Skill、命令和 Agent 通过 OpenCode 的目录级 catalog 验证，不存在、重名或接口不可用时不执行。Command 通过原生 `session.command` 提交而不是把斜杠命令当普通提示词。Subagent 经原生 Agent catalog 验证并附加 Agent 提及；是否真正创建子会话和运行结果须以实际 OpenCode 工具轨迹为准，不能把文本提及视为已经执行成功。
 
-配置页面的**编辑权限**独立保存在启动目录的 **`.workbench/config-access.json`**。首次使用时系统默认只读，不会自动授权登录用户。启动时权限文件已创建，默认 `editors` 是空数组。打开配置页可以看到当前身份标识（SHA-256 字符串）；请在本机文件系统中由受信任的管理员**编辑已有权限文件**，将该标识加入 `editors`：
+配置页面的**编辑权限**独立保存在启动目录的 **`.workbench/config-access.json`**。新工作目录首次启动默认只允许登录用户名 `zhangzhanhui` 编辑配置，其他登录用户名只读。打开配置页显示当前登录用户名；管理员可以在本机文件系统中直接用用户名维护 `editors`。已有的权限文件不会自动覆盖，因此旧工作目录若仍是空名单，需要手动把用户名写入：
 
 ```json
 {
   "version": 1,
-  "editors": ["从配置页面复制的当前身份标识"]
+  "editors": ["zhangzhanhui"]
 }
 ```
 
-保存权限文件后刷新配置页面。前端会根据 `canEdit` 切换编辑状态；服务端对每次保存独立校验会话、CSRF、ACL、配置结构、目录存在性和文件版本。**不能在 Web 页面修改此权限文件**，防止自我提权。编辑的是本机工作区配置，权限基于本地登录资料，不代表企业级统一身份认证；登录手机号没有短信核验，使用者必须控制本机目录和服务的访问权限。
+保存权限文件后刷新配置页面。前端会根据 `canEdit` 切换编辑状态；服务端按**登录用户名精确匹配（区分大小写）**判断权限，并在每次保存时独立校验会话、CSRF、ACL、配置结构、目录存在性和文件版本。**不能在 Web 页面修改此权限文件**，防止自我提权。没有登录用户名的配对码会话默认只读。注意：当前本地登录只需填写姓名和手机号，没有凭证验证，因此任何知道 `zhangzhanhui` 的人都可能填同名冒用；此规则只适用于受控本机开发测试环境，不构成严格的人员身份认证。真正的多人内网部署必须接入受信任的账户认证与授权。
 
 `.workbench/user.json` 包含本机个人资料，请勿将这些文件与内部业务路径和用户资料提交到公共 Git 仓库。场景配置文件和权限文件可包含敏感路径与身份标识，同样应排除在共享版本控制之外。建议工作台启动目录与受控业务仓库分离。
 
