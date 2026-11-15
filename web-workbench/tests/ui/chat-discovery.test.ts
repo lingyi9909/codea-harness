@@ -148,6 +148,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
   await chmod(cli,0o755);
   const browser=await chromium.launch(process.env.HARNESS_TEST_CHROME?{channel:'chrome'}:{});
   const cwd=process.cwd(),saved={...process.env};
+  const shots=join(cwd,'screenshots');
+  await mkdir(shots,{recursive:true});
   process.chdir(root);
   process.env.PATH=root;
   process.env.HARNESS_OPENCODE_SERVICE_FILE=file;
@@ -174,6 +176,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     });
     await page.goto('http://127.0.0.1:'+port);
     await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
+    await expect(page.locator('.profile-side')).toBeVisible();
+    await expect(page.locator('.profile-submit')).toHaveCSS('background-color','rgb(36, 39, 44)');
+    await page.screenshot({path:join(shots,'00-login-silver.png')});
     await expect(page.getByRole('navigation')).toHaveCount(0);
     await page.getByLabel('姓名',{exact:true}).fill('测试同事');
     await page.getByLabel('手机号',{exact:true}).fill('12');
@@ -185,6 +190,13 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     for(const value of ['测试同事','13800000000'])assert.ok(!contactCache.includes(value));
     await expect(page.getByRole('navigation')).toBeVisible();
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
+    await expect(page.getByLabel('对话内容')).toBeVisible();
+    await expect(page.locator('.main > .topbar')).toBeVisible();
+    await expect(page.locator('.workspace-pill')).toContainText('业务项目');
+    await expect(page.locator('.sidebar')).toHaveCSS('width','282px');
+    await expect(page.getByRole('navigation').getByRole('button',{name:'代码审查'})).toHaveCSS('color','rgb(43, 48, 56)');
+    await expect(page.locator('.silver-chat-home')).toHaveClass(/silver-chat-empty/);
+    await page.screenshot({path:join(shots,'01-home-empty.png')});
     assert.equal(sessionRequests,1);
     const sessionCookie=async()=>(await page.context().cookies()).find(c=>c.name==='harness_session')?.value;
     const cookie=await sessionCookie();
@@ -193,8 +205,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('navigation')).toBeVisible();
     assert.equal(sessionRequests,1);
     assert.equal(await sessionCookie(),cookie);
-    await page.getByRole('navigation').getByRole('button',{name:'直接对话',exact:true}).click();
-    await expect(page.locator('.sidebar .brand')).toHaveText(/智能工作台/);
+    // The home is already the native OpenCode chat; do not navigate to a separate scene.
+    await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
+    await expect(page.locator('.sidebar .brand')).toContainText('Code Harness');
+    await expect(page.locator('.chat-hero,.scene-cards')).toHaveCount(0);
     await expect(page).toHaveTitle('智能工作台');
     async function checkChatLayout(){
       await expect(page.getByLabel('对话内容')).toBeVisible();
@@ -209,6 +223,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await search.fill('company');
     await expect(page.getByRole('option',{name:/Analysis fixture/})).toHaveCount(0);
     await expect(page.getByRole('option',{name:/Company fixture/})).toBeVisible();
+    await page.screenshot({path:join(shots,'02-model-picker.png')});
     await search.press('Enter');
     const composer=page.getByLabel('对话内容');
     await composer.fill('第一行');
@@ -233,6 +248,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await checkChatLayout();
     await expect(page.getByText('要排查哪次请求？')).toHaveCount(0);
     await expect(page.locator('.chat-feed')).toHaveCount(0);
+    await page.screenshot({path:join(shots,'03-log-criteria.png')});
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
@@ -335,6 +351,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(running).toHaveCount(0);
     await expect(feed.locator('.turn-process').first()).not.toHaveAttribute('open','');
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
+    await page.screenshot({path:join(shots,'04-log-results.png')});
     await expect(feed.getByRole('cell',{name:'120 ms'})).toBeVisible();
     await expect(feed.locator('pre code.language-json')).toContainText('"count"');
     await page.getByRole('button',{name:'选择模型'}).click();
@@ -349,7 +366,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     await writeFile(file+'.ask','1');
     await expect(page.getByText('选择排查范围',{exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'新建对话'}).click();
+    await page.screenshot({path:join(shots,'05-log-form-waiting.png')});
+    // Sidebar starts a direct chat; the log scene owns its independent new-investigation action.
+    await page.locator('.log-investigation').getByRole('button',{name:'新建对话'}).click();
     await expect(page.getByLabel('对话内容')).toHaveValue('');
     await expect(page.getByText('选择排查范围',{exact:true})).toHaveCount(0);
     await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
@@ -378,6 +397,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('button',{name:'提交回答'}).click();
     await expect.poll(async()=>(await recorded('.answer')).answer).toEqual({scope:'trace',service:'orders',note:'手动说明'});
     await expect(page.getByText('logs/orders.log',{exact:true})).toBeVisible();
+    await page.screenshot({path:join(shots,'06-log-permission-waiting.png')});
     await page.getByRole('button',{name:'仅本次允许'}).click();
     await expect.poll(async()=>(await recorded('.permission')).decision).toBe('once');
     const codeForm=page.getByRole('form',{name:'验证本次查询'});
@@ -471,15 +491,22 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.goto('http://127.0.0.1:'+port);
     await login(page);
     const response=page.getByRole('article',{name:'OpenCode 回答'});
+    const shots=join(process.cwd(),'screenshots');
+    await mkdir(shots,{recursive:true});
     const body=response.getByRole('region',{name:'回答正文'});
     await expect(response).toHaveCount(1);
     await expect(body.getByRole('link',{name:'中央气象台'})).toBeVisible();
     await expect(body).toContainText('15℃');
+    await page.screenshot({path:join(shots,'07-conversation-active.png')});
     const answerBox=await body.boundingBox(),questionBox=await page.locator('.user-question').boundingBox();
     const composerBox=await page.locator('.composer').boundingBox();
     assert.ok(questionBox&&answerBox&&composerBox);
+    const readingWidth=await page.locator('.conversation-transcript').boundingBox();
+    assert.ok(readingWidth&&readingWidth.width<=921,'active assistant transcript has a comfortable max width');
     assert.ok(Math.abs(answerBox.x-questionBox.x)<=4,'question and reply share a reading edge');
-    assert.ok(composerBox.y-answerBox.y-answerBox.height<=40,'short replies leave the composer within reach');
+    // Silver Precision keeps the composer docked at the bottom instead of directly beneath short replies.
+    assert.ok(composerBox.y>=answerBox.y+answerBox.height,'composer does not cover the response');
+    assert.ok(composerBox.y+composerBox.height<=800+2,'composer remains visible in the viewport');
     await expect(body).not.toContainText('拼图');
     await expect(page.getByText('向右滑动填充拼图',{exact:true})).not.toBeVisible();
     const historyThought=response.locator('.turn-reasoning');
@@ -520,6 +547,12 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.setViewportSize({width:390,height:844});
     await expect(body).toBeVisible();
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    // Mobile must not hide history recovery or logout behind the compact sidebar.
+    await expect(page.getByRole('button',{name:'退出登录'})).toBeVisible();
+    await page.getByRole('navigation',{name:'场景导航'}).getByRole('button',{name:'历史对话'}).click();
+    await expect(page.getByRole('region',{name:'历史对话'})).toBeVisible();
+    await page.getByRole('main').getByRole('button',{name:'历史对话',exact:true}).click();
+    await expect(page.getByRole('region',{name:'历史对话'})).toHaveCount(0);
     await page.reload();
     await expect(page.locator('.turn-process')).not.toHaveAttribute('open','');
     await expect(body).toContainText('15℃');
@@ -554,6 +587,44 @@ it('groups a multi-step weather response and keeps verification output out of th
     const prefixes=await painted.evaluate(seen=>[...seen]);
     assert.ok(prefixes.filter(s=>s.length>1&&s.length<fallbackAnswer.length&&fallbackAnswer.startsWith(s)).length>=3,
       'snapshot-only completion is paced for the new turn');
+    // Switching scenarios must keep the same OpenCode conversation and must not POST a new session.
+    const createdSessions:string[]=[];
+    page.on('request',request=>{
+      if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/chat/sessions')
+        createdSessions.push(request.url());
+    });
+    const navigation=page.getByRole('navigation',{name:'场景导航'});
+    await navigation.getByRole('button',{name:'数据分析',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'数据分析'})).toBeVisible();
+    await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+      name:'orders.csv',mimeType:'text/csv',buffer:Buffer.from('order,amount\nA001,120\nA002,220\n')});
+    await expect(page.getByText(/2 行 · 2 列/)).toBeVisible();
+    await page.screenshot({path:join(shots,'08-csv-analysis.png')});
+    await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toHaveCount(0);
+    await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
+    await expect(response.last()).toContainText(fallbackAnswer);
+    await expect(page.getByLabel('对话内容')).toBeVisible();
+    await page.getByLabel('对话内容').fill('跨场景保存这份草稿');
+    await navigation.getByRole('button',{name:'代码审查',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'代码审查',exact:true})).toBeVisible();
+    await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
+    await expect(page.getByLabel('对话内容')).toHaveValue('跨场景保存这份草稿');
+    assert.deepEqual(createdSessions,[],'navigating never creates a native OpenCode session');
+    await page.getByRole('complementary').getByRole('button',{name:'新建对话'}).click();
+    await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toBeVisible();
+    await expect(page.getByLabel('对话内容')).toHaveValue('');
+    await expect(response).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'北京明天的天气',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'北京明天的天气',exact:true}).click();
+    await expect(response.last()).toContainText(fallbackAnswer);
+    assert.deepEqual(createdSessions,[],'restoring a sidebar history item reuses its native session');
+    await page.getByRole('complementary').getByRole('button',{name:'全部',exact:true}).click();
+    const sidebarHistory=page.getByRole('region',{name:'历史对话'});
+    await expect(sidebarHistory).toBeVisible();
+    await page.getByRole('main').getByRole('button',{name:'历史对话',exact:true}).click();
+    await expect(sidebarHistory).toHaveCount(0);
+
+
 
   }finally{await browser.close();await app.close();await rm(root,{recursive:true,force:true});}
 });

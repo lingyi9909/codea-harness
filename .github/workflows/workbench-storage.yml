@@ -50,3 +50,12 @@ jobs:
           npx playwright install chromium
       - name: Windows browser and installed CLI discovery (offline fixture)
         run: node --experimental-strip-types --test tests/ui/chat-discovery.test.ts
+      - name: Upload real browser screenshots (scripted chat fixture)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-precision-chat-${{ github.run_id }}
+          path: web-workbench/screenshots/*.png
+          retention-days: 14
+          if-no-files-found: ignore
+

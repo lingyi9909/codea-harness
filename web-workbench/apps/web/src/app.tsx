@@ -7,7 +7,8 @@ import { ProfileLogin } from './ProfileLogin.tsx';
 import { DirectChat } from './DirectChat.tsx';
 import {LogInvestigation} from './LogInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
-import { ScenarioHome, scenes, type Scene } from './ScenarioHome.tsx';
+import { scenes, type Scene } from './ScenarioHome.tsx';
+import { SidebarChatHistory } from './SidebarChatHistory.tsx';
 import { SourceView } from './SourceView.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
 
@@ -37,7 +38,16 @@ export function WorkbenchApp() {
     const saved=sessionStorage.getItem('harness.scene')??'home';
     return Object.hasOwn(scenes,saved)?saved as Scene:'home';
   });
-  const navigate=(next:Scene)=>{setSelected('');setScene(next);sessionStorage.setItem('harness.scene',next);};
+  const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
+  const [chatDirectory,setChatDirectory]=useState('');
+  const navigate=(next:Scene)=>{
+    // Scene navigation never creates a native session; the chat restores its own saved id/draft.
+    const target=next==='chat'?'home':next;
+    setSelected('');setScene(target);sessionStorage.setItem('harness.scene',target);
+  };
+  const openChat=(kind:'new'|'history'|'select',id?:string)=>{
+    navigate('home');setChatNavigation(previous=>({kind,id,seq:previous.seq+1}));
+  };
   const selection=useRef(selected);
   selection.current=selected;
   const detailRequest=useRef(0);
@@ -227,54 +237,74 @@ export function WorkbenchApp() {
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">
     {error?<><p role="alert">{error}</p><button onClick={reconnect}>重新连接</button></>:<p role="status">正在连接本地工作台…</p>}
   </div></main>;
-  if(!bootstrap) return <div className="pair-page">
-    <div className="pair-card"><div className="brand"><span className="brand-icon">✧</span><div><strong>智能工作台</strong></div></div>
-      <div className="eyebrow">LOCAL WORKBENCH</div><h1>连接工作台<span className="accent">.</span></h1>
-      <p className="intro">输入 Windows 服务启动时显示的一次性配对码。此操作只连接本机服务，不启动 OpenCode。</p>
-      {error&&<div className="alert" role="alert">{error}</div>}
-      <label>一次性配对码<input type="password" autoComplete="off" maxLength={256}
-        placeholder="请输入本地终端显示的配对码" value={pairingCode}
-        onChange={e=>setPairingCode(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&pairingCode.trim())void pair();}}/></label>
-      <button className="primary" disabled={busy||!pairingCode.trim()} onClick={pair}>连接本地工作台</button>
-      <p className="muted small">仅 localhost · HttpOnly 会话 · 不会修改全局 OpenCode 配置</p>
-    </div>
-  </div>;
+  if(!bootstrap) return <main className="profile-page pair-page">
+    <section className="profile-card pair-login-card" aria-labelledby="pair-title">
+      <aside className="profile-side">
+        <div className="profile-brand"><strong>Code Harness</strong><span>智能研发工作台</span></div>
+        <div className="profile-side-copy">
+          <span className="profile-overline">LOCAL AI WORKSPACE</span>
+          <h2>连接你的<br/>研发工作台</h2>
+          <p>在统一的本地界面中使用 OpenCode 对话、代码审查、日志排查和数据分析。</p>
+        </div>
+        <span className="profile-side-footer">本地连接 · 离线可用</span>
+      </aside>
+      <div className="profile-form-pane">
+        <span className="profile-overline">一次性验证</span>
+        <h1 id="pair-title">连接工作台</h1>
+        <p className="profile-subtitle">输入 Windows 服务启动时显示的一次性配对码。连接本机服务不会启动 OpenCode。</p>
+        {error&&<p className="profile-error" role="alert">{error}</p>}
+        <label>一次性配对码<input type="password" autoComplete="off" maxLength={256}
+          placeholder="请输入本地终端显示的配对码" value={pairingCode}
+          onChange={e=>setPairingCode(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&pairingCode.trim())void pair();}}/></label>
+        <button className="profile-submit" disabled={busy||!pairingCode.trim()} onClick={pair}>
+          {busy?'正在连接…':'连接本地工作台'}<span aria-hidden="true">↗</span>
+        </button>
+        <p className="profile-footnote">仅 localhost · HttpOnly 会话 · 不修改全局 OpenCode 配置</p>
+      </div>
+    </section>
+  </main>;
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><span className="brand-icon">✧</span><div><strong>智能工作台</strong></div></div>
-      <nav aria-label="场景导航" className="scene-nav">{(Object.keys(scenes) as Scene[]).map(key=>
-        <button key={key} aria-current={!selected&&scene===key?'page':undefined} className={'side-link '+(!selected&&scene===key?'selected':'')} onClick={()=>navigate(key)}>
-          <span aria-hidden="true">{{home:'▦',chat:'✳',review:'⌘',logs:'≋',data:'▥'}[key]}</span>{scenes[key]}</button>)}</nav>
-      {(tasks.length>0||selected||scene==='review'||scene==='home')&&<>
-      <div className="side-section">任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
-      <div className="history">
-        {tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')}
-          onClick={()=>setSelected(task.id)}>
-          <span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}
-        {!tasks.length&&<p className="muted small">暂无历史任务</p>}
-      </div></>}
-      <div className="workbench-account"><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
-        <button disabled={busy} onClick={()=>void act(async()=>{
-          await api.logout();
-          window.location.reload();
-        })}>退出登录</button>
+      <div className="brand"><div><strong>Code Harness</strong><small>智能研发工作台</small></div></div>
+      <button className="new-chat-action" onClick={()=>openChat('new')}><span aria-hidden="true">＋</span> 新建对话</button>
+      <nav aria-label="场景导航" className="scene-nav">
+        <button className={'side-link '+(!selected&&(scene==='home'||scene==='chat')?'selected':'')} aria-current={!selected&&(scene==='home'||scene==='chat')?'page':undefined} onClick={()=>navigate('home')}><span aria-hidden="true">◫</span> 对话首页</button>
+        <div className="side-section">专项场景</div>
+        {(['review','logs','data'] as const).map(key=><div className="scenario-group" key={key}>
+          <button className={'side-link scenario-parent '+(scene===key?'selected':'')}
+            aria-current={scene===key?'page':undefined} onClick={()=>navigate(key)}><span className={'scenario-icon '+key} aria-hidden="true">{{review:'⌘',logs:'≡',data:'▥'}[key]}</span>{scenes[key]}</button>
+        </div>)}
+        <button className="side-link mobile-history-link" onClick={()=>openChat('history')}><span aria-hidden="true">▤</span>历史对话</button>
+      </nav>
+      <div className="side-section history-heading">最近对话 <button title="查看完整对话历史" onClick={()=>openChat('history')}>全部</button></div>
+      <SidebarChatHistory onSelect={id=>openChat('select',id)} onViewAll={()=>openChat('history')}/>
+      {(tasks.length>0||selected||scene==='review')&&<>
+        <div className="side-section task-history-heading">Review 任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
+        <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
+      </>}
+      <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
+        <button aria-label="退出登录" disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
       </div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="breadcrumb">研发场景 <span>/</span> {selected?'任务详情':scenes[scene]}</div>
-        {(selected||scene==='review')&&<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 服务已就绪':'● 服务未就绪'}</span>}</header>
+      <header className="topbar"><div className="workspace-heading"><strong>工作台</strong>
+        <span className="heading-divider" aria-hidden="true"/>
+        {chatDirectory?<span className="workspace-pill" title={chatDirectory}>{chatDirectory.split(/[\\/]/).filter(Boolean).at(-1)}</span>:
+          <span className="workspace-context">{selected?'任务详情':scene==='home'||scene==='chat'?'对话首页':scenes[scene]}</span>}</div>
+        {selected||scene==='review'?<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 审查服务已就绪':'● 审查服务未就绪'}</span>:
+          <span className="workbench-connection"><span className="connection-dot" aria-hidden="true"/>本地工作台已连接</span>}</header>
       <div className="page">
       {error&&<div className="alert" role="alert">{error}<button onClick={()=>setError('')}>关闭</button></div>}
       {gap&&selected&&<div className="notice" role="status">{gap}<button onClick={()=>{loadDetail(selected).catch(e=>setError(text(e)));setGap('');}}>重新读取</button></div>}
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
-      {!selected&&scene==='home'?<ScenarioHome open={navigate}/>:!selected&&scene==='chat'?<DirectChat/>:
+      {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory}/>:
        !selected&&scene==='logs'?<LogInvestigation/>:!selected&&scene==='data'?<FileScene/>:!selected?<section className="workbench">
-        <div className="eyebrow">SCENARIO / CODE REVIEW</div>
-        <h1>代码审查工作台<span className="accent">.</span></h1>
+        <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
+        <h1>代码审查</h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
         <div className="form-panel">
-          <div className="panel-head"><div><h2>创建 Review 任务</h2><p>执行前固定代码范围，原仓库保持不变。</p></div><span className="chip">Git · Local</span></div>
+          <div className="panel-head"><div><h2>选择范围 <span className="step-arrow">→</span> 预览变更 <span className="step-arrow">→</span> 开始审查</h2><p>固定 Git 已提交版本，原仓库保持不变。</p></div><span className="chip">Git · Local</span></div>
           <div className="form-grid">
             <label>本地代码仓库<select value={repoId} onChange={e=>setRepoId(e.target.value)}>
               <option value="">请选择已登记仓库</option>{repos.map(repo=><option value={repo.id} key={repo.id}>{repo.name}</option>)}</select></label>
