@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { dispatchNext,type SchedulerConfig } from './workers/scheduler.ts';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { delimiter, join } from 'node:path';
 import { registerGitRoutes } from './modules/repositories/routes.ts';
 import { registerTaskFileRoutes } from './modules/tasks/files.ts';
@@ -111,16 +111,15 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
   if(sceneConfig){
-    // Profile sessions use their existing profile key. Paired/DB sessions
-    // use a stable, non-reversible owner token as the ACL subject.
-    const editorIdentity=(session:{ownerId:string;profile?:{key:string}})=>session.profile?.key??
-      createHash('sha256').update('workbench-owner:'+session.ownerId).digest('hex');
+    // Only a named local login can match the configured editor usernames.
+    // Pairing-code sessions have no verified username and remain read-only.
+    const editorUsername=(session:{profile?:{name:string}})=>session.profile?.name??null;
     app.get('/api/v1/scene-config',async(req,reply)=>{
-      const session=opts.auth.session(req),identity=editorIdentity(session);
+      const session=opts.auth.session(req),username=editorUsername(session);
       return reply.header('Cache-Control','no-store').send(result({
         workspace,configPath:join(workspace!,SCENE_CONFIG_PATH),accessPath:join(workspace!,SCENE_ACCESS_PATH),
-        ...sceneConfig.read(),canEdit:sceneConfig.canEdit(identity),
-        identity,
+        ...sceneConfig.read(),canEdit:sceneConfig.canEdit(username??undefined),
+        username,
       }));
     });
     app.put<{Body:{config:unknown;revision:string}}>('/api/v1/scene-config',{
@@ -128,7 +127,7 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
         config:{type:'object'},revision:{type:'string',minLength:64,maxLength:64}}}},
     },async(req,reply)=>{
       const session=opts.auth.mutation(req);
-      if(!sceneConfig.canEdit(editorIdentity(session)))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
+      if(!sceneConfig.canEdit(editorUsername(session)??undefined))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
       const saved=await sceneConfig.save(req.body.config,req.body.revision);
       return reply.header('Cache-Control','no-store').send(result({...saved,canEdit:true}));
     });
