@@ -375,3 +375,34 @@ body{background:#fff;color:var(--silver-ink);}
   .sidebar .workbench-account button{padding:5px 3px;}
   .silver-chat-home.silver-chat-active .conversation-transcript{max-width:100%;}
 }
+
+/* Two-level scene navigation: parent expands only; leaf opens the real workflow. */
+.sidebar .scene-nav .scenario-group{width:100%;min-width:0;}
+.sidebar .scene-nav .scenario-parent{gap:9px;}
+.sidebar .scene-nav .scenario-parent.expanded{font-weight:650;color:#2b3038;}
+.sidebar .scene-nav .scenario-parent .scenario-caret{
+  width:16px;min-width:16px;margin-left:auto;color:#79818c;
+  text-align:center;font-size:18px;font-weight:500;line-height:1;
+}
+.sidebar .scene-nav .scenario-icon.problem{color:#8a5b8b;}
+.sidebar .scene-nav .scenario-icon.analysis{color:#b68b1a;}
+.sidebar .scene-nav .scenario-children{
+  display:grid;gap:2px;margin:0 0 7px 20px;padding:3px 0 3px 10px;
+  border-left:1px solid #d6dce3;min-width:0;
+}
+.sidebar .scene-nav .scenario-child{
+  font-size:13px;font-weight:500;line-height:1.45;min-height:37px;
+  padding:7px 10px;color:#515963;
+}
+.sidebar .scene-nav .scenario-child > .scenario-child-mark{
+  width:16px;min-width:16px;font-size:19px;line-height:1;color:#8a929d;
+}
+.sidebar .scene-nav .scenario-child.selected{
+  background:#e1e5ea!important;color:#20262e!important;font-weight:680;
+}
+.sidebar .scene-nav .scenario-child.selected > .scenario-child-mark{color:#505d6e;}
+@media(max-width:620px){
+  .sidebar .scene-nav .scenario-group{width:100%;}
+  .sidebar .scene-nav .scenario-children{margin-left:12px;padding-left:10px;}
+  .sidebar .scene-nav .scenario-child{font-size:12px;min-height:34px;}
+}
