@@ -27,6 +27,30 @@ export class SceneConfigStore {
     this.file=join(this.folder,'scenarios.json');
     this.accessFile=join(this.folder,'config-access.json');
   }
+  /** Create empty config files on first startup without granting edit permission.
+   * The login profile is intentionally created only after a successful login.
+   * Existing files are never overwritten. */
+  initialize(){
+    this.directory(true);
+    const defaults=[
+      {path:this.file,text:JSON.stringify({version:1,scenes:{}},null,2)+'\n'},
+      {path:this.accessFile,text:JSON.stringify({version:1,editors:[]},null,2)+'\n'},
+    ];
+    for(const file of defaults){
+      // Refuse existing symlinks or non-regular files. File creation is exclusive.
+      if(this.readFile(file.path)!==null)continue;
+      let fd:number|undefined;
+      try{
+        fd=openSync(file.path,'wx',0o600);
+        writeFileSync(fd,file.text,'utf8');
+        fsyncSync(fd);
+      }catch(e){
+        if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;
+      }finally{if(fd!==undefined)closeSync(fd);}
+      this.readFile(file.path);
+    }
+    this.read(); // Invalid preexisting scene configuration blocks startup rather than being replaced.
+  }
   /** Never follow symlinks to config or the editor ACL. */
   private directory(create=false){
     if(relative(this.root,realpathSync.native(this.root))!=='')throw invalid();
