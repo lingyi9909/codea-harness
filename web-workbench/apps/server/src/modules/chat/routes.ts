@@ -10,6 +10,7 @@ import {activeFormFields,matchesFormCondition,formDefaults,type ChatForm,type Ch
 import type { FastifyInstance } from 'fastify';
 import type { ChatMessage,ChatStatus,ChatModel,ChatFragment,ChatHistoryPage,ChatScenario } from '../../../../../packages/contracts/src/chat.ts';
 import { AuthProblem,type LocalAuth } from '../../auth.ts';
+import { SceneConfigStore,type SceneKey,type Binding } from '../../scene-config.ts';
 
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
 const within=(root:string,target:string)=>{
@@ -127,17 +128,25 @@ export async function resolveLocalWorkspace(input?:string){
     throw new Error('Workspace directory does not exist or is not a directory: '+selected);
   return workspace;
 }
-export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{mayStart?:boolean;workspace?:string}){
+const sceneKey=(s:ChatScenario):SceneKey|undefined=>s==='log-inspection'?'logs':s==='message-inspection'?'message':s==='data-analysis'?'data':undefined;
+export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore}){
   const client=chatConnection(options.mayStart??false);
-  const configured=configuredRoots(),workspace=options.workspace;
+  const configured=configuredRoots(),workspace=options.workspace,sceneConfig=options.sceneConfig;
   const roots=workspace?[workspace]:configured.length?configured:[defaultDirectory];
   async function directory(input:string){
     if(!isAbsolute(input))throw new AuthProblem(400,'ABSOLUTE_DIRECTORY_REQUIRED');
     const path=await realpath(input).catch(()=>null);
     if(!path||!(await stat(path)).isDirectory())throw new AuthProblem(400,'DIRECTORY_NOT_FOUND');
     if(workspace){
-      if(relative(workspace,path)!=='')throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
-      return workspace;
+      if(relative(workspace,path)==='')return workspace;
+      // Only a directory explicitly bound by startup-workspace configuration is available.
+      const bindings=sceneConfig?.read().config.scenes??{};
+      for(const binding of Object.values(bindings)){
+        if(!binding)continue;
+        const permitted=await realpath(binding.directory).catch(()=>null);
+        if(permitted===path)return path;
+      }
+      throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
     }
     if(!configured.length&&options.mayStart)return path;
     for(const root of roots){
@@ -149,9 +158,14 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   async function owned(id:string,owner:string){
     if(!/^[\w-]{1,128}$/.test(id))throw new AuthProblem(400,'INVALID_SESSION');
     const session=await (await client()).session.get({sessionID:id});
-    if(session.id!==id||(session.metadata?.harnessScenario!=='direct-chat'&&session.metadata?.harnessScenario!=='log-inspection')||session.metadata.harnessOwner!==owner)
+    const kind=session.metadata?.harnessScenario as ChatScenario|undefined;
+    if(session.id!==id||!kind||!['direct-chat','log-inspection','message-inspection','data-analysis'].includes(kind)||session.metadata?.harnessOwner!==owner)
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
     await directory(session.location.directory);
+    if(sceneConfig&&sceneKey(kind)){
+      const binding=await sceneConfig.binding(sceneKey(kind)!);
+      if(binding.directory!==session.location.directory)throw new AuthProblem(409,'SCENE_DIRECTORY_CHANGED');
+    }
     return session;
   }
   async function pendingForms(sessionID:string){
@@ -171,6 +185,34 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   async function project(input?:string){
     if(!workspace&&!configured.length&&(!input||input===roots[0]))await mkdir(roots[0],{recursive:true});
     return directory(input??roots[0]);
+  }
+  async function sceneDirectory(kind:ChatScenario,input?:string){
+    const key=sceneKey(kind);
+    if(key&&sceneConfig){
+      const binding=await sceneConfig.binding(key);
+      if(input&&await directory(input)!==binding.directory)throw new AuthProblem(403,'SCENE_DIRECTORY_MISMATCH');
+      return binding.directory;
+    }
+    return project(input);
+  }
+  async function execution(dir:string,binding:Binding){
+    const native=await client();
+    if(binding.executor.type==='skill'){
+      const catalog=await native.skill.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
+      if(catalog.location?.directory!==dir||!Array.isArray(catalog.data))throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');
+      const candidates=catalog.data.filter(item=>item.name===binding.executor.name);
+      if(candidates.length!==1||!candidates[0].id)throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
+      return {skills:[{id:candidates[0].id}]};
+    }
+    if(binding.executor.type==='command'){
+      const catalog=await native.command.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
+      if(!catalog.data?.some(item=>item.name===binding.executor.name))throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
+      return {command:binding.executor.name};
+    }
+    const catalog=await native.agent.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
+    const agent=catalog.data?.find(item=>item.name===binding.executor.name||item.id===binding.executor.name);
+    if(!agent||!['subagent','all'].includes(String(agent.mode)))throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
+    return {agents:[{name:binding.executor.name}]};
   }
   async function models(dir:string):Promise<ChatModel[]>{
     const result=await (await client()).model.list({location:{directory:dir}});
@@ -195,11 +237,11 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     auth.mutation(req);return wrap({directory:await project(req.body.directory)});
   });
   app.post<{Body:{directory?:string;scenario:ChatScenario;cursor?:string}}>('/api/v1/chat/history',{schema:body({
-    directory:property(4096),scenario:{enum:['log-inspection','direct-chat']},cursor:property(4096),
+    directory:property(4096),scenario:{enum:['log-inspection','message-inspection','data-analysis','direct-chat']},cursor:property(4096),
   },['scenario'])},async(req,reply)=>{
     const {ownerId}=auth.mutation(req);
     const {directory:input,scenario,cursor}=req.body;
-    const dir=await project(input);
+    const dir=await sceneDirectory(scenario,input);
     const page=await (await client()).session.list({directory:dir,order:'desc',limit:50,cursor});
     const items:ChatHistoryPage['items']=[];
     for(const session of page.data){
@@ -223,16 +265,18 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     if(!match||(model.variant!==undefined&&!match.variants?.includes(model.variant)))
       throw new AuthProblem(409,'CHAT_MODEL_UNAVAILABLE');
   }
-  app.post<{Body:{directory?:string;model?:Selection;title?:string;scenario?:'log-inspection'|'direct-chat'}}>('/api/v1/chat/sessions',{schema:body({
-    directory:property(4096),title:property(120),scenario:{enum:['log-inspection','direct-chat']},model:{type:'object',additionalProperties:false,required:['providerID','id'],
+  app.post<{Body:{directory?:string;model?:Selection;title?:string;scenario?:ChatScenario}}>('/api/v1/chat/sessions',{schema:body({
+    directory:property(4096),title:property(120),scenario:{enum:['log-inspection','message-inspection','data-analysis','direct-chat']},model:{type:'object',additionalProperties:false,required:['providerID','id'],
       properties:modelFields}},[])},async(req,reply)=>{
     const {ownerId}=auth.mutation(req);
-    const dir=await project(req.body?.directory),model=req.body?.model;
+    const scenario=req.body?.scenario??'direct-chat';
+    const dir=await sceneDirectory(scenario,req.body?.directory),model=req.body?.model;
     if(model)await validateModel(dir,model);
-    if(req.body?.scenario==='log-inspection')await logQuerySkill(dir);
-    const title=req.body?.title?.trim()||(req.body?.scenario==='log-inspection'?'智能工作台 · 问题排查':'智能工作台 · 直接对话');
+    if(sceneConfig&&sceneKey(scenario))await execution(dir,await sceneConfig.binding(sceneKey(scenario)!));
+    else if(scenario==='log-inspection')await logQuerySkill(dir);
+    const title=req.body?.title?.trim()||(scenario==='direct-chat'?'智能工作台 · 直接对话':'智能工作台 · 专项场景');
     const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title,
-      metadata:{harnessScenario:req.body?.scenario??'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
+      metadata:{harnessScenario:scenario,harnessOwner:ownerId}}).catch((error:unknown)=>{
         if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
         if(error instanceof Error&&'reason' in error&&error.reason==='Transport'){
           const timedOut=error.cause instanceof Error&&error.cause.name==='TimeoutError';
@@ -339,8 +383,8 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     await (await client()).session.switchModel({sessionID,model});
     return wrap({model});
   });
-  app.post<{Params:Params;Body:{text:string;files?:string[];scenario?:'log-inspection'|'direct-chat'}}>('/api/v1/chat/sessions/:id/messages',{
-    bodyLimit:128*1024,schema:body({text:property(16000),scenario:{enum:['direct-chat','log-inspection']},files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
+  app.post<{Params:Params;Body:{text:string;files?:string[];scenario?:ChatScenario}}>('/api/v1/chat/sessions/:id/messages',{
+    bodyLimit:128*1024,schema:body({text:property(16000),scenario:{enum:['direct-chat','log-inspection','message-inspection','data-analysis']},files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
     const {ownerId}=auth.mutation(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId);
     const scenario=session.metadata?.harnessScenario;
@@ -354,7 +398,8 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       if(!target||!within(root,target)||!(await stat(target)).isFile())throw new AuthProblem(400,'FILE_OUTSIDE_WORKSPACE_OR_MISSING');
       return {uri:pathToFileURL(target).href,name};
     }));
-    const skills=scenario==='log-inspection'?[await logQuerySkill(root)]:undefined;
+    const binding=sceneConfig&&sceneKey(scenario as ChatScenario)?await sceneConfig.binding(sceneKey(scenario as ChatScenario)!):undefined;
+    const action=binding?await execution(root,binding):scenario==='log-inspection'?{skills:[await logQuerySkill(root)]}:{};
     const native=await client();
     let prompt:{text:string;metadata?:{workbenchLanguageSuffix:1}}={text};
     try{
@@ -366,7 +411,14 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       // Tag the fallback so the transcript shows the user's original input.
       prompt={text:text+languageSuffix,metadata:{workbenchLanguageSuffix:1}};
     }
-    const accepted=await native.session.prompt({sessionID,...prompt,files,skills,delivery:'queue'});
+    if('command' in action&&action.command){
+      if(files.length)throw new AuthProblem(400,'SCENE_COMMAND_FILES_UNSUPPORTED');
+      const accepted=await native.session.command({sessionID,command:action.command,arguments:prompt.text});
+      return reply.code(202).send(wrap({id:accepted.id}));
+    }
+    const accepted=await native.session.prompt({sessionID,...prompt,files,
+      ...('skills' in action?{skills:action.skills}:{}),
+      ...('agents' in action?{agents:action.agents}:{}),delivery:'queue'});
     return reply.code(202).send(wrap({id:accepted.id}));
   });
   app.post<{Params:Params;Body:{message:string;ordinal:number}}>('/api/v1/chat/sessions/:id/reasoning/translation',{
