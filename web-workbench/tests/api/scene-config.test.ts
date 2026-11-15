@@ -138,7 +138,7 @@ it('startup fills missing default scene bindings without overwriting custom conf
   assert.deepEqual(config.scenes.logs,custom,'existing binding is preserved');
   assert.deepEqual(config.scenes.message,{directory:workspace,executor:{type:'command',name:'models'}});
   assert.deepEqual(config.scenes.data,{directory:workspace,executor:{type:'builtin',name:'chat'}});
-  assert.equal('brainstorming' in JSON.stringify(config.scenes.logs),false);
+  assert.ok(!JSON.stringify(config.scenes.logs).includes('brainstorming'));
   // Second startup is idempotent and does not change the user-managed file.
   const existing=await readFile(file,'utf8');
   const next=await createApp({localOnly:true,workspace,auth:new LocalAuth('unused',4202)});
