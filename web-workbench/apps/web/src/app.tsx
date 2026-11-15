@@ -237,18 +237,32 @@ export function WorkbenchApp() {
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">
     {error?<><p role="alert">{error}</p><button onClick={reconnect}>重新连接</button></>:<p role="status">正在连接本地工作台…</p>}
   </div></main>;
-  if(!bootstrap) return <div className="pair-page">
-    <div className="pair-card"><div className="brand"><div><strong>Code Harness</strong><small>智能研发工作台</small></div></div>
-      <div className="eyebrow">LOCAL WORKBENCH</div><h1>连接工作台</h1>
-      <p className="intro">输入 Windows 服务启动时显示的一次性配对码。此操作只连接本机服务，不启动 OpenCode。</p>
-      {error&&<div className="alert" role="alert">{error}</div>}
-      <label>一次性配对码<input type="password" autoComplete="off" maxLength={256}
-        placeholder="请输入本地终端显示的配对码" value={pairingCode}
-        onChange={e=>setPairingCode(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&pairingCode.trim())void pair();}}/></label>
-      <button className="primary" disabled={busy||!pairingCode.trim()} onClick={pair}>连接本地工作台</button>
-      <p className="muted small">仅 localhost · HttpOnly 会话 · 不会修改全局 OpenCode 配置</p>
-    </div>
-  </div>;
+  if(!bootstrap) return <main className="profile-page pair-page">
+    <section className="profile-card pair-login-card" aria-labelledby="pair-title">
+      <aside className="profile-side">
+        <div className="profile-brand"><strong>Code Harness</strong><span>智能研发工作台</span></div>
+        <div className="profile-side-copy">
+          <span className="profile-overline">LOCAL AI WORKSPACE</span>
+          <h2>连接你的<br/>研发工作台</h2>
+          <p>在统一的本地界面中使用 OpenCode 对话、代码审查、日志排查和数据分析。</p>
+        </div>
+        <span className="profile-side-footer">本地连接 · 离线可用</span>
+      </aside>
+      <div className="profile-form-pane">
+        <span className="profile-overline">一次性验证</span>
+        <h1 id="pair-title">连接工作台</h1>
+        <p className="profile-subtitle">输入 Windows 服务启动时显示的一次性配对码。连接本机服务不会启动 OpenCode。</p>
+        {error&&<p className="profile-error" role="alert">{error}</p>}
+        <label>一次性配对码<input type="password" autoComplete="off" maxLength={256}
+          placeholder="请输入终端显示的配对码" value={pairingCode}
+          onChange={e=>setPairingCode(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&pairingCode.trim())void pair();}}/></label>
+        <button className="profile-submit" disabled={busy||!pairingCode.trim()} onClick={pair}>
+          {busy?'正在连接…':'连接本地工作台'}<span aria-hidden="true">↗</span>
+        </button>
+        <p className="profile-footnote">仅 localhost · HttpOnly 会话 · 不修改全局 OpenCode 配置</p>
+      </div>
+    </section>
+  </main>;
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div><strong>Code Harness</strong><small>智能研发工作台</small></div></div>
@@ -260,6 +274,7 @@ export function WorkbenchApp() {
           <button className={'side-link scenario-parent '+(scene===key?'selected':'')}
             aria-current={scene===key?'page':undefined} onClick={()=>navigate(key)}><span className={'scenario-icon '+key} aria-hidden="true">{{review:'⌘',logs:'≡',data:'▥'}[key]}</span>{scenes[key]}</button>
         </div>)}
+        <button className="side-link mobile-history-link" onClick={()=>openChat('history')}><span aria-hidden="true">▤</span>历史对话</button>
       </nav>
       <div className="side-section history-heading">最近对话 <button title="查看完整对话历史" onClick={()=>openChat('history')}>全部</button></div>
       <SidebarChatHistory onSelect={id=>openChat('select',id)} onViewAll={()=>openChat('history')}/>
