@@ -12,6 +12,8 @@ export type SceneConfiguration={version:1;scenes:Partial<Record<SceneKey,Binding
 export const SCENE_CONFIG_PATH='.workbench/scenarios.json';
 export const SCENE_ACCESS_PATH='.workbench/config-access.json';
 const EMPTY:SceneConfiguration={version:1,scenes:{}};
+// Current workbench owner. This is a UI-level allowance; local profile names are not verified.
+const DEFAULT_EDITORS=['zhangzhanhui'];
 const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
 const plain=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
 const invalid=(code='SCENE_CONFIG_INVALID')=>new AuthProblem(400,code);
@@ -34,7 +36,7 @@ export class SceneConfigStore {
     this.directory(true);
     const defaults=[
       {path:this.file,text:JSON.stringify({version:1,scenes:{}},null,2)+'\n'},
-      {path:this.accessFile,text:JSON.stringify({version:1,editors:[]},null,2)+'\n'},
+      {path:this.accessFile,text:JSON.stringify({version:1,editors:DEFAULT_EDITORS},null,2)+'\n'},
     ];
     for(const file of defaults){
       // Refuse existing symlinks or non-regular files. File creation is exclusive.
@@ -92,16 +94,18 @@ export class SceneConfigStore {
     catch(e){if(e instanceof AuthProblem)throw e;throw invalid();}
   }
   /** Fail closed. This file is managed outside the web editor to avoid self-grant. */
-  canEdit(identity?:string):boolean{
-    if(!identity)return false;
+  canEdit(username?:string):boolean{
+    if(!username)return false;
     let raw:string|null;
     try{raw=this.readFile(this.accessFile);}catch{return false;}
     if(!raw)return false;
     try{
       const acl=JSON.parse(raw) as unknown;
       return plain(acl)&&acl.version===1&&Array.isArray(acl.editors)&&
-        acl.editors.length<=100&&acl.editors.every((item:unknown)=>typeof item==='string'&&/^[a-f0-9]{64}$/.test(item))&&
-        acl.editors.includes(identity);
+        acl.editors.length<=100&&acl.editors.every((item:unknown)=>
+          typeof item==='string'&&item===item.trim()&&item.length>0&&
+          [...item].length<=80&&!/\\p{Cc}/u.test(item)&&item!=='*')&&
+        acl.editors.includes(username);
     }catch{return false;}
   }
   async binding(key:SceneKey):Promise<Binding>{
