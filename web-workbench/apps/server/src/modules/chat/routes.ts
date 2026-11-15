@@ -161,7 +161,9 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     const kind=session.metadata?.harnessScenario as ChatScenario|undefined;
     if(session.id!==id||!kind||!['direct-chat','log-inspection','message-inspection','data-analysis'].includes(kind)||session.metadata?.harnessOwner!==owner)
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
-    await directory(session.location.directory);
+    const activeDirectory=await directory(session.location.directory);
+    if(kind==='direct-chat'&&workspace&&activeDirectory!==workspace)
+      throw new AuthProblem(404,'CHAT_NOT_FOUND');
     if(sceneConfig&&sceneKey(kind)){
       const binding=await sceneConfig.binding(sceneKey(kind)!);
       if(binding.directory!==session.location.directory)throw new AuthProblem(409,'SCENE_DIRECTORY_CHANGED');
@@ -193,7 +195,10 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       if(input&&await directory(input)!==binding.directory)throw new AuthProblem(403,'SCENE_DIRECTORY_MISMATCH');
       return binding.directory;
     }
-    return project(input);
+    const resolved=await project(input);
+    if(kind==='direct-chat'&&workspace&&resolved!==workspace)
+      throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
+    return resolved;
   }
   type Execution={kind:'skill';skills:{id:string}[]}|{kind:'command';name:string}|{kind:'subagent';agents:{name:string}[]}|{kind:'direct'};
   async function execution(dir:string,binding:Binding):Promise<Execution>{
