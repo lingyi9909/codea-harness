@@ -14,9 +14,15 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   const port=4176,host='127.0.0.1:'+port,origin='http://'+host;
   const app=await createApp({localOnly:true,workspace:project,auth:new LocalAuth('unused',port)});
   t.after(()=>app.close());
+  const configDir=join(project,'.workbench');
+  // Startup creates both empty files without granting editing privileges.
+  assert.deepEqual(JSON.parse(await readFile(join(configDir,'scenarios.json'),'utf8')),{version:1,scenes:{}});
+  assert.deepEqual(JSON.parse(await readFile(join(configDir,'config-access.json'),'utf8')),{version:1,editors:[]});
+  await assert.rejects(readFile(join(configDir,'user.json'),'utf8'),{code:'ENOENT'});
   const profile={name:'业务开发',phone:'13800000000'};
   const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',headers:{host,origin},payload:profile});
   assert.equal(login.statusCode,200);
+  assert.deepEqual(JSON.parse(await readFile(join(configDir,'user.json'),'utf8')),profile);
   const headers={host,origin,cookie:String(login.headers['set-cookie']).split(';')[0],
     'x-csrf-token':login.json().data.csrfToken};
   const read=()=>app.inject({method:'GET',url:'/api/v1/scene-config',headers});
@@ -25,6 +31,8 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   const before=await read();
   assert.equal(before.statusCode,200);
   assert.deepEqual(before.json().data.config,{version:1,scenes:{}});
+  assert.equal(before.json().data.configPath,join(await realpath(project),'.workbench','scenarios.json'));
+  assert.equal(before.json().data.accessPath,join(await realpath(project),'.workbench','config-access.json'));
   assert.equal(before.json().data.canEdit,false);
   assert.equal(before.json().data.identity,profileKey(profile));
   assert.equal((await write({version:1,scenes:{}},before.json().data.revision)).statusCode,403);
