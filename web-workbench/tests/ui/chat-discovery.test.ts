@@ -559,6 +559,29 @@ it('groups a multi-step weather response and keeps verification output out of th
     const prefixes=await painted.evaluate(seen=>[...seen]);
     assert.ok(prefixes.filter(s=>s.length>1&&s.length<fallbackAnswer.length&&fallbackAnswer.startsWith(s)).length>=3,
       'snapshot-only completion is paced for the new turn');
+    // Switching scenarios must keep the same OpenCode conversation and must not POST a new session.
+    const createdSessions:string[]=[];
+    page.on('request',request=>{
+      if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/chat/sessions')
+        createdSessions.push(request.url());
+    });
+    const navigation=page.getByRole('navigation',{name:'场景导航'});
+    await navigation.getByRole('button',{name:'数据分析',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'数据分析'})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toHaveCount(0);
+    await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
+    await expect(response.last()).toContainText(fallbackAnswer);
+    await expect(page.getByLabel('对话内容')).toBeVisible();
+    assert.deepEqual(createdSessions,[],'navigating never creates a native OpenCode session');
+    await page.getByRole('complementary').getByRole('button',{name:'新建对话'}).click();
+    await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toBeVisible();
+    await expect(page.getByLabel('对话内容')).toHaveValue('');
+    await expect(response).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'北京明天的天气',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'北京明天的天气',exact:true}).click();
+    await expect(response.last()).toContainText(fallbackAnswer);
+    assert.deepEqual(createdSessions,[],'restoring a sidebar history item reuses its native session');
+
 
   }finally{await browser.close();await app.close();await rm(root,{recursive:true,force:true});}
 });
