@@ -406,3 +406,33 @@ body{background:#fff;color:var(--silver-ink);}
   .sidebar .scene-nav .scenario-children{margin-left:12px;padding-left:10px;}
   .sidebar .scene-nav .scenario-child{font-size:12px;min-height:34px;}
 }
+
+/* Scene binding editor, shared silver-white controls. */
+.sidebar > .sidebar-settings{
+  display:flex;align-items:center;gap:11px;width:100%;padding:11px;
+  min-height:42px;margin-top:auto;border:0;border-radius:7px;
+  text-align:left;background:transparent;color:#464c55;font-size:14px;
+}
+.sidebar > .sidebar-settings.selected{background:#e3e6eb;color:#252a30;font-weight:650;}
+.sidebar > .sidebar-settings > span{width:24px;min-width:24px;text-align:center;font-size:18px;color:#67717e;}
+.sidebar .workbench-account{margin-top:12px;}
+.scene-config-page{max-width:1050px;margin:20px auto 44px;}
+.scene-config-meta{padding:12px 0 22px;border-bottom:1px solid #dce1e7;font-size:13px;line-height:1.7;}
+.scene-config-meta p{margin:4px 0;overflow-wrap:anywhere;}
+.scene-config-meta code,.scene-config-page code{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+.scene-config-list{display:grid;gap:14px;margin:19px 0 22px;}
+.scene-config-row{padding:21px 24px;}
+.scene-config-row h2{margin:0 0 4px;font-size:17px;font-weight:700;}
+.scene-config-row p{margin:0 0 17px;font-size:13px;}
+.scene-config-fields{display:grid;grid-template-columns:minmax(220px,1.6fr) minmax(140px,.7fr) minmax(160px,1fr);gap:13px;}
+.scene-config-fields label{display:grid;gap:7px;font-size:13px;font-weight:650;color:#434b56;min-width:0;}
+.scene-config-fields :is(input,select){width:100%;min-width:0;min-height:41px;border:1px solid #d4dae2;border-radius:6px;padding:9px 10px;background:#fff;color:#242a30;font-size:13px;}
+.scene-config-fields input:read-only{background:#f5f6f8;color:#68717b;}
+@media(max-width:900px){.scene-config-fields{grid-template-columns:1fr 1fr;}.scene-config-fields label:first-child{grid-column:1/-1;}}
+@media(max-width:620px){
+  .sidebar > .sidebar-settings{margin:7px 0 0;min-height:36px;font-size:12px;}
+  .scene-config-fields{grid-template-columns:1fr;}
+  .scene-config-fields label:first-child{grid-column:auto;}
+  .scene-config-row{padding:15px;}
+  .sidebar .workbench-account{margin:0;}
+}
