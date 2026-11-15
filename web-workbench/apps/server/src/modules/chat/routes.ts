@@ -195,24 +195,25 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     }
     return project(input);
   }
-  async function execution(dir:string,binding:Binding){
+  type Execution={kind:'skill';skills:{id:string}[]}|{kind:'command';name:string}|{kind:'subagent';agents:{name:string}[]}|{kind:'direct'};
+  async function execution(dir:string,binding:Binding):Promise<Execution>{
     const native=await client();
     if(binding.executor.type==='skill'){
       const catalog=await native.skill.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
       if(catalog.location?.directory!==dir||!Array.isArray(catalog.data))throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');
       const candidates=catalog.data.filter(item=>item.name===binding.executor.name);
       if(candidates.length!==1||!candidates[0].id)throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
-      return {skills:[{id:candidates[0].id}]};
+      return {kind:'skill',skills:[{id:candidates[0].id}]};
     }
     if(binding.executor.type==='command'){
       const catalog=await native.command.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
       if(!catalog.data?.some(item=>item.name===binding.executor.name))throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
-      return {command:binding.executor.name};
+      return {kind:'command',name:binding.executor.name};
     }
     const catalog=await native.agent.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
     const agent=catalog.data?.find(item=>item.name===binding.executor.name||item.id===binding.executor.name);
     if(!agent||!['subagent','all'].includes(String(agent.mode)))throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
-    return {agents:[{name:binding.executor.name}]};
+    return {kind:'subagent',agents:[{name:binding.executor.name}]};
   }
   async function models(dir:string):Promise<ChatModel[]>{
     const result=await (await client()).model.list({location:{directory:dir}});
@@ -399,7 +400,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       return {uri:pathToFileURL(target).href,name};
     }));
     const binding=sceneConfig&&sceneKey(scenario as ChatScenario)?await sceneConfig.binding(sceneKey(scenario as ChatScenario)!):undefined;
-    const action=binding?await execution(root,binding):scenario==='log-inspection'?{skills:[await logQuerySkill(root)]}:{};
+    const action:Execution=binding?await execution(root,binding):scenario==='log-inspection'?{kind:'skill',skills:[await logQuerySkill(root)]}:{kind:'direct'};
     const native=await client();
     let prompt:{text:string;metadata?:{workbenchLanguageSuffix:1}}={text};
     try{
@@ -411,14 +412,14 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       // Tag the fallback so the transcript shows the user's original input.
       prompt={text:text+languageSuffix,metadata:{workbenchLanguageSuffix:1}};
     }
-    if('command' in action&&action.command){
+    if(action.kind==='command'){
       if(files.length)throw new AuthProblem(400,'SCENE_COMMAND_FILES_UNSUPPORTED');
-      const accepted=await native.session.command({sessionID,command:action.command,arguments:prompt.text});
-      return reply.code(202).send(wrap({id:accepted.id}));
+      await native.session.command({sessionID,name:action.name,text:prompt.text,delivery:'queue'});
+      return reply.code(202).send(wrap({id:sessionID}));
     }
     const accepted=await native.session.prompt({sessionID,...prompt,files,
-      ...('skills' in action?{skills:action.skills}:{}),
-      ...('agents' in action?{agents:action.agents}:{}),delivery:'queue'});
+      ...(action.kind==='skill'?{skills:action.skills}:{}),
+      ...(action.kind==='subagent'?{agents:action.agents}:{}),delivery:'queue'});
     return reply.code(202).send(wrap({id:accepted.id}));
   });
   app.post<{Params:Params;Body:{message:string;ordinal:number}}>('/api/v1/chat/sessions/:id/reasoning/translation',{
