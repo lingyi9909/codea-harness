@@ -29,7 +29,7 @@ export class SceneConfigStore {
     this.file=join(this.folder,'scenarios.json');
     this.accessFile=join(this.folder,'config-access.json');
   }
-  /** Create empty config files on first startup without granting edit permission.
+  /** Initialize safe config files on first startup with the explicitly selected test editor.
    * The login profile is intentionally created only after a successful login.
    * Existing files are never overwritten. */
   initialize(){
@@ -104,7 +104,7 @@ export class SceneConfigStore {
       return plain(acl)&&acl.version===1&&Array.isArray(acl.editors)&&
         acl.editors.length<=100&&acl.editors.every((item:unknown)=>
           typeof item==='string'&&item===item.trim()&&item.length>0&&
-          [...item].length<=80&&!/\\p{Cc}/u.test(item)&&item!=='*')&&
+          [...item].length<=80&&!/\p{Cc}/u.test(item)&&item!=='*')&&
         acl.editors.includes(username);
     }catch{return false;}
   }
