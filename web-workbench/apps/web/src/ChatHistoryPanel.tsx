@@ -11,13 +11,9 @@ export function ChatHistoryPanel({scene,directory,active,disabled,onSelect}:{
   const [cursor,setCursor]=useState<string>(),[next,setNext]=useState<string>();
   const [loading,setLoading]=useState(true),[error,setError]=useState(''),[retry,again]=useState(0);
   useEffect(()=>{
-    // Message investigation reuses the existing log-inspection backend. Its
-    // client-side subtype is not a server filter, so do not mix unrelated
-    // remote sessions into the dedicated message history.
-    if(scene==='harness.message'){setLoading(false);setError('');setNext(undefined);return;}
     let live=true;
     setLoading(true);setError('');
-    api.chatHistory(directory||undefined,scene==='harness.chat'?'direct-chat':'log-inspection',cursor)
+    api.chatHistory(directory||undefined,scene==='harness.chat'?'direct-chat':scene==='harness.message'?'message-inspection':scene==='harness.data'?'data-analysis':'log-inspection',cursor)
       .then(page=>{
         if(!live)return;
         setRemote(previous=>cursor?[...previous,...page.items]:page.items);
@@ -27,9 +23,7 @@ export function ChatHistoryPanel({scene,directory,active,disabled,onSelect}:{
     return ()=>{live=false;};
   },[scene,directory,cursor,retry]);
   const rows=new Map(local.map(row=>[row.id,row]));
-  const messageIds=new Set(readHistory(localStorage,'harness.message',directory).map(row=>row.id));
   for(const row of remote){
-    if(scene==='harness.logs'&&messageIds.has(row.id))continue;
     const known=rows.get(row.id);
     rows.set(row.id,{id:row.id,title:displayChatTitle(row.title,known?.title),updated:Math.max(row.updated||0,known?.updated??0)});
   }
