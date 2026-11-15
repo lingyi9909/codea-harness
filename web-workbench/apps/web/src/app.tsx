@@ -38,12 +38,12 @@ export function WorkbenchApp() {
     const saved=sessionStorage.getItem('harness.scene')??'home';
     return Object.hasOwn(scenes,saved)?saved as Scene:'home';
   });
-  const [expanded,setExpanded]=useState<Scene|null>(()=>{
-    const saved=sessionStorage.getItem('harness.scene');
-    return saved==='review'||saved==='logs'||saved==='data'?saved:null;
-  });
   const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
-  const navigate=(next:Scene)=>{setSelected('');setScene(next==='chat'?'home':next);sessionStorage.setItem('harness.scene',next==='chat'?'home':next);};
+  const navigate=(next:Scene)=>{
+    // Scene navigation never creates a native session; the chat restores its own saved id/draft.
+    const target=next==='chat'?'home':next;
+    setSelected('');setScene(target);sessionStorage.setItem('harness.scene',target);
+  };
   const openChat=(kind:'new'|'history'|'select',id?:string)=>{
     navigate('home');setChatNavigation(previous=>({kind,id,seq:previous.seq+1}));
   };
@@ -256,10 +256,8 @@ export function WorkbenchApp() {
         <button className={'side-link '+(!selected&&(scene==='home'||scene==='chat')?'selected':'')} aria-current={!selected&&(scene==='home'||scene==='chat')?'page':undefined} onClick={()=>navigate('home')}><span aria-hidden="true">◫</span> 对话首页</button>
         <div className="side-section">专项场景</div>
         {(['review','logs','data'] as const).map(key=><div className="scenario-group" key={key}>
-          <button className={'side-link scenario-parent '+(!selected&&scene===key?'selected':'')} aria-expanded={expanded===key} onClick={()=>{
-            // One real entry per category: open the existing scene directly.
-            setExpanded(key);navigate(key);
-          }}><span className={'scenario-icon '+key} aria-hidden="true">{{review:'⌘',logs:'≡',data:'▥'}[key]}</span>{scenes[key]}</button>
+          <button className={'side-link scenario-parent '+(scene===key?'selected':'')}
+            aria-current={scene===key?'page':undefined} onClick={()=>navigate(key)}><span className={'scenario-icon '+key} aria-hidden="true">{{review:'⌘',logs:'≡',data:'▥'}[key]}</span>{scenes[key]}</button>
         </div>)}
       </nav>
       <div className="side-section history-heading">最近对话 <button title="查看完整对话历史" onClick={()=>openChat('history')}>全部</button></div>
