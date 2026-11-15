@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
+import {defaultSceneConfiguration} from '../../apps/server/src/scene-config.ts';
 
 it('routes each configured subscene through its own native executor and directory',async t=>{
   const root=await realpath(await mkdtemp(join(tmpdir(),'scene-entry-')));
@@ -97,4 +98,19 @@ it('routes each configured subscene through its own native executor and director
   const missing=await send(log.json().data.id,'log-inspection','再查一次');
   assert.equal(missing.statusCode,409);
   assert.equal(missing.json().error.code,'SCENE_EXECUTOR_NOT_FOUND');
+
+  // Stock /models is an interactive model picker, never a custom task command.
+  await writeFile(join(conf,'scenarios.json'),JSON.stringify(defaultSceneConfiguration(root)));
+  const callsBefore=observed.filter(row=>/^\\/api\\/session\\/ses_scene_\\d+\\/command$/.test(row.url)).length;
+  const modelsScene=await create('message-inspection');
+  assert.equal(modelsScene.statusCode,201,modelsScene.body);
+  const modelsSend=await send(modelsScene.json().data.id,'message-inspection','排查报文');
+  assert.equal(modelsSend.statusCode,202,modelsSend.body);
+  assert.equal(observed.filter(row=>/^\\/api\\/session\\/ses_scene_\\d+\\/command$/.test(row.url)).length,callsBefore);
+  assert.equal(observed.filter(row=>row.url.endsWith('/prompt')).at(-1)?.body.text,'排查报文');
+  const builtinData=await create('data-analysis');
+  assert.equal(builtinData.statusCode,201,builtinData.body);
+  const analysis=await send(builtinData.json().data.id,'data-analysis','分析数据');
+  assert.equal(analysis.statusCode,202,analysis.body);
+  assert.equal(observed.filter(row=>row.url.endsWith('/prompt')).at(-1)?.body.text,'分析数据');
 });
