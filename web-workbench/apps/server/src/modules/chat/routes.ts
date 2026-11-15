@@ -230,7 +230,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     const dir=await project(req.body?.directory),model=req.body?.model;
     if(model)await validateModel(dir,model);
     if(req.body?.scenario==='log-inspection')await logQuerySkill(dir);
-    const title=req.body?.title?.trim()||(req.body?.scenario==='log-inspection'?'Code Harness · 日志排查':'Code Harness · 直接对话');
+    const title=req.body?.title?.trim()||(req.body?.scenario==='log-inspection'?'智能工作台 · 问题排查':'智能工作台 · 直接对话');
     const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title,
       metadata:{harnessScenario:req.body?.scenario??'direct-chat',harnessOwner:ownerId}}).catch((error:unknown)=>{
         if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
