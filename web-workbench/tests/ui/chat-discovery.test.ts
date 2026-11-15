@@ -207,7 +207,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.equal(await sessionCookie(),cookie);
     // The home is already the native OpenCode chat; do not navigate to a separate scene.
     await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
-    await expect(page.locator('.sidebar .brand')).toContainText('Code Harness');
+    await expect(page.locator('.sidebar .brand')).toContainText('智能工作台');
     await expect(page.locator('.chat-hero,.scene-cards')).toHaveCount(0);
     await expect(page).toHaveTitle('智能工作台');
     async function checkChatLayout(){
@@ -243,7 +243,25 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     const created=JSON.parse(await readFile(file+'.body','utf8'));
     assert.deepEqual(created.model,{id:'intranet',providerID:'company'});
     assert.equal(created.location.directory,await realpath(project));
-    await page.getByRole('navigation').getByRole('button',{name:'日志排查',exact:true}).click();
+    const nav=page.getByRole('navigation',{name:'场景导航'});
+    const problem=nav.getByRole('button',{name:'问题排查',exact:true});
+    await expect(problem).toHaveAttribute('aria-expanded','false');
+    await problem.click();
+    await expect(problem).toHaveAttribute('aria-expanded','true');
+    await expect(nav.getByRole('button',{name:'公管问题排查'})).toBeVisible();
+    await expect(nav.getByRole('button',{name:'报文问题排查'})).toBeVisible();
+    await nav.getByRole('button',{name:'报文问题排查'}).click();
+    await expect(page.getByRole('heading',{name:'报文问题排查'})).toBeVisible();
+    await page.getByLabel('对话内容').fill('报文模式独立草稿');
+    await nav.getByRole('button',{name:'公管问题排查'}).click();
+    await expect(page.getByRole('heading',{name:'公管问题排查'})).toBeVisible();
+    await expect(page.getByLabel('对话内容')).toHaveValue('');
+    await nav.getByRole('button',{name:'报文问题排查'}).click();
+    await expect(page.getByLabel('对话内容')).toHaveValue('报文模式独立草稿');
+    await nav.getByRole('button',{name:'公管问题排查'}).click();
+    await expect(problem).toHaveAttribute('aria-expanded','true');
+    await expect(nav.getByRole('button',{name:'公管问题排查'})).toHaveAttribute('aria-current','page');
+    await expect(nav.getByRole('button',{name:'数据分析',exact:true})).toHaveAttribute('aria-expanded','false');
     const submit=page.getByRole('button',{name:'开始排查'});
     await checkChatLayout();
     await expect(page.getByText('要排查哪次请求？')).toHaveCount(0);
@@ -595,7 +613,9 @@ it('groups a multi-step weather response and keeps verification output out of th
     });
     const navigation=page.getByRole('navigation',{name:'场景导航'});
     await navigation.getByRole('button',{name:'数据分析',exact:true}).click();
-    await expect(page.getByRole('heading',{name:'数据分析'})).toBeVisible();
+    await expect(navigation.getByRole('button',{name:'数据分析',exact:true})).toHaveAttribute('aria-expanded','true');
+    await navigation.getByRole('button',{name:'公管数据分析',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'公管数据分析'})).toBeVisible();
     await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
       name:'orders.csv',mimeType:'text/csv',buffer:Buffer.from('order,amount\nA001,120\nA002,220\n')});
     await expect(page.getByText(/2 行 · 2 列/)).toBeVisible();
