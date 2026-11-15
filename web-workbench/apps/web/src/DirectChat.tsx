@@ -36,9 +36,10 @@ function explain(e:unknown){
 }
 type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void};
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
-export function DirectChat({investigation,navigation}:{investigation?:Investigation;navigation?:ChatNavigation}={}){
+export function DirectChat({investigation,navigation,onDirectoryChange}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void}={}){
   const [settings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
   useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live)configure(s);}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
+  useEffect(()=>{if(settings)onDirectoryChange?.(settings.directories[0]??'');},[settings,onDirectoryChange]);
   if(!settings)return <p role={error?'alert':'status'}>{error||'正在加载工作目录…'}</p>;
   const directory=settings.directories[0]??'';
   return <ChatWorkspace key={directory} directory={directory} settings={settings} investigation={investigation} navigation={navigation}/>;
@@ -173,7 +174,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
     <div className="chat-layout"><div className="chat-box">
       {(!investigation||messages.length>0||stream.tools.length>0||state?.active)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
-      }}>{!investigation&&!messages.length&&!state?.active&&<div className="chat-empty"><p className="chat-project-hint">当前项目 · {directory.split(/[\\/]/).filter(Boolean).at(-1)||'工作目录'}</p><h2>直接开始你的工作</h2><p>描述问题，OpenCode 将在当前项目中处理。</p><button onClick={()=>write('请阅读 README，告诉我这个项目如何启动。')}>了解项目结构 ↗</button></div>}
+      }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><p className="chat-project-hint">当前项目　/　{directory.split(/[\\/]/).filter(Boolean).at(-1)||'工作目录'}</p><h2>直接开始你的工作</h2><p>描述问题，OpenCode 将在当前项目中处理。</p></div>}
         <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
       </div>}
       {error&&<p role="alert" className="notice">{error}</p>}
@@ -195,5 +196,10 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {interrupt}
           <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
-      </div>}</div></div></section>;
+      </div>}
+      {!investigation&&!id&&!messages.length&&!pending&&<div className="chat-quick-actions" aria-label="快捷提问">
+        <button type="button" onClick={()=>{write('请阅读项目的目录结构和 README，解释各模块的职责。');input.current?.focus();}}>解释项目结构 <span aria-hidden="true">↗</span></button>
+        <button type="button" onClick={()=>{write('请从入口开始梳理这个项目的主要调用链。');input.current?.focus();}}>梳理调用链 <span aria-hidden="true">↗</span></button>
+      </div>}
+    </div></div></section>;
 }
