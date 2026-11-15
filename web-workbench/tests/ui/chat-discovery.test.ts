@@ -148,6 +148,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
   await chmod(cli,0o755);
   const browser=await chromium.launch(process.env.HARNESS_TEST_CHROME?{channel:'chrome'}:{});
   const cwd=process.cwd(),saved={...process.env};
+  const shots=join(cwd,'screenshots');
+  await mkdir(shots,{recursive:true});
   process.chdir(root);
   process.env.PATH=root;
   process.env.HARNESS_OPENCODE_SERVICE_FILE=file;
@@ -185,6 +187,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     for(const value of ['测试同事','13800000000'])assert.ok(!contactCache.includes(value));
     await expect(page.getByRole('navigation')).toBeVisible();
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
+    await expect(page.getByLabel('对话内容')).toBeVisible();
+    await page.screenshot({path:join(shots,'01-home-empty.png')});
     assert.equal(sessionRequests,1);
     const sessionCookie=async()=>(await page.context().cookies()).find(c=>c.name==='harness_session')?.value;
     const cookie=await sessionCookie();
@@ -211,6 +215,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await search.fill('company');
     await expect(page.getByRole('option',{name:/Analysis fixture/})).toHaveCount(0);
     await expect(page.getByRole('option',{name:/Company fixture/})).toBeVisible();
+    await page.screenshot({path:join(shots,'02-model-picker.png')});
     await search.press('Enter');
     const composer=page.getByLabel('对话内容');
     await composer.fill('第一行');
@@ -235,6 +240,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await checkChatLayout();
     await expect(page.getByText('要排查哪次请求？')).toHaveCount(0);
     await expect(page.locator('.chat-feed')).toHaveCount(0);
+    await page.screenshot({path:join(shots,'03-log-criteria.png')});
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
@@ -337,6 +343,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(running).toHaveCount(0);
     await expect(feed.locator('.turn-process').first()).not.toHaveAttribute('open','');
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
+    await page.screenshot({path:join(shots,'04-log-results.png')});
     await expect(feed.getByRole('cell',{name:'120 ms'})).toBeVisible();
     await expect(feed.locator('pre code.language-json')).toContainText('"count"');
     await page.getByRole('button',{name:'选择模型'}).click();
@@ -351,6 +358,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     await writeFile(file+'.ask','1');
     await expect(page.getByText('选择排查范围',{exact:true})).toBeVisible();
+    await page.screenshot({path:join(shots,'05-log-form-waiting.png')});
     // Sidebar starts a direct chat; the log scene owns its independent new-investigation action.
     await page.locator('.log-investigation').getByRole('button',{name:'新建对话'}).click();
     await expect(page.getByLabel('对话内容')).toHaveValue('');
@@ -381,6 +389,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('button',{name:'提交回答'}).click();
     await expect.poll(async()=>(await recorded('.answer')).answer).toEqual({scope:'trace',service:'orders',note:'手动说明'});
     await expect(page.getByText('logs/orders.log',{exact:true})).toBeVisible();
+    await page.screenshot({path:join(shots,'06-log-permission-waiting.png')});
     await page.getByRole('button',{name:'仅本次允许'}).click();
     await expect.poll(async()=>(await recorded('.permission')).decision).toBe('once');
     const codeForm=page.getByRole('form',{name:'验证本次查询'});
@@ -474,10 +483,13 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.goto('http://127.0.0.1:'+port);
     await login(page);
     const response=page.getByRole('article',{name:'OpenCode 回答'});
+    const shots=join(process.cwd(),'screenshots');
+    await mkdir(shots,{recursive:true});
     const body=response.getByRole('region',{name:'回答正文'});
     await expect(response).toHaveCount(1);
     await expect(body.getByRole('link',{name:'中央气象台'})).toBeVisible();
     await expect(body).toContainText('15℃');
+    await page.screenshot({path:join(shots,'07-conversation-active.png')});
     const answerBox=await body.boundingBox(),questionBox=await page.locator('.user-question').boundingBox();
     const composerBox=await page.locator('.composer').boundingBox();
     assert.ok(questionBox&&answerBox&&composerBox);
@@ -568,6 +580,10 @@ it('groups a multi-step weather response and keeps verification output out of th
     const navigation=page.getByRole('navigation',{name:'场景导航'});
     await navigation.getByRole('button',{name:'数据分析',exact:true}).click();
     await expect(page.getByRole('heading',{name:'数据分析'})).toBeVisible();
+    await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
+      name:'orders.csv',mimeType:'text/csv',buffer:Buffer.from('order,amount\nA001,120\nA002,220\n')});
+    await expect(page.getByText(/2 行 · 2 列/)).toBeVisible();
+    await page.screenshot({path:join(shots,'08-csv-analysis.png')});
     await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toHaveCount(0);
     await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
     await expect(response.last()).toContainText(fallbackAnswer);
