@@ -267,7 +267,7 @@ export function WorkbenchApp() {
         <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
       </>}
       <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
-        <button disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
+        <button aria-label="退出登录" disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
       </div>
     </aside>
     <main className="main">
