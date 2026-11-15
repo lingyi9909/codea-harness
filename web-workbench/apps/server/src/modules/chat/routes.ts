@@ -422,9 +422,14 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       await native.session.command({sessionID,name:action.name,text:prompt.text,delivery:'queue'});
       return reply.code(202).send(wrap({id:sessionID}));
     }
-    const accepted=await native.session.prompt({sessionID,...prompt,files,
+    // A declared agent attachment alone is not an invocation. Include the
+    // native @mention span so OpenCode routes this prompt to the subagent.
+    const agent=action.kind==='subagent'?action.agents[0]?.name:undefined;
+    const mention=agent?'@'+agent:undefined;
+    const prepared=mention?{...prompt,text:mention+' '+prompt.text}:prompt;
+    const accepted=await native.session.prompt({sessionID,...prepared,files,
       ...(action.kind==='skill'?{skills:action.skills}:{}),
-      ...(action.kind==='subagent'?{agents:action.agents}:{}),delivery:'queue'});
+      ...(mention?{agents:[{name:agent!,mention:{start:0,end:mention.length,text:mention}}]}:{}),delivery:'queue'});
     return reply.code(202).send(wrap({id:accepted.id}));
   });
   app.post<{Params:Params;Body:{message:string;ordinal:number}}>('/api/v1/chat/sessions/:id/reasoning/translation',{
