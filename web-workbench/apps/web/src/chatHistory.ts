@@ -1,7 +1,7 @@
 import type {ChatHistoryPage} from '../../../packages/contracts/src/chat.ts';
 
 export type HistoryRow=ChatHistoryPage['items'][number];
-export type SceneKey='harness.chat'|'harness.logs';
+export type SceneKey='harness.chat'|'harness.logs'|'harness.message';
 const prefix=(scene:SceneKey,directory:string)=>scene+'.history.'+JSON.stringify(directory)+'.';
 const selection=(scene:SceneKey,directory:string)=>scene+'.selected.'+JSON.stringify(directory);
 
@@ -44,7 +44,7 @@ export function readDraft(key:string):{text:string;files:string}{
 
 export function displayChatTitle(native?:string,cached?:string){
   const title=native?.trim();
-  return title&&!/^Code Harness · (直接对话|日志排查)$/.test(title)?title:cached??'';
+  return title&&!/^(?:Code Harness|智能工作台) · (直接对话|日志排查|问题排查)$/.test(title)?title:cached??'';
 }
 
 export function summarizeFirstInput(text='',logInspection=false){
