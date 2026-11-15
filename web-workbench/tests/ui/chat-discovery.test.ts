@@ -229,7 +229,21 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('button',{name:'保存场景配置'}).click();
     await expect(page.getByRole('status').last()).toContainText('配置已写入当前启动目录');
     await page.screenshot({path:join(shots,'10-scene-config-editor.png')});
-    await page.getByRole('navigation',{name:'场景导航'}).getByRole('button',{name:'对话首页'}).click();
+    // A missing scenario binding must show actionable local configuration guidance,
+    // not an offline error or an attempt to contact OpenCode.
+    const sceneFile=join(settingsDir,'scenarios.json');
+    const configured=await readFile(sceneFile,'utf8');
+    await writeFile(sceneFile,JSON.stringify({version:1,scenes:{}}));
+    const sceneNav=page.getByRole('navigation',{name:'场景导航'});
+    await sceneNav.getByRole('button',{name:'问题排查',exact:true}).click();
+    await sceneNav.getByRole('button',{name:'公管问题排查',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'当前子场景尚未配置'})).toBeVisible();
+    await expect(page.getByText('连接已中断')).toHaveCount(0);
+    await page.screenshot({path:join(shots,'11-scene-unconfigured.png')});
+    await writeFile(sceneFile,configured);
+    await page.getByRole('button',{name:'重新检查配置'}).click();
+    await expect(page.getByRole('heading',{name:'公管问题排查'})).toBeVisible();
+    await sceneNav.getByRole('button',{name:'对话首页'}).click();
     await expect(page.locator('.chat-hero,.scene-cards')).toHaveCount(0);
     await expect(page).toHaveTitle('智能工作台');
     async function checkChatLayout(){
