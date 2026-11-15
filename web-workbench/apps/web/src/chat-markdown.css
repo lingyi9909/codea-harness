@@ -375,7 +375,7 @@
   font-weight: 650;
 }
 .turn-answer [data-component="markdown"] :is(h1,h2,h3,h4,h5,h6) {
-  color: #164d4a;
+  color: #292e35;
   font-size: 1.1em;
   font-weight: 700;
   line-height: 1.45;
@@ -383,8 +383,8 @@
 }
 .turn-answer [data-component="markdown"] :first-child:is(h1,h2,h3,h4,h5,h6) { margin-top: 0; }
 .turn-answer [data-component="markdown"] :not(pre) > code {
-  color: #21623e;
-  background: #eff6ef;
+  color: #425368;
+  background: #f0f2f5;
   padding-inline: .2em;
 }
 .turn-answer [data-component="markdown"] :is(ul,ol) { margin-block: .3em .65em; padding-inline-start: 1.65em; }
@@ -392,4 +392,4 @@
 .turn-answer [data-component="markdown"] li > :is(ul,ol) { margin-block: .1em; }
 .reasoning-body [data-component="markdown"] { font-size: 14px; line-height: 1.55; }
 .turn-answer [data-component="markdown"] :is(h1,h2) { font-size: 1.23em; }
-.turn-answer [data-component="markdown"] li::marker { color: #65827e; }
+.turn-answer [data-component="markdown"] li::marker { color: #85909c; }
