@@ -255,3 +255,88 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outli
 @media (forced-colors: active) {
   .scene-page:has(.chat-layout) .composer > textarea:focus-visible { outline: 2px solid Highlight; }
 }
+
+/* Silver Precision: a quiet, offline-first visual layer over the existing workflows.
+   No API data, native permissions, or review behavior is replaced by presentation. */
+:root{color:#202328;background:#fff;font-size:14px;--silver-line:#e2e5e9;--silver-muted:#727780;--silver-ink:#202328;--silver-panel:#f4f5f7;--silver-side:#f0f2f4}
+body{background:#fff;color:var(--silver-ink)}
+.app-shell{min-height:100dvh;background:#fff}
+.sidebar{width:268px;min-height:100dvh;position:sticky;top:0;height:100dvh;padding:20px 17px 16px;gap:0;background:linear-gradient(120deg,#f5f6f8 0%,#eff1f3 100%);border-right:1px solid #e3e5e9}
+.brand{margin:0 10px 33px;min-height:48px;align-items:start}
+.brand strong{font-size:20px;letter-spacing:-.7px;color:#181a1d;font-weight:750}
+.brand small{font-size:12px;margin-top:4px;color:#787d84;letter-spacing:.15px}
+.new-chat-action{display:flex;align-items:center;gap:13px;justify-content:flex-start;width:100%;min-height:47px;padding:0 17px;border:1px solid #232529;border-radius:7px;background:#232529;color:#fff;font-weight:650;font-size:14px;margin:0 0 24px;box-shadow:none}
+.new-chat-action span{font-size:24px;font-weight:400;line-height:1}
+.new-chat-action:hover{background:#3b3e43}
+.scene-nav{gap:4px}
+.side-link{min-height:40px;border-radius:7px;padding:9px 12px;color:#3d424a;font-size:14px;font-weight:550;align-items:center}
+.side-link:hover,.recent-chat-link:hover{background:#e4e7eb}
+.side-link.selected{background:#e1e5ea!important;color:#1c2025!important}
+.scene-nav .side-link span{width:23px;flex-shrink:0;text-align:center;font-size:18px}
+.scene-nav .scenario-icon.review{color:#ce5a29}
+.scene-nav .scenario-icon.logs{color:#8b5a96}
+.scene-nav .scenario-icon.data{color:#b88b16}
+.side-section{margin:23px 9px 8px;font-size:12px;font-weight:650;letter-spacing:.2px;color:#797e86}
+.side-section button{font-size:12px;color:#737981;font-weight:500}
+.history-heading{margin-top:28px;padding-top:19px;border-top:1px solid #dce0e4}
+.recent-chat-list{display:grid;gap:2px;min-height:36px;overflow-y:auto;max-height:30vh}
+.recent-chat-link{display:flex;align-items:center;gap:10px;text-align:left;border:0;background:transparent;border-radius:6px;color:#41464d;padding:9px 10px;min-height:38px;width:100%;font-size:13px}
+.recent-chat-link span:first-child{color:#8c929a;font-size:17px}
+.recent-chat-link span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-chat-empty{font-size:12px;color:#989da4;padding:5px 10px}
+.recent-chat-all{border:0;background:none;color:#626872;font-size:12px;text-align:left;padding:7px 10px}
+.task-history-heading{margin-top:15px}
+.task-history{max-height:22vh;min-height:0}
+.history-item{padding:9px 10px}
+.workbench-account{margin-top:auto;display:flex;align-items:center;gap:10px;border-top:1px solid #dce0e4;padding:16px 8px 0;color:#343941;font-size:13px;min-height:54px}
+.workbench-account .account-avatar{display:grid;place-items:center;width:29px;height:29px;border-radius:50%;background:#dfe3e7;color:#363b41;font-weight:650}
+.workbench-account>span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.workbench-account button{border:0;background:none;color:#777e86;font-size:12px}
+.main{background:#fff}
+.topbar{height:70px;padding:0 33px;border-bottom:1px solid var(--silver-line)}
+.breadcrumb{font-size:14px;color:#737880}
+.breadcrumb strong{font-size:20px;font-weight:700;color:#1e2227;letter-spacing:-.4px}
+.breadcrumb span{color:#c1c5ca;padding:0 16px}
+.page{max-width:1250px;padding:32px 46px 45px}
+.main:has(.silver-chat-home){height:100dvh;min-height:620px;display:flex;flex-direction:column;overflow:hidden}
+.main:has(.silver-chat-home) .page{width:100%;max-width:none;min-height:0;flex:1;padding:0 46px 12px;display:flex;flex-direction:column}
+.silver-chat-home{max-width:1100px;width:100%;min-height:0;flex:1;margin:0 auto;display:flex;flex-direction:column}
+.silver-chat-home>.scene-title{margin:0;padding:16px 0 12px;border-bottom:0!important;min-height:52px}
+.silver-chat-home>.scene-title h1{font-size:13px;color:#858a91;letter-spacing:0}
+.silver-chat-home>.scene-title .conversation-title{font-size:16px;color:#252a30}
+.silver-chat-home .chat-layout{flex:1;min-height:0;display:flex;flex-direction:column}
+.silver-chat-home .chat-box{flex:1;min-height:0;display:flex;flex-direction:column;border:0;background:transparent}
+.silver-chat-home .chat-feed{flex:1;min-height:0;max-height:none;overflow-y:auto;padding:18px max(2px,calc((100% - 850px)/2));scrollbar-gutter:stable}
+.silver-chat-home .chat-empty{min-height:100%;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:14px;padding-bottom:60px}
+.silver-chat-home .chat-empty h2{font-size:32px;font-weight:730;letter-spacing:-1.2px;margin:0}
+.silver-chat-home .chat-empty p{font-size:15px;color:#707780;margin:0}
+.silver-chat-home .chat-empty .chat-project-hint{font-size:13px;letter-spacing:.2px;color:#9298a0}
+.silver-chat-home .chat-empty button{margin-top:12px;background:none;border:0;border-bottom:1px solid #aeb4bc;border-radius:0;padding:5px 0;color:#626a73}
+.silver-chat-home .chat-empty .chat-symbol{display:none}
+.silver-chat-home .composer{width:100%;max-width:980px;margin:0 auto 10px!important;border:1px solid #cbd0d8!important;border-radius:9px!important;box-shadow:0 1px 5px #171c2408!important;padding:11px 14px!important;background:#fff!important}
+.silver-chat-home .composer:has(>textarea:focus-visible){border-color:#717b8a!important;box-shadow:0 0 0 2px #dce1e8!important}
+.silver-chat-home .composer>textarea{min-height:90px;max-height:28vh;resize:vertical;font-size:15px;line-height:1.65;padding:9px 3px;border:0!important;background:#fff}
+.silver-chat-home .composer-actions .primary,.new-chat-action{background:#24272c;color:#fff}
+.silver-chat-home .composer-actions .primary{border-color:#24272c;border-radius:7px;min-height:36px}
+.silver-chat-home .composer-actions button:not(.primary,.running-action){background:#fff!important;border:1px solid #e0e4e9!important;color:#424850}
+.silver-chat-home .chat-turn.assistant{background:transparent;border:0;box-shadow:none}
+.silver-chat-home .chat-turn.user{background:#f2f4f6;border:0}
+.silver-chat-home .chat-turn{font-size:14px;line-height:1.75}
+.silver-chat-home .conversation-history{max-height:25vh;overflow:auto}
+.workbench{margin:25px auto;max-width:900px}
+.workbench h1,.detail-heading h1{font-size:30px;letter-spacing:-.8px}
+.eyebrow{color:#8b929a;letter-spacing:1px}
+.accent{color:#24272c}
+.form-panel,.detail-card{border:1px solid #e7e9ec;box-shadow:none;border-radius:9px;background:#fff}
+.form-panel{padding:26px 28px}
+.panel-head h2{font-size:16px}
+.step-arrow{font-weight:400;color:#a0a6af;padding:0 8px}
+.form-panel :is(input,select,textarea),.detail-card textarea{border-color:#d5dae0;border-radius:6px}
+.primary{background:#25282d;border-color:#25282d;color:#fff}
+.primary:hover:enabled{background:#40454b}
+.chip{background:#f1f3f5;color:#626a74}
+.detail-card{padding:24px}
+:where(.scene-page,.task-page) :is(button,input,select,textarea,summary,a):focus-visible{outline:2px solid #687687;outline-offset:2px}
+@media(max-width:900px){.sidebar{width:216px;padding-inline:11px}.main:has(.silver-chat-home) .page{padding-inline:22px}.topbar{padding-inline:22px}.page{padding:24px}}
+@media(max-width:620px){.app-shell{display:block}.sidebar{position:relative;width:100%;height:auto;min-height:0;padding:12px;gap:0}.brand{margin:0 0 12px}.new-chat-action{margin-bottom:12px}.scene-nav{display:flex;flex-wrap:wrap;gap:5px}.scene-nav .side-section{display:none}.scene-nav .side-link{font-size:12px;min-height:36px;padding:7px 9px}.history-heading,.recent-chat-list,.task-history-heading,.task-history,.workbench-account{display:none}.topbar{height:54px}.main:has(.silver-chat-home){height:calc(100dvh - 190px);min-height:450px}.main:has(.silver-chat-home) .page{padding:0 12px 8px}.silver-chat-home>.scene-title{flex-wrap:wrap}.silver-chat-home .chat-empty h2{font-size:24px}.silver-chat-home .chat-feed{padding-inline:0}.silver-chat-home .composer{margin-bottom:2px!important}.silver-chat-home .composer>textarea{min-height:64px}.form-panel{padding:16px}.step-arrow{padding:0 3px}}
+@media(prefers-reduced-motion:reduce){.silver-chat-home *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
