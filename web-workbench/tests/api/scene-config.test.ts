@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
+import {defaultSceneConfiguration} from '../../apps/server/src/scene-config.ts';
 
 it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=>{
   const project=await mkdtemp(join(tmpdir(),'workbench-scenes-'));
@@ -15,7 +16,8 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   t.after(()=>app.close());
   const configDir=join(project,'.workbench');
   // Startup creates both empty files without granting editing privileges.
-  assert.deepEqual(JSON.parse(await readFile(join(configDir,'scenarios.json'),'utf8')),{version:1,scenes:{}});
+  assert.deepEqual(JSON.parse(await readFile(join(configDir,'scenarios.json'),'utf8')),
+    defaultSceneConfiguration(await realpath(project)));
   assert.deepEqual(JSON.parse(await readFile(join(configDir,'config-access.json'),'utf8')),{version:1,editors:['zhangzhanhui']});
   await assert.rejects(readFile(join(configDir,'user.json'),'utf8'),{code:'ENOENT'});
   const profile={name:'业务开发',phone:'13800000000'};
@@ -29,7 +31,7 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
     payload:{config,revision}});
   const before=await read();
   assert.equal(before.statusCode,200);
-  assert.deepEqual(before.json().data.config,{version:1,scenes:{}});
+  assert.deepEqual(before.json().data.config,defaultSceneConfiguration(await realpath(project)));
   assert.equal(before.json().data.configPath,join(await realpath(project),'.workbench','scenarios.json'));
   assert.equal(before.json().data.accessPath,join(await realpath(project),'.workbench','config-access.json'));
   assert.equal(before.json().data.canEdit,false);
@@ -120,4 +122,26 @@ it('only the exact configured login username can edit without hashes or phone co
   await writeFile(join(workspace,'.workbench','config-access.json'),
     JSON.stringify({version:1,editors:['*','zhangzhanhui']}));
   assert.equal((await app.inject({url:'/api/v1/scene-config',headers})).json().data.canEdit,false);
+});
+
+it('startup fills missing default scene bindings without overwriting custom configured scenes',async t=>{
+  const workspace=await realpath(await mkdtemp(join(tmpdir(),'default-scene-')));
+  const outside=await realpath(await mkdtemp(join(tmpdir(),'custom-scene-')));
+  t.after(()=>Promise.all([rm(workspace,{recursive:true,force:true}),rm(outside,{recursive:true,force:true})]));
+  await mkdir(join(workspace,'.workbench'),{recursive:true});
+  const custom={directory:outside,executor:{type:'subagent',name:'business-diagnostics'}};
+  const file=join(workspace,'.workbench','scenarios.json');
+  await writeFile(file,JSON.stringify({version:1,scenes:{logs:custom}}));
+  const app=await createApp({localOnly:true,workspace,auth:new LocalAuth('unused',4201)});
+  t.after(()=>app.close());
+  const config=JSON.parse(await readFile(file,'utf8'));
+  assert.deepEqual(config.scenes.logs,custom,'existing binding is preserved');
+  assert.deepEqual(config.scenes.message,{directory:workspace,executor:{type:'command',name:'models'}});
+  assert.deepEqual(config.scenes.data,{directory:workspace,executor:{type:'builtin',name:'chat'}});
+  assert.equal('brainstorming' in JSON.stringify(config.scenes.logs),false);
+  // Second startup is idempotent and does not change the user-managed file.
+  const existing=await readFile(file,'utf8');
+  const next=await createApp({localOnly:true,workspace,auth:new LocalAuth('unused',4202)});
+  await next.close();
+  assert.equal(await readFile(file,'utf8'),existing);
 });
