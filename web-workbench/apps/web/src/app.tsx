@@ -7,7 +7,7 @@ import { ProfileLogin } from './ProfileLogin.tsx';
 import { DirectChat } from './DirectChat.tsx';
 import {LogInvestigation} from './LogInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
-import { scenes, type Scene } from './ScenarioHome.tsx';
+import { scenes, scenarioGroups, groupForScene, type Scene, type ScenarioGroup } from './ScenarioHome.tsx';
 import { SidebarChatHistory } from './SidebarChatHistory.tsx';
 import { SourceView } from './SourceView.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
@@ -38,12 +38,13 @@ export function WorkbenchApp() {
     const saved=sessionStorage.getItem('harness.scene')??'home';
     return Object.hasOwn(scenes,saved)?saved as Scene:'home';
   });
+  const [expandedGroup,setExpandedGroup]=useState<ScenarioGroup|null>(()=>groupForScene(scene));
   const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
   const [chatDirectory,setChatDirectory]=useState('');
   const navigate=(next:Scene)=>{
     // Scene navigation never creates a native session; the chat restores its own saved id/draft.
     const target=next==='chat'?'home':next;
-    setSelected('');setScene(target);sessionStorage.setItem('harness.scene',target);
+    setSelected('');setScene(target);setExpandedGroup(groupForScene(target));sessionStorage.setItem('harness.scene',target);
   };
   const openChat=(kind:'new'|'history'|'select',id?:string)=>{
     navigate('home');setChatNavigation(previous=>({kind,id,seq:previous.seq+1}));
@@ -240,11 +241,11 @@ export function WorkbenchApp() {
   if(!bootstrap) return <main className="profile-page pair-page">
     <section className="profile-card pair-login-card" aria-labelledby="pair-title">
       <aside className="profile-side">
-        <div className="profile-brand"><strong>Code Harness</strong><span>智能研发工作台</span></div>
+        <div className="profile-brand"><strong>智能工作台</strong><span>智能研发场景协作</span></div>
         <div className="profile-side-copy">
           <span className="profile-overline">LOCAL AI WORKSPACE</span>
           <h2>连接你的<br/>研发工作台</h2>
-          <p>在统一的本地界面中使用 OpenCode 对话、代码审查、日志排查和数据分析。</p>
+          <p>在统一的本地界面中使用 OpenCode 对话、代码审查、问题排查和数据分析。</p>
         </div>
         <span className="profile-side-footer">本地连接 · 离线可用</span>
       </aside>
@@ -265,14 +266,28 @@ export function WorkbenchApp() {
   </main>;
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><div><strong>Code Harness</strong><small>智能研发工作台</small></div></div>
+      <div className="brand"><div><strong>智能工作台</strong><small>智能研发场景协作</small></div></div>
       <button className="new-chat-action" onClick={()=>openChat('new')}><span aria-hidden="true">＋</span> 新建对话</button>
       <nav aria-label="场景导航" className="scene-nav">
         <button className={'side-link '+(!selected&&(scene==='home'||scene==='chat')?'selected':'')} aria-current={!selected&&(scene==='home'||scene==='chat')?'page':undefined} onClick={()=>navigate('home')}><span aria-hidden="true">◫</span> 对话首页</button>
         <div className="side-section">专项场景</div>
-        {(['review','logs','data'] as const).map(key=><div className="scenario-group" key={key}>
-          <button className={'side-link scenario-parent '+(scene===key?'selected':'')}
-            aria-current={scene===key?'page':undefined} onClick={()=>navigate(key)}><span className={'scenario-icon '+key} aria-hidden="true">{{review:'⌘',logs:'≡',data:'▥'}[key]}</span>{scenes[key]}</button>
+        <button className={'side-link '+(!selected&&scene==='review'?'selected':'')}
+          aria-current={!selected&&scene==='review'?'page':undefined} onClick={()=>navigate('review')}>
+          <span className="scenario-icon review" aria-hidden="true">⌘</span>代码审查
+        </button>
+        {scenarioGroups.map(group=><div className="scenario-group" key={group.id}>
+          <button type="button" className={'side-link scenario-parent '+(expandedGroup===group.id?'expanded':'')}
+            aria-expanded={expandedGroup===group.id} aria-controls={'scenario-'+group.id}
+            onClick={()=>setExpandedGroup(previous=>previous===group.id?null:group.id)}>
+            <span className={'scenario-icon '+group.id} aria-hidden="true">{group.icon}</span>{group.label}
+            <span className="scenario-caret" aria-hidden="true">{expandedGroup===group.id?'⌄':'›'}</span>
+          </button>
+          {expandedGroup===group.id&&<div className="scenario-children" id={'scenario-'+group.id} role="group" aria-label={group.label+'子场景'}>
+            {group.children.map(child=><button key={child} className={'side-link scenario-child '+(!selected&&scene===child?'selected':'')}
+              aria-current={!selected&&scene===child?'page':undefined} onClick={()=>navigate(child)}>
+              <span className="scenario-child-mark" aria-hidden="true">·</span>{scenes[child]}
+            </button>)}
+          </div>}
         </div>)}
         <button className="side-link mobile-history-link" onClick={()=>openChat('history')}><span aria-hidden="true">▤</span>历史对话</button>
       </nav>
@@ -299,7 +314,7 @@ export function WorkbenchApp() {
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
       {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory}/>:
-       !selected&&scene==='logs'?<LogInvestigation/>:!selected&&scene==='data'?<FileScene/>:!selected?<section className="workbench">
+       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'}/>:!selected&&scene==='data'?<FileScene title={scenes.data}/>:!selected?<section className="workbench">
         <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
         <h1>代码审查</h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
