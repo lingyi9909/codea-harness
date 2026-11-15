@@ -1,7 +1,7 @@
 export type ChatModel={providerID:string;id:string;name:string;variant?:string;variants?:string[];context?:number};
 export type ChatScenario='direct-chat'|'log-inspection'|'message-inspection'|'data-analysis';
 export type SceneId='logs'|'message'|'data';
-export type SceneBinding={directory:string;executor:{type:'skill'|'subagent'|'command';name:string}};
+export type SceneBinding={directory:string;executor:{type:'skill'|'subagent'|'command'|'builtin';name:string}};
 export type SceneConfigValue={version:1;scenes:Partial<Record<SceneId,SceneBinding>>};
 export type SceneConfigResponse={workspace:string;configPath:string;accessPath:string;config:SceneConfigValue;revision:string;canEdit:boolean;username:string|null};
 export type ChatHistoryPage={items:{id:string;title:string;updated:number}[];next?:string};
