@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {chromium,expect,type Page} from '@playwright/test';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
+import {profileKey} from '../../apps/server/src/local-profile.ts';
 
 async function observePaintedText(page:Page){
   return page.evaluateHandle(()=>{
@@ -215,6 +216,20 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     // The home is already the native OpenCode chat; do not navigate to a separate scene.
     await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
     await expect(page.locator('.sidebar .brand')).toContainText('智能工作台');
+    // The browser must render the actual file-backed editor and respect ACL changes.
+    await page.getByRole('button',{name:'场景配置'}).click();
+    await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
+    await expect(page.getByLabel('公管问题排查工作目录')).toHaveValue(project);
+    await expect(page.getByRole('button',{name:'保存场景配置'})).toHaveCount(0);
+    await page.screenshot({path:join(shots,'09-scene-config-readonly.png')});
+    await writeFile(join(settingsDir,'config-access.json'),
+      JSON.stringify({version:1,editors:[profileKey({name:'测试同事',phone:'13800000000'})]}));
+    await page.reload();
+    await expect(page.getByRole('button',{name:'保存场景配置'})).toBeVisible();
+    await page.getByRole('button',{name:'保存场景配置'}).click();
+    await expect(page.getByRole('status').last()).toContainText('配置已写入当前启动目录');
+    await page.screenshot({path:join(shots,'10-scene-config-editor.png')});
+    await page.getByRole('navigation',{name:'场景导航'}).getByRole('button',{name:'对话首页'}).click();
     await expect(page.locator('.chat-hero,.scene-cards')).toHaveCount(0);
     await expect(page).toHaveTitle('智能工作台');
     async function checkChatLayout(){
