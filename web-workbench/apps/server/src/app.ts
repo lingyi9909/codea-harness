@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { dispatchNext,type SchedulerConfig } from './workers/scheduler.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { delimiter } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { registerGitRoutes } from './modules/repositories/routes.ts';
 import { registerTaskFileRoutes } from './modules/tasks/files.ts';
 import { registerTaskRoutes } from './modules/tasks/routes.ts';
@@ -73,6 +73,7 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
   const localSession=opts.localOnly===true&&!opts.pool;
   const workspace=opts.workspace?await resolveLocalWorkspace(opts.workspace):localSession?await resolveLocalWorkspace():undefined;
   const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
+  sceneConfig?.initialize();
   if(workspace&&localSession){
     const store=new WorkspaceProfile(workspace);
     app.addHook('onRequest',async(req,reply)=>{
@@ -117,7 +118,7 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     app.get('/api/v1/scene-config',async(req,reply)=>{
       const session=opts.auth.session(req),identity=editorIdentity(session);
       return reply.header('Cache-Control','no-store').send(result({
-        workspace,configPath:SCENE_CONFIG_PATH,accessPath:SCENE_ACCESS_PATH,
+        workspace,configPath:join(workspace!,SCENE_CONFIG_PATH),accessPath:join(workspace!,SCENE_ACCESS_PATH),
         ...sceneConfig.read(),canEdit:sceneConfig.canEdit(identity),
         identity,
       }));
