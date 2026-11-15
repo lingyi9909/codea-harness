@@ -42,21 +42,42 @@ type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(tex
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
 export function DirectChat({investigation,navigation,onDirectoryChange,sceneId}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId}={}){
-  const [settings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
+  const [baseSettings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
   const [sceneSettings,setSceneSettings]=useState<SceneConfigResponse|null>(null);
-  useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live)configure(s);}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
+  const [attempt,retry]=useState(0);
+  // A bound scene only needs the workspace configuration. Do not gate its
+  // initial form on an unrelated /chat/settings request or the OpenCode server.
+  useEffect(()=>{
+    if(sceneId)return;
+    let live=true;
+    fail('');configure(null);
+    api.chatSettings().then(s=>{if(live)configure(s);}).catch(e=>{if(live)fail(explain(e));});
+    return ()=>{live=false;};
+  },[sceneId,attempt]);
   useEffect(()=>{
     if(!sceneId)return;
     let live=true;
-    setSceneSettings(null);
+    fail('');setSceneSettings(null);
     api.sceneConfig().then(value=>{if(live)setSceneSettings(value);}).catch(e=>{if(live)fail(explain(e));});
     return ()=>{live=false;};
-  },[sceneId]);
-  const directory=sceneId?sceneSettings?.config.scenes[sceneId]?.directory??'':settings?.directories[0]??'';
+  },[sceneId,attempt]);
+  const directory=sceneId?sceneSettings?.config.scenes[sceneId]?.directory??'':baseSettings?.directories[0]??'';
+  const settings:ChatSettings|null=sceneId
+    ?sceneSettings?{configured:true,directories:[sceneSettings.workspace]}:null
+    :baseSettings;
   useEffect(()=>{if(directory)onDirectoryChange?.(directory);},[directory,onDirectoryChange]);
-  if(!settings||sceneId&&!sceneSettings)return <p role={error?'alert':'status'}>{error||'正在读取工作目录与场景配置…'}</p>;
-  if(sceneId&&!directory)return <section className="scene-page"><div className="scene-title"><h1>当前子场景尚未配置</h1></div>
-    <p className="notice">请由有权限的人员在「场景配置」中绑定工作目录和 Skill、Subagent 或 OpenCode 命令，之后再执行。</p></section>;
+  if(!settings)return <section className="scene-page" role={error?'alert':'status'}>
+    {error?<><h1>无法读取工作台配置</h1><p className="notice">{error}</p>
+      <p>请确认工作台进程仍在运行，或检查浏览器网络请求；这不是 Skill 加载错误。</p>
+      <button className="secondary" type="button" onClick={()=>retry(n=>n+1)}>重试加载</button></>
+      :<p>正在读取工作目录与场景配置…</p>}
+  </section>;
+  if(sceneId&&!directory)return <section className="scene-page">
+    <div className="scene-title"><div><h1>当前子场景尚未配置</h1></div></div>
+    <p className="notice">请到「场景配置」为此子场景指定工作目录与 Skill、Subagent 或 OpenCode 命令。</p>
+    <p>在配置保存之前不会创建 OpenCode 会话，也不会在其他目录中代为执行。</p>
+    <button className="secondary" type="button" onClick={()=>retry(n=>n+1)}>重新检查配置</button>
+  </section>;
   return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat'))}
     directory={directory} settings={settings} investigation={investigation} navigation={navigation} sceneId={sceneId}/>;
 }
