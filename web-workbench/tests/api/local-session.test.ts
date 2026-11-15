@@ -99,6 +99,7 @@ it('rejects redirected profile directories and files before opening a session',a
     assert.equal(response.json().error.code,'PROFILE_WRITE_FAILED');
     assert.equal(response.headers['set-cookie'],undefined);
   }
+  await rm(directory,{recursive:true,force:true}); // startup now creates the safe config folder
   await symlink(outside,directory,'junction');
   await assertDenied();
   await assert.rejects(readFile(join(outside,'user.json')),{code:'ENOENT'});
