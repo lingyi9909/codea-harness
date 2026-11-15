@@ -41,7 +41,7 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 .composer-actions button.running-action:not(.primary):hover{background:#8d1f25}
 
 /* The scene heading already identifies the active conversation. */
-.main:has(.chat-layout, .file-panel) > .topbar { display: none; }
+.main:has(.chat-layout, .file-panel) > .topbar { display: flex; }
 .page:has(.chat-layout, .file-panel, .workbench, .task-page) {
   max-width: none;
   margin: 0;
@@ -63,7 +63,7 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 .chat-layout .composer > textarea { display: block; min-height: 38px; margin: 0 0 4px; padding: 5px 3px; }
 
 @media (min-width: 851px) {
-  .app-shell:has(.chat-layout, .file-panel, .workbench, .task-page) > .sidebar { width: clamp(170px, 14vw, 210px); }
+  .app-shell:has(.chat-layout, .file-panel, .workbench, .task-page) > .sidebar { width: 282px; }
   .main:has(.chat-layout) { display: flex; flex-direction: column; height: 100dvh; }
   .page:has(.chat-layout) { display: flex; flex: 1; flex-direction: column; overflow: auto; }
   .scene-page:has(.chat-layout) { display: flex; flex: 1; min-height: 0; flex-direction: column; }
@@ -89,8 +89,8 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 
 /* Keep review service status available alongside the compact scene header. */
 .main:has(.workbench, .task-page) > .topbar {
-  height: 34px;
-  padding: 0 clamp(12px, 1.5vw, 28px);
+  height: 70px;
+  padding: 0 34px;
 }
 .main:has(.workbench, .task-page) .state { padding: 3px 9px; }
 .page > .workbench { max-width: 1220px; margin: 0; }
@@ -120,36 +120,36 @@ details.thinking-step summary{cursor:pointer}details.thinking-step p{max-height:
 
 /* Shared workbench palette, including the login screen and native dialogs. */
 :root {
-  --wb-ink: #162e3b;
-  --wb-muted: #4d646e;
-  --wb-canvas: #eff5f5;
-  --wb-line: #cadadd;
-  --wb-teal: #096663;
-  --wb-teal-deep: #06524f;
-  --wb-mint: #daefea;
-  --wb-blue: #255d96;
-  --wb-navy: #162f3c;
+  --wb-ink: #24282e;
+  --wb-muted: #69717c;
+  --wb-canvas: #ffffff;
+  --wb-line: #dce0e5;
+  --wb-teal: #272a2f;
+  --wb-teal-deep: #3b4148;
+  --wb-mint: #f4f5f7;
+  --wb-blue: #66758b;
+  --wb-navy: #f1f3f5;
   color: var(--wb-ink);
   background: var(--wb-canvas);
 }
 .sidebar {
-  color: #f0fbf9;
+  color: #22262d;
   background: var(--wb-navy);
-  border-color: #234754;
+  border-color: #e0e4e8;
 }
 .brand-icon, .chat-symbol { color: white; background: var(--wb-teal); }
 .sidebar .brand-icon { color: #123c43; background: #90e0c9; }
-.sidebar .side-link, .sidebar .history-item { color: #d5e6e8; }
-.sidebar .side-link > span { color: #85d3c5; }
-.sidebar :is(.side-link, .history-item):hover { background: #21434e; }
+.sidebar .side-link, .sidebar .history-item { color: #30363e; }
+.sidebar .side-link > span { color: #4b5460; }
+.sidebar :is(.side-link, .history-item):hover { background: #e5e8ec; }
 .sidebar .selected {
-  color: white !important;
-  background: #214d53 !important;
-  box-shadow: inset 3px 0 #86ddc3;
+  color: #20242a !important;
+  background: #e2e6eb !important;
+  box-shadow: inset 3px 0 #808d9d;
 }
-.sidebar :is(.side-section, .side-section button, .history-meta, .muted) { color: #afc9cd; }
-.sidebar :focus-visible { outline: 2px solid #98edd6; outline-offset: -2px; }
-.topbar { background: #f9fcfc; border-color: var(--wb-line); }
+.sidebar :is(.side-section, .side-section button, .history-meta, .muted) { color: #69717c; }
+.sidebar :focus-visible { outline: 2px solid #64748a; outline-offset: -2px; }
+.topbar { background: #fff; border-color: var(--wb-line); }
 .breadcrumb, .scene-title p, .scene-card p, .workbench .intro { color: var(--wb-muted); }
 .primary, .chat-hero b { background: var(--wb-teal); }
 .primary:hover:enabled { background: var(--wb-teal-deep); }
@@ -165,13 +165,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outli
   border-color: var(--wb-teal); box-shadow: 0 0 0 3px #09666321;
 }
 .scene-page:has(.chat-layout) {
-  --chat-ink: var(--wb-ink);
-  --chat-muted: var(--wb-muted);
+  --chat-ink: #252a30;
+  --chat-muted: #68717b;
   --chat-surface: #fff;
-  --chat-surface-muted: #f3f8f8;
-  --chat-layer: #e2efee;
-  --chat-line: var(--wb-line);
-  --chat-accent: var(--wb-blue);
+  --chat-surface-muted: #f6f7f9;
+  --chat-layer: #eceff3;
+  --chat-line: #dee3e9;
+  --chat-accent: #556b88;
   --chat-error: #97252b;
   color: var(--chat-ink);
 }
@@ -200,7 +200,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outli
 .conversation-history small, .conversation-history p { color: var(--chat-muted); }
 
 /* Conversation reading surface and its persistent input. */
-.main:has(.chat-layout) { background: #fcfdfc; }
+.main:has(.chat-layout) { background: #ffffff; }
 .scene-page:has(.chat-layout) .scene-title {
   padding-bottom: 10px;
   margin-bottom: 0;
@@ -222,11 +222,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outli
   border-color: transparent;
 }
 .scene-title .chat-history-actions .new-conversation {
-  color: #135450;
-  background: #e5f2ed;
-  border-color: #c0d9d0;
+  color: #30363c;
+  background: #eef1f4;
+  border-color: #d8dee4;
 }
-.scene-title .chat-history-actions .secondary:enabled:hover { background: #dcebe6; }
+.scene-title .chat-history-actions .secondary:enabled:hover { background: #eef0f3; }
 .scene-title .new-conversation span { font-weight: 500; }
 .chat-layout .chat-box { background: transparent; border: 0; }
 .chat-layout .chat-feed { padding-inline: 4px; }
@@ -248,7 +248,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outli
   border-color: transparent;
 }
 @media (min-width: 601px) {
-  .sidebar .brand { margin-bottom: 18px; }
+  .sidebar .brand { margin-bottom: 20px; }
   .sidebar .side-link { align-items: center; padding: 9px 12px; font-size: 14px; font-weight: 500; }
   .sidebar .side-link[aria-current] { font-weight: 650; }
 }
@@ -261,7 +261,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--wb-blue); outli
 :root{color:#202328;background:#fff;font-size:14px;--silver-line:#e2e5e9;--silver-muted:#727780;--silver-ink:#202328;--silver-panel:#f4f5f7;--silver-side:#f0f2f4}
 body{background:#fff;color:var(--silver-ink)}
 .app-shell{min-height:100dvh;background:#fff}
-.sidebar{width:268px;min-height:100dvh;position:sticky;top:0;height:100dvh;padding:20px 17px 16px;gap:0;background:#f1f3f5;border-right:1px solid #e3e5e9}
+.sidebar{width:282px;min-height:100dvh;position:sticky;top:0;height:100dvh;padding:20px 18px 16px;gap:0;background:#f1f3f5;border-right:1px solid #e3e5e9}
 .brand{margin:0 10px 33px;min-height:48px;align-items:start}
 .brand strong{font-size:20px;letter-spacing:-.7px;color:#181a1d;font-weight:750}
 .brand small{font-size:12px;margin-top:4px;color:#787d84;letter-spacing:.15px}
