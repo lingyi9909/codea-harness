@@ -176,6 +176,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     });
     await page.goto('http://127.0.0.1:'+port);
     await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
+    await expect(page.locator('.profile-side')).toBeVisible();
+    await expect(page.locator('.profile-submit')).toHaveCSS('background-color','rgb(36, 39, 44)');
+    await page.screenshot({path:join(shots,'00-login-silver.png')});
     await expect(page.getByRole('navigation')).toHaveCount(0);
     await page.getByLabel('姓名',{exact:true}).fill('测试同事');
     await page.getByLabel('手机号',{exact:true}).fill('12');
@@ -188,6 +191,11 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('navigation')).toBeVisible();
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
     await expect(page.getByLabel('对话内容')).toBeVisible();
+    await expect(page.locator('.main > .topbar')).toBeVisible();
+    await expect(page.locator('.workspace-pill')).toContainText('业务项目');
+    await expect(page.locator('.sidebar')).toHaveCSS('width','282px');
+    await expect(page.getByRole('navigation').getByRole('button',{name:'代码审查'})).toHaveCSS('color','rgb(43, 48, 56)');
+    await expect(page.locator('.silver-chat-home')).toHaveClass(/silver-chat-empty/);
     await page.screenshot({path:join(shots,'01-home-empty.png')});
     assert.equal(sessionRequests,1);
     const sessionCookie=async()=>(await page.context().cookies()).find(c=>c.name==='harness_session')?.value;
