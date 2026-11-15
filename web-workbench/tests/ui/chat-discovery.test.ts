@@ -351,7 +351,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     await writeFile(file+'.ask','1');
     await expect(page.getByText('选择排查范围',{exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'新建对话'}).click();
+    // Sidebar starts a direct chat; the log scene owns its independent new-investigation action.
+    await page.locator('.log-investigation').getByRole('button',{name:'新建对话'}).click();
     await expect(page.getByLabel('对话内容')).toHaveValue('');
     await expect(page.getByText('选择排查范围',{exact:true})).toHaveCount(0);
     await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
