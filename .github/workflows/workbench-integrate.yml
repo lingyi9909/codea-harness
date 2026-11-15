@@ -70,3 +70,12 @@ jobs:
       - run: npm run web:build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Upload real browser screenshots (scripted Review fixture)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-precision-review-${{ github.run_id }}
+          path: web-workbench/screenshots/*.png
+          retention-days: 14
+          if-no-files-found: ignore
+
