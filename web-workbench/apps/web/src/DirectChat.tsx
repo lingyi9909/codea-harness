@@ -164,7 +164,8 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
     if(follow.current&&feed.current)feed.current.scrollTop=feed.current.scrollHeight;
   },[messages,stream.tools]);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
-  return <section className={investigation?"scene-page log-investigation":"scene-page silver-chat-home"}><div className="scene-title"><div className="thread-heading"><h1>{investigation?'日志排查':'直接对话'}</h1>
+  const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
+  return <section className={investigation?"scene-page log-investigation":"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?'日志排查':'直接对话'}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
@@ -201,5 +202,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
         <button type="button" onClick={()=>{write('请阅读项目的目录结构和 README，解释各模块的职责。');input.current?.focus();}}>解释项目结构 <span aria-hidden="true">↗</span></button>
         <button type="button" onClick={()=>{write('请从入口开始梳理这个项目的主要调用链。');input.current?.focus();}}>梳理调用链 <span aria-hidden="true">↗</span></button>
       </div>}
-    </div></div></section>;
+    </div></div>
+    {homeEmpty&&<p className="chat-workspace-path" title={directory}>工作目录：{directory}</p>}
+  </section>;
 }
