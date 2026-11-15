@@ -62,11 +62,11 @@ export class SceneConfigStore {
       this.readFile(file.path);
     }
     const current=this.read(); // Invalid preexisting configuration blocks startup.
-    const defaults=defaultSceneConfiguration(this.root);
+    const defaultConfig=defaultSceneConfiguration(this.root);
     const missing=SCENE_KEYS.filter(key=>!current.config.scenes[key]);
     if(missing.length){
       const scenes={...current.config.scenes};
-      for(const key of missing)scenes[key]=defaults.scenes[key];
+      for(const key of missing)scenes[key]=defaultConfig.scenes[key];
       await this.save({version:1,scenes},current.revision);
     }
   }
