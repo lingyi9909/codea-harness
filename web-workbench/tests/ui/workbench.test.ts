@@ -21,6 +21,8 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
   const repo=join(root,'repo'),dataRoot=join(root,'data');
   const pool=await createPool(config);
   const browser=await chromium.launch();
+  const shots=join(process.cwd(),'screenshots');
+  await mkdir(shots,{recursive:true});
   process.env.HARNESS_REPOSITORY_ROOTS=repo;
   process.env.HARNESS_DATA_DIR=dataRoot;
   process.env.HARNESS_REF_KEY=randomUUID();process.env.HARNESS_CURSOR_KEY=randomUUID();
@@ -85,6 +87,8 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     await page.getByPlaceholder('请输入本地终端显示的配对码').fill(code);
     await page.getByRole('button',{name:'连接本地工作台'}).click();
     await page.getByRole('navigation').getByRole('button',{name:'代码审查'}).click();
+    await expect(page.getByRole('heading',{name:'代码审查',exact:true})).toBeVisible();
+    await page.screenshot({path:join(shots,'09-review-create.png')});
     await page.getByRole('button',{name:'添加本地仓库'}).click();
     const name='UI '+randomUUID();
     await page.getByLabel('仓库名称').fill(name);await page.getByLabel('本地绝对路径').fill(repo);
@@ -93,8 +97,10 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     await page.getByLabel('基线分支').selectOption({label:'refs/heads/baseline'});
     await page.getByRole('button',{name:'预览变更范围'}).click();
     await expect(page.getByText(/最近预检：1 个已变更文件/)).toBeVisible();
+    await page.screenshot({path:join(shots,'10-review-preview.png')});
     await page.getByRole('button',{name:'开始 Review'}).click();
     await expect(page.getByRole('heading',{name:'原生工具授权'})).toBeVisible({timeout:20000});
+    await page.screenshot({path:join(shots,'11-review-permission.png')});
     await page.getByPlaceholder('本轮执行中；暂不可并发发送').fill('saved draft');
     await page.reload();
     await expect(page.getByPlaceholder('本轮执行中；暂不可并发发送')).toHaveValue('saved draft');
@@ -102,6 +108,7 @@ it('Chromium → Fastify → MySQL 8.4 → Git and scripted native review', {tim
     await page.getByLabel('Evidence detail').fill('confirmed');
     await page.getByRole('button',{name:'提交原生表单'}).click();
     await expect(page.locator('.report-text').first()).toContainText('评审摘要',{timeout:20000});
+    await page.screenshot({path:join(shots,'12-review-report.png')});
     await expect(page.getByText('Review completed in fixture')).toBeVisible();
     await page.getByRole('button',{name:'查看固定版本源码'}).click();
     await page.getByLabel('文件与版本').selectOption({label:'HEAD · OrderController.java'});
