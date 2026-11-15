@@ -155,6 +155,13 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
   process.env.HARNESS_OPENCODE_SERVICE_FILE=file;
   const project=join(root,'业务项目');
   await mkdir(project);
+  const settingsDir=join(project,'.workbench');
+  await mkdir(settingsDir,{recursive:true});
+  await writeFile(join(settingsDir,'scenarios.json'),JSON.stringify({version:1,scenes:{
+    logs:{directory:project,executor:{type:'skill',name:'log-query'}},
+    message:{directory:project,executor:{type:'skill',name:'log-query'}},
+    data:{directory:project,executor:{type:'skill',name:'log-query'}},
+  }}));
   process.env.HARNESS_CHAT_ROOTS=project;
   delete process.env.HARNESS_REPOSITORY_ROOTS;delete process.env.HARNESS_OPENCODE_URL;
   const port=31881;
@@ -299,23 +306,14 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(submit).toBeEnabled();
     await page.getByLabel('Trace ID',{exact:true}).fill('');
     await expect(submit).toBeDisabled();
-    await page.getByLabel('关键字',{exact:true}).fill('timeout');
+    await page.getByLabel('关键词',{exact:true}).fill('timeout');
     await expect(submit).toBeEnabled();
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
-    await page.getByText('日志来源与级别',{exact:true}).click();
-    await page.getByLabel('导入本地日志').setInputFiles({name:'service.log',mimeType:'text/plain',buffer:Buffer.from([
-      '2026-11-11 23:56:59.999 ERROR abc123 timeout before-window','2026-11-11 23:57:00 ERROR abc123 timeout included',
-      '2026-11-11 23:59:59 INFO abc123 timeout wrong-level','2026-11-12 00:03:00 ERROR abc123 timeout at-end',
-      '2026-11-12 00:02:00 ERROR def timeout wrong-id','2026-11-11T16:02:59.999Z ERROR abc123 timeout last-ms',
-      '2026-11-12T05:29:00+13:30 ERROR abc123 timeout offset-row'].join('\n'))});
-    await page.getByLabel('日志级别').selectOption('ERROR');
-    await expect(page.locator('.log-query pre')).toHaveText([
-      '2  2026-11-11 23:57:00 ERROR abc123 timeout included',
-      '6  2026-11-11T16:02:59.999Z ERROR abc123 timeout last-ms',
-      '7  2026-11-12T05:29:00+13:30 ERROR abc123 timeout offset-row'].join('\n'));
+    await expect(page.getByLabel('日志级别')).toHaveCount(0);
+    await expect(page.getByLabel('导入本地日志')).toHaveCount(0);
     await page.getByLabel('对话内容').fill('检查超时原因');
     await submit.click();
-    await expect(page.getByRole('alert')).toContainText('未加载自定义 Skill「log-query」');
+    await expect(page.getByRole('alert')).toContainText('未发现配置的执行入口');
     await expect(page.getByLabel('对话内容')).toHaveValue('检查超时原因');
     const painted=await observePaintedText(page);
     await writeFile(file+'.skill','1');
@@ -439,8 +437,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
-    for(const value of ['检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
-    for(const value of ['请求入参','wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));
+    for(const value of ['检查超时原因','abc123','timeout'])assert.ok(request.includes(value));
+    assert.ok(!request.includes('日志级别：'));
+    assert.ok(!request.includes('导入日志：'));
     await page.getByLabel('对话内容').fill('下一步怎么查？');
     await page.getByLabel('对话内容').press('Enter');
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
@@ -477,6 +476,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
 it('groups a multi-step weather response and keeps verification output out of the answer',async()=>{
   const port=31882,id='ses_weather_example';
   const root=await realpath(await mkdtemp(join(tmpdir(),'harness weather ')));
+  await mkdir(join(root,'.workbench'),{recursive:true});
+  await writeFile(join(root,'.workbench','scenarios.json'),JSON.stringify({version:1,scenes:{
+    data:{directory:root,executor:{type:'skill',name:'analysis-fixture'}},
+  }}));
   const app=await createApp({localOnly:true,workspace:root,auth:new LocalAuth('unused',port)});
   const browser=await chromium.launch(process.env.HARNESS_TEST_CHROME?{channel:'chrome'}:{});
 
@@ -616,10 +619,10 @@ it('groups a multi-step weather response and keeps verification output out of th
     await expect(navigation.getByRole('button',{name:'数据分析',exact:true})).toHaveAttribute('aria-expanded','true');
     await navigation.getByRole('button',{name:'公管数据分析',exact:true}).click();
     await expect(page.getByRole('heading',{name:'公管数据分析'})).toBeVisible();
-    await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
-      name:'orders.csv',mimeType:'text/csv',buffer:Buffer.from('order,amount\nA001,120\nA002,220\n')});
-    await expect(page.getByText(/2 行 · 2 列/)).toBeVisible();
-    await page.screenshot({path:join(shots,'08-csv-analysis.png')});
+    await expect(page.getByLabel('对话内容')).toBeVisible();
+    await page.getByLabel('对话内容').fill('请分析公管订单超时原因');
+    await expect(page.getByLabel('对话内容')).toHaveValue('请分析公管订单超时原因');
+    await page.screenshot({path:join(shots,'08-data-chat.png')});
     await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toHaveCount(0);
     await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
     await expect(response.last()).toContainText(fallbackAnswer);
