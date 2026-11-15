@@ -78,11 +78,15 @@ export function DirectChat({investigation,navigation,onDirectoryChange,sceneId}:
     <p>在配置保存之前不会创建 OpenCode 会话，也不会在其他目录中代为执行。</p>
     <button className="secondary" type="button" onClick={()=>retry(n=>n+1)}>重新检查配置</button>
   </section>;
+  const modelCommand=sceneId==='message'&&sceneSettings?.config.scenes.message?.executor.type==='command'&&
+    sceneSettings.config.scenes.message.executor.name==='models';
   return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat'))}
-    directory={directory} settings={settings} investigation={investigation} navigation={navigation} sceneId={sceneId}/>;
+    directory={directory} settings={settings} investigation={investigation} navigation={navigation} sceneId={sceneId}
+    modelCommand={modelCommand}/>;
 }
-function ChatWorkspace({investigation,directory,settings,navigation,sceneId}:{
+function ChatWorkspace({investigation,directory,settings,navigation,sceneId,modelCommand}:{
   investigation?:Investigation;navigation?:ChatNavigation;directory:string;settings:ChatSettings;sceneId?:SceneId;
+  modelCommand?:boolean;
 }){
   const scenario=scenarioFor(sceneId);
   const sessionKey:SceneKey=investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat');
@@ -216,6 +220,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId}:{
       }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><p className="chat-project-hint">当前项目　/　{directory.split(/[\\/]/).filter(Boolean).at(-1)||'工作目录'}</p><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
         <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
       </div>}
+      {modelCommand&&!id&&<p className="notice" role="status">默认入口 /models 用于选择本次排查使用的模型，
+        不是报文排查执行命令。选择模型后可继续用 OpenCode 对话排查。</p>}
       {error&&<p role="alert" className="notice">{error}</p>}
       {pending&&state?<div className="composer request-composer">
         <ChatRequests key={id} state={state} busy={busy}
@@ -230,6 +236,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId}:{
         {showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
         <div className="composer-actions">
           <ModelPicker key={JSON.stringify([directory,id])} value={id?state?.model:chosen} allowDefault={!id}
+            initialOpen={Boolean(modelCommand&&!id)}
             disabled={busy||!settings||Boolean(pending)||Boolean(id&&!state)}
             loadModels={()=>api.chatModels(directory||undefined)} onSelect={selectModel} onApplied={()=>input.current?.focus()}/>
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
