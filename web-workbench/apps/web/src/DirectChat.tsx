@@ -6,7 +6,7 @@ import {activateChat,displayChatTitle,summarizeFirstInput,draftKey,readDraft,rea
 import {ModelPicker} from './ModelPicker.tsx';
 import {ChatRequests} from './ChatRequests.tsx';
 import {api,ApiError} from './api/client.ts';
-import type {ChatStatus,ChatSettings,ChatModel} from '../../../packages/contracts/src/chat.ts';
+import type {ChatStatus,ChatSettings,ChatModel,ChatScenario,SceneId,SceneConfigResponse} from '../../../packages/contracts/src/chat.ts';
 
 import {ConversationTranscript} from './ConversationTranscript.tsx';
 
@@ -21,6 +21,10 @@ function explain(e:unknown){
     CHAT_SCENARIO_MISMATCH:'这个会话属于其他场景，请在当前页新建对话。',
     FORM_CHANGED:'这个问题已更新或已经处理，请查看当前请求。',FORM_ANSWER_INVALID:'这份回答不符合问题要求，请检查后再提交。',FORM_SERVICE_UNAVAILABLE:'暂时无法读取待处理问题，请检查 OpenCode 连接。',
     CHAT_MODEL_UNAVAILABLE:'此模型当前未启用，请刷新模型列表后重新选择。',
+    SCENE_EXECUTOR_NOT_FOUND:'未发现配置的执行入口。请检查当前子场景的 Skill、Subagent 或命令是否已在绑定目录加载。',
+    SCENE_NOT_CONFIGURED:'当前子场景尚未绑定工作目录和执行入口。',
+    SCENE_DIRECTORY_CHANGED:'子场景绑定的目录已变更，请新建对话。',
+    SCENE_DIRECTORY_MISMATCH:'提交的目录与子场景配置不一致。',
     OPENCODE_DISCOVERY_FAILED:'未能自动连接本机 OpenCode。请确认已安装的 opencode 在 PATH 中，并支持 serve --service。',
     OPENCODE_WORKBENCH_URL:'OpenCode 服务地址填成了工作台自身的地址。请重启工作台，填写 OpenCode 后台服务地址。',
     OPENCODE_CONNECTION_FAILED:'创建会话时无法连接 OpenCode。请核对后台服务地址、端口和 HTTPS 证书。',
@@ -35,19 +39,32 @@ function explain(e:unknown){
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
 type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;title:string;sessionKey:'harness.logs'|'harness.message'};
+const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
-export function DirectChat({investigation,navigation,onDirectoryChange}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void}={}){
+export function DirectChat({investigation,navigation,onDirectoryChange,sceneId}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId}={}){
   const [settings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
+  const [sceneSettings,setSceneSettings]=useState<SceneConfigResponse|null>(null);
   useEffect(()=>{let live=true;api.chatSettings().then(s=>{if(live)configure(s);}).catch(e=>{if(live)fail(explain(e));});return()=>{live=false;};},[]);
-  useEffect(()=>{if(settings)onDirectoryChange?.(settings.directories[0]??'');},[settings,onDirectoryChange]);
-  if(!settings)return <p role={error?'alert':'status'}>{error||'正在加载工作目录…'}</p>;
-  const directory=settings.directories[0]??'';
-  return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??'harness.chat')} directory={directory} settings={settings} investigation={investigation} navigation={navigation}/>;
+  useEffect(()=>{
+    if(!sceneId)return;
+    let live=true;
+    setSceneSettings(null);
+    api.sceneConfig().then(value=>{if(live)setSceneSettings(value);}).catch(e=>{if(live)fail(explain(e));});
+    return ()=>{live=false;};
+  },[sceneId]);
+  const directory=sceneId?sceneSettings?.config.scenes[sceneId]?.directory??'':settings?.directories[0]??'';
+  useEffect(()=>{if(directory)onDirectoryChange?.(directory);},[directory,onDirectoryChange]);
+  if(!settings||sceneId&&!sceneSettings)return <p role={error?'alert':'status'}>{error||'正在读取工作目录与场景配置…'}</p>;
+  if(sceneId&&!directory)return <section className="scene-page"><div className="scene-title"><h1>当前子场景尚未配置</h1></div>
+    <p className="notice">请由有权限的人员在「场景配置」中绑定工作目录和 Skill、Subagent 或 OpenCode 命令，之后再执行。</p></section>;
+  return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat'))}
+    directory={directory} settings={settings} investigation={investigation} navigation={navigation} sceneId={sceneId}/>;
 }
-function ChatWorkspace({investigation,directory,settings,navigation}:{
-  investigation?:Investigation;navigation?:ChatNavigation;directory:string;settings:ChatSettings;
+function ChatWorkspace({investigation,directory,settings,navigation,sceneId}:{
+  investigation?:Investigation;navigation?:ChatNavigation;directory:string;settings:ChatSettings;sceneId?:SceneId;
 }){
-  const sessionKey:SceneKey=investigation?.sessionKey??'harness.chat';
+  const scenario=scenarioFor(sceneId);
+  const sessionKey:SceneKey=investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat');
   const [chosen,setChosen]=useState<ChatModel>();
   const [id,select]=useState(()=>savedChat(localStorage,sessionStorage,sessionKey,directory));
   const [cachedTitle,setCachedTitle]=useState(()=>readHistory(localStorage,sessionKey,directory).find(row=>row.id===id)?.title??'');
@@ -141,14 +158,14 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
     let session=id;
     if(!session){
       const title=draft.trim()?summarizeFirstInput(draft):summarizeFirstInput(text,Boolean(investigation));
-      const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,investigation?'log-inspection':undefined,title);
+      const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,scenario==='direct-chat'?undefined:scenario,title);
       session=s.id;createdSession.current=session;setCachedTitle(s.title||title);
       rememberChat(localStorage,sessionKey,directory,{id:session,title:s.title||title,updated:Date.now()});
       activateChat(localStorage,sessionStorage,sessionKey,directory,session);
       restoreContext.current=false;sessionStorage.removeItem(composerKey);select(session);
     }
     await stream.connect(session);
-    await api.chatAction(session,'messages',{text,scenario:investigation?'log-inspection':'direct-chat',files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
+    await api.chatAction(session,'messages',{text,scenario,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
     rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);write('');attach('');toggleFiles(false);
@@ -165,7 +182,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
   },[messages,stream.tools]);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
-  return <section className={investigation?"scene-page log-investigation":"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??'直接对话'}</h1>
+  return <section className={investigation?"scene-page log-investigation":"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
@@ -175,7 +192,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
     <div className="chat-layout"><div className="chat-box">
       {(!investigation||messages.length>0||stream.tools.length>0||state?.active)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
-      }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><p className="chat-project-hint">当前项目　/　{directory.split(/[\\/]/).filter(Boolean).at(-1)||'工作目录'}</p><h2>直接开始你的工作</h2><p>描述问题，OpenCode 将在当前项目中处理。</p></div>}
+      }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><p className="chat-project-hint">当前项目　/　{directory.split(/[\\/]/).filter(Boolean).at(-1)||'工作目录'}</p><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
         <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
       </div>}
       {error&&<p role="alert" className="notice">{error}</p>}
