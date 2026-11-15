@@ -37,7 +37,7 @@ function validBounds(from:unknown,to:unknown):Bounds|null{
   return typeof from==='number'&&typeof to==='number'&&Number.isFinite(new Date(from).getTime())&&
     Number.isFinite(new Date(to).getTime())&&from<to?{from,to}:null;
 }
-function readAppliedRange(session:string,rangePrompt?:string):Bounds|null{
+function readAppliedRange(session:string,rangePrompt?:string,storageKey='harness.logs'):Bounds|null{
   if(!session)return null;
   // Existing workbench prompts contain either offset-qualified bounds or UTC instants.
   const line=rangePrompt?.match(/^时间范围（起点含、终点不含）：(\S+) 至 (\S+)$/m);
@@ -45,8 +45,9 @@ function readAppliedRange(session:string,rangePrompt?:string):Bounds|null{
     const bounds=validBounds(Date.parse(line[1]),Date.parse(line[2]));
     if(bounds)return bounds;
   }
-  const key='harness.logs.range.'+session;
-  for(const candidate of [key,'harness.logs.range']){
+  const key=storageKey+'.range.'+session;
+  // Previous log sessions used an unscoped range entry. Migrate them only for the public scene.
+  for(const candidate of storageKey==='harness.logs'?[key,'harness.logs.range']:[key]){
     try{
       const saved=JSON.parse(sessionStorage.getItem(candidate)??'null');
       if(candidate===key||saved?.session===session){
@@ -79,10 +80,12 @@ function parseRow(text:string,i:number):Row{
   const time=stamp[2]?Date.parse(wall+stamp[2]):parseLocal(wall);
   return {number:i+1,text,time};
 }
-export function LogInvestigation(){
-  const [form,setForm]=useState(()=>!sessionStorage.getItem('harness.logs'));
+export function LogInvestigation({mode='public'}:{mode?:'public'|'message'}={}){
+  const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
+  const title=mode==='message'?'报文问题排查':'公管问题排查';
+  const [form,setForm]=useState(()=>!sessionStorage.getItem(storageKey));
   const [trace,setTrace]=useState(''),[keyword,setKeyword]=useState('');
-  const [applied,setApplied]=useState(()=>readAppliedRange(sessionStorage.getItem('harness.logs')??''));
+  const [applied,setApplied]=useState(()=>readAppliedRange(sessionStorage.getItem(storageKey)??'',undefined,storageKey));
   const [range,setRange]=useState(()=>applied?rangeFromBounds(applied):recentRange(60));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
@@ -114,20 +117,23 @@ export function LogInvestigation(){
     finally{if(gen===generation.current)setReading(false);}
   }
   function reset(session='',rangePrompt?:string){
-    const restored=readAppliedRange(session,rangePrompt);
+    const restored=readAppliedRange(session,rangePrompt,storageKey);
     setApplied(restored);setRange(restored?rangeFromBounds(restored):recentRange(60));
     setForm(!session);setTrace('');setKeyword('');setLevel('全部');void load();
   }
-  function onSent(session=sessionStorage.getItem('harness.logs')){
+  function onSent(session=sessionStorage.getItem(storageKey)){
     if(form){
       setApplied({from,to});
-      if(session)sessionStorage.setItem('harness.logs.range.'+session,JSON.stringify({from,to}));
+      if(session)sessionStorage.setItem(storageKey+'.range.'+session,JSON.stringify({from,to}));
       setForm(false);
     }
   }
   function prompt(question:string){
     if(!form)return question;
     const lines=['请根据以下条件排查日志，列出证据、异常原因及下一步。',
+      mode==='message'?
+        '排查场景：报文问题排查。关注报文收发、字段校验与处理链路；仅使用可验证的数据源，缺少报文查询工具时说明证据不足。':
+        '排查场景：公管问题排查。关注公管业务操作及上下游链路，使用当前可用日志证据，不臆测数据库或服务状态。',
       '若 log-query 需要用户手工输入验证码，请使用当前会话的 OpenCode question 表单收集文本回答，保留前导零，再继续本次排查。网页无法向后台脚本的 stdin 输入。',
       '查询时区：'+localZone+'。请按以下起止时刻查询；若工具需要无时区的本地时间，使用该时区对应的日期和时间。',
       '时间范围（起点含、终点不含）：'+formatBounds({from,to}),
@@ -174,5 +180,5 @@ export function LogInvestigation(){
     {applied&&<div><strong>上次排查范围</strong><span>{formatBounds(applied)} · {localZone}</span></div>}
     <button type="button" className="secondary" onClick={()=>setForm(true)}>调整排查条件</button>
   </div>;
-  return <DirectChat investigation={{controls,initial:form,ready,prompt,onSent,reset}}/>;
+  return <DirectChat investigation={{controls,initial:form,ready,prompt,onSent,reset,title,sessionKey:storageKey}}/>;
 }
