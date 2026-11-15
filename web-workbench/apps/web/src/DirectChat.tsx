@@ -60,6 +60,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
   const createdSession=useRef('');
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(initialDraft.text),[refs,attach]=useState(initialDraft.files);
   const [showFiles,toggleFiles]=useState(Boolean(initialDraft.files)),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
+  useEffect(()=>{window.dispatchEvent(new Event('harness:chat-history'));},[id,cachedTitle]);
   useEffect(()=>{
     if(draft||refs)sessionStorage.setItem(composerKey,JSON.stringify({text:draft,files:refs}));
     else sessionStorage.removeItem(composerKey);
