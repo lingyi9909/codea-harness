@@ -59,7 +59,9 @@ The worker records control sends before contacting the native service. An uncert
 
 ### 配置文件与安全边界
 
-在启动目录下，通过「场景配置」页面保存 **`.workbench/scenarios.json`**。此文件将子场景 ID 映射到**绝对路径**工作目录和原生执行入口，示例如下（名称只是示例，须在对应目录的 OpenCode 2.x 中真实可用）：
+启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（初始 `{"version":1,"scenes":{}}`）和 **`.workbench/config-access.json`**（初始 `{"version":1,"editors":[]}`），**不会自动授予编辑权限**。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
+
+通过「场景配置」页面保存 `.workbench/scenarios.json`。此文件将子场景 ID 映射到**绝对路径**工作目录和原生执行入口，示例如下（名称只是示例，须在对应目录的 OpenCode 2.x 中真实可用）：
 
 ```json
 {
@@ -83,7 +85,7 @@ The worker records control sends before contacting the native service. An uncert
 
 三个配置键：`logs` 对应公管问题排查，`message` 对应报文问题排查，`data` 对应公管数据分析。可以分别绑定不同目录。**未配置场景不允许执行**，不会默认跑到首页目录。所有绑定必须为已存在的绝对目录；服务端按实际文件解析路径并检查。Skill、命令和 Agent 通过 OpenCode 的目录级 catalog 验证，不存在、重名或接口不可用时不执行。Command 通过原生 `session.command` 提交而不是把斜杠命令当普通提示词。Subagent 经原生 Agent catalog 验证并附加 Agent 提及；是否真正创建子会话和运行结果须以实际 OpenCode 工具轨迹为准，不能把文本提及视为已经执行成功。
 
-配置页面的**编辑权限**独立保存在启动目录的 **`.workbench/config-access.json`**。首次使用时系统默认只读，不会自动授权登录用户。打开配置页可以看到当前身份标识（SHA-256 字符串）；请在本机文件系统中由受信任的管理员创建下列文件，将该标识填入 `editors`：
+配置页面的**编辑权限**独立保存在启动目录的 **`.workbench/config-access.json`**。首次使用时系统默认只读，不会自动授权登录用户。启动时权限文件已创建，默认 `editors` 是空数组。打开配置页可以看到当前身份标识（SHA-256 字符串）；请在本机文件系统中由受信任的管理员**编辑已有权限文件**，将该标识加入 `editors`：
 
 ```json
 {
@@ -98,7 +100,7 @@ The worker records control sends before contacting the native service. An uncert
 
 ### 对话与执行
 
-每个子场景使用自身的已绑定工作目录获取模型、Skill、Command、Agent 和文件引用。历史会话、草稿与时间范围按场景区分；旧的公管日志会话保留既有 `harness.logs` 存储键。切换场景不自动创建 OpenCode 会话，当前会话也不会因为管理员修改配置而无提示迁移目录；执行时仍在服务端检查当前绑定。
+每个子场景使用自身的已绑定工作目录获取模型、Skill、Command、Agent 和文件引用。配置缺失时，页面会明确显示「当前子场景尚未配置」，不会试图在默认目录执行；页面的「重新检查配置」可在保存配置后重新读取。网络无法读取配置时会单独提示本地服务连接问题并允许重试。历史会话、草稿与时间范围按场景区分；旧的公管日志会话保留既有 `harness.logs` 存储键。切换场景不自动创建 OpenCode 会话，当前会话也不会因为管理员修改配置而无提示迁移目录；执行时仍在服务端检查当前绑定。
 
 模型选择、流式输出、工具执行、授权等待、原生表单补参、中断和恢复与之前一致。等待权限时仍只有「拒绝」「仅本次允许」，不会新增自动授权。测试中的模拟工具或会话输出不是企业内网真实运行证据。
 
