@@ -7,7 +7,8 @@ import { ProfileLogin } from './ProfileLogin.tsx';
 import { DirectChat } from './DirectChat.tsx';
 import {LogInvestigation} from './LogInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
-import { ScenarioHome, scenes, type Scene } from './ScenarioHome.tsx';
+import { scenes, type Scene } from './ScenarioHome.tsx';
+import { SidebarChatHistory } from './SidebarChatHistory.tsx';
 import { SourceView } from './SourceView.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
 
@@ -37,7 +38,15 @@ export function WorkbenchApp() {
     const saved=sessionStorage.getItem('harness.scene')??'home';
     return Object.hasOwn(scenes,saved)?saved as Scene:'home';
   });
-  const navigate=(next:Scene)=>{setSelected('');setScene(next);sessionStorage.setItem('harness.scene',next);};
+  const [expanded,setExpanded]=useState<Scene|null>(()=>{
+    const saved=sessionStorage.getItem('harness.scene');
+    return saved==='review'||saved==='logs'||saved==='data'?saved:null;
+  });
+  const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
+  const navigate=(next:Scene)=>{setSelected('');setScene(next==='chat'?'home':next);sessionStorage.setItem('harness.scene',next==='chat'?'home':next);};
+  const openChat=(kind:'new'|'history'|'select',id?:string)=>{
+    navigate('home');setChatNavigation(previous=>({kind,id,seq:previous.seq+1}));
+  };
   const selection=useRef(selected);
   selection.current=selected;
   const detailRequest=useRef(0);
@@ -241,40 +250,43 @@ export function WorkbenchApp() {
   </div>;
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><span className="brand-icon">✧</span><div><strong>智能工作台</strong></div></div>
-      <nav aria-label="场景导航" className="scene-nav">{(Object.keys(scenes) as Scene[]).map(key=>
-        <button key={key} aria-current={!selected&&scene===key?'page':undefined} className={'side-link '+(!selected&&scene===key?'selected':'')} onClick={()=>navigate(key)}>
-          <span aria-hidden="true">{{home:'▦',chat:'✳',review:'⌘',logs:'≋',data:'▥'}[key]}</span>{scenes[key]}</button>)}</nav>
-      {(tasks.length>0||selected||scene==='review'||scene==='home')&&<>
-      <div className="side-section">任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
-      <div className="history">
-        {tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')}
-          onClick={()=>setSelected(task.id)}>
-          <span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}
-        {!tasks.length&&<p className="muted small">暂无历史任务</p>}
-      </div></>}
-      <div className="workbench-account"><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
-        <button disabled={busy} onClick={()=>void act(async()=>{
-          await api.logout();
-          window.location.reload();
-        })}>退出登录</button>
+      <div className="brand"><div><strong>Code Harness</strong><small>智能研发工作台</small></div></div>
+      <button className="new-chat-action" onClick={()=>openChat('new')}><span aria-hidden="true">＋</span> 新建对话</button>
+      <nav aria-label="场景导航" className="scene-nav">
+        <button className={'side-link '+(!selected&&(scene==='home'||scene==='chat')?'selected':'')} aria-current={!selected&&(scene==='home'||scene==='chat')?'page':undefined} onClick={()=>navigate('home')}><span aria-hidden="true">◫</span> 对话首页</button>
+        <div className="side-section">专项场景</div>
+        {(['review','logs','data'] as const).map(key=><div className="scenario-group" key={key}>
+          <button className={'side-link scenario-parent '+(!selected&&scene===key?'selected':'')} aria-expanded={expanded===key} onClick={()=>{
+            // One real entry per category: open the existing scene directly.
+            setExpanded(key);navigate(key);
+          }}><span className={'scenario-icon '+key} aria-hidden="true">{{review:'⌘',logs:'≡',data:'▥'}[key]}</span>{scenes[key]}</button>
+        </div>)}
+      </nav>
+      <div className="side-section history-heading">最近对话 <button title="查看完整对话历史" onClick={()=>openChat('history')}>全部</button></div>
+      <SidebarChatHistory onSelect={id=>openChat('select',id)} onViewAll={()=>openChat('history')}/>
+      {(tasks.length>0||selected||scene==='review')&&<>
+        <div className="side-section task-history-heading">Review 任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
+        <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
+      </>}
+      <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
+        <button disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
       </div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="breadcrumb">研发场景 <span>/</span> {selected?'任务详情':scenes[scene]}</div>
+      <header className="topbar"><div className="breadcrumb"><strong>工作台</strong><span>/</span> {selected?'任务详情':scene==='home'||scene==='chat'?'对话首页':scenes[scene]}</div>
         {(selected||scene==='review')&&<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 服务已就绪':'● 服务未就绪'}</span>}</header>
       <div className="page">
       {error&&<div className="alert" role="alert">{error}<button onClick={()=>setError('')}>关闭</button></div>}
       {gap&&selected&&<div className="notice" role="status">{gap}<button onClick={()=>{loadDetail(selected).catch(e=>setError(text(e)));setGap('');}}>重新读取</button></div>}
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
-      {!selected&&scene==='home'?<ScenarioHome open={navigate}/>:!selected&&scene==='chat'?<DirectChat/>:
+      {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation}/>:
        !selected&&scene==='logs'?<LogInvestigation/>:!selected&&scene==='data'?<FileScene/>:!selected?<section className="workbench">
-        <div className="eyebrow">SCENARIO / CODE REVIEW</div>
-        <h1>代码审查工作台<span className="accent">.</span></h1>
+        <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
+        <h1>代码审查</h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
         <div className="form-panel">
-          <div className="panel-head"><div><h2>创建 Review 任务</h2><p>执行前固定代码范围，原仓库保持不变。</p></div><span className="chip">Git · Local</span></div>
+          <div className="panel-head"><div><h2>选择范围 <span className="step-arrow">→</span> 预览变更 <span className="step-arrow">→</span> 开始审查</h2><p>固定 Git 已提交版本，原仓库保持不变。</p></div><span className="chip">Git · Local</span></div>
           <div className="form-grid">
             <label>本地代码仓库<select value={repoId} onChange={e=>setRepoId(e.target.value)}>
               <option value="">请选择已登记仓库</option>{repos.map(repo=><option value={repo.id} key={repo.id}>{repo.name}</option>)}</select></label>
