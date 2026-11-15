@@ -116,8 +116,8 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     const historyRequest={directory:root,scenario:'direct-chat'};
     const firstPage=await history(historyRequest);
     assert.equal(firstPage.statusCode,200,firstPage.body);
-    assert.deepEqual(firstPage.json().data,{items:[{id,title:'Code Harness · 直接对话',updated:17}],next:'next-page'});
-    assert.deepEqual((await history({...historyRequest,cursor:'next-page'})).json().data,{items:[{id:'ses_older',title:'Code Harness · 直接对话',updated:17}]});
+    assert.deepEqual(firstPage.json().data,{items:[{id,title:'智能工作台 · 直接对话',updated:17}],next:'next-page'});
+    assert.deepEqual((await history({...historyRequest,cursor:'next-page'})).json().data,{items:[{id:'ses_older',title:'智能工作台 · 直接对话',updated:17}]});
     assert.equal((await history({...historyRequest,directory:tmpdir()})).statusCode,403);
     const options=await app.inject({method:'POST',url:'/api/v1/chat/models',headers});
     assert.deepEqual(options.json().data,[{id:'corp-alias',name:'Private',providerID:'corp'}]);
