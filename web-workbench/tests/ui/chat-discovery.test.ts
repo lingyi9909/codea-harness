@@ -232,9 +232,19 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     // not an offline error or an attempt to contact OpenCode.
     const sceneFile=join(settingsDir,'scenarios.json');
     const configured=await readFile(sceneFile,'utf8');
-    await writeFile(sceneFile,JSON.stringify({version:1,scenes:{}}));
+    // Built-in /models must open the actual model selector, not issue a fake
+    // custom command in OpenCode when the message scene first opens.
+    const modelScene=JSON.parse(configured);
+    modelScene.scenes.message={directory:project,executor:{type:'command',name:'models'}};
+    await writeFile(sceneFile,JSON.stringify(modelScene));
     const sceneNav=page.getByRole('navigation',{name:'场景导航'});
     await sceneNav.getByRole('button',{name:'问题排查',exact:true}).click();
+    await sceneNav.getByRole('button',{name:'报文问题排查',exact:true}).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByText('默认入口 /models', {exact:false})).toBeVisible();
+    await page.screenshot({path:join(shots,'12-default-model-picker.png')});
+    await page.getByRole('button',{name:'关闭模型选择'}).click();
+    await writeFile(sceneFile,JSON.stringify({version:1,scenes:{}}));
     await sceneNav.getByRole('button',{name:'公管问题排查',exact:true}).click();
     await expect(page.getByRole('heading',{name:'当前子场景尚未配置'})).toBeVisible();
     await expect(page.getByText('连接已中断')).toHaveCount(0);
