@@ -176,6 +176,9 @@ body{background:#fff;color:var(--silver-ink);}
   font-weight:650;line-height:1.6;color:#454d56;
 }
 .silver-chat-home > .scene-title .chat-history-actions{display:none;}
+/* The sidebar's “全部” opens the existing history panel; keep its close control reachable. */
+.silver-chat-home:has(> .conversation-history) > .scene-title{display:flex!important;}
+.silver-chat-home:has(> .conversation-history) > .scene-title .chat-history-actions{display:flex!important;}
 .silver-chat-home .chat-layout{display:flex;flex-direction:column;min-height:0;}
 .silver-chat-home .chat-box{width:100%;min-width:0;display:flex;flex-direction:column;border:0;box-shadow:none;background:#fff;}
 .silver-chat-home .chat-feed{min-height:0;max-height:none;}
