@@ -34,7 +34,7 @@ function explain(e:unknown){
     return '创建会话时，OpenCode 服务或其网关返回 HTTP '+e.code.slice(-3)+'。';
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
-type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void};
+type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;title:string;sessionKey:'harness.logs'|'harness.message'};
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
 export function DirectChat({investigation,navigation,onDirectoryChange}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void}={}){
   const [settings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
@@ -42,12 +42,12 @@ export function DirectChat({investigation,navigation,onDirectoryChange}:{investi
   useEffect(()=>{if(settings)onDirectoryChange?.(settings.directories[0]??'');},[settings,onDirectoryChange]);
   if(!settings)return <p role={error?'alert':'status'}>{error||'正在加载工作目录…'}</p>;
   const directory=settings.directories[0]??'';
-  return <ChatWorkspace key={directory} directory={directory} settings={settings} investigation={investigation} navigation={navigation}/>;
+  return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??'harness.chat')} directory={directory} settings={settings} investigation={investigation} navigation={navigation}/>;
 }
 function ChatWorkspace({investigation,directory,settings,navigation}:{
   investigation?:Investigation;navigation?:ChatNavigation;directory:string;settings:ChatSettings;
 }){
-  const sessionKey:SceneKey=investigation?'harness.logs':'harness.chat';
+  const sessionKey:SceneKey=investigation?.sessionKey??'harness.chat';
   const [chosen,setChosen]=useState<ChatModel>();
   const [id,select]=useState(()=>savedChat(localStorage,sessionStorage,sessionKey,directory));
   const [cachedTitle,setCachedTitle]=useState(()=>readHistory(localStorage,sessionKey,directory).find(row=>row.id===id)?.title??'');
@@ -123,7 +123,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
   useEffect(()=>{
     if(!pending)return;
     const title=document.title;
-    document.title='等待你回应 · '+(investigation?'日志排查':'直接对话');
+    document.title='等待你回应 · '+(investigation?.title??'直接对话');
     return ()=>{document.title=title;};
   },[pending,Boolean(investigation)]);
   const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy);
@@ -165,7 +165,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
   },[messages,stream.tools]);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
-  return <section className={investigation?"scene-page log-investigation":"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?'日志排查':'直接对话'}</h1>
+  return <section className={investigation?"scene-page log-investigation":"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??'直接对话'}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
@@ -183,7 +183,7 @@ function ChatWorkspace({investigation,directory,settings,navigation}:{
         <ChatRequests key={id} state={state} busy={busy}
           onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
         {interrupt&&<div className="composer-actions">{interrupt}</div>}
-      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={2} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次日志排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
+      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={2} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次问题排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
