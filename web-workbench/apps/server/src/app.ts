@@ -1,5 +1,6 @@
 import { parseProfile, profileKey, WorkspaceProfile } from './local-profile.ts';
 import { registerChat, resolveLocalWorkspace } from './modules/chat/routes.ts';
+import { SceneConfigStore, SCENE_CONFIG_PATH, SCENE_ACCESS_PATH } from './scene-config.ts';
 import Fastify from 'fastify';
 import serveStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
@@ -70,7 +71,8 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     return reply.status(health.status==='READY'?200:503).send(result(health));
   });
   const localSession=opts.localOnly===true&&!opts.pool;
-  const workspace=localSession?await resolveLocalWorkspace(opts.workspace):undefined;
+  const workspace=opts.workspace?await resolveLocalWorkspace(opts.workspace):localSession?await resolveLocalWorkspace():undefined;
+  const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
   if(workspace){
     const store=new WorkspaceProfile(workspace);
     app.addHook('onRequest',async(req,reply)=>{
@@ -107,7 +109,26 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
-  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace});
+  if(sceneConfig){
+    app.get('/api/v1/scene-config',async(req,reply)=>{
+      const session=opts.auth.session(req);
+      return reply.header('Cache-Control','no-store').send(result({
+        workspace,configPath:SCENE_CONFIG_PATH,accessPath:SCENE_ACCESS_PATH,
+        ...sceneConfig.read(),canEdit:sceneConfig.canEdit(session.profile?.key),
+        identity:session.profile?.key??null,
+      }));
+    });
+    app.put<{Body:{config:unknown;revision:string}}>('/api/v1/scene-config',{
+      schema:{body:{type:'object',additionalProperties:false,required:['config','revision'],properties:{
+        config:{type:'object'},revision:{type:'string',minLength:64,maxLength:64}}}},
+    },async(req,reply)=>{
+      const session=opts.auth.mutation(req);
+      if(!sceneConfig.canEdit(session.profile?.key))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
+      const saved=await sceneConfig.save(req.body.config,req.body.revision);
+      return reply.header('Cache-Control','no-store').send(result({...saved,canEdit:true}));
+    });
+  }
+  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       opts.auth.session(req);return result({items:[],nextCursor:null});
