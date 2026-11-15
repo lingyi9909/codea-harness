@@ -58,3 +58,28 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
     headers:{host,cookie:headers.cookie},payload:{config,revision:saved.json().data.revision}})).statusCode,403);
   assert.equal((await read()).json().data.canEdit,true);
 });
+
+it('paired sessions can be granted scene editor access only through the ACL file',async t=>{
+  const workspace=await realpath(await mkdtemp(join(tmpdir(),'paired-scene-')));
+  t.after(()=>rm(workspace,{recursive:true,force:true}));
+  const port=4189,host='127.0.0.1:'+port,origin='http://'+host;
+  const app=await createApp({auth:new LocalAuth('secret-once',port),workspace});
+  t.after(()=>app.close());
+  const pair=await app.inject({method:'POST',url:'/api/v1/auth/session',headers:{host,origin},
+    payload:{pairingCode:'secret-once'}});
+  assert.equal(pair.statusCode,200,pair.body);
+  const headers={host,origin,cookie:String(pair.headers['set-cookie']).split(';')[0],
+    'x-csrf-token':pair.json().data.csrfToken};
+  const before=await app.inject({url:'/api/v1/scene-config',headers});
+  assert.equal(before.statusCode,200);
+  const identity=before.json().data.identity;
+  assert.match(identity,/^[a-f0-9]{64}$/);
+  assert.equal(before.json().data.canEdit,false);
+  await mkdir(join(workspace,'.workbench'),{recursive:true});
+  await writeFile(join(workspace,'.workbench','config-access.json'),JSON.stringify({version:1,editors:[identity]}));
+  const after=await app.inject({url:'/api/v1/scene-config',headers});
+  assert.equal(after.json().data.canEdit,true);
+  const saved=await app.inject({method:'PUT',url:'/api/v1/scene-config',headers,
+    payload:{config:{version:1,scenes:{}},revision:after.json().data.revision}});
+  assert.equal(saved.statusCode,200,saved.body);
+});
