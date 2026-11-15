@@ -83,8 +83,9 @@ export class SceneConfigStore {
   async binding(key:SceneKey):Promise<Binding>{
     const row=this.read().config.scenes[key];
     if(!row)throw new AuthProblem(409,'SCENE_NOT_CONFIGURED');
-    const path=realpathSync.native(row.directory);
-    if(!statSync(path).isDirectory())throw new AuthProblem(409,'SCENE_DIRECTORY_INVALID');
+    let path:string;
+    try{path=realpathSync.native(row.directory);if(!statSync(path).isDirectory())throw new Error('NOT_DIRECTORY');}
+    catch{throw new AuthProblem(409,'SCENE_DIRECTORY_INVALID');}
     return {...row,directory:path};
   }
   async save(value:unknown,revision:string):Promise<{config:SceneConfiguration;revision:string}>{
@@ -94,8 +95,8 @@ export class SceneConfigStore {
     for(const [key,row] of Object.entries(config.scenes)){
       if(!row)continue;
       let path:string;
-      try{path=realpathSync.native(row.directory);}catch{throw invalid('SCENE_DIRECTORY_INVALID');}
-      if(!statSync(path).isDirectory())throw invalid('SCENE_DIRECTORY_INVALID');
+      try{path=realpathSync.native(row.directory);if(!statSync(path).isDirectory())throw new Error('NOT_DIRECTORY');}
+      catch{throw invalid('SCENE_DIRECTORY_INVALID');}
       scenes[key as SceneKey]={...row,directory:path};
     }
     const fresh:SceneConfiguration={version:1,scenes};
