@@ -1,7 +1,7 @@
 import type {ChatHistoryPage} from '../../../packages/contracts/src/chat.ts';
 
 export type HistoryRow=ChatHistoryPage['items'][number];
-export type SceneKey='harness.chat'|'harness.logs'|'harness.message';
+export type SceneKey='harness.chat'|'harness.logs'|'harness.message'|'harness.data';
 const prefix=(scene:SceneKey,directory:string)=>scene+'.history.'+JSON.stringify(directory)+'.';
 const selection=(scene:SceneKey,directory:string)=>scene+'.selected.'+JSON.stringify(directory);
 
