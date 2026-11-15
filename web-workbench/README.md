@@ -59,9 +59,19 @@ The worker records control sends before contacting the native service. An uncert
 
 ### 配置文件与安全边界
 
-启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（初始 `{"version":1,"scenes":{}}`）和 **`.workbench/config-access.json`**（新目录初始 `{"version":1,"editors":["zhangzhanhui"]}`，仅允许该登录用户名编辑）。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
+启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（三个子场景均有可见的默认绑定）和 **`.workbench/config-access.json`**（新目录初始 `{"version":1,"editors":["zhangzhanhui"]}`，仅允许该登录用户名编辑）。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
 
-通过「场景配置」页面保存 `.workbench/scenarios.json`。此文件将子场景 ID 映射到**绝对路径**工作目录和原生执行入口，示例如下（名称只是示例，须在对应目录的 OpenCode 2.x 中真实可用）：
+通过「场景配置」页面保存 `.workbench/scenarios.json`。此文件将子场景 ID 映射到**绝对路径**工作目录和原生执行入口。**不安装 Superpowers，也不新增任何第三方 Skill 文件。** 启动时，若子场景没有配置，系统按以下默认值填充到启动工作目录中；已有的自定义绑定不覆盖：
+
+| 子场景 | 默认工作目录 | 默认执行入口 | 使用限制 |
+| --- | --- | --- | --- |
+| 公管问题排查 | 启动工作目录 | Skill `brainstorming` | 仅是能力名称引用；没有在 OpenCode 加载该 Skill 时会明确拒绝执行，不会假装已安装 Superpowers |
+| 报文问题排查 | 启动工作目录 | Command `models`（TUI `/models`） | 它只是**模型选择器**，页面打开内置模型列表；发送问题走普通对话，不会把 `/models` 当作报文排查工具调用 |
+| 公管数据分析 | 启动工作目录 | Built-in `chat` | 直接使用 OpenCode 对话，不依赖第三方 Skill |
+
+已有 `.workbench/scenarios.json` 若未配置某个子场景，会在**下一次工作台服务启动**时补齐该子场景默认值，其他场景绑定保留不变。若用户保存了一个不存在的 Skill 名称，执行仍严格校验目录内真实的 OpenCode Catalog。
+
+以下 JSON 演示如何把默认绑定替换成项目中**实际存在**的业务入口（名称只是示例）：
 
 ```json
 {
@@ -83,7 +93,7 @@ The worker records control sends before contacting the native service. An uncert
 }
 ```
 
-三个配置键：`logs` 对应公管问题排查，`message` 对应报文问题排查，`data` 对应公管数据分析。可以分别绑定不同目录。**未配置场景不允许执行**，不会默认跑到首页目录。所有绑定必须为已存在的绝对目录；服务端按实际文件解析路径并检查。Skill、命令和 Agent 通过 OpenCode 的目录级 catalog 验证，不存在、重名或接口不可用时不执行。Command 通过原生 `session.command` 提交而不是把斜杠命令当普通提示词。Subagent 经原生 Agent catalog 验证并附加 Agent 提及；是否真正创建子会话和运行结果须以实际 OpenCode 工具轨迹为准，不能把文本提及视为已经执行成功。
+三个配置键：`logs` 对应公管问题排查，`message` 对应报文问题排查，`data` 对应公管数据分析。可以分别绑定不同目录。首次启动或重启后，未配置的场景自动绑定启动目录及上述默认入口；自定义 Skill 如果不存在仍会拒绝执行。所有绑定必须为已存在的绝对目录；服务端按实际文件解析路径并检查。Skill、命令和 Agent 通过 OpenCode 的目录级 catalog 验证，不存在、重名或接口不可用时不执行。Command 通过原生 `session.command` 提交而不是把斜杠命令当普通提示词。Subagent 经原生 Agent catalog 验证并附加 Agent 提及；是否真正创建子会话和运行结果须以实际 OpenCode 工具轨迹为准，不能把文本提及视为已经执行成功。
 
 配置页面的**编辑权限**独立保存在启动目录的 **`.workbench/config-access.json`**。新工作目录首次启动默认只允许登录用户名 `zhangzhanhui` 编辑配置，其他登录用户名只读。打开配置页显示当前登录用户名；管理员可以在本机文件系统中直接用用户名维护 `editors`。已有的权限文件不会自动覆盖，因此旧工作目录若仍是空名单，需要手动把用户名写入：
 
