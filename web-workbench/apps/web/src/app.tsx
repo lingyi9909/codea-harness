@@ -39,6 +39,7 @@ export function WorkbenchApp() {
     return Object.hasOwn(scenes,saved)?saved as Scene:'home';
   });
   const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
+  const [chatDirectory,setChatDirectory]=useState('');
   const navigate=(next:Scene)=>{
     // Scene navigation never creates a native session; the chat restores its own saved id/draft.
     const target=next==='chat'?'home':next;
@@ -271,14 +272,18 @@ export function WorkbenchApp() {
       </div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="breadcrumb"><strong>工作台</strong><span>/</span> {selected?'任务详情':scene==='home'||scene==='chat'?'对话首页':scenes[scene]}</div>
-        {(selected||scene==='review')&&<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 服务已就绪':'● 服务未就绪'}</span>}</header>
+      <header className="topbar"><div className="workspace-heading"><strong>工作台</strong>
+        <span className="heading-divider" aria-hidden="true"/>
+        {chatDirectory?<span className="workspace-pill" title={chatDirectory}>{chatDirectory.split(/[\\/]/).filter(Boolean).at(-1)}</span>:
+          <span className="workspace-context">{selected?'任务详情':scene==='home'||scene==='chat'?'对话首页':scenes[scene]}</span>}</div>
+        {selected||scene==='review'?<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 审查服务已就绪':'● 审查服务未就绪'}</span>:
+          <span className="workbench-connection"><span className="connection-dot" aria-hidden="true"/>本地工作台已连接</span>}</header>
       <div className="page">
       {error&&<div className="alert" role="alert">{error}<button onClick={()=>setError('')}>关闭</button></div>}
       {gap&&selected&&<div className="notice" role="status">{gap}<button onClick={()=>{loadDetail(selected).catch(e=>setError(text(e)));setGap('');}}>重新读取</button></div>}
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
-      {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation}/>:
+      {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory}/>:
        !selected&&scene==='logs'?<LogInvestigation/>:!selected&&scene==='data'?<FileScene/>:!selected?<section className="workbench">
         <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
         <h1>代码审查</h1>
