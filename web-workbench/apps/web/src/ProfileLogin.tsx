@@ -35,29 +35,29 @@ export function ProfileLogin({onLogin}:{onLogin:(name:string,phone:string)=>Prom
     finally{setBusy(false);}
   }
   return <main className="profile-page">
-    <aside className="profile-aside" aria-label="工作台介绍">
-      <div className="profile-brand"><strong>Code Harness</strong><span>智能研发工作台</span></div>
-      <div className="profile-aside-content">
-        <span className="profile-kicker">YOUR AI WORKSPACE</span>
-        <h2>专注研发，<br/>让 AI 自然参与。</h2>
-        <p>一个工作台，连接直接对话、代码审查、日志排查和数据分析。</p>
-      </div>
-      <p className="profile-aside-footer">本地工作台 · 在当前项目目录中使用</p>
-    </aside>
-    <section className="profile-main">
-      <div className="profile-card" aria-labelledby="profile-title">
-        <span className="profile-kicker">WORKBENCH ACCESS</span>
+    <section className="profile-card" aria-labelledby="profile-title">
+      <aside className="profile-side">
+        <div className="profile-brand"><strong>Code Harness</strong><span>智能研发工作台</span></div>
+        <div className="profile-side-copy">
+          <span className="profile-overline">LOCAL AI WORKSPACE</span>
+          <h2>让研发工作<br/>更专注、更清晰</h2>
+          <p>在同一个工作台中连接 OpenCode 对话、代码审查、日志排查和数据分析。</p>
+        </div>
+        <span className="profile-side-footer">本地运行 · 资源随项目使用</span>
+      </aside>
+      <div className="profile-form-pane">
+        <span className="profile-overline">欢迎使用</span>
         <h1 id="profile-title">登录工作台</h1>
-        <p className="profile-intro">填写使用者信息，继续进入当前项目。</p>
+        <p className="profile-subtitle">填写本地工作台资料，继续当前项目。</p>
         <form onSubmit={submit} autoComplete="off">
-          <label>姓名<input name="name" placeholder="请输入姓名" value={name} required autoComplete="off" onChange={e=>setName(e.target.value)}/></label>
-          <label>手机号<input name="phone" type="tel" inputMode="tel" placeholder="请输入手机号" value={phone} required maxLength={40} autoComplete="off" onChange={e=>setPhone(e.target.value)}/></label>
+          <label>姓名<input name="name" value={name} required autoComplete="off" placeholder="请输入姓名" onChange={e=>setName(e.target.value)}/></label>
+          <label>手机号<input name="phone" type="tel" value={phone} required maxLength={40} autoComplete="off" placeholder="请输入手机号" onChange={e=>setPhone(e.target.value)}/></label>
+          <p className="profile-disclosure">登录后，姓名和手机号将保存到当前工作目录的 <code>.workbench/user.json</code>，供此目录中的 Skill 读取。</p>
           {error&&<p className="profile-error" role="alert">{error}</p>}
-          <button className="profile-submit" disabled={busy} type="submit">{busy?'正在登录…':'登录工作台'}<span aria-hidden="true">→</span></button>
-          <p className="profile-disclosure">姓名和手机号将保存到当前工作目录的 <code>.workbench/user.json</code>，供该目录的 Skill 读取。此登录不发送短信验证码。</p>
+          <button className="profile-submit" disabled={busy} type="submit">{busy?'正在登录…':'登录工作台'}<span aria-hidden="true">↗</span></button>
         </form>
+        <p className="profile-footnote">仅用于本地工作台资料登记，不进行短信验证。</p>
       </div>
-      <p className="profile-main-footer">Code Harness · 本地研发工作台</p>
     </section>
   </main>;
 }
