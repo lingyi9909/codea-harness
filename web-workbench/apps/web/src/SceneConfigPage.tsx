@@ -55,8 +55,8 @@ export function SceneConfigPage(){
         <p>编辑权限：<code>{loaded.accessPath}</code></p>
       </div>
       {!loaded.canEdit&&<div className="notice" role="status">
-        当前身份只有查看权限。请由目录管理员在上述权限文件中加入当前身份标识，然后重新打开页面。
-        {loaded.identity&&<p>当前身份标识：<code>{loaded.identity}</code></p>}
+        当前登录用户名不在配置管理员名单中。请在上述权限文件的 editors 数组中加入登录用户名，然后刷新页面。
+        {loaded.username&&<p>当前登录用户名：<strong>{loaded.username}</strong></p>}
         该权限文件不能通过本页面修改。
       </div>}
       <div className="scene-config-list">
