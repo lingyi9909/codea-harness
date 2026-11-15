@@ -19,7 +19,7 @@ export function csvTable(input:string){
   if(!rows.length||rows.some(r=>r.length!==rows[0].length))throw Error('请使用包含表头且各行列数一致的 CSV');
   return rows;
 }
-export function FileScene(){
+export function FileScene({title='数据分析'}:{title?:string}={}){
   const [name,setName]=useState(''),[table,setTable]=useState<string[][]>([]);
   const [col,setCol]=useState(0),[error,setError]=useState('');
   const generation=useRef(0);
@@ -35,7 +35,7 @@ export function FileScene(){
       setTable(csvTable(raw));setName(file.name);
     }catch(e){if(key===generation.current)setError(e instanceof Error?e.message:String(e));}
   }
-  return <section className="scene-page"><div className="scene-title"><div><h1>数据分析</h1><p>导入 CSV 查看数据预览，选择数值列计算统计指标。</p></div></div>
+  return <section className="scene-page"><div className="scene-title"><div><h1>{title}</h1><p>导入 CSV 查看数据预览，选择数值列计算统计指标。</p></div></div>
     <div className="file-panel"><label className="file-pick"><strong>{name|| '选择 CSV 文件'}</strong><span>UTF-8 · 最大 2 MiB · 在浏览器内处理</span><input type="file" accept=".csv,text/csv" onChange={e=>void load(e.target.files?.[0])}/></label>
     {error&&<p role="alert">{error}</p>}
     {table.length>0&&<><label>统计字段<select value={col} onChange={e=>setCol(Number(e.target.value))}>{table[0].map((h,i)=><option key={i} value={i}>{h||'列 '+(i+1)}</option>)}</select></label>
