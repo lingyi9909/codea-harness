@@ -73,7 +73,7 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
   const localSession=opts.localOnly===true&&!opts.pool;
   const workspace=opts.workspace?await resolveLocalWorkspace(opts.workspace):localSession?await resolveLocalWorkspace():undefined;
   const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
-  if(workspace){
+  if(workspace&&localSession){
     const store=new WorkspaceProfile(workspace);
     app.addHook('onRequest',async(req,reply)=>{
       const route=req.routeOptions.url;
