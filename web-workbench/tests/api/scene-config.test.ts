@@ -1,6 +1,6 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createApp} from '../../apps/server/src/app.ts';
@@ -32,15 +32,16 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   await mkdir(folder,{recursive:true});
   await writeFile(join(folder,'config-access.json'),JSON.stringify({version:1,editors:[profileKey(profile)]}));
   assert.equal((await read()).json().data.canEdit,true);
+  const realProject=await realpath(project),realOutside=await realpath(outside);
   const config={version:1,scenes:{
-    logs:{directory:outside,executor:{type:'skill',name:'log-query'}},
-    message:{directory:project,executor:{type:'subagent',name:'message-helper'}},
-    data:{directory:outside,executor:{type:'command',name:'public-analysis'}},
+    logs:{directory:realOutside,executor:{type:'skill',name:'log-query'}},
+    message:{directory:realProject,executor:{type:'subagent',name:'message-helper'}},
+    data:{directory:realOutside,executor:{type:'command',name:'public-analysis'}},
   }};
   const saved=await write(config,before.json().data.revision);
   assert.equal(saved.statusCode,200,JSON.stringify(saved.json()));
   assert.deepEqual(JSON.parse(await readFile(join(folder,'scenarios.json'),'utf8')).scenes,config.scenes);
-  assert.equal(saved.json().data.config.scenes.logs.directory,outside);
+  assert.equal(saved.json().data.config.scenes.logs.directory,realOutside);
   const stale=await write(config,before.json().data.revision);
   assert.equal(stale.statusCode,409);
   assert.equal(stale.json().error.code,'SCENE_CONFIG_STALE');
