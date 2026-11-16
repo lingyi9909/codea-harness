@@ -3,7 +3,6 @@ import {streamingMessages,useChatStream} from './chatStream.ts';
 import {useProgressiveMessages} from './progressiveMessages.ts';
 import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
 import {activateChat,displayChatTitle,summarizeFirstInput,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
-import {ModelPicker} from './ModelPicker.tsx';
 import {ChatRequests} from './ChatRequests.tsx';
 import {api,ApiError} from './api/client.ts';
 import type {ChatStatus,ChatSettings,ChatModel,ChatScenario,SceneId,SceneConfigResponse} from '../../../packages/contracts/src/chat.ts';
@@ -41,7 +40,8 @@ function explain(e:unknown){
 type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;title:string;sessionKey:'harness.logs'|'harness.message'};
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
-export function DirectChat({investigation,navigation,onDirectoryChange,sceneId}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId}={}){
+type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
+export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){
   const [baseSettings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
   const [sceneSettings,setSceneSettings]=useState<SceneConfigResponse|null>(null);
   const [attempt,retry]=useState(0);
@@ -82,15 +82,14 @@ export function DirectChat({investigation,navigation,onDirectoryChange,sceneId}:
     sceneSettings.config.scenes.message.executor.name==='models';
   return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat'))}
     directory={directory} settings={settings} investigation={investigation} navigation={navigation} sceneId={sceneId}
-    modelCommand={modelCommand}/>;
+    modelCommand={modelCommand} globalModel={globalModel}/>;
 }
-function ChatWorkspace({investigation,directory,settings,navigation,sceneId,modelCommand}:{
+function ChatWorkspace({investigation,directory,settings,navigation,sceneId,modelCommand,globalModel}:{
   investigation?:Investigation;navigation?:ChatNavigation;directory:string;settings:ChatSettings;sceneId?:SceneId;
-  modelCommand?:boolean;
+  modelCommand?:boolean;globalModel?:GlobalModel;
 }){
   const scenario=scenarioFor(sceneId);
   const sessionKey:SceneKey=investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat');
-  const [chosen,setChosen]=useState<ChatModel>();
   const [id,select]=useState(()=>savedChat(localStorage,sessionStorage,sessionKey,directory));
   const [cachedTitle,setCachedTitle]=useState(()=>readHistory(localStorage,sessionKey,directory).find(row=>row.id===id)?.title??'');
   const migrating=useRef(Boolean(id)&&!sessionStorage.getItem(sessionKey+'.scoped'));
@@ -169,13 +168,6 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     return ()=>{document.title=title;};
   },[pending,Boolean(investigation)]);
   const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy);
-  async function selectModel(model:ChatModel|undefined){
-    if(id&&model){
-      await api.chatAction(id,'model',{id:model.id,providerID:model.providerID,variant:model.variant});
-      update(previous=>previous?.id===id?{...previous,model}:previous);
-      bump(n=>n+1);
-    }else setChosen(model);
-  }
   const send=()=>run(async()=>{
     if(!maySend)return;
     const text=investigation?investigation.prompt(draft.trim()):draft.trim();
@@ -183,11 +175,18 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     let session=id;
     if(!session){
       const title=draft.trim()?summarizeFirstInput(draft):summarizeFirstInput(text,Boolean(investigation));
-      const s=await api.newChat(directory||undefined,chosen?{id:chosen.id,providerID:chosen.providerID,variant:chosen.variant}:undefined,scenario==='direct-chat'?undefined:scenario,title);
+      const s=await api.newChat(directory||undefined,globalModel,scenario==='direct-chat'?undefined:scenario,title);
       session=s.id;createdSession.current=session;setCachedTitle(s.title||title);
       rememberChat(localStorage,sessionKey,directory,{id:session,title:s.title||title,updated:Date.now()});
       activateChat(localStorage,sessionStorage,sessionKey,directory,session);
       restoreContext.current=false;sessionStorage.removeItem(composerKey);select(session);
+    }else if(globalModel&&state?.id===session&&
+      (state.model?.id!==globalModel.id||state.model?.providerID!==globalModel.providerID||
+        state.model?.variant!==globalModel.variant)){
+      // A single global choice also applies to follow-up messages in an old
+      // session. Switch first and fail closed if this directory lacks it.
+      await api.chatAction(session,'model',globalModel);
+      update(previous=>previous?.id===session?{...previous,model:globalModel}:previous);
     }
     await stream.connect(session);
     await api.chatAction(session,'messages',{text,scenario,files:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
@@ -235,10 +234,6 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         }}/>
         {showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
         <div className="composer-actions">
-          <ModelPicker key={JSON.stringify([directory,id])} value={id?state?.model:chosen} allowDefault={!id}
-            initialOpen={Boolean(modelCommand&&!id)}
-            disabled={busy||!settings||Boolean(pending)||Boolean(id&&!state)}
-            loadModels={()=>api.chatModels(directory||undefined)} onSelect={selectModel} onApplied={()=>input.current?.focus()}/>
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {interrupt}
           <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
