@@ -65,6 +65,20 @@ function parsedFilters(prompt?:string){
     keyword:prompt?.match(/^关键字：([^\r\n]*)$/m)?.[1]?.trim()??'',
   };
 }
+function readAppliedFilters(session:string,prompt?:string,storageKey='harness.logs'){
+  const parsed=parsedFilters(prompt);
+  if((parsed.trace||parsed.keyword)||!session)return parsed;
+  try{
+    const saved:unknown=JSON.parse(sessionStorage.getItem(storageKey+'.filters.'+session)??'null');
+    if(saved&&typeof saved==='object'&&!Array.isArray(saved)){
+      const value=saved as Record<string,unknown>;
+      if(typeof value.trace==='string'&&typeof value.keyword==='string'&&
+        value.trace.length<=256&&value.keyword.length<=512)
+        return {trace:value.trace,keyword:value.keyword};
+    }
+  }catch{/* A saved filter draft may be incomplete; never crash restoration. */}
+  return parsed;
+}
 function elapsed(ms:number){
   const hours=Math.floor(ms/3600000),minutes=Math.floor(ms%3600000/60000),remainder=Math.floor(ms%60000/1000);
   return [hours&&hours+' 小时',minutes&&minutes+' 分钟',remainder&&remainder+' 秒'].filter(Boolean).join(' ');
@@ -98,14 +112,18 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   const ready=Boolean(validTime&&(trace.trim()||keyword.trim()));
   function reset(session='',rangePrompt?:string){
     const restored=readAppliedRange(session,rangePrompt,storageKey);
-    const filters=parsedFilters(rangePrompt);
+    const filters=readAppliedFilters(session,rangePrompt,storageKey);
     setApplied(restored);setRange(restored?rangeFromBounds(restored):recentRange(60));
     setAppliedFilters(filters);setForm(!session);setTrace(filters.trace);setKeyword(filters.keyword);
   }
   function onSent(session=sessionStorage.getItem(storageKey)){
     if(form){
-      setApplied({from,to});setAppliedFilters({trace:trace.trim(),keyword:keyword.trim()});
-      if(session)sessionStorage.setItem(storageKey+'.range.'+session,JSON.stringify({from,to}));
+      const filters={trace:trace.trim(),keyword:keyword.trim()};
+      setApplied({from,to});setAppliedFilters(filters);
+      if(session){
+        sessionStorage.setItem(storageKey+'.range.'+session,JSON.stringify({from,to}));
+        sessionStorage.setItem(storageKey+'.filters.'+session,JSON.stringify(filters));
+      }
       setForm(false);
     }
   }
