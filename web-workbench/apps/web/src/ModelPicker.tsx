@@ -57,6 +57,9 @@ function buildGroups(catalog: ChatModel[], query: string, favorites: string[], r
 
 export function ModelPicker(props: Props) {
   const [open, setOpen] = useState(Boolean(props.initialOpen));
+  // The scenario binding arrives asynchronously from .workbench/scenarios.json.
+  // Opening /models is a UI action, not a native session.command call.
+  useEffect(()=>{if(props.initialOpen)setOpen(true);},[props.initialOpen]);
   const [last, setLast] = useState<ChatModel>();
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
