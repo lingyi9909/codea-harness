@@ -319,7 +319,26 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await checkChatLayout();
     await expect(page.getByText('要排查哪次请求？')).toHaveCount(0);
     await expect(page.locator('.chat-feed')).toHaveCount(0);
+    // The investigation composer must have breathing room between the
+    // filtering criteria, optional question and footer actions on Windows.
+    await expect(page.getByText('补充排查问题',{exact:true})).toBeVisible();
+    const filterBox=await page.locator('.log-grid').boundingBox();
+    const questionBox=await page.locator('.investigation-question-heading').boundingBox();
+    const textareaBox=await page.getByLabel('对话内容').boundingBox();
+    const actionBox=await page.locator('.log-investigation .composer-actions').boundingBox();
+    assert.ok(filterBox&&questionBox&&textareaBox&&actionBox);
+    assert.ok(questionBox.y-(filterBox.y+filterBox.height)>=20,'separate optional question from filters');
+    assert.ok(textareaBox.y-(questionBox.y+questionBox.height)>=8,'leave space below question label');
+    assert.ok(actionBox.y-(textareaBox.y+textareaBox.height)>=18,'separate submit actions from text area');
     await page.screenshot({path:join(shots,'03-log-criteria.png')});
+    await page.setViewportSize({width:390,height:844});
+    const stacked=await Promise.all(['开始时间','结束时间'].map(label=>page.getByLabel(label,{exact:true}).boundingBox()));
+    assert.ok(stacked[0]&&stacked[1]&&stacked[1].y>=stacked[0].y+stacked[0].height,
+      'narrow layouts stack date/time inputs vertically');
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),
+      'investigation criteria must not overflow the narrow viewport');
+    await page.screenshot({path:join(shots,'03-log-criteria-mobile.png')});
+    await page.setViewportSize({width:1280,height:720});
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
