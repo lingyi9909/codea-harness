@@ -568,6 +568,24 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await history.getByRole('button',{name:/检查超时原因/}).click();
     await expect(appliedRange.locator('.log-applied-time')).toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
     assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
+    // Applying conditions reuses the current session, closes the drawer,
+    // preserves a pending reply draft and does not attach reply-only files.
+    const pendingDraft='未发送的追问草稿';
+    await page.getByLabel('对话内容').fill(pendingDraft);
+    await adjustment.click();
+    await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await dialog.getByLabel('关键词',{exact:true}).fill('retry-timeout');
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
+    await dialog.getByRole('button',{name:'应用并重新排查'}).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(appliedRange).toContainText('retry-timeout');
+    await expect(page.getByLabel('对话内容')).toHaveValue(pendingDraft);
+    await expect.poll(async()=>JSON.parse((await readFile(file+'.prompt','utf8')).text).text)
+      .toContain('关键字：retry-timeout');
+    const rerun=await recorded('.prompt');
+    assert.ok(!rerun.text.includes(pendingDraft));
+    assert.deepEqual(rerun.files,[]);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('harness.logs')),'ses_logs_fixture');
     assert.deepEqual(retiredRequests,[]);
     await page.getByRole('button',{name:'退出登录'}).click();
     await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
