@@ -1,4 +1,4 @@
-import {useState,type MouseEvent} from 'react';
+import {useState} from 'react';
 import {DirectChat} from './DirectChat.tsx';
 
 import './log-time-range.css';
@@ -7,17 +7,9 @@ const presets=[{minutes:15,label:'最近 15 分钟'},{minutes:60,label:'最近 1
 const localZone=Intl.DateTimeFormat().resolvedOptions().timeZone;
 type Bounds={from:number;to:number};
 type TimeRange={start:string;end:string;from:number;to:number;preset:number|null};
-function openTimePicker(event:MouseEvent<HTMLInputElement>){
-  const field=event.currentTarget;
-  if(!field.showPicker)return;
-  try{
-    field.showPicker();
-    event.preventDefault();
-  }catch{/* Keep the browser's native activation when programmatic opening is unavailable. */}
-}
 function localTime(instant:number){
   const date=new Date(instant);
-  return new Date(instant-date.getTimezoneOffset()*60000).toISOString().slice(0,-1);
+  return new Date(instant-date.getTimezoneOffset()*60000).toISOString().slice(0,19);
 }
 function offsetAt(instant:number){
   const minutes=-new Date(instant).getTimezoneOffset(),absolute=Math.abs(minutes);
@@ -26,16 +18,21 @@ function offsetAt(instant:number){
 function formatBounds({from,to}:Bounds){
   return localTime(from)+offsetAt(from)+' 至 '+localTime(to)+offsetAt(to);
 }
+// The UI, saved ranges, and prompts share the same whole-second precision.
+function seconds(instant:number){return Math.floor(instant/1000)*1000;}
 function rangeFromBounds({from,to}:Bounds,preset:number|null=null):TimeRange{
-  return {start:localTime(from),end:localTime(to),from,to,preset};
+  const start=seconds(from),end=seconds(to);
+  return {start:localTime(start),end:localTime(end),from:start,to:end,preset};
 }
 function recentRange(minutes:number){
-  const to=Date.now();
+  const to=seconds(Date.now());
   return rangeFromBounds({from:to-minutes*60000,to},minutes);
 }
 function validBounds(from:unknown,to:unknown):Bounds|null{
-  return typeof from==='number'&&typeof to==='number'&&Number.isFinite(new Date(from).getTime())&&
-    Number.isFinite(new Date(to).getTime())&&from<to?{from,to}:null;
+  if(typeof from!=='number'||typeof to!=='number'||!Number.isFinite(from)||!Number.isFinite(to))return null;
+  const start=seconds(from),end=seconds(to);
+  return Number.isFinite(new Date(start).getTime())&&Number.isFinite(new Date(end).getTime())&&start<end
+    ?{from:start,to:end}:null;
 }
 function readAppliedRange(session:string,rangePrompt?:string,storageKey='harness.logs'):Bounds|null{
   if(!session)return null;
@@ -62,14 +59,17 @@ function readAppliedRange(session:string,rangePrompt?:string,storageKey='harness
   return null;
 }
 function elapsed(ms:number){
-  const hours=Math.floor(ms/3600000),minutes=Math.floor(ms%3600000/60000),seconds=ms%60000/1000;
-  return [hours&&hours+' 小时',minutes&&minutes+' 分钟',seconds&&seconds+' 秒'].filter(Boolean).join(' ');
+  const hours=Math.floor(ms/3600000),minutes=Math.floor(ms%3600000/60000),remainder=Math.floor(ms%60000/1000);
+  return [hours&&hours+' 小时',minutes&&minutes+' 分钟',remainder&&remainder+' 秒'].filter(Boolean).join(' ');
 }
 function parseLocal(value:string){
-  const ms=Date.parse(value);
+  // Native datetime-local may omit :00; any fractional input is rejected
+  // rather than silently flowing into the downstream log query.
+  const normalized=value.length===16?value+':00':value;
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized))return NaN;
+  const ms=Date.parse(normalized);
   if(!Number.isFinite(ms))return NaN;
-  // Reject wall times skipped by a daylight-saving transition.
-  const normalized=value.length===16?value+':00.000':value.length===19?value+'.000':value.padEnd(23,'0');
+  // Reject invalid dates and wall times skipped by a daylight-saving transition.
   return localTime(ms)===normalized?ms:NaN;
 }
 export function LogInvestigation({mode='public'}:{mode?:'public'|'message'}={}){
@@ -116,16 +116,16 @@ export function LogInvestigation({mode='public'}:{mode?:'public'|'message'}={}){
   }
   const controls=form?<fieldset className="log-query"><legend>排查条件</legend>
     <section className="log-time-range" aria-labelledby="log-range-title">
-      <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">本地时区 · {localZone}{Number.isFinite(from)&&' · UTC'+offsetAt(from)}{Number.isFinite(to)&&(!Number.isFinite(from)||offsetAt(to)!==offsetAt(from))&&' → UTC'+offsetAt(to)}</span></header>
+      <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">精确到秒 · 本地时区 · {localZone}{Number.isFinite(from)&&' · UTC'+offsetAt(from)}{Number.isFinite(to)&&(!Number.isFinite(from)||offsetAt(to)!==offsetAt(from))&&' → UTC'+offsetAt(to)}</span></header>
       <div className="range-presets" role="group" aria-label="快捷时间范围">
         {presets.map(p=><button key={p.minutes} type="button" aria-pressed={range.preset===p.minutes}
           onClick={()=>setRange(recentRange(p.minutes))}>{p.label}</button>)}
       </div>
       <div className="range-fields">
-        <label>开始时间<input required type="datetime-local" step="any" onClick={openTimePicker} value={start} onChange={e=>editTime('start',e.target.value)}
+        <label>开始时间<input required type="datetime-local" step="1" value={start} onChange={e=>editTime('start',e.target.value)}
           aria-invalid={!Number.isFinite(from)} aria-describedby="log-range-feedback"/></label>
         <span className="range-direction" aria-hidden="true">→</span>
-        <label>结束时间<input required type="datetime-local" step="any" onClick={openTimePicker} value={end} onChange={e=>editTime('end',e.target.value)}
+        <label>结束时间<input required type="datetime-local" step="1" value={end} onChange={e=>editTime('end',e.target.value)}
           aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
       </div>
       <div className="range-footer" id="log-range-feedback">
