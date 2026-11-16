@@ -184,6 +184,17 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.goto('http://127.0.0.1:'+port);
     await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
     await expect(page.locator('.profile-side')).toBeVisible();
+    // Keep the login form simple: no disclosure, promotional copy or footer.
+    for(const removed of [
+      '登录后，姓名和手机号将保存到当前工作目录',
+      '在同一个工作台中连接 OpenCode 对话',
+      '填写本地工作台资料，继续当前项目。',
+      '仅用于本地工作台资料登记，不进行短信验证。',
+      '本地运行 · 资源随项目使用',
+    ])await expect(page.getByText(removed,{exact:false})).toHaveCount(0);
+    await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
+    await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('手机号',{exact:true})).toBeVisible();
     await expect(page.locator('.profile-submit')).toHaveCSS('background-color','rgb(36, 39, 44)');
     await page.screenshot({path:join(shots,'00-login-silver.png')});
     await expect(page.getByRole('navigation')).toHaveCount(0);
