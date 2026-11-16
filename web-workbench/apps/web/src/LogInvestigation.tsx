@@ -154,20 +154,6 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       '请使用当前绑定目录中配置的工具执行；若不存在可验证的数据源，说明证据缺口。'];
     return lines.filter(Boolean).join('\n');
   }
-  const summary=<div className="log-applied-range">
-    <div className="log-applied-overview">
-      <span className="log-applied-label">当前排查条件</span>
-      {applied&&<span className="log-applied-time">
-        <span aria-hidden="true">◷</span> {localTime(applied.from).replace('T',' ')} — {localTime(applied.to).replace('T',' ')}
-      </span>}
-      {appliedFilters.trace&&<span className="log-applied-chip" title={'Trace ID：'+appliedFilters.trace}>Trace ID · {appliedFilters.trace}</span>}
-      {appliedFilters.msgSn&&<span className="log-applied-chip" title={'msgSn：'+appliedFilters.msgSn}>msgSn · {appliedFilters.msgSn}</span>}
-      {appliedFilters.keyword&&<span className="log-applied-chip" title={'关键词：'+appliedFilters.keyword}>关键词 · {appliedFilters.keyword}</span>}
-    </div>
-    <button type="button" className="secondary log-adjust-button" onClick={beginEdit}>
-      <span aria-hidden="true">⚙</span> 调整排查条件
-    </button>
-  </div>;
   const controls=form?<fieldset className="log-query"><legend>排查条件</legend>
     <section className="log-time-range" aria-labelledby="log-range-title">
       <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">精确到秒</span></header>
@@ -192,6 +178,6 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       <label>关键词<input value={keyword} maxLength={512} onChange={e=>setKeyword(e.target.value)} placeholder="可选，三项至少填写一项"/></label>
     </div>
     {!ready&&<small className="muted" role="status">时间为必填；Trace ID、msgSn、关键词至少填写一项。</small>}
-  </fieldset>:summary;
-  return <DirectChat sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,summary,initial:form,ready,prompt,onSent,reset,cancel:cancelEdit,title,sessionKey:storageKey}}/>;
+  </fieldset>:null;
+  return <DirectChat sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,initial:form,ready,prompt,onSent,reset,beginEdit,cancel:cancelEdit,title,sessionKey:storageKey}}/>;
 }

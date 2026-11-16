@@ -39,9 +39,9 @@ function explain(e:unknown){
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
 type Investigation={
-  controls:ReactNode;summary:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;
+  controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;
   onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;
-  cancel:()=>void;title:string;sessionKey:'harness.logs'|'harness.message';
+  beginEdit:()=>void;cancel:()=>void;title:string;sessionKey:'harness.logs'|'harness.message';
 };
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
@@ -99,6 +99,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const [cachedTitle,setCachedTitle]=useState(()=>readHistory(localStorage,sessionKey,directory).find(row=>row.id===id)?.title??'');
   const migrating=useRef(Boolean(id)&&!sessionStorage.getItem(sessionKey+'.scoped'));
   const [history,showHistory]=useState(false);
+  // The editor is user-controlled, never inferred from the investigation form
+  // (which stays in its initial state while a new session is being created).
+  const [editorOpen,setEditorOpen]=useState(false);
   const restoreContext=useRef(true),investigationRef=useRef(investigation);
   investigationRef.current=investigation;
   const composerKey=draftKey(sessionKey,directory,id);
@@ -113,7 +116,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     else sessionStorage.removeItem(composerKey);
   },[composerKey,draft,refs]);
   function switchTo(next:string){
-    showHistory(false);
+    showHistory(false);setEditorOpen(false);
     if(next===id)return;
     const saved=readDraft(draftKey(sessionKey,directory,next));
     setCachedTitle(readHistory(localStorage,sessionKey,directory).find(row=>row.id===next)?.title??'');
@@ -172,9 +175,14 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     document.title='等待你回应 · '+(investigation?.title??'直接对话');
     return ()=>{document.title=title;};
   },[pending,Boolean(investigation)]);
-  const adjustmentOpen=Boolean(investigation&&id&&investigation.initial);
+  const adjustmentOpen=Boolean(investigation&&id&&editorOpen);
   const drawer=useRef<HTMLElement>(null);
-  const cancelAdjustment=()=>investigationRef.current?.cancel();
+  const cancelAdjustment=()=>{setEditorOpen(false);investigationRef.current?.cancel();};
+  const openAdjustment=()=>{
+    if(!investigation||!id||busy||pending||state?.active)return;
+    investigationRef.current?.beginEdit();
+    setEditorOpen(true);
+  };
   useEffect(()=>{
     if(!adjustmentOpen)return;
     const priorFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
@@ -226,6 +234,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
     rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);
+    if(rerun)setEditorOpen(false);
     // Re-running edited conditions must not erase an unsent follow-up draft
     // or include the draft's file references in the new investigation request.
     if(!rerun){write('');attach('');toggleFiles(false);}
@@ -244,9 +253,11 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
   return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
-    <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
+    <div className="chat-history-actions">{investigation&&id&&<button type="button" className="secondary log-adjust-button"
+      aria-expanded={adjustmentOpen} disabled={busy||pending||Boolean(state?.active)}
+      onClick={openAdjustment}>调整排查条件</button>}
+      <button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
-    {investigation&&id&&<div className="investigation-summary-bar">{investigation.summary}</div>}
     {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy} onSelect={row=>{
       rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
     }}/>}
