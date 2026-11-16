@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {DirectChat} from './DirectChat.tsx';
+import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
 
 import './log-time-range.css';
 
@@ -72,7 +73,7 @@ function parseLocal(value:string){
   // Reject invalid dates and wall times skipped by a daylight-saving transition.
   return localTime(ms)===normalized?ms:NaN;
 }
-export function LogInvestigation({mode='public'}:{mode?:'public'|'message'}={}){
+export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'message';globalModel?:Pick<ChatModel,'id'|'providerID'|'variant'>}={}){
   const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
   const title=mode==='message'?'报文问题排查':'公管问题排查';
   const [form,setForm]=useState(()=>!sessionStorage.getItem(storageKey));
@@ -141,5 +142,5 @@ export function LogInvestigation({mode='public'}:{mode?:'public'|'message'}={}){
     {applied&&<div><strong>上次排查范围</strong><span>{formatBounds(applied)} · {localZone}</span></div>}
     <button type="button" className="secondary" onClick={()=>setForm(true)}>调整排查条件</button>
   </div>;
-  return <DirectChat sceneId={mode==='message'?'message':'logs'} investigation={{controls,initial:form,ready,prompt,onSent,reset,title,sessionKey:storageKey}}/>;
+  return <DirectChat sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,initial:form,ready,prompt,onSent,reset,title,sessionKey:storageKey}}/>;
 }
