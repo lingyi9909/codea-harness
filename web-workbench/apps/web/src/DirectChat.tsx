@@ -226,7 +226,12 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         <ChatRequests key={id} state={state} busy={busy}
           onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
         {interrupt&&<div className="composer-actions">{interrupt}</div>}
-      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}<textarea ref={input} readOnly={busy} aria-label="对话内容" rows={2} maxLength={16000} placeholder={investigation?(investigation.initial?'补充排查问题（选填）…':'继续追问这次问题排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
+      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}
+        {investigation&&<div className="investigation-question-heading">
+          <strong>{investigation.initial?'补充排查问题':'继续追问'}</strong>
+          <span>{investigation.initial?'选填。可补充业务现象或期望核查的内容。':'沿用当前会话上下文，继续询问排查结果。'}</span>
+        </div>}
+        <textarea ref={input} readOnly={busy} aria-label="对话内容" rows={2} maxLength={16000} placeholder={investigation?(investigation.initial?'例如：核查该 Trace 对应的请求为什么失败…':'继续追问本次问题排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
