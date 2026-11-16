@@ -407,7 +407,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       'the global model must apply to new investigation sessions');
     const expectedRange='2026-11-11T23:57:11+08:00 至 2026-11-12T00:03:42+08:00';
     const appliedRange=page.locator('.log-applied-range');
-    await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
+    await expect(appliedRange.locator('.log-applied-time')).toContainText('2026-11-11 23:57:11 — 2026-11-12 00:03:42');
     await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
     const sentRange=(await recorded('.prompt')).text;
     assert.ok(sentRange.includes(expectedRange));
@@ -518,7 +518,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       'new conversations use the latest global model, even after switching scenes');
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
     const presetBounds='2026-11-11T23:50:43+08:00 至 2026-11-12T00:05:43+08:00';
-    await expect(appliedRange.locator('.log-applied-time')).toHaveAttribute('title',presetBounds+' · Asia/Shanghai');
+    await expect(appliedRange.locator('.log-applied-time')).toContainText('2026-11-11 23:50:43 — 2026-11-12 00:05:43');
     assert.ok((await recorded('.second-prompt')).text.includes(presetBounds));
     await page.getByLabel('对话内容').fill('第二个会话草稿');
     await page.getByRole('button',{name:'历史对话'}).click();
@@ -574,7 +574,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.reload();
     await expect(page.getByLabel('对话内容')).toHaveValue('第二个会话草稿');
     await expect(feed).toContainText('第二个会话的结果');
-    await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
+    await expect(appliedRange.locator('.log-applied-time')).toContainText('2026-11-11 23:50:43 — 2026-11-12 00:05:43');
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/检查超时原因/}).click();
     await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
