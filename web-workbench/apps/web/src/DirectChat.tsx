@@ -179,7 +179,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const drawer=useRef<HTMLElement>(null);
   const cancelAdjustment=()=>{setEditorOpen(false);investigationRef.current?.cancel();};
   const openAdjustment=()=>{
-    if(!investigation||!id||busy||pending||state?.active)return;
+    // Wait for the native session and saved filters to finish restoring.
+    if(!investigation||!id||busy||pending||state?.id!==id||state.active||restoreContext.current)return;
     investigationRef.current?.beginEdit();
     setEditorOpen(true);
   };
@@ -254,7 +255,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions">{investigation&&id&&<button type="button" className="secondary log-adjust-button"
-      aria-expanded={adjustmentOpen} disabled={busy||pending||Boolean(state?.active)}
+      aria-expanded={adjustmentOpen} disabled={busy||pending||state?.id!==id||Boolean(state?.active)||restoreContext.current}
       onClick={openAdjustment}>调整排查条件</button>}
       <button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
