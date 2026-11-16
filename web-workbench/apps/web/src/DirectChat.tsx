@@ -39,7 +39,7 @@ function explain(e:unknown){
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
 type Investigation={
-  controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;
+  controls:ReactNode;summary:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;
   onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;
   cancel:()=>void;title:string;sessionKey:'harness.logs'|'harness.message';
 };
@@ -246,7 +246,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
-    {investigation&&id&&!investigation.initial&&<div className="investigation-summary-bar">{investigation.controls}</div>}
+    {investigation&&id&&<div className="investigation-summary-bar">{investigation.summary}</div>}
     {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy} onSelect={row=>{
       rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
     }}/>}
