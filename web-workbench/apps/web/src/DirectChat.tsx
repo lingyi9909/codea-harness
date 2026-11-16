@@ -1,4 +1,5 @@
 import {useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode} from 'react';
+import {createPortal} from 'react-dom';
 import {streamingMessages,useChatStream} from './chatStream.ts';
 import {useProgressiveMessages} from './progressiveMessages.ts';
 import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
@@ -37,7 +38,11 @@ function explain(e:unknown){
     return '创建会话时，OpenCode 服务或其网关返回 HTTP '+e.code.slice(-3)+'。';
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
-type Investigation={controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;title:string;sessionKey:'harness.logs'|'harness.message'};
+type Investigation={
+  controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;
+  onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;
+  cancel:()=>void;title:string;sessionKey:'harness.logs'|'harness.message';
+};
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
 type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
@@ -167,10 +172,38 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     document.title='等待你回应 · '+(investigation?.title??'直接对话');
     return ()=>{document.title=title;};
   },[pending,Boolean(investigation)]);
-  const maySend=Boolean((investigation?.initial?investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy);
-  const send=()=>run(async()=>{
-    if(!maySend)return;
-    const text=investigation?investigation.prompt(draft.trim()):draft.trim();
+  const adjustmentOpen=Boolean(investigation&&id&&investigation.initial);
+  const drawer=useRef<HTMLElement>(null);
+  const cancelAdjustment=()=>investigationRef.current?.cancel();
+  useEffect(()=>{
+    if(!adjustmentOpen)return;
+    const priorFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    drawer.current?.focus();
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==='Escape'){event.preventDefault();cancelAdjustment();return;}
+      if(event.key!=='Tab'||!drawer.current)return;
+      const all=[...drawer.current.querySelectorAll<HTMLElement>(
+        'button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[tabindex="0"]',
+      )].filter(el=>el.offsetParent!==null);
+      if(!all.length)return;
+      const first=all[0],last=all.at(-1)!;
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    };
+    document.addEventListener('keydown',onKey);
+    return()=>{
+      document.removeEventListener('keydown',onKey);
+      document.body.style.overflow=previousOverflow;
+      priorFocus?.focus();
+    };
+  },[adjustmentOpen]);
+  const maySend=Boolean((investigation?.initial?!id&&investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy);
+  const canRerun=Boolean(adjustmentOpen&&investigation?.ready&&settings.configured&&state?.id===id&&!state.active&&!pending&&!busy);
+  const send=(rerun=false)=>run(async()=>{
+    if(rerun?!canRerun:!maySend)return;
+    const text=investigation?investigation.prompt(rerun?'':draft.trim()):draft.trim();
     if(text.length>16000)throw Error('排查条件和问题合计过长，请缩短后再发送。');
     let session=id;
     if(!session){
@@ -206,10 +239,11 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   },[messages,stream.tools]);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
-  return <section className={investigation?"scene-page log-investigation":"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
+  return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions"><button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
+    {investigation&&id&&!investigation.initial&&<div className="investigation-summary-bar">{investigation.controls}</div>}
     {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy} onSelect={row=>{
       rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
     }}/>}
@@ -226,12 +260,12 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         <ChatRequests key={id} state={state} busy={busy}
           onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
         {interrupt&&<div className="composer-actions">{interrupt}</div>}
-      </div>:<div className="composer">{investigation&&(!id||state?.id===id)&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}
+      </div>:<div className="composer">{investigation&&!id&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}
         {investigation&&<div className="investigation-question-heading">
-          <strong>{investigation.initial?'补充排查问题':'继续追问'}</strong>
-          <span>{investigation.initial?'选填。可补充业务现象或期望核查的内容。':'沿用当前会话上下文，继续询问排查结果。'}</span>
+          <strong>{!id?'补充排查问题':'继续追问'}</strong>
+          {!id&&<span>选填。可补充业务现象或期望核查的内容。</span>}
         </div>}
-        <textarea ref={input} readOnly={busy} aria-label="对话内容" rows={2} maxLength={16000} placeholder={investigation?(investigation.initial?'例如：核查该 Trace 对应的请求为什么失败…':'继续追问本次问题排查…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
+        <textarea ref={input} readOnly={busy} aria-label="对话内容" rows={2} maxLength={16000} placeholder={investigation?(!id?'例如：核查该 Trace 对应的请求为什么失败…':'继续追问本次排查结果…'):'输入问题，或让 OpenCode 修改当前目录中的文件…'} value={draft} onChange={e=>write(e.target.value)}
         onKeyDown={e=>{
           if(e.key!=='Enter'||e.shiftKey||e.altKey||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           e.preventDefault();
@@ -241,7 +275,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         <div className="composer-actions">
           <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
           {interrupt}
-          <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={send}>{busy?'提交中…':investigation?.initial?'开始排查':'发送 ↑'}</button></div>
+          <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={()=>void send()}>{busy?'提交中…':investigation&&!id?'开始排查':'发送 ↑'}</button></div>
       </div>}
       {!investigation&&!id&&!messages.length&&!pending&&<div className="chat-quick-actions" aria-label="快捷提问">
         <button type="button" onClick={()=>{write('请阅读项目的目录结构和 README，解释各模块的职责。');input.current?.focus();}}>解释项目结构 <span aria-hidden="true">↗</span></button>
@@ -249,5 +283,28 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       </div>}
     </div></div>
     {homeEmpty&&<p className="chat-workspace-path" title={directory}>工作目录：{directory}</p>}
+    {adjustmentOpen&&createPortal(<div className="investigation-drawer-backdrop" onMouseDown={e=>{
+      if(e.target===e.currentTarget&&!busy)cancelAdjustment();
+    }}>
+      <aside ref={drawer} tabIndex={-1} role="dialog" aria-modal="true"
+        aria-labelledby="investigation-drawer-title" className="investigation-drawer">
+        <header className="investigation-drawer-header">
+          <div><span className="investigation-drawer-eyebrow">排查范围</span>
+            <h2 id="investigation-drawer-title">调整排查条件</h2>
+            <p>修改条件后重新排查，现有结果会保留在会话中。</p>
+          </div>
+          <button type="button" className="investigation-drawer-close" aria-label="关闭调整面板"
+            disabled={busy} onClick={cancelAdjustment}>×</button>
+        </header>
+        <div className="investigation-drawer-body">
+          <fieldset className="investigation-controls" disabled={busy}>{investigation?.controls}</fieldset>
+        </div>
+        <footer className="investigation-drawer-footer">
+          <button type="button" className="secondary" disabled={busy} onClick={cancelAdjustment}>取消调整</button>
+          <button type="button" className="primary" disabled={!canRerun}
+            onClick={()=>void send(true)}>{busy?'正在提交…':'应用并重新排查'}</button>
+        </footer>
+      </aside>
+    </div>,document.body)}
   </section>;
 }
