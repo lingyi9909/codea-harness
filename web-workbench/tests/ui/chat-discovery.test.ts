@@ -315,10 +315,11 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
-    await page.clock.setFixedTime(new Date('2026-11-12T00:05:43+08:00'));
+    await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
     await quarter.click();
     await expect(page.getByLabel('开始时间',{exact:true})).toHaveValue('2026-11-11T23:50:43');
-    await expect(page.getByLabel('结束时间',{exact:true})).toHaveValue('2026-11-12T00:05:43.125');
+    await expect(page.getByLabel('结束时间',{exact:true})).toHaveValue('2026-11-12T00:05:43');
+    await expect(page.locator('.range-zone')).toContainText('精确到秒');
     await expect(page.locator('.range-zone')).toContainText('Asia/Shanghai');
     await expect(page.locator('.range-zone')).toContainText('UTC+08:00');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
