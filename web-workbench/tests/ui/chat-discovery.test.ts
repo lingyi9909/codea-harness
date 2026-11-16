@@ -443,6 +443,37 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(feed.locator('.turn-process').first()).not.toHaveAttribute('open','');
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
     await page.screenshot({path:join(shots,'04-log-results.png')});
+    // Result-first editing: the editor overlays the answer rather than
+    // growing the composer; Escape and Cancel must restore applied criteria.
+    const answerBefore=await feed.boundingBox(),composerBefore=await page.locator('.log-investigation-active .composer').boundingBox();
+    assert.ok(answerBefore&&composerBefore&&answerBefore.height>=220,
+      'results must have a substantial independent reading area');
+    const adjustment=page.getByRole('button',{name:'调整排查条件'});
+    await adjustment.click();
+    const dialog=page.getByRole('dialog',{name:'调整排查条件'});
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await expect(dialog.getByLabel('关键词',{exact:true})).toHaveValue('timeout');
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
+    const answerDuring=await feed.boundingBox(),composerDuring=await page.locator('.log-investigation-active .composer').boundingBox();
+    assert.ok(answerDuring&&composerDuring);
+    assert.ok(Math.abs(answerBefore.height-answerDuring.height)<3,'editing must not shrink the result pane');
+    assert.ok(Math.abs(composerBefore.height-composerDuring.height)<3,'editing must not grow the reply composer');
+    await page.screenshot({path:join(shots,'04a-log-adjustment-drawer.png')});
+    await dialog.getByLabel('Trace ID',{exact:true}).fill('temporary-trace');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(appliedRange).toContainText('abc123');
+    await adjustment.click();
+    await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await dialog.getByLabel('关键词',{exact:true}).fill('draft-keyword');
+    await dialog.getByRole('button',{name:'取消调整'}).click();
+    await expect(dialog).toHaveCount(0);
+    await adjustment.click();
+    await expect(dialog.getByLabel('关键词',{exact:true})).toHaveValue('timeout');
+    await dialog.getByRole('button',{name:'关闭调整面板'}).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(feed.getByText(finalAnswer,{exact:true})).toBeVisible();
     await expect(feed.getByRole('cell',{name:'120 ms'})).toBeVisible();
     await expect(feed.locator('pre code.language-json')).toContainText('"count"');
     await page.getByRole('button',{name:'选择模型'}).click();
