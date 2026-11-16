@@ -316,10 +316,16 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(nav.getByRole('button',{name:'报文问题排查'})).toBeVisible();
     await nav.getByRole('button',{name:'报文问题排查'}).click();
     await expect(page.getByRole('heading',{name:'报文问题排查'})).toBeVisible();
+    await expect(page.getByLabel('msgSn',{exact:true})).toBeVisible();
+    const messageSubmit=page.getByRole('button',{name:'开始排查'});
+    await expect(messageSubmit).toBeDisabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('000456');
+    await expect(messageSubmit).toBeEnabled();
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','company/intranet');
     await page.getByLabel('对话内容').fill('报文模式独立草稿');
     await nav.getByRole('button',{name:'公管问题排查'}).click();
     await expect(page.getByRole('heading',{name:'公管问题排查'})).toBeVisible();
+    await expect(page.getByLabel('msgSn',{exact:true})).toHaveValue('');
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','company/intranet');
     await expect(page.getByLabel('对话内容')).toHaveValue('');
     await nav.getByRole('button',{name:'报文问题排查'}).click();
@@ -352,6 +358,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       'investigation criteria must not overflow the narrow viewport');
     await page.screenshot({path:join(shots,'03-log-criteria-mobile.png')});
     await page.setViewportSize({width:1280,height:720});
+    await expect(submit).toBeDisabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('000123');
+    await expect(submit).toBeEnabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('');
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
@@ -393,6 +403,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByLabel('关键词',{exact:true}).fill('timeout');
     await expect(submit).toBeEnabled();
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
+    await page.getByLabel('msgSn',{exact:true}).fill('000123');
     await expect(page.getByLabel('日志级别')).toHaveCount(0);
     await expect(page.getByLabel('导入本地日志')).toHaveCount(0);
     await page.getByLabel('对话内容').fill('检查超时原因');
@@ -409,9 +420,11 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     const appliedRange=page.locator('.log-applied-range');
     await expect(appliedRange.locator('.log-applied-time')).toContainText('2026-11-11 23:57:11 — 2026-11-12 00:03:42');
     await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
+    await expect(appliedRange).toContainText('msgSn · 000123');
     const sentRange=(await recorded('.prompt')).text;
     assert.ok(sentRange.includes(expectedRange));
     assert.ok(sentRange.includes('Asia/Shanghai'));
+    assert.ok(sentRange.includes('msgSn：000123'));
     const running=page.getByRole('button',{name:'正在执行 · 中断执行'});
     await expect(running).toBeVisible();
     await expect(running).toHaveCSS('background-color','rgb(170, 39, 46)');
@@ -464,6 +477,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     const dialog=page.getByRole('dialog',{name:'调整排查条件'});
     await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
     await expect(dialog.getByLabel('关键词',{exact:true})).toHaveValue('timeout');
     await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
     const answerDuring=await feed.boundingBox(),composerDuring=await page.locator('.log-investigation-active .composer').boundingBox();
@@ -472,11 +486,13 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.ok(Math.abs(composerBefore.height-composerDuring.height)<3,'editing must not grow the reply composer');
     await page.screenshot({path:join(shots,'04a-log-adjustment-drawer.png')});
     await dialog.getByLabel('Trace ID',{exact:true}).fill('temporary-trace');
+    await dialog.getByLabel('msgSn',{exact:true}).fill('000987');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(appliedRange).toContainText('abc123');
     await adjustment.click();
     await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
     await dialog.getByLabel('关键词',{exact:true}).fill('draft-keyword');
     await dialog.getByRole('button',{name:'取消调整'}).click();
     await expect(dialog).toHaveCount(0);
@@ -569,6 +585,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
+    await expect(appliedRange).toContainText('msgSn · 000123');
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/第二次排查/}).click();
     await page.reload();
@@ -585,15 +602,19 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByLabel('对话内容').fill(pendingDraft);
     await adjustment.click();
     await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
+    await dialog.getByLabel('msgSn',{exact:true}).fill('000789');
     await dialog.getByLabel('关键词',{exact:true}).fill('retry-timeout');
     await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
     await dialog.getByRole('button',{name:'应用并重新排查'}).click();
     await expect(dialog).toHaveCount(0);
     await expect(appliedRange).toContainText('retry-timeout');
+    await expect(appliedRange).toContainText('msgSn · 000789');
     await expect(page.getByLabel('对话内容')).toHaveValue(pendingDraft);
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text)
       .toContain('关键字：retry-timeout');
     const rerun=await recorded('.prompt');
+    assert.ok(rerun.text.includes('msgSn：000789'));
     assert.ok(!rerun.text.includes(pendingDraft));
     assert.deepEqual(rerun.files,[]);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('harness.logs')),'ses_logs_fixture');

@@ -63,18 +63,21 @@ function parsedFilters(prompt?:string){
   return {
     trace:prompt?.match(/^Trace ID：([^\r\n]*)$/m)?.[1]?.trim()??'',
     keyword:prompt?.match(/^关键字：([^\r\n]*)$/m)?.[1]?.trim()??'',
+    msgSn:prompt?.match(/^msgSn：([^\r\n]*)$/m)?.[1]?.trim()??'',
   };
 }
 function readAppliedFilters(session:string,prompt?:string,storageKey='harness.logs'){
   const parsed=parsedFilters(prompt);
-  if((parsed.trace||parsed.keyword)||!session)return parsed;
+  if((parsed.trace||parsed.keyword||parsed.msgSn)||!session)return parsed;
   try{
     const saved:unknown=JSON.parse(sessionStorage.getItem(storageKey+'.filters.'+session)??'null');
     if(saved&&typeof saved==='object'&&!Array.isArray(saved)){
       const value=saved as Record<string,unknown>;
-      if(typeof value.trace==='string'&&typeof value.keyword==='string'&&
-        value.trace.length<=256&&value.keyword.length<=512)
-        return {trace:value.trace,keyword:value.keyword};
+      // Older saved sessions have only trace/keyword; they remain readable.
+      const msgSn=value.msgSn===undefined?'':value.msgSn;
+      if(typeof value.trace==='string'&&typeof value.keyword==='string'&&typeof msgSn==='string'&&
+        value.trace.length<=256&&value.keyword.length<=512&&msgSn.length<=256)
+        return {trace:value.trace,keyword:value.keyword,msgSn};
     }
   }catch{/* A saved filter draft may be incomplete; never crash restoration. */}
   return parsed;
@@ -97,9 +100,9 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
   const title=mode==='message'?'报文问题排查':'公管问题排查';
   const [form,setForm]=useState(()=>!sessionStorage.getItem(storageKey));
-  const [trace,setTrace]=useState(''),[keyword,setKeyword]=useState('');
+  const [trace,setTrace]=useState(''),[msgSn,setMsgSn]=useState(''),[keyword,setKeyword]=useState('');
   const [applied,setApplied]=useState(()=>readAppliedRange(sessionStorage.getItem(storageKey)??'',undefined,storageKey));
-  const [appliedFilters,setAppliedFilters]=useState({trace:'',keyword:''});
+  const [appliedFilters,setAppliedFilters]=useState({trace:'',keyword:'',msgSn:''});
   const [range,setRange]=useState(()=>applied?rangeFromBounds(applied):recentRange(60));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
@@ -109,16 +112,16 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
     !Number.isFinite(from)||!Number.isFinite(to)?'所选时间无效，请重新选择。':
     from>=to?'结束时间必须晚于开始时间。':'';
   const validTime=!timeError;
-  const ready=Boolean(validTime&&(trace.trim()||keyword.trim()));
+  const ready=Boolean(validTime&&(trace.trim()||keyword.trim()||msgSn.trim()));
   function reset(session='',rangePrompt?:string){
     const restored=readAppliedRange(session,rangePrompt,storageKey);
     const filters=readAppliedFilters(session,rangePrompt,storageKey);
     setApplied(restored);setRange(restored?rangeFromBounds(restored):recentRange(60));
-    setAppliedFilters(filters);setForm(!session);setTrace(filters.trace);setKeyword(filters.keyword);
+    setAppliedFilters(filters);setForm(!session);setTrace(filters.trace);setKeyword(filters.keyword);setMsgSn(filters.msgSn);
   }
   function onSent(session=sessionStorage.getItem(storageKey)){
     if(form){
-      const filters={trace:trace.trim(),keyword:keyword.trim()};
+      const filters={trace:trace.trim(),keyword:keyword.trim(),msgSn:msgSn.trim()};
       setApplied({from,to});setAppliedFilters(filters);
       if(session){
         sessionStorage.setItem(storageKey+'.range.'+session,JSON.stringify({from,to}));
@@ -129,12 +132,12 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   }
   function beginEdit(){
     if(applied)setRange(rangeFromBounds(applied));
-    setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);
+    setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);setMsgSn(appliedFilters.msgSn);
     setForm(true);
   }
   function cancelEdit(){
     if(applied)setRange(rangeFromBounds(applied));
-    setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);
+    setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);setMsgSn(appliedFilters.msgSn);
     setForm(false);
   }
   function prompt(question:string){
@@ -146,7 +149,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       '若当前配置的执行入口需要验证码等补充信息，请使用当前会话的 OpenCode question 表单收集回答，保留前导零，再继续排查。网页无法向后台脚本的 stdin 输入。',
       '查询时区：'+localZone+'。请按以下起止时刻查询；若工具需要无时区的本地时间，使用该时区对应的日期和时间。',
       '时间范围（起点含、终点不含）：'+formatBounds({from,to}),
-      trace.trim()&&'Trace ID：'+trace.trim(),keyword.trim()&&'关键字：'+keyword.trim(),
+      trace.trim()&&'Trace ID：'+trace.trim(),msgSn.trim()&&'msgSn：'+msgSn.trim(),keyword.trim()&&'关键字：'+keyword.trim(),
       question&&'排查问题：'+question,
       '请使用当前绑定目录中配置的工具执行；若不存在可验证的数据源，说明证据缺口。'];
     return lines.filter(Boolean).join('\n');
@@ -158,6 +161,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
         <span aria-hidden="true">◷</span> {localTime(applied.from).replace('T',' ')} — {localTime(applied.to).replace('T',' ')}
       </span>}
       {appliedFilters.trace&&<span className="log-applied-chip" title={'Trace ID：'+appliedFilters.trace}>Trace ID · {appliedFilters.trace}</span>}
+      {appliedFilters.msgSn&&<span className="log-applied-chip" title={'msgSn：'+appliedFilters.msgSn}>msgSn · {appliedFilters.msgSn}</span>}
       {appliedFilters.keyword&&<span className="log-applied-chip" title={'关键词：'+appliedFilters.keyword}>关键词 · {appliedFilters.keyword}</span>}
     </div>
     <button type="button" className="secondary log-adjust-button" onClick={beginEdit}>
@@ -183,10 +187,11 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       </div>
     </section>
     <div className="log-grid">
-      <label>Trace ID<input value={trace} maxLength={256} onChange={e=>setTrace(e.target.value)} placeholder="与关键词至少填写一项"/></label>
-      <label>关键词<input value={keyword} maxLength={512} onChange={e=>setKeyword(e.target.value)} placeholder="与 Trace ID 至少填写一项"/></label>
+      <label>Trace ID<input value={trace} maxLength={256} onChange={e=>setTrace(e.target.value)} placeholder="可选，三项至少填写一项"/></label>
+      <label>msgSn<input value={msgSn} maxLength={256} onChange={e=>setMsgSn(e.target.value)} placeholder="可选，支持前导零"/></label>
+      <label>关键词<input value={keyword} maxLength={512} onChange={e=>setKeyword(e.target.value)} placeholder="可选，三项至少填写一项"/></label>
     </div>
-    {!ready&&<small className="muted" role="status">时间为必填；Trace ID 和关键词至少填写一项。</small>}
+    {!ready&&<small className="muted" role="status">时间为必填；Trace ID、msgSn、关键词至少填写一项。</small>}
   </fieldset>:summary;
   return <DirectChat sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,summary,initial:form,ready,prompt,onSent,reset,cancel:cancelEdit,title,sessionKey:storageKey}}/>;
 }
