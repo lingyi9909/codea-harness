@@ -459,3 +459,128 @@ body{background:#fff;color:var(--silver-ink);}
   .scene-config-row{padding:15px;}
   .sidebar .workbench-account{margin:0;}
 }
+
+/* Investigation forms: generous reading rhythm and clear separation between
+ * time bounds, filtering criteria, optional question and submit actions.
+ * Scoped to investigations so the compact direct-chat composer is unchanged. */
+.main .page:has(.log-investigation){
+  padding:26px clamp(18px,3.5vw,58px) 52px;
+  overflow-y:auto;
+}
+.scene-page.log-investigation:has(.chat-layout){
+  width:100%;max-width:1120px;margin:0 auto 48px;min-width:0;align-self:center;
+}
+.log-investigation.scene-page > .scene-title{
+  margin-bottom:24px;gap:20px;min-height:42px;
+}
+.log-investigation .chat-layout .chat-box{border:0;background:transparent;box-shadow:none;}
+.log-investigation .chat-layout .composer,
+.log-investigation .chat-layout .composer:first-child{
+  padding:30px 34px 28px;
+  border:1px solid #dce2e9;border-radius:13px;
+  background:#fff;box-shadow:0 3px 20px rgba(26,36,48,.035);
+}
+.log-investigation .investigation-controls{display:block;width:100%;min-width:0;margin:0;padding:0;border:0;}
+.log-investigation .log-query{display:block;width:100%;min-width:0;margin:0;padding:0;border:0;}
+.log-investigation .log-query legend{
+  padding:0;margin:0 0 14px;color:#242a32;
+  font-size:18px;font-weight:720;line-height:1.5;
+}
+.log-investigation .log-time-range{
+  margin:14px 0 26px;padding:23px 25px 21px;
+  background:#f7f8fa;border:1px solid #e0e5eb;border-radius:10px;
+}
+.log-investigation .log-time-range header{gap:10px 16px;}
+.log-investigation .log-time-range header h2{font-size:15px;font-weight:690;color:#323b47;}
+.log-investigation .log-time-range .range-zone{font-size:12px;color:#747d89;}
+.log-investigation .log-time-range .range-presets{margin:18px 0 22px;gap:10px;}
+.log-investigation .log-time-range .range-presets button{
+  min-height:37px;padding:7px 14px;font-size:13px;
+  background:#fff;border:1px solid #d8dfe7;border-radius:7px;color:#4e5662;
+}
+.log-investigation .log-time-range .range-presets button[aria-pressed="true"]{
+  background:#eef2f6;border-color:#8492a4;color:#263443;font-weight:650;
+}
+.log-investigation .log-time-range .range-fields{
+  display:grid;grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr);
+  gap:14px;max-width:950px;align-items:end;
+}
+.log-investigation .log-time-range .range-fields label,
+.log-investigation .log-grid label{display:grid;gap:9px;min-width:0;color:#414a57;font-size:13px;font-weight:650;}
+.log-investigation .log-time-range .range-fields input,
+.log-investigation .log-grid input{
+  width:100%;min-width:0;min-height:47px;margin:0;
+  padding:11px 13px;border:1px solid #cfd7e1;border-radius:8px;
+  background:#fff;color:#222b35;font-size:14px;font-weight:450;line-height:1.4;
+  font-variant-numeric:tabular-nums;
+}
+.log-investigation .log-time-range .range-direction{
+  align-self:end;line-height:47px;text-align:center;font-size:17px;color:#929ba8;
+}
+.log-investigation .log-time-range .range-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin-top:17px;font-size:12px;line-height:1.5;color:#727d89;
+}
+.log-investigation .log-time-range .range-footer strong{font-weight:620;color:#556170;}
+.log-investigation .log-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:20px;margin:0 0 0;max-width:100%;
+}
+.log-investigation .log-query > .muted,
+.log-investigation .log-query > small{display:block;margin:13px 0 0;font-size:12px;line-height:1.6;color:#7b8590;}
+.log-investigation .investigation-question-heading{
+  display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 12px;
+  margin-top:28px;padding-top:23px;border-top:1px solid #e8ecf1;
+}
+.log-investigation .investigation-question-heading strong{
+  color:#343c47;font-size:15px;font-weight:680;
+}
+.log-investigation .investigation-question-heading span{font-size:12px;line-height:1.5;color:#78838e;}
+.log-investigation .chat-layout .composer > textarea{
+  display:block;width:100%;min-height:110px;max-height:35vh;
+  margin:13px 0 0;padding:14px 16px;resize:vertical;
+  border:1px solid #d4dce5;border-radius:9px;background:#fff;
+  color:#2d3540;font-size:14px;line-height:1.65;
+}
+.log-investigation .chat-layout .composer > textarea::placeholder{color:#9199a3;}
+.log-investigation .chat-layout .composer-actions{
+  display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  margin-top:23px;padding-top:18px;border-top:1px solid #edf0f3;
+}
+.log-investigation .chat-layout .composer-actions button{
+  min-height:43px;padding:10px 17px;font-size:13px;border-radius:8px;
+}
+.log-investigation .chat-layout .composer-actions .primary{min-width:120px;font-weight:670;}
+.log-investigation .log-applied-range{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:16px;padding:14px 17px;margin:0 0 4px;
+  background:#f7f9fb;border:1px solid #e3e8ee;border-radius:9px;
+}
+.log-investigation .log-applied-range span{line-height:1.55;}
+@media(max-width:900px){
+  .main .page:has(.log-investigation){padding:20px 20px 36px;}
+  .log-investigation .chat-layout .composer,
+  .log-investigation .chat-layout .composer:first-child{padding:24px;}
+  .log-investigation .log-time-range{padding:19px;}
+}
+@media(max-width:690px){
+  .log-investigation .log-time-range .range-fields{grid-template-columns:minmax(0,1fr);gap:10px;}
+  .log-investigation .log-time-range .range-direction{justify-self:start;margin-left:12px;line-height:1;transform:rotate(90deg);}
+  .log-investigation .log-grid{grid-template-columns:1fr;gap:17px;}
+  .log-investigation .log-time-range .range-zone{width:100%;}
+}
+@media(max-width:620px){
+  .main .page:has(.log-investigation){padding:14px 12px 28px;}
+  .scene-page.log-investigation:has(.chat-layout){margin:0 auto 20px;}
+  .log-investigation.scene-page > .scene-title{margin-bottom:15px;}
+  .log-investigation .chat-layout .composer,
+  .log-investigation .chat-layout .composer:first-child{padding:18px 15px;border-radius:10px;}
+  .log-investigation .log-time-range{padding:17px 14px;margin:12px 0 22px;}
+  .log-investigation .log-time-range .range-presets{margin:15px 0 18px;gap:7px;}
+  .log-investigation .log-time-range .range-presets button{padding:7px 10px;}
+  .log-investigation .investigation-question-heading{margin-top:23px;padding-top:19px;}
+  .log-investigation .chat-layout .composer > textarea{min-height:102px;}
+  .log-investigation .chat-layout .composer-actions{margin-top:18px;}
+  .log-investigation .chat-layout .composer-actions .primary{margin-left:auto;width:auto;}
+  .log-investigation .log-applied-range{align-items:flex-start;flex-direction:column;}
+}
