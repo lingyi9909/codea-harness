@@ -315,31 +315,38 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
-    await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
+    await page.clock.setFixedTime(new Date('2026-11-12T00:05:43+08:00'));
     await quarter.click();
-    await expect(page.getByLabel('开始时间',{exact:true})).toHaveValue('2026-11-11T23:50:43.125');
+    await expect(page.getByLabel('开始时间',{exact:true})).toHaveValue('2026-11-11T23:50:43');
     await expect(page.getByLabel('结束时间',{exact:true})).toHaveValue('2026-11-12T00:05:43.125');
     await expect(page.locator('.range-zone')).toContainText('Asia/Shanghai');
     await expect(page.locator('.range-zone')).toContainText('UTC+08:00');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
+    // Windows Chromium owns the native datetime picker. React clicks must not
+    // call showPicker() a second time and close/reopen the popup.
     await page.evaluate(()=>{
       const native=HTMLInputElement.prototype.showPicker;
       HTMLInputElement.prototype.showPicker=function(){
-        native.call(this);this.dataset.pickerCalls=String(Number(this.dataset.pickerCalls??0)+1);
+        this.dataset.pickerCalls=String(Number(this.dataset.pickerCalls??0)+1);
+        return native.call(this);
       };
     });
     for(const label of ['开始时间','结束时间']){
       const input=page.getByLabel(label,{exact:true}),box=await input.boundingBox();
       assert.ok(box);
-      for(const [index,x] of [8,box.width/2,box.width-10].entries()){
-        await input.click({position:{x,y:box.height/2}});
-        await expect(input).toHaveAttribute('data-picker-calls',String(index+1));
-        await page.keyboard.press('Escape');
-      }
+      await expect(input).toHaveAttribute('step','1');
+      await input.click({position:{x:8,y:box.height/2}});
+      await expect(input).not.toHaveAttribute('data-picker-calls',/./);
+      await expect(input).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.log-time-range')).toBeVisible();
     }
-    await page.getByLabel('开始时间').fill('2026-11-11T23:57');
-    await page.getByLabel('结束时间').fill('2026-11-12T00:03');
+    await page.getByLabel('开始时间').fill('2026-11-11T23:57:11');
+    await page.getByLabel('结束时间').fill('2026-11-12T00:03:42');
+    await expect(page.getByLabel('开始时间')).toHaveValue('2026-11-11T23:57:11');
+    await expect(page.getByLabel('结束时间')).toHaveValue('2026-11-12T00:03:42');
+    await expect(page.locator('.log-time-range')).toBeVisible();
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
     await expect(submit).toBeEnabled();
     await page.getByLabel('Trace ID',{exact:true}).fill('');
@@ -357,7 +364,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await writeFile(file+'.skill','1');
     await submit.click();
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
-    const expectedRange='2026-11-11T23:57:00.000+08:00 至 2026-11-12T00:03:00.000+08:00';
+    const expectedRange='2026-11-11T23:57:11+08:00 至 2026-11-12T00:03:42+08:00';
     const appliedRange=page.locator('.log-applied-range');
     await expect(appliedRange).toContainText(expectedRange);
     await expect(appliedRange).toContainText('Asia/Shanghai');
@@ -432,7 +439,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await submit.click();
     await expect(feed).toContainText('第二个会话的结果');
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
-    const presetBounds='2026-11-11T23:50:43.125+08:00 至 2026-11-12T00:05:43.125+08:00';
+    const presetBounds='2026-11-11T23:50:43+08:00 至 2026-11-12T00:05:43+08:00';
     await expect(appliedRange).toContainText(presetBounds);
     assert.ok((await recorded('.second-prompt')).text.includes(presetBounds));
     await page.getByLabel('对话内容').fill('第二个会话草稿');
