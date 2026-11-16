@@ -113,7 +113,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     const saved=readDraft(draftKey(sessionKey,directory,next));
     setCachedTitle(readHistory(localStorage,sessionKey,directory).find(row=>row.id===next)?.title??'');
     select(next);update(null);createdSession.current='';write(saved.text);attach(saved.files);toggleFiles(Boolean(saved.files));
-    setChosen(undefined);fail('');migrating.current=false;restoreContext.current=true;
+    fail('');migrating.current=false;restoreContext.current=true;
     activateChat(localStorage,sessionStorage,sessionKey,directory,next);
     window.dispatchEvent(new Event('harness:chat-history'));
   }
