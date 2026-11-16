@@ -131,6 +131,29 @@ body{background:#fff;color:var(--silver-ink);}
 .workspace-context{font-size:14px;color:#6c7480;white-space:nowrap;}
 .workbench-connection{display:flex;align-items:center;gap:10px;color:#505861;font-size:13px;white-space:nowrap;}
 .connection-dot{display:block;width:8px;height:8px;border-radius:50%;background:#58626d;}
+/* One persistent model selector, shared by direct chat and all bound scenes. */
+.topbar-tools{display:flex;align-items:center;justify-content:flex-end;gap:16px;min-width:0;flex-shrink:0;}
+.global-model-control{display:flex;align-items:center;gap:10px;min-width:0;}
+.global-model-label{font-size:12px;color:#6c7480;white-space:nowrap;}
+.global-model-control .model-trigger{
+  display:inline-flex;align-items:center;justify-content:space-between;
+  gap:10px;min-width:120px;max-width:260px;min-height:36px;
+  padding:6px 11px;border:1px solid #d8dee5;border-radius:7px;
+  background:#f8f9fb;color:#252b34;font-size:13px;font-weight:580;
+  box-shadow:none;cursor:pointer;
+}
+.global-model-control .model-trigger:enabled:hover{border-color:#929eaf;background:#f0f3f7;}
+.global-model-control .model-trigger:focus-visible{outline:2px solid #768496;outline-offset:2px;}
+@media(max-width:900px){
+  .topbar-tools{gap:9px;}
+  .global-model-control{gap:7px;}
+  .global-model-control .model-trigger{max-width:185px;}
+  .global-model-label{display:none;}
+}
+@media(max-width:620px){
+  .topbar-tools .workbench-connection,.topbar-tools .state{display:none;}
+  .global-model-control .model-trigger{min-width:94px;max-width:150px;min-height:30px;padding:4px 7px;font-size:11px;}
+}
 .main .state{font-size:12px;}
 .main .page{background:#fff;}
 /* Neutral action, input and focus language across scenarios. */
