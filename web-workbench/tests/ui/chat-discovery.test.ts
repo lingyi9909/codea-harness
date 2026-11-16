@@ -373,6 +373,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await writeFile(file+'.skill','1');
     await submit.click();
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
+    assert.deepEqual((await recorded('.body')).model,{id:'intranet',providerID:'company'},
+      'the global model must apply to new investigation sessions');
     const expectedRange='2026-11-11T23:57:11+08:00 至 2026-11-12T00:03:42+08:00';
     const appliedRange=page.locator('.log-applied-range');
     await expect(appliedRange).toContainText(expectedRange);
@@ -451,6 +453,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByLabel('对话内容').fill('第二次排查');
     await submit.click();
     await expect(feed).toContainText('第二个会话的结果');
+    assert.deepEqual((await recorded('.body')).model,{id:'analysis',providerID:'labs',variant:'high'},
+      'new conversations use the latest global model, even after switching scenes');
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
     const presetBounds='2026-11-11T23:50:43+08:00 至 2026-11-12T00:05:43+08:00';
     await expect(appliedRange).toContainText(presetBounds);
@@ -500,6 +504,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.ok(!request.includes('导入日志：'));
     await page.getByLabel('对话内容').fill('下一步怎么查？');
     await page.getByLabel('对话内容').press('Enter');
+    await expect.poll(async()=>(await recorded('.model')).model).toEqual({id:'analysis',providerID:'labs',variant:'high'});
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     await expect(appliedRange).toContainText(expectedRange);
@@ -677,6 +682,7 @@ it('groups a multi-step weather response and keeps verification output out of th
     await expect(navigation.getByRole('button',{name:'数据分析',exact:true})).toHaveAttribute('aria-expanded','true');
     await navigation.getByRole('button',{name:'公管数据分析',exact:true}).click();
     await expect(page.getByRole('heading',{name:'公管数据分析'})).toBeVisible();
+    await expect(page.locator('.main > .topbar')).toContainText('analysis');
     await expect(page.getByLabel('对话内容')).toBeVisible();
     await page.getByLabel('对话内容').fill('请分析公管订单超时原因');
     await expect(page.getByLabel('对话内容')).toHaveValue('请分析公管订单超时原因');
@@ -688,6 +694,7 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.getByLabel('对话内容').fill('跨场景保存这份草稿');
     await navigation.getByRole('button',{name:'代码审查',exact:true}).click();
     await expect(page.getByRole('heading',{name:'代码审查',exact:true})).toBeVisible();
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toBeVisible();
     await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
     await expect(page.getByLabel('对话内容')).toHaveValue('跨场景保存这份草稿');
     assert.deepEqual(createdSessions,[],'navigating never creates a native OpenCode session');
