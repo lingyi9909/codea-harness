@@ -59,6 +59,12 @@ function readAppliedRange(session:string,rangePrompt?:string,storageKey='harness
   }
   return null;
 }
+function parsedFilters(prompt?:string){
+  return {
+    trace:prompt?.match(/^Trace ID：([^\r\n]*)$/m)?.[1]?.trim()??'',
+    keyword:prompt?.match(/^关键字：([^\r\n]*)$/m)?.[1]?.trim()??'',
+  };
+}
 function elapsed(ms:number){
   const hours=Math.floor(ms/3600000),minutes=Math.floor(ms%3600000/60000),remainder=Math.floor(ms%60000/1000);
   return [hours&&hours+' 小时',minutes&&minutes+' 分钟',remainder&&remainder+' 秒'].filter(Boolean).join(' ');
@@ -79,6 +85,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   const [form,setForm]=useState(()=>!sessionStorage.getItem(storageKey));
   const [trace,setTrace]=useState(''),[keyword,setKeyword]=useState('');
   const [applied,setApplied]=useState(()=>readAppliedRange(sessionStorage.getItem(storageKey)??'',undefined,storageKey));
+  const [appliedFilters,setAppliedFilters]=useState({trace:'',keyword:''});
   const [range,setRange]=useState(()=>applied?rangeFromBounds(applied):recentRange(60));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
@@ -91,15 +98,26 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   const ready=Boolean(validTime&&(trace.trim()||keyword.trim()));
   function reset(session='',rangePrompt?:string){
     const restored=readAppliedRange(session,rangePrompt,storageKey);
+    const filters=parsedFilters(rangePrompt);
     setApplied(restored);setRange(restored?rangeFromBounds(restored):recentRange(60));
-    setForm(!session);setTrace('');setKeyword('');
+    setAppliedFilters(filters);setForm(!session);setTrace(filters.trace);setKeyword(filters.keyword);
   }
   function onSent(session=sessionStorage.getItem(storageKey)){
     if(form){
-      setApplied({from,to});
+      setApplied({from,to});setAppliedFilters({trace:trace.trim(),keyword:keyword.trim()});
       if(session)sessionStorage.setItem(storageKey+'.range.'+session,JSON.stringify({from,to}));
       setForm(false);
     }
+  }
+  function beginEdit(){
+    if(applied)setRange(rangeFromBounds(applied));
+    setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);
+    setForm(true);
+  }
+  function cancelEdit(){
+    if(applied)setRange(rangeFromBounds(applied));
+    setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);
+    setForm(false);
   }
   function prompt(question:string){
     if(!form)return question;
@@ -139,8 +157,17 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
     </div>
     {!ready&&<small className="muted" role="status">时间为必填；Trace ID 和关键词至少填写一项。</small>}
   </fieldset>:<div className="log-applied-range">
-    {applied&&<div><strong>上次排查范围</strong><span>{formatBounds(applied)} · {localZone}</span></div>}
-    <button type="button" className="secondary" onClick={()=>setForm(true)}>调整排查条件</button>
+    <div className="log-applied-overview">
+      <span className="log-applied-label">当前排查条件</span>
+      {applied&&<span className="log-applied-time" title={formatBounds(applied)+' · '+localZone}>
+        <span aria-hidden="true">◷</span> {localTime(applied.from).replace('T',' ')} — {localTime(applied.to).replace('T',' ')}
+      </span>}
+      {appliedFilters.trace&&<span className="log-applied-chip" title={'Trace ID：'+appliedFilters.trace}>Trace ID · {appliedFilters.trace}</span>}
+      {appliedFilters.keyword&&<span className="log-applied-chip" title={'关键词：'+appliedFilters.keyword}>关键词 · {appliedFilters.keyword}</span>}
+    </div>
+    <button type="button" className="secondary log-adjust-button" onClick={beginEdit}>
+      <span aria-hidden="true">⚙</span> 调整排查条件
+    </button>
   </div>;
-  return <DirectChat sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,initial:form,ready,prompt,onSent,reset,title,sessionKey:storageKey}}/>;
+  return <DirectChat sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,initial:form,ready,prompt,onSent,reset,cancel:cancelEdit,title,sessionKey:storageKey}}/>;
 }
