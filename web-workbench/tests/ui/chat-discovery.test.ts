@@ -199,6 +199,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
     await expect(page.getByLabel('对话内容')).toBeVisible();
     await expect(page.locator('.main > .topbar')).toBeVisible();
+    const topModel=page.locator('.main > .topbar').getByRole('button',{name:'选择模型'});
+    await expect(topModel).toBeVisible();
+    await expect(page.locator('.composer-actions').getByLabel('选择模型')).toHaveCount(0);
     await expect(page.locator('.workspace-pill')).toContainText('业务项目');
     await expect(page.locator('.sidebar')).toHaveCSS('width','282px');
     await expect(page.getByRole('navigation').getByRole('button',{name:'代码审查'})).toHaveCSS('color','rgb(43, 48, 56)');
@@ -263,13 +266,16 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       assert.ok(layout&&box&&Math.abs(layout.width-box.width)<1);
     }
     await checkChatLayout();
-    await page.locator('.composer-actions').getByLabel('选择模型').click();
+    await topModel.click();
     const search=page.getByRole('combobox',{name:'搜索模型'});
     await search.fill('company');
     await expect(page.getByRole('option',{name:/Analysis fixture/})).toHaveCount(0);
     await expect(page.getByRole('option',{name:/Company fixture/})).toBeVisible();
     await page.screenshot({path:join(shots,'02-model-picker.png')});
     await search.press('Enter');
+    await expect(page.locator('.main > .topbar')).toContainText('intranet');
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+      {id:'intranet',providerID:'company'});
     const composer=page.getByLabel('对话内容');
     await composer.fill('第一行');
     await composer.press('Shift+Enter');
@@ -297,9 +303,11 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(nav.getByRole('button',{name:'报文问题排查'})).toBeVisible();
     await nav.getByRole('button',{name:'报文问题排查'}).click();
     await expect(page.getByRole('heading',{name:'报文问题排查'})).toBeVisible();
+    await expect(page.locator('.main > .topbar')).toContainText('intranet');
     await page.getByLabel('对话内容').fill('报文模式独立草稿');
     await nav.getByRole('button',{name:'公管问题排查'}).click();
     await expect(page.getByRole('heading',{name:'公管问题排查'})).toBeVisible();
+    await expect(page.locator('.main > .topbar')).toContainText('intranet');
     await expect(page.getByLabel('对话内容')).toHaveValue('');
     await nav.getByRole('button',{name:'报文问题排查'}).click();
     await expect(page.getByLabel('对话内容')).toHaveValue('报文模式独立草稿');
@@ -421,8 +429,12 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('option',{name:/Analysis fixture/}).click();
     await page.getByRole('combobox',{name:'模型变体'}).selectOption('high');
     await page.getByRole('button',{name:'使用此模型'}).click();
-    await expect.poll(async()=>(await recorded('.model')).model).toEqual({id:'analysis',providerID:'labs',variant:'high'});
-    await expect(page.getByLabel('对话内容')).toBeFocused();
+    await expect(page.locator('.main > .topbar')).toContainText('analysis');
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+      {id:'analysis',providerID:'labs',variant:'high'});
+    await page.reload();
+    await expect(page.locator('.main > .topbar')).toContainText('analysis');
+    await expect(page.getByLabel('对话内容')).toBeVisible();
     await page.getByLabel('对话内容').fill('保存这份草稿');
     await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
