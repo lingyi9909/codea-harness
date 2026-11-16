@@ -6,48 +6,41 @@
   font-family:Inter,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
 }
 .profile-card{
-  width:min(100%,1010px);min-height:590px;
+  width:min(100%,1010px);min-height:510px;
   display:grid;grid-template-columns:minmax(300px,0.88fr) minmax(0,1.12fr);
   background:#fff;border:1px solid #dce0e5;border-radius:10px;overflow:hidden;
   box-shadow:0 12px 38px #222b3408;
 }
 .profile-side{
   min-width:0;padding:38px 42px;
-  display:flex;flex-direction:column;justify-content:space-between;
+  display:flex;flex-direction:column;justify-content:flex-start;
   background:#eef1f4;border-right:1px solid #e0e4e8;
 }
 .profile-brand{display:flex;flex-direction:column;align-items:flex-start;gap:5px;}
 .profile-brand strong{font-size:24px;font-weight:760;line-height:1.2;letter-spacing:-1px;color:#202429;}
 .profile-brand span{font-size:13px;color:#707781;letter-spacing:.1px;}
-.profile-side-copy{max-width:330px;padding-block:54px 28px;}
+.profile-side-copy{max-width:330px;margin:auto 0;padding-block:30px;}
 .profile-overline{font-size:11px;font-weight:700;letter-spacing:1.5px;color:#808791;}
 .profile-side-copy h2{font-size:32px;letter-spacing:-1px;line-height:1.45;font-weight:720;color:#23272d;margin:18px 0 14px;}
-.profile-side-copy p{font-size:14px;line-height:1.9;color:#68707c;margin:0;}
-.profile-side-footer{font-size:12px;color:#8a919b;border-top:1px solid #d5dbe1;padding-top:15px;}
 .profile-form-pane{display:flex;flex-direction:column;justify-content:center;min-width:0;padding:58px clamp(36px,6vw,76px);}
 .profile-form-pane h1{margin:12px 0 8px;font-size:29px;letter-spacing:-.8px;font-weight:730;color:#20242a;}
-.profile-subtitle{margin:0 0 38px;font-size:14px;color:#747b85;line-height:1.65;}
+.profile-card:not(.pair-login-card) .profile-form-pane h1{margin-bottom:32px;}
 .profile-card form{display:grid;gap:20px;}
 .profile-card label{display:grid;gap:9px;font-size:14px;font-weight:620;color:#414750;}
 .profile-card input{width:100%;height:47px;min-width:0;padding:10px 14px;border:1px solid #d3d9e0;border-radius:7px;background:#fff;color:#21262d;font:inherit;}
 .profile-card input::placeholder{color:#a3a9b1;}
 .profile-card input:hover{border-color:#aab3be;}
 .profile-card :is(input,button):focus-visible{outline:2px solid #657285;outline-offset:2px;}
-.profile-disclosure,.profile-error{font-size:12px;line-height:1.8;margin:0;}
-.profile-disclosure{color:#767e89;}
-.profile-disclosure code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#424952;overflow-wrap:anywhere;}
-.profile-error{color:#a43134;}
+.profile-error{font-size:12px;line-height:1.8;margin:0;color:#a43134;}
 .profile-submit{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;height:48px;margin-top:2px;padding:0 18px;background:#24272c;color:#fff;border:1px solid #24272c;border-radius:7px;font-weight:650;font-size:14px;}
 .profile-submit span{font-size:17px;font-weight:400;}
 .profile-submit:enabled:hover{background:#393d43;}
-.profile-footnote{font-size:12px;color:#9da3ab;margin:26px 0 0;line-height:1.7;}
 @media(max-width:760px){
   .profile-page{padding:16px;}
   .profile-card{grid-template-columns:1fr;min-height:0;max-width:500px;}
   .profile-side{padding:25px 26px 20px;gap:0;border-right:0;border-bottom:1px solid #e0e4e8;}
   .profile-brand strong{font-size:22px;}
-  .profile-side-copy,.profile-side-footer{display:none;}
+  .profile-side-copy{display:none;}
   .profile-form-pane{padding:38px 26px 44px;}
-  .profile-subtitle{margin-bottom:28px;}
 }
 @media(prefers-reduced-motion:reduce){.profile-card *{transition:none!important;}}
