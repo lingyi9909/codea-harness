@@ -580,7 +580,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(dialog).toHaveCount(0);
     await expect(appliedRange).toContainText('retry-timeout');
     await expect(page.getByLabel('对话内容')).toHaveValue(pendingDraft);
-    await expect.poll(async()=>JSON.parse((await readFile(file+'.prompt','utf8')).text).text)
+    await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text)
       .toContain('关键字：retry-timeout');
     const rerun=await recorded('.prompt');
     assert.ok(!rerun.text.includes(pendingDraft));
