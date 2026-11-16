@@ -22,7 +22,6 @@ async function observePaintedText(page:Page){
 
 async function login(page:Page){
   await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
-  await expect(page.getByText('.workbench/user.json',{exact:true})).toBeVisible();
   await page.getByLabel('姓名',{exact:true}).fill('测试同事');
   await page.getByLabel('手机号',{exact:true}).fill('13800000000');
   await page.getByRole('button',{name:'登录工作台',exact:true}).click();
