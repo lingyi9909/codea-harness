@@ -345,8 +345,7 @@ export function WorkbenchApp() {
     <main className="main">
       <header className="topbar"><div className="workspace-heading"><strong>工作台</strong>
         <span className="heading-divider" aria-hidden="true"/>
-        {chatDirectory?<span className="workspace-pill" title={chatDirectory}>{chatDirectory.split(/[\\/]/).filter(Boolean).at(-1)}</span>:
-          <span className="workspace-context">{selected?'任务详情':scene==='home'||scene==='chat'?'对话首页':scenes[scene]}</span>}</div>
+        <span className="workspace-context">{selected?'任务详情':scene==='home'||scene==='chat'?'对话首页':scenes[scene]}</span>}</div>
         <div className="topbar-tools">
           <div className="global-model-control" title="统一应用于 OpenCode 直接对话及专项场景；代码审查任务仍按 Review 服务配置执行">
             <span className="global-model-label">全局模型</span>

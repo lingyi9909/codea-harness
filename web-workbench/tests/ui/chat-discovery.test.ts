@@ -212,7 +212,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     const topModel=page.locator('.main > .topbar').getByRole('button',{name:'选择模型'});
     await expect(topModel).toBeVisible();
     await expect(page.locator('.composer-actions').getByLabel('选择模型')).toHaveCount(0);
-    await expect(page.locator('.workspace-pill')).toContainText('业务项目');
+    await expect(page.locator('.workspace-context')).toHaveText('对话首页');
+    await expect(page.locator('.workspace-pill')).toHaveCount(0);
+    await expect(page.locator('.chat-project-hint')).toHaveCount(0);
+    await expect(page.locator('.chat-workspace-path')).toHaveCount(0);
     await expect(page.locator('.sidebar')).toHaveCSS('width','282px');
     await expect(page.getByRole('navigation').getByRole('button',{name:'代码审查'})).toHaveCSS('color','rgb(43, 48, 56)');
     await expect(page.locator('.silver-chat-home')).toHaveClass(/silver-chat-empty/);
@@ -356,9 +359,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await quarter.click();
     await expect(page.getByLabel('开始时间',{exact:true})).toHaveValue('2026-11-11T23:50:43');
     await expect(page.getByLabel('结束时间',{exact:true})).toHaveValue('2026-11-12T00:05:43');
-    await expect(page.locator('.range-zone')).toContainText('精确到秒');
-    await expect(page.locator('.range-zone')).toContainText('Asia/Shanghai');
-    await expect(page.locator('.range-zone')).toContainText('UTC+08:00');
+    await expect(page.locator('.range-zone')).toHaveText('精确到秒');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
     // Windows Chromium owns the native datetime picker. React clicks must not
@@ -406,8 +407,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       'the global model must apply to new investigation sessions');
     const expectedRange='2026-11-11T23:57:11+08:00 至 2026-11-12T00:03:42+08:00';
     const appliedRange=page.locator('.log-applied-range');
-    await expect(appliedRange.locator('.log-applied-time')).toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
-    await expect(appliedRange.locator('.log-applied-time')).toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
+    await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
+    await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
     const sentRange=(await recorded('.prompt')).text;
     assert.ok(sentRange.includes(expectedRange));
     assert.ok(sentRange.includes('Asia/Shanghai'));
@@ -447,7 +448,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       assert.ok(partial.size>=3,'a whole upstream chunk produces multiple visible prefixes: '+chunk);
     }
     await page.reload();
-    await expect(appliedRange.locator('.log-applied-time')).toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
+    await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
     await expect(feed.getByText(finalAnswer,{exact:true})).toHaveCount(1);
     await expect(running).toHaveCount(0);
     await expect(feed.locator('.turn-process').first()).not.toHaveAttribute('open','');
@@ -567,7 +568,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect.poll(async()=>(await recorded('.model')).model).toEqual({id:'analysis',providerID:'labs',variant:'high'});
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
-    await expect(appliedRange.locator('.log-applied-time')).toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
+    await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/第二次排查/}).click();
     await page.reload();
@@ -576,7 +577,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/检查超时原因/}).click();
-    await expect(appliedRange.locator('.log-applied-time')).toHaveAttribute('title',expectedRange+' · Asia/Shanghai');
+    await expect(appliedRange.locator('.log-applied-time')).not.toHaveAttribute('title',/./);
     assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
     // Applying conditions reuses the current session, closes the drawer,
     // preserves a pending reply draft and does not attach reply-only files.

@@ -253,7 +253,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     <div className="chat-layout"><div className="chat-box">
       {(!investigation||messages.length>0||stream.tools.length>0||state?.active)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
-      }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><p className="chat-project-hint">当前项目　/　{directory.split(/[\\/]/).filter(Boolean).at(-1)||'工作目录'}</p><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
+      }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
         <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
       </div>}
       {modelCommand&&!id&&<p className="notice" role="status">默认入口 /models 用于选择本次排查使用的模型，
@@ -285,7 +285,6 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         <button type="button" onClick={()=>{write('请从入口开始梳理这个项目的主要调用链。');input.current?.focus();}}>梳理调用链 <span aria-hidden="true">↗</span></button>
       </div>}
     </div></div>
-    {homeEmpty&&<p className="chat-workspace-path" title={directory}>工作目录：{directory}</p>}
     {adjustmentOpen&&createPortal(<div className="investigation-drawer-backdrop" onMouseDown={e=>{
       if(e.target===e.currentTarget&&!busy)cancelAdjustment();
     }}>

@@ -106,7 +106,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
     setRange(previous=>({...previous,[side]:value,[side==='start'?'from':'to']:parseLocal(value),preset:null}));
   }
   const timeError=!start||!end?'请填写完整的开始和结束时间。':
-    !Number.isFinite(from)||!Number.isFinite(to)?'所选时区中不存在这个本地时间。':
+    !Number.isFinite(from)||!Number.isFinite(to)?'所选时间无效，请重新选择。':
     from>=to?'结束时间必须晚于开始时间。':'';
   const validTime=!timeError;
   const ready=Boolean(validTime&&(trace.trim()||keyword.trim()));
@@ -154,7 +154,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   const summary=<div className="log-applied-range">
     <div className="log-applied-overview">
       <span className="log-applied-label">当前排查条件</span>
-      {applied&&<span className="log-applied-time" title={formatBounds(applied)+' · '+localZone}>
+      {applied&&<span className="log-applied-time">
         <span aria-hidden="true">◷</span> {localTime(applied.from).replace('T',' ')} — {localTime(applied.to).replace('T',' ')}
       </span>}
       {appliedFilters.trace&&<span className="log-applied-chip" title={'Trace ID：'+appliedFilters.trace}>Trace ID · {appliedFilters.trace}</span>}
@@ -166,7 +166,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   </div>;
   const controls=form?<fieldset className="log-query"><legend>排查条件</legend>
     <section className="log-time-range" aria-labelledby="log-range-title">
-      <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">精确到秒 · 本地时区 · {localZone}{Number.isFinite(from)&&' · UTC'+offsetAt(from)}{Number.isFinite(to)&&(!Number.isFinite(from)||offsetAt(to)!==offsetAt(from))&&' → UTC'+offsetAt(to)}</span></header>
+      <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">精确到秒</span></header>
       <div className="range-presets" role="group" aria-label="快捷时间范围">
         {presets.map(p=><button key={p.minutes} type="button" aria-pressed={range.preset===p.minutes}
           onClick={()=>setRange(recentRange(p.minutes))}>{p.label}</button>)}
