@@ -19,7 +19,7 @@ function explain(e:unknown){
     LOG_QUERY_CATALOG_UNAVAILABLE:'无法读取当前工作目录的 OpenCode Skill 列表。请检查 OpenCode 服务连接后重试。',
     CHAT_SCENARIO_MISMATCH:'这个会话属于其他场景，请在当前页新建对话。',
     FORM_CHANGED:'这个问题已更新或已经处理，请查看当前请求。',FORM_ANSWER_INVALID:'这份回答不符合问题要求，请检查后再提交。',FORM_SERVICE_UNAVAILABLE:'暂时无法读取待处理问题，请检查 OpenCode 连接。',
-    CHAT_MODEL_UNAVAILABLE:'此模型当前未启用，请刷新模型列表后重新选择。',
+    CHAT_MODEL_UNAVAILABLE:'右上角选择的全局模型在当前场景工作目录中不可用。请重新选择该目录已启用的内网模型；不会自动回退到 OpenCode 默认模型。',
     SCENE_EXECUTOR_NOT_FOUND:'未发现配置的执行入口。请检查当前子场景的 Skill、Subagent 或命令是否已在绑定目录加载。',
     SCENE_NOT_CONFIGURED:'当前子场景尚未绑定工作目录和执行入口。',
     SCENE_DIRECTORY_CHANGED:'子场景绑定的目录已变更，请新建对话。',
