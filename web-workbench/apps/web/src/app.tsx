@@ -5,6 +5,8 @@ import { subscribeTask } from './api/events.ts';
 import Markdown from 'react-markdown';
 import { ProfileLogin } from './ProfileLogin.tsx';
 import { DirectChat } from './DirectChat.tsx';
+import { ModelPicker } from './ModelPicker.tsx';
+import type { ChatModel, SceneConfigResponse } from '../../../packages/contracts/src/chat.ts';
 import {LogInvestigation} from './LogInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
 import { scenes, scenarioGroups, groupForScene, type Scene, type ScenarioGroup } from './ScenarioHome.tsx';
@@ -25,6 +27,19 @@ const controllerPattern=/^[A-Za-z_][A-Za-z0-9_]*$/;
 const text=(error:unknown)=>error instanceof Error?error.message:'请求失败';
 const short=(s:string)=>s.length>12?s.slice(0,10)+'…':s;
 const operationId=()=>crypto.randomUUID();
+const globalModelKey='harness.global.model';
+type SelectedModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
+function savedGlobalModel():SelectedModel|undefined{
+  try{
+    const raw:unknown=JSON.parse(localStorage.getItem(globalModelKey)??'null');
+    if(!raw||typeof raw!=='object'||Array.isArray(raw))return undefined;
+    const model=raw as Record<string,unknown>;
+    if(typeof model.id!=='string'||!model.id||typeof model.providerID!=='string'||!model.providerID||
+      (model.variant!==undefined&&typeof model.variant!=='string'))return undefined;
+    return {id:model.id,providerID:model.providerID,
+      ...(typeof model.variant==='string'&&model.variant?{variant:model.variant}:{})};
+  }catch{return undefined;}
+}
 
 export function WorkbenchApp() {
   const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);
@@ -42,10 +57,34 @@ export function WorkbenchApp() {
   const [expandedGroup,setExpandedGroup]=useState<ScenarioGroup|null>(()=>groupForScene(scene));
   const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
   const [chatDirectory,setChatDirectory]=useState('');
+  // One model selection for all OpenCode chats (home, investigations, analytics).
+  // Stored on this browser only; the server independently validates each
+  // model against the effective bound directory before admitting a request.
+  const [globalModel,setGlobalModel]=useState<SelectedModel|undefined>(savedGlobalModel);
+  const [sceneModelConfig,setSceneModelConfig]=useState<SceneConfigResponse|null>(null);
+  useEffect(()=>{
+    if(globalModel)localStorage.setItem(globalModelKey,JSON.stringify(globalModel));
+    else localStorage.removeItem(globalModelKey);
+  },[globalModel]);
+  useEffect(()=>{
+    if(!bootstrap)return;
+    let live=true;setSceneModelConfig(null);
+    api.sceneConfig().then(value=>{if(live)setSceneModelConfig(value);}).catch(()=>{});
+    return()=>{live=false;};
+  },[bootstrap,scene]);
+  const sceneDirectory=scene==='logs'?sceneModelConfig?.config.scenes.logs?.directory:
+    scene==='message'?sceneModelConfig?.config.scenes.message?.directory:
+    scene==='data'?sceneModelConfig?.config.scenes.data?.directory:undefined;
+  const modelDirectory=sceneDirectory??(scene==='home'||scene==='chat'?chatDirectory:undefined)??sceneModelConfig?.workspace;
+  const modelCommand=scene==='message'&&sceneModelConfig?.config.scenes.message?.executor.type==='command'&&
+    sceneModelConfig.config.scenes.message.executor.name==='models';
+  const chooseGlobalModel=(model:ChatModel|undefined)=>{
+    setGlobalModel(model?{id:model.id,providerID:model.providerID,...(model.variant?{variant:model.variant}:{})}:undefined);
+  };
   const navigate=(next:Scene)=>{
     // Scene navigation never creates a native session; the chat restores its own saved id/draft.
     const target=next==='chat'?'home':next;
-    setSelected('');setScene(target);setExpandedGroup(groupForScene(target));sessionStorage.setItem('harness.scene',target);
+    setSelected('');setScene(target);setChatDirectory('');setExpandedGroup(groupForScene(target));sessionStorage.setItem('harness.scene',target);
   };
   const openChat=(kind:'new'|'history'|'select',id?:string)=>{
     navigate('home');setChatNavigation(previous=>({kind,id,seq:previous.seq+1}));
@@ -308,15 +347,24 @@ export function WorkbenchApp() {
         <span className="heading-divider" aria-hidden="true"/>
         {chatDirectory?<span className="workspace-pill" title={chatDirectory}>{chatDirectory.split(/[\\/]/).filter(Boolean).at(-1)}</span>:
           <span className="workspace-context">{selected?'任务详情':scene==='home'||scene==='chat'?'对话首页':scenes[scene]}</span>}</div>
-        {selected||scene==='review'?<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 审查服务已就绪':'● 审查服务未就绪'}</span>:
-          <span className="workbench-connection"><span className="connection-dot" aria-hidden="true"/>本地工作台已连接</span>}</header>
+        <div className="topbar-tools">
+          <div className="global-model-control" title="统一应用于 OpenCode 直接对话及专项场景；代码审查任务仍按 Review 服务配置执行">
+            <span className="global-model-label">全局模型</span>
+            <ModelPicker key={scene} value={globalModel} allowDefault
+              initialOpen={Boolean(modelCommand)}
+              loadModels={()=>api.chatModels(modelDirectory||undefined)}
+              onSelect={chooseGlobalModel}/>
+          </div>
+          {selected||scene==='review'?<span className={'state '+(ready?'state-ok':'state-warn')}>{ready?'● 审查服务已就绪':'● 审查服务未就绪'}</span>:
+            <span className="workbench-connection"><span className="connection-dot" aria-hidden="true"/>本地工作台已连接</span>}
+        </div></header>
       <div className="page">
       {error&&<div className="alert" role="alert">{error}<button onClick={()=>setError('')}>关闭</button></div>}
       {gap&&selected&&<div className="notice" role="status">{gap}<button onClick={()=>{loadDetail(selected).catch(e=>setError(text(e)));setGap('');}}>重新读取</button></div>}
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
-      {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory}/>:
-       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'}/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory}/>:!selected&&scene==='settings'?<SceneConfigPage/>:!selected?<section className="workbench">
+      {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:
+       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'} globalModel={globalModel}/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:!selected&&scene==='settings'?<SceneConfigPage/>:!selected?<section className="workbench">
         <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
         <h1>代码审查</h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
