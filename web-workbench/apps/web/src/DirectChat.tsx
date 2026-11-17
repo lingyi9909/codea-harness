@@ -1,3 +1,4 @@
+import {BusinessVerification} from './BusinessVerification.tsx';
 import {localStorage,sessionStorage} from './userStorage.ts';
 import {useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -295,6 +296,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       </div>}
       {modelCommand&&!id&&<p className="notice" role="status">默认入口 /models 用于选择本次排查使用的模型，
         不是报文排查执行命令。选择模型后可继续用 OpenCode 对话排查。</p>}
+      {id&&<BusinessVerification key={id} sessionId={id}/>}
       {error&&<p role="alert" className="notice">{error}</p>}
       {pending&&state?<div className="composer request-composer">
         <ChatRequests key={id} state={state} busy={busy}

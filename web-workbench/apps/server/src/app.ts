@@ -1,3 +1,6 @@
+import {MysqlIdentityStore} from '../../../packages/storage/src/identity.ts';
+import {UserContextResolver} from './user-context.ts';
+import {BusinessVerificationBridge,MockLogProvider} from './business-verification.ts';
 import type {ExecutionRegistry} from './execution-registry.ts';
 import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
 import { MultiUserAuth } from './multi-user-auth.ts';
@@ -26,7 +29,7 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=!(opts.auth instanceof MultiUserAuth)&&Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -159,7 +162,13 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
       return opts.execution.run(session.ownerId,async()=>handler.call(this,req,reply));
     };
   });
-  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
+  let business: {resolver:UserContextResolver;bridge:BusinessVerificationBridge}|undefined;
+  if(multi&&opts.mockBusiness){
+    const identities=new MysqlIdentityStore(opts.pool!);
+    const resolver=new UserContextResolver(owner=>identities.profile(owner));
+    business={resolver,bridge:new BusinessVerificationBridge(resolver,new MockLogProvider())};
+  }
+  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       await opts.auth.session(req);return result({items:[],nextCursor:null});

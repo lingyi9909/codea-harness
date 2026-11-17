@@ -1,3 +1,5 @@
+import type {BusinessVerificationBridge} from '../../business-verification.ts';
+import type {UserContextResolver} from '../../user-context.ts';
 import type {ExecutionRegistry} from '../../execution-registry.ts';
 import {MultiUserAuth} from '../../multi-user-auth.ts';
 import {requireChatBinding,matchNativeBinding} from '../../owned-chat.ts';
@@ -133,7 +135,7 @@ export async function resolveLocalWorkspace(input?:string){
   return workspace;
 }
 const sceneKey=(s:ChatScenario):SceneKey|undefined=>s==='log-inspection'?'logs':s==='message-inspection'?'message':s==='data-analysis'?'data':undefined;
-export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:{mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore;bindings?:ChatBindingStore;execution?:ExecutionRegistry;multiUser?:boolean}){
+export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:{mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore;bindings?:ChatBindingStore;execution?:ExecutionRegistry;multiUser?:boolean;business?:{resolver:UserContextResolver;bridge:BusinessVerificationBridge}}){
   const localClient=chatConnection(options.mayStart??false);
   const client=()=>options.multiUser?options.execution!.client():localClient();
   const serviceIdentity=()=>options.execution?.serviceIdentity()??'local';
@@ -183,6 +185,23 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
       if(effective(binding.directory)!==session.location.directory)throw new AuthProblem(409,'SCENE_DIRECTORY_CHANGED');
     }
     return session;
+  }
+  if(options.business&&options.bindings){
+    const {resolver,bridge}=options.business;
+    const scope=async(req:FastifyRequest,id:string)=>{
+      const session=await auth.session(req);
+      await owned(id,session.ownerId);
+      const binding=await requireChatBinding(options.bindings!,serviceIdentity(),id,session.ownerId);
+      return resolver.bind(session.ownerId,binding,'mock-logs');
+    };
+    const base='/api/v1/chat/sessions/:id/business-verification';
+    app.get<{Params:Params}>(base,async req=>wrap(bridge.status(await scope(req,req.params.id))));
+    app.post<{Params:Params}>(base,async req=>{await auth.mutation(req);return wrap(await bridge.send(await scope(req,req.params.id)));});
+    app.post<{Params:Params&{challenge:string};Body:{code:string}}>(base+'/:challenge/code',{schema:body({code:property(32)})},async req=>{
+      await auth.mutation(req);const context=await scope(req,req.params.id);
+      return wrap(await bridge.submit(context,req.params.challenge,req.body.code));
+    });
+    app.delete<{Params:Params&{challenge:string}}>(base+'/:challenge',async req=>{await auth.mutation(req);return wrap(bridge.cancel(await scope(req,req.params.id),req.params.challenge));});
   }
   async function pendingForms(sessionID:string){
     try{

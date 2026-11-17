@@ -57,6 +57,9 @@ export class HarnessApi {
     this.setCsrf(body.data.csrfToken);
     return body.data;
   }
+  businessStatus(id:string){return this.request<{state:string;challengeId?:string;expiresAt?:number;maskedPhone?:string;verified?:boolean}>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification');}
+  submitBusinessCode(id:string,challenge:string,code:string){return this.request<{state:string;verified?:boolean}>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification/'+encodeURIComponent(challenge)+'/code',{method:'POST',body:JSON.stringify({code})});}
+  cancelBusinessCode(id:string,challenge:string){return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification/'+encodeURIComponent(challenge),{method:'DELETE'});}
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
   sceneConfig(){return this.request<SceneConfigResponse>('/scene-config');}
   saveSceneConfig(config:SceneConfigValue,revision:string){return this.request<SceneConfigResponse>('/scene-config',{method:'PUT',body:JSON.stringify({config,revision})});}

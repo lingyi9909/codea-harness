@@ -30,7 +30,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
     for(const entry of entries){const directories:Record<string,string>={};for(const [source,target]of Object.entries(entry.directories))directories[await realpath(source)]=await realpath(target);entry.directories=directories;}
     execution=new ExecutionRegistry(entries,(url,authorization)=>chatConnection(false,{url,authorization})());
   }
-  const app=await createApp({pool,auth,native,execution,localOnly,workspace,autoOpenCode:localOnly});
+  const app=await createApp({pool,auth,native,execution,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly});
   const shutdown=async()=>{await app.close();await pool?.end();};
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
