@@ -59,25 +59,25 @@ export function InstitutionMessageInvestigation(){
         <h2><span aria-hidden="true">☷</span> 查询参数</h2>
         <div className="institution-divider"/>
         <label htmlFor="institution-date">日期 <span className="institution-required">*</span></label>
-        <input id="institution-date" type="date" value={day} required
+        <input id="institution-date" aria-label="日期" type="date" value={day} required
           aria-invalid={!bounds} onChange={e=>{setDay(e.target.value);setNotice('');}}/>
         <p className="institution-day-summary" role="status">
           {bounds?'系统将自动查询该日 00:00:00 — 23:59:59 的报文数据。':'请选择有效的查询日期。'}
         </p>
 
         <label htmlFor="institution-msg-sn">报文编号（msgSn） <span className="institution-required">*</span></label>
-        <input id="institution-msg-sn" type="text" value={msgSn} required maxLength={256}
+        <input id="institution-msg-sn" aria-label="msgSn" type="text" value={msgSn} required maxLength={256}
           spellCheck={false} autoComplete="off" placeholder="请输入报文编号"
           onChange={e=>{setMsgSn(e.target.value);setNotice('');}}/>
 
         <label htmlFor="institution-account">账号 <span className="institution-required">*</span></label>
-        <input id="institution-account" type="text" value={account} required maxLength={128}
+        <input id="institution-account" aria-label="账号" type="text" value={account} required maxLength={128}
           spellCheck={false} autoComplete="off" placeholder="请输入账号"
           onChange={e=>{setAccount(e.target.value);setNotice('');}}/>
 
         <label htmlFor="institution-password">密码 <span className="institution-required">*</span></label>
         <div className="institution-secret">
-          <input id="institution-password" type={passwordVisible?'text':'password'} value={password}
+          <input id="institution-password" aria-label="密码" type={passwordVisible?'text':'password'} value={password}
             required maxLength={256} autoComplete="off" placeholder="请输入密码"
             onChange={e=>{setPassword(e.target.value);setNotice('');}}/>
           <button type="button" aria-label={passwordVisible?'隐藏密码':'显示密码'}
@@ -85,7 +85,7 @@ export function InstitutionMessageInvestigation(){
         </div>
 
         <label htmlFor="institution-code">验证码 <span className="institution-required">*</span></label>
-        <input id="institution-code" type="password" value={verificationCode}
+        <input id="institution-code" aria-label="验证码" type="password" value={verificationCode}
           required maxLength={64} autoComplete="off" placeholder="请输入验证码"
           onChange={e=>{setVerificationCode(e.target.value);setNotice('');}}/>
 
