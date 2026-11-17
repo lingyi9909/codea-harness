@@ -33,6 +33,10 @@ export class MysqlIdentityStore implements IdentityStore {
     }
     return {id,name,phone,status:'ACTIVE'};
   }
+  async profile(ownerId:string):Promise<Identity|undefined>{
+    const [rows]=await this.pool.execute<RowDataPacket[]>('SELECT owner_id,username,phone_normalized,status FROM wh_user_profiles WHERE owner_id=?',[ownerId]);
+    return rows[0]?identity(rows[0]):undefined;
+  }
   async issue(ownerId:string,tokenDigest:string,csrfDigest:string,expires:number){
     await this.pool.execute('INSERT INTO wh_web_sessions(id,owner_id,token_digest,csrf_digest,expires_at,created_at) VALUES (?,?,?,?,?,UTC_TIMESTAMP(3))',
       [randomUUID(),ownerId,tokenDigest,csrfDigest,date(expires)]);
