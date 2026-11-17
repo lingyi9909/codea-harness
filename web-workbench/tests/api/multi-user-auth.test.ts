@@ -13,7 +13,7 @@ class MemoryIdentityStore implements IdentityStore {
   async revoke(digest:string){this.sessions.delete(digest);}
 }
 const origin='https://workbench.example';
-function request(cookie?:string,csrf?:string){return {ip:'127.0.0.1',headers:{host:'workbench.example',origin,cookie,'x-csrf-token':csrf}} as FastifyRequest;}
+function request(cookie?:string,csrf?:string){return {ip:'127.0.0.1',headers:{host:'workbench.example',origin,cookie,'x-csrf-token':csrf}} as unknown as FastifyRequest;}
 function reply(){const headers=new Map<string,string>();return {headers,value:{header:(k:string,v:string)=>{headers.set(k,v);}} as FastifyReply};}
 test('T1: three simultaneous users, stable identities, restart, CSRF and independent logout',async()=>{
   const store=new MemoryIdentityStore(),auth=new MultiUserAuth(store,origin);

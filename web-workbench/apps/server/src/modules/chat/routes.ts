@@ -1,3 +1,6 @@
+import {MultiUserAuth} from '../../multi-user-auth.ts';
+import {requireChatBinding,matchNativeBinding} from '../../owned-chat.ts';
+import type {ChatBindingStore} from '../../../../../packages/storage/src/chat-bindings.ts';
 import {activity,activityPreview,assistantFooters} from './activity.ts';
 import {chatConnection} from './connection.ts';
 import { mkdir,realpath,stat } from 'node:fs/promises';
@@ -7,9 +10,9 @@ import { delimiter,isAbsolute,relative,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type {FormInfo,FormField} from '@opencode/client';
 import {activeFormFields,matchesFormCondition,formDefaults,type ChatForm,type ChatFormField,type FormAnswers,type FormValue} from '../../../../../packages/contracts/src/chat.ts';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance,FastifyRequest } from 'fastify';
 import type { ChatMessage,ChatStatus,ChatModel,ChatFragment,ChatHistoryPage,ChatScenario } from '../../../../../packages/contracts/src/chat.ts';
-import { AuthProblem,type LocalAuth } from '../../auth.ts';
+import { AuthProblem,type RequestAuth } from '../../auth.ts';
 import { SceneConfigStore,type SceneKey,type Binding } from '../../scene-config.ts';
 
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
@@ -129,48 +132,54 @@ export async function resolveLocalWorkspace(input?:string){
   return workspace;
 }
 const sceneKey=(s:ChatScenario):SceneKey|undefined=>s==='log-inspection'?'logs':s==='message-inspection'?'message':s==='data-analysis'?'data':undefined;
-export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore}){
-  const client=chatConnection(options.mayStart??false);
+export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:{mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore;bindings?:ChatBindingStore;serviceIdentity?:string}){
+  const localClient=chatConnection(options.mayStart??false);
+  const client=localClient;
+  const serviceIdentity=()=>options.serviceIdentity??'local';
   const configured=configuredRoots(),workspace=options.workspace,sceneConfig=options.sceneConfig;
+  const effective=(path:string)=>path;
+  const currentWorkspace=()=>workspace?effective(workspace):undefined;
   const roots=workspace?[workspace]:configured.length?configured:[defaultDirectory];
   async function directory(input:string){
     if(!isAbsolute(input))throw new AuthProblem(400,'ABSOLUTE_DIRECTORY_REQUIRED');
-    const path=await realpath(input).catch(()=>null);
+    const path=await realpath(effective(input)).catch(()=>null);
     if(!path||!(await stat(path)).isDirectory())throw new AuthProblem(400,'DIRECTORY_NOT_FOUND');
     if(workspace){
-      if(relative(workspace,path)==='')return workspace;
+      if(relative(currentWorkspace()!,path)==='')return currentWorkspace()!;
       // Only a directory explicitly bound by startup-workspace configuration is available.
       const bindings=sceneConfig?.read().config.scenes??{};
       for(const binding of Object.values(bindings)){
         if(!binding)continue;
-        const permitted=await realpath(binding.directory).catch(()=>null);
+        const permitted=await realpath(effective(binding.directory)).catch(()=>null);
         if(permitted===path)return path;
       }
       throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
     }
     if(!configured.length&&options.mayStart)return path;
     for(const root of roots){
-      const canonical=await realpath(root).catch(()=>null);
+      const canonical=await realpath(effective(root)).catch(()=>null);
       if(canonical&&within(canonical,path))return path;
     }
     throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
   }
   async function owned(id:string,owner:string){
     if(!/^[\w-]{1,128}$/.test(id))throw new AuthProblem(400,'INVALID_SESSION');
+    const binding=options.bindings?await requireChatBinding(options.bindings,serviceIdentity(),id,owner):undefined;
     const session=await (await client()).session.get({sessionID:id}).catch((error:unknown)=>{
       const problem=upstreamProblem(error);
       if(problem instanceof AuthProblem&&problem.code==='OPENCODE_HTTP_404')throw new AuthProblem(404,'CHAT_NOT_FOUND');
       throw error;
     });
+    if(binding)matchNativeBinding(binding,session);
     const kind=session.metadata?.harnessScenario as ChatScenario|undefined;
     if(session.id!==id||!kind||!['direct-chat','log-inspection','message-inspection','data-analysis'].includes(kind)||session.metadata?.harnessOwner!==owner)
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
     const activeDirectory=await directory(session.location.directory);
-    if(kind==='direct-chat'&&workspace&&activeDirectory!==workspace)
+    if(kind==='direct-chat'&&workspace&&activeDirectory!==currentWorkspace())
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
     if(sceneConfig&&sceneKey(kind)){
       const binding=await sceneConfig.binding(sceneKey(kind)!);
-      if(binding.directory!==session.location.directory)throw new AuthProblem(409,'SCENE_DIRECTORY_CHANGED');
+      if(effective(binding.directory)!==session.location.directory)throw new AuthProblem(409,'SCENE_DIRECTORY_CHANGED');
     }
     return session;
   }
@@ -186,7 +195,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     }
   }
   app.get('/api/v1/chat/settings',async(req)=>{
-    auth.session(req);return wrap({configured:true,directories:roots});
+    await auth.session(req);return wrap({configured:true,directories:roots.map(effective)});
   });
   async function project(input?:string){
     if(!workspace&&!configured.length&&(!input||input===roots[0]))await mkdir(roots[0],{recursive:true});
@@ -196,11 +205,11 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     const key=sceneKey(kind);
     if(key&&sceneConfig){
       const binding=await sceneConfig.binding(key);
-      if(input&&await directory(input)!==binding.directory)throw new AuthProblem(403,'SCENE_DIRECTORY_MISMATCH');
-      return binding.directory;
+      if(input&&await directory(input)!==effective(binding.directory))throw new AuthProblem(403,'SCENE_DIRECTORY_MISMATCH');
+      return directory(binding.directory);
     }
     const resolved=await project(input);
-    if(kind==='direct-chat'&&workspace&&resolved!==workspace)
+    if(kind==='direct-chat'&&workspace&&resolved!==currentWorkspace())
       throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
     return resolved;
   }
@@ -249,12 +258,12 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   }
   type ProjectInput={Body:{directory?:string}};
   if(!workspace)app.post<ProjectInput>('/api/v1/chat/project',{schema:body({directory:property(4096)})},async req=>{
-    auth.mutation(req);return wrap({directory:await project(req.body.directory)});
+    await auth.mutation(req);return wrap({directory:await project(req.body.directory)});
   });
   app.post<{Body:{directory?:string;scenario:ChatScenario;cursor?:string}}>('/api/v1/chat/history',{schema:body({
     directory:property(4096),scenario:{enum:['log-inspection','message-inspection','data-analysis','direct-chat']},cursor:property(4096),
   },['scenario'])},async(req,reply)=>{
-    const {ownerId}=auth.mutation(req);
+    const {ownerId}=await auth.mutation(req);
     const {directory:input,scenario,cursor}=req.body;
     const dir=await sceneDirectory(scenario,input);
     const page=await (await client()).session.list({directory:dir,order:'desc',limit:50,cursor});
@@ -263,6 +272,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       if(session.parentID||session.metadata?.harnessOwner!==ownerId||session.metadata.harnessScenario!==scenario)continue;
       const location=session.location?.directory;
       if(!location||!isAbsolute(location)||relative(dir,location)!==''||!session.id)continue;
+      if(options.bindings){const binding=await options.bindings.get(serviceIdentity(),session.id,ownerId);if(!binding)continue;try{matchNativeBinding(binding,session);}catch{continue;}}
       items.push({id:session.id,title:session.title??'',updated:session.time.updated});
     }
     return reply.header('Cache-Control','no-store').send(wrap({items,next:page.cursor?.next??undefined}));
@@ -272,7 +282,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   app.patch<{Params:Params;Body:{title:string}}>('/api/v1/chat/sessions/:id',{schema:body({
     title:{type:'string',minLength:1,maxLength:120},
   })},async(req,reply)=>{
-    const {ownerId}=auth.mutation(req),id=req.params.id;
+    const {ownerId}=await auth.mutation(req),id=req.params.id;
     await owned(id,ownerId);
     const title=req.body.title.trim();
     if(!title||Array.from(title).length>120)throw new AuthProblem(400,'CHAT_TITLE_INVALID');
@@ -280,15 +290,16 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     return reply.header('Cache-Control','no-store').send(wrap({id,title}));
   });
   app.delete<{Params:Params}>('/api/v1/chat/sessions/:id',async(req,reply)=>{
-    const {ownerId}=auth.mutation(req),id=req.params.id;
+    const {ownerId}=await auth.mutation(req),id=req.params.id;
     await owned(id,ownerId);
     const running=await (await client()).session.active();
     if(running[id])throw new AuthProblem(409,'CHAT_SESSION_ACTIVE');
     await (await client()).session.remove({sessionID:id});
+    await options.bindings?.remove(serviceIdentity(),id,ownerId);
     return reply.header('Cache-Control','no-store').send(wrap({id,deleted:true}));
   });
   app.post<ProjectInput>('/api/v1/chat/models',async req=>{
-    auth.mutation(req);
+    await auth.mutation(req);
     const input=req.body?.directory;
     if(input!==undefined&&(typeof input!=='string'||input.length>4096))throw new AuthProblem(400,'INVALID_DIRECTORY');
     return wrap(await models(await project(input)));
@@ -303,7 +314,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   app.post<{Body:{directory?:string;model?:Selection;title?:string;scenario?:ChatScenario}}>('/api/v1/chat/sessions',{schema:body({
     directory:property(4096),title:property(120),scenario:{enum:['log-inspection','message-inspection','data-analysis','direct-chat']},model:{type:'object',additionalProperties:false,required:['providerID','id'],
       properties:modelFields}},[])},async(req,reply)=>{
-    const {ownerId}=auth.mutation(req);
+    const {ownerId}=await auth.mutation(req);
     const scenario=req.body?.scenario??'direct-chat';
     const dir=await sceneDirectory(scenario,req.body?.directory),model=req.body?.model;
     if(model)await validateModel(dir,model);
@@ -321,12 +332,16 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
       });
     if(!session?.id||typeof session.location?.directory!=='string')throw new AuthProblem(502,'OPENCODE_SESSION_RESPONSE');
     if(resolve(session.location.directory)!==dir)throw new AuthProblem(409,'SESSION_DIRECTORY_CHANGED');
+    if(options.bindings){
+      try{await options.bindings.create({serviceIdentity:serviceIdentity(),id:session.id,ownerId,scenario,directory:dir});}
+      catch(error){await (await client()).session.remove({sessionID:session.id}).catch(()=>{});throw error;}
+    }
     return reply.code(201).send(wrap({id:session.id,directory:dir,title:session.title||title}));
   });
   const streams=new Set<AbortController>();
   app.addHook('preClose',async()=>{for(const stop of streams)stop.abort();});
   app.get<{Params:Params}>('/api/v1/chat/sessions/:id/activity',async(req,reply)=>{
-    const session=auth.session(req),sessionID=req.params.id;
+    const session=await auth.session(req),sessionID=req.params.id;
     await owned(sessionID,session.ownerId);
     const native=await client();
     const stop=new AbortController(),raw=reply.raw;
@@ -335,7 +350,8 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     raw.write('retry: 5000\n\n');
     streams.add(stop);raw.once('close',()=>stop.abort());
     const expiry=setTimeout(()=>stop.abort(),Math.max(1,session.expires-Date.now()));
-    const heartbeat=setInterval(()=>{if(!raw.write(': heartbeat\n\n'))stop.abort();},15000);
+    const unsubscribe=auth instanceof MultiUserAuth?auth.onRevoke(req,()=>stop.abort()):()=>{};
+    const heartbeat=setInterval(()=>{void Promise.resolve().then(()=>auth.session(req)).then(()=>{if(!raw.write(': heartbeat\n\n'))stop.abort();},()=>stop.abort());},15000);
     try{
       let ready=false;
       const signalReady=()=>{
@@ -350,7 +366,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
         const eventSession=event.type==='form.created'?event.data.form.sessionID:
           'sessionID' in event.data?event.data.sessionID:undefined;
         if(eventSession!==sessionID)continue;
-        if(auth.session(req).csrf!==session.csrf)break;
+        if((await auth.session(req)).csrf!==session.csrf)break;
         let frame:string;
         switch(event.type){
           case 'session.text.started':case 'session.text.delta':case 'session.text.ended':
@@ -379,14 +395,14 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
         if(!raw.write(frame+'\n\n'))await once(raw,'drain',{signal:stop.signal});
       }
     }catch{/* The message snapshot remains available if native event streaming is unavailable. */}
-    finally{streams.delete(stop);stop.abort();clearInterval(heartbeat);clearTimeout(expiry);if(!raw.destroyed)raw.end();}
+    finally{unsubscribe();streams.delete(stop);stop.abort();clearInterval(heartbeat);clearTimeout(expiry);if(!raw.destroyed)raw.end();}
   });
   app.get<{Params:Params;Querystring:{message?:string;part?:number}}>('/api/v1/chat/sessions/:id',{
     schema:{querystring:{type:'object',additionalProperties:false,properties:{
       message:property(160),part:{type:'integer',minimum:0}}}}
   },async(req,reply)=>{
     reply.header('Cache-Control','no-store');
-    const {ownerId}=auth.session(req),sessionID=req.params.id;
+    const {ownerId}=await auth.session(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId);
     const [page,permissions,running,inbox,forms]=await Promise.all([(await client()).message.list({sessionID,order:'desc',limit:100}),
       (await client()).permission.list({sessionID}),(await client()).session.active(),(await client()).session.inbox.list({sessionID}),pendingForms(sessionID)]);
@@ -412,7 +428,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   });
   app.post<{Params:Params;Body:Selection}>('/api/v1/chat/sessions/:id/model',{
     schema:body(modelFields,['providerID','id'])},async(req)=>{
-    const {ownerId}=auth.mutation(req),sessionID=req.params.id;
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId),model=req.body;
     await validateModel(session.location.directory,model);
     await (await client()).session.switchModel({sessionID,model});
@@ -420,7 +436,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   });
   app.post<{Params:Params;Body:{text:string;files?:string[];scenario?:ChatScenario}}>('/api/v1/chat/sessions/:id/messages',{
     bodyLimit:128*1024,schema:body({text:property(16000),scenario:{enum:['direct-chat','log-inspection','message-inspection','data-analysis']},files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
-    const {ownerId}=auth.mutation(req),sessionID=req.params.id;
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
     const session=await owned(sessionID,ownerId);
     const scenario=session.metadata?.harnessScenario;
     if(req.body.scenario&&req.body.scenario!==scenario)throw new AuthProblem(409,'CHAT_SCENARIO_MISMATCH');
@@ -464,7 +480,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   app.post<{Params:Params;Body:{message:string;ordinal:number}}>('/api/v1/chat/sessions/:id/reasoning/translation',{
     schema:body({message:property(160),ordinal:{type:'integer',minimum:0}}),
   },async(req,reply)=>{
-    const {ownerId}=auth.mutation(req),sessionID=req.params.id;
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
     await owned(sessionID,ownerId);
     const native=await client();
     const message=await native.session.message.get({sessionID,messageID:req.body.message}).catch((error:unknown)=>{
@@ -485,7 +501,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   app.post<{Params:Params;Body:{requestId:string;revision:string;decision:'cancel'|'reply';answer?:FormAnswers}}>('/api/v1/chat/sessions/:id/form',{
     schema:body({requestId:property(128),revision:property(64),decision:{enum:['cancel','reply']},answer:{type:'object',additionalProperties:true}},['requestId','revision','decision'])
   },async req=>{
-    const {ownerId}=auth.mutation(req),sessionID=req.params.id;
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
     await owned(sessionID,ownerId);
     const form=(await pendingForms(sessionID)).find(f=>f.id===req.body.requestId);
     if(!form||form.revision!==req.body.revision)throw new AuthProblem(409,'FORM_CHANGED');
@@ -506,7 +522,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   });
   app.post<{Params:Params;Body:{requestId:string;decision:'once'|'reject';revision:string}}>('/api/v1/chat/sessions/:id/permission',{
     schema:body({requestId:property(128),decision:{enum:['once','reject']},revision:property(64)})},async(req)=>{
-    const {ownerId}=auth.mutation(req),sessionID=req.params.id;
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
     await owned(sessionID,ownerId);
     const pending=await (await client()).permission.list({sessionID});
     const request=pending.find(p=>p.sessionID===sessionID&&p.id===req.body.requestId);
@@ -515,7 +531,7 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     return wrap({submitted:true});
   });
   app.post<{Params:Params}>('/api/v1/chat/sessions/:id/interrupt',async(req)=>{
-    const {ownerId}=auth.mutation(req),sessionID=req.params.id;
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
     await owned(sessionID,ownerId);return wrap(await (await client()).session.interrupt({sessionID}));
   });
 }

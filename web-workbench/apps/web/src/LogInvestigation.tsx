@@ -1,3 +1,4 @@
+import {sessionStorage} from './userStorage.ts';
 import {useState} from 'react';
 import {DirectChat} from './DirectChat.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';

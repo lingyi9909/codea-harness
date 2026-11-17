@@ -1,3 +1,4 @@
+import {configureUserStorage,resetUserStorage} from '../userStorage.ts';
 import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
@@ -84,19 +85,22 @@ export class HarnessApi {
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() {
-    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').finally(()=>{this.connecting=undefined;});
+    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
   async login(name:string,phone:string) {
     const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
       method:'POST',body:JSON.stringify({name,phone}),
     });
+    configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
     this.setCsrf(session.csrfToken);
+    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
     return session;
   }
   async logout() {
     await this.request<void>('/auth/session',{method:'DELETE'});
-    this.setCsrf('');
+    this.setCsrf('');resetUserStorage();
+    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
   }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }

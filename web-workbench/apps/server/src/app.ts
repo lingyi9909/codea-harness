@@ -1,3 +1,5 @@
+import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
+import { MultiUserAuth } from './multi-user-auth.ts';
 import { parseProfile, profileKey, WorkspaceProfile } from './local-profile.ts';
 import { registerChat, resolveLocalWorkspace } from './modules/chat/routes.ts';
 import { SceneConfigStore, SCENE_CONFIG_PATH, SCENE_ACCESS_PATH } from './scene-config.ts';
@@ -23,16 +25,16 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
-  const enabled=Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
+  const enabled=!(opts.auth instanceof MultiUserAuth)&&Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
     evaluateCapabilities().capabilities.filter(c=>c.required).every(c=>
       capabilities.some(ob=>ob.name===c.name&&ob.status==='SUPPORTED')));
   const capability={ready:enabled,capabilities};
   const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
   if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false});
-  if(opts.native && opts.pool && enabled){
+  if(!(opts.auth instanceof MultiUserAuth) && opts.native && opts.pool && enabled){
     const stop=new AbortController();
     const config={...opts.native,pool:opts.pool,signal:stop.signal};
     let worker:Promise<void>|undefined;
@@ -46,8 +48,8 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     });
     app.addHook('onClose',async()=>{stop.abort();await worker;});
   }
-  const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>>=>({
-    owner,csrfToken:csrf,
+  const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>&{identityMode:'local'|'multi-user'}>=>({
+    owner,csrfToken:csrf,identityMode:opts.auth instanceof MultiUserAuth?'multi-user':'local',
     scenarios:[{id:'direct-chat',name:'直接对话',enabled:true,reason:null},{id:'log-inspection',name:'问题排查',enabled:true,reason:null},
       {id:'data-analysis',name:'数据分析',enabled:true,reason:null},{id:'code-review',name:'Codea Review',enabled:capability.ready,
       reason:capability.ready?null:'OpenCode native capabilities require target-environment validation'}],
@@ -70,27 +72,42 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     };
     return reply.status(health.status==='READY'?200:503).send(result(health));
   });
+  const multi=opts.auth instanceof MultiUserAuth;
+  if(multi&&!opts.pool)throw new Error('MULTI_USER_MYSQL_REQUIRED');
+  app.addHook('onRequest',async(req,reply)=>{if(req.url.startsWith('/api/'))reply.header('Cache-Control','no-store');});
   const localSession=opts.localOnly===true&&!opts.pool;
   const workspace=opts.workspace?await resolveLocalWorkspace(opts.workspace):localSession?await resolveLocalWorkspace():undefined;
   const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
   await sceneConfig?.initialize();
-  if(workspace&&localSession){
+  if(multi){
+    const auth=opts.auth as MultiUserAuth;
+    app.post('/api/v1/auth/login',async(req,reply)=>{
+      const session=await auth.login(req,reply,req.body);
+      return result(await makeBootstrap(session.csrf,{id:session.ownerId,name:session.profile!.name}));
+    });
+    // Existing login page keeps its two fields; server mode uses the same UI.
+    app.post('/api/v1/auth/local-session',async(req,reply)=>{
+      const body=req.body as {name?:unknown;phone?:unknown}|undefined;
+      const session=await auth.login(req,reply,{username:body?.name,phone:body?.phone});
+      return result(await makeBootstrap(session.csrf,{id:session.ownerId,name:session.profile!.name}));
+    });
+  }else if(workspace&&localSession){
     const store=new WorkspaceProfile(workspace);
     app.addHook('onRequest',async(req,reply)=>{
       const route=req.routeOptions.url;
       if(!route?.startsWith('/api/v1/')||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
         (route==='/api/v1/auth/session'&&req.method==='DELETE'))return;
       let session;
-      try{session=opts.auth.session(req);}catch(e){
+      try{session=await opts.auth.session(req);}catch(e){
         if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
       }
       if(!session?.profile||!store.matches(session.profile.key))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
       reply.header('Cache-Control','no-store');
     });
     app.post('/api/v1/auth/local-session',async(req,reply)=>{
-      opts.auth.requireLocalOrigin(req);
+      (opts.auth as LocalAuth).requireLocalOrigin(req);
       const profile=parseProfile(req.body);
-      const session=opts.auth.openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
+      const session=(opts.auth as LocalAuth).openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
       return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,{id:session.ownerId,name:profile.name})));
     });
   }else app.post<{Body:{pairingCode:string}}>('/api/v1/auth/session',{schema:{
@@ -98,15 +115,15 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
       properties:{pairingCode:{type:'string',minLength:1,maxLength:256}}},
   }},async(req,reply)=>{
     const owner=opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:'Local Developer'};
-    const session=opts.auth.pair(req,reply,req.body.pairingCode,owner.id);
+    const session=(opts.auth as LocalAuth).pair(req,reply,req.body.pairingCode,owner.id);
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
   app.delete('/api/v1/auth/session',async(req,reply)=>{
-    opts.auth.logout(req,reply);return reply.status(204).send();
+    await opts.auth.logout(req,reply);return reply.status(204).send();
   });
   app.get('/api/v1/bootstrap',async(req,reply)=>{
-    const session=opts.auth.session(req);
-    const owner=opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:session.profile?.name??'Local Developer'};
+    const session=await Promise.resolve().then(()=>opts.auth.session(req)).catch(error=>{if(multi&&error instanceof AuthProblem&&error.code==='AUTH_REQUIRED')throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');throw error;});
+    const owner=multi?{id:session.ownerId,name:session.profile!.name}:opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:session.profile?.name??'Local Developer'};
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
@@ -115,10 +132,10 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     // Pairing-code sessions have no verified username and remain read-only.
     const editorUsername=(session:{profile?:{name:string}})=>session.profile?.name??null;
     app.get('/api/v1/scene-config',async(req,reply)=>{
-      const session=opts.auth.session(req),username=editorUsername(session);
+      const session=await opts.auth.session(req),username=editorUsername(session);
       return reply.header('Cache-Control','no-store').send(result({
         workspace,configPath:join(workspace!,SCENE_CONFIG_PATH),accessPath:join(workspace!,SCENE_ACCESS_PATH),
-        ...sceneConfig.read(),canEdit:sceneConfig.canEdit(username??undefined),
+        ...sceneConfig.read(),canEdit:!multi&&sceneConfig.canEdit(username??undefined),
         username,
       }));
     });
@@ -126,16 +143,17 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
       schema:{body:{type:'object',additionalProperties:false,required:['config','revision'],properties:{
         config:{type:'object'},revision:{type:'string',minLength:64,maxLength:64}}}},
     },async(req,reply)=>{
-      const session=opts.auth.mutation(req);
-      if(!sceneConfig.canEdit(editorUsername(session)??undefined))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
+      const session=await opts.auth.mutation(req);
+      if(multi||!sceneConfig.canEdit(editorUsername(session)??undefined))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
       const saved=await sceneConfig.save(req.body.config,req.body.revision);
       return reply.header('Cache-Control','no-store').send(result({...saved,canEdit:true}));
     });
   }
-  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig});
+  if(multi)app.addHook('onRequest',async req=>{if(req.url.startsWith('/api/v1/chat/'))throw new AuthProblem(503,'EXECUTION_NOT_PROVISIONED');});
+  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig,...(multi?{bindings:new MysqlChatBindings(opts.pool!),serviceIdentity:'MULTI_EXECUTION_PENDING'}:{})});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
-      opts.auth.session(req);return result({items:[],nextCursor:null});
+      await opts.auth.session(req);return result({items:[],nextCursor:null});
     });
     return app;
   }

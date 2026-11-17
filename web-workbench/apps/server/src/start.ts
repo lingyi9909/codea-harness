@@ -1,3 +1,5 @@
+import { MultiUserAuth } from './multi-user-auth.ts';
+import { MysqlIdentityStore } from '../../../packages/storage/src/identity.ts';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -8,7 +10,8 @@ import { runtimeConfig } from './config.ts';
 import { LocalAuth } from './auth.ts';
 import { createApp } from './app.ts';
 
-export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal'>,localOnly=false,workspace?:string){
+export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal'>,localOnly=false,workspace?:string,multiUser=false){
+  if(localOnly&&multiUser)throw new Error('INCOMPATIBLE_RUN_MODES');
   if(!workspace?.trim())throw new Error('STARTUP_WORKSPACE_REQUIRED: specify --workspace with an existing absolute directory.');
   if(localOnly&&!existsSync(fileURLToPath(new URL('../../web/dist/index.html',import.meta.url))))
     throw new Error('FRONTEND_BUILD_MISSING: run npm run web:build from web-workbench before starting the local app.');
@@ -17,18 +20,18 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   const pool=config.mysql?await createPool(config.mysql):undefined;
   const pairingCode=randomBytes(32).toString('base64url');
   const printCode=(code:string)=>process.stdout.write('智能工作台本地配对码（5 分钟内有效，仅可使用一次）：'+code+'\n');
-  const auth=new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode);
+  const auth=multiUser?new MultiUserAuth(new MysqlIdentityStore(pool!),process.env.HARNESS_PUBLIC_ORIGIN??''):new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode);
   const app=await createApp({pool,auth,native,localOnly,workspace,autoOpenCode:localOnly});
   const shutdown=async()=>{await app.close();await pool?.end();};
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
   await app.listen({host:'127.0.0.1',port:config.port});
-  if(!localOnly)printCode(pairingCode);
+  if(!localOnly&&!multiUser)printCode(pairingCode);
   process.stdout.write('Local API: http://127.0.0.1:'+config.port+'\n');
 }
 async function main(){
-  const {values}=parseArgs({options:{'local-only':{type:'boolean'},workspace:{type:'string'}}});
-  await startWorkbench(undefined,values['local-only'],values.workspace);
+  const {values}=parseArgs({options:{'local-only':{type:'boolean'},'multi-user':{type:'boolean'},workspace:{type:'string'}}});
+  await startWorkbench(undefined,values['local-only'],values.workspace,values['multi-user']);
 }
 if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url)
   main().catch(e=>{console.error('Server startup blocked:',e instanceof Error?e.message:'UNKNOWN');process.exitCode=2});

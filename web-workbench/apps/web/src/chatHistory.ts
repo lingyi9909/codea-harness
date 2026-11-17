@@ -1,3 +1,4 @@
+import {sessionStorage} from './userStorage.ts';
 import type {ChatHistoryPage} from '../../../packages/contracts/src/chat.ts';
 
 export type HistoryRow=ChatHistoryPage['items'][number];
