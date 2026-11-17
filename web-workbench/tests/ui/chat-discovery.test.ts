@@ -405,6 +405,14 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByLabel('开始日期')).toHaveCount(0);
     await expect(page.getByLabel('结束日期')).toHaveCount(0);
     await expect(page.locator('.range-footer')).toContainText('已选择 2026/11/11 全天');
+    await page.getByLabel('msgSn',{exact:true}).fill('000123');
+    await expect(submit).toBeEnabled();
+    await page.getByLabel('查询日期').fill('');
+    await expect(submit).toBeDisabled();
+    await expect(page.locator('.range-footer')).toContainText('请填写完整');
+    await page.getByLabel('查询日期').fill('2026-11-11');
+    await expect(submit).toBeEnabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('');
     await page.getByRole('button',{name:'自定义范围'}).click();
     await expect(page.getByLabel('开始日期')).toHaveValue('2026-11-11');
     await expect(page.getByLabel('结束日期')).toHaveValue('2026-11-12');

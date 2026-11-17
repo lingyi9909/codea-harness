@@ -137,7 +137,9 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   function selectDay(value:string){
     setDay(value);
     const selected=wholeDay(value);
-    if(selected)setRange(selected);
+    // An emptied/invalid calendar selection must never reuse the previously
+    // valid day when the user presses "开始排查".
+    setRange(selected??{start:'',end:'',from:NaN,to:NaN,preset:'day'});
   }
   function beginDayMode(){
     const selected=wholeDay(day);
@@ -207,7 +209,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       {range.preset==='day'?<div className="range-day-mode">
         <label>查询日期<input aria-label="查询日期" type="date" value={day} onChange={e=>selectDay(e.target.value)}/></label>
         <div className="range-day-summary" role="status">
-          <strong>{day.replaceAll('-','/')} · 全天</strong>
+          <strong>{day?day.replaceAll('-','/')+' · 全天':'请选择查询日期'}</strong>
           <span>00:00:00 — 23:59:59</span>
           <small>包含当天所有秒</small>
         </div>
