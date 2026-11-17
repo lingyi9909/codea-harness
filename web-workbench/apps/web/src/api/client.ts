@@ -67,6 +67,14 @@ export class HarnessApi {
   chat(id:string){
     return this.request<ChatStatus>('/chat/sessions/'+encodeURIComponent(id));
   }
+  renameChat(id:string,title:string){
+    return this.request<{id:string;title:string}>('/chat/sessions/'+encodeURIComponent(id),{
+      method:'PATCH',body:JSON.stringify({title}),
+    });
+  }
+  deleteChat(id:string){
+    return this.request<{id:string;deleted:true}>('/chat/sessions/'+encodeURIComponent(id),{method:'DELETE'});
+  }
   translateReasoning(id:string,message:string,ordinal:number){
     return this.request<{text:string}>('/chat/sessions/'+encodeURIComponent(id)+'/reasoning/translation',{
       method:'POST',body:JSON.stringify({message,ordinal}),

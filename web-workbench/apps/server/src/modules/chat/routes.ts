@@ -263,6 +263,26 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
     }
     return reply.header('Cache-Control','no-store').send(wrap({items,next:page.cursor?.next??undefined}));
   });
+  // Manage the actual OpenCode session, not merely a browser-local history entry.
+  // owned() enforces the authenticated user, scenario and bound directory.
+  app.patch<{Params:Params;Body:{title:string}}>('/api/v1/chat/sessions/:id',{schema:body({
+    title:{type:'string',minLength:1,maxLength:120},
+  })},async(req,reply)=>{
+    const {ownerId}=auth.mutation(req),id=req.params.id;
+    await owned(id,ownerId);
+    const title=req.body.title.trim();
+    if(!title||Array.from(title).length>120)throw new AuthProblem(400,'CHAT_TITLE_INVALID');
+    await (await client()).session.update({sessionID:id,title});
+    return reply.header('Cache-Control','no-store').send(wrap({id,title}));
+  });
+  app.delete<{Params:Params}>('/api/v1/chat/sessions/:id',async(req,reply)=>{
+    const {ownerId}=auth.mutation(req),id=req.params.id;
+    await owned(id,ownerId);
+    const running=await (await client()).session.active();
+    if(running[id])throw new AuthProblem(409,'CHAT_SESSION_ACTIVE');
+    await (await client()).session.remove({sessionID:id});
+    return reply.header('Cache-Control','no-store').send(wrap({id,deleted:true}));
+  });
   app.post<ProjectInput>('/api/v1/chat/models',async req=>{
     auth.mutation(req);
     const input=req.body?.directory;
