@@ -157,7 +157,11 @@ export async function registerChat(app:FastifyInstance,auth:LocalAuth,options:{m
   }
   async function owned(id:string,owner:string){
     if(!/^[\w-]{1,128}$/.test(id))throw new AuthProblem(400,'INVALID_SESSION');
-    const session=await (await client()).session.get({sessionID:id});
+    const session=await (await client()).session.get({sessionID:id}).catch((error:unknown)=>{
+      const problem=upstreamProblem(error);
+      if(problem instanceof AuthProblem&&problem.code==='OPENCODE_HTTP_404')throw new AuthProblem(404,'CHAT_NOT_FOUND');
+      throw error;
+    });
     const kind=session.metadata?.harnessScenario as ChatScenario|undefined;
     if(session.id!==id||!kind||!['direct-chat','log-inspection','message-inspection','data-analysis'].includes(kind)||session.metadata?.harnessOwner!==owner)
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
