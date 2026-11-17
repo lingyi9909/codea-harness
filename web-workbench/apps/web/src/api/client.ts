@@ -55,6 +55,8 @@ export class HarnessApi {
     const body = await response.json() as { data?: Schema<'Bootstrap'>; error?: { message?: string } };
     if (!response.ok || !body.data) throw new ApiError(response.status, 'PAIRING_FAILED',
       body.error?.message ?? '配对失败，请检查一次性配对码');
+    configureUserStorage(body.data.owner.id,(body.data as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
+    this.businessVerificationEnabled=(body.data as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     this.setCsrf(body.data.csrfToken);
     return body.data;
   }
