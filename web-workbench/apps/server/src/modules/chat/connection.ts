@@ -8,11 +8,11 @@ import {Service,type Endpoint} from '@opencode/client/service';
 import {AuthProblem} from '../../auth.ts';
 
 const local=(host:string)=>['127.0.0.1','localhost','[::1]'].includes(host);
-export function chatConnection(mayStart:boolean){
+export function chatConnection(mayStart:boolean,isolated?:{url:string;authorization:string}){
   let cached:ReturnType<typeof connect>|undefined,expires=0;
   async function connect(){
-    let endpoint=process.env.HARNESS_OPENCODE_URL;
-    let authorization=process.env.HARNESS_OPENCODE_AUTHORIZATION;
+    let endpoint=isolated?.url??process.env.HARNESS_OPENCODE_URL;
+    let authorization=isolated?.authorization??process.env.HARNESS_OPENCODE_AUTHORIZATION;
     if(!endpoint){
       const file=process.env.HARNESS_OPENCODE_SERVICE_FILE??join(process.env.XDG_STATE_HOME??join(homedir(),'.local','state'),'opencode','service.json');
       const options={file};

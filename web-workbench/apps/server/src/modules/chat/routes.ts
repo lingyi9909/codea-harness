@@ -1,3 +1,4 @@
+import type {ExecutionRegistry} from '../../execution-registry.ts';
 import {MultiUserAuth} from '../../multi-user-auth.ts';
 import {requireChatBinding,matchNativeBinding} from '../../owned-chat.ts';
 import type {ChatBindingStore} from '../../../../../packages/storage/src/chat-bindings.ts';
@@ -132,12 +133,12 @@ export async function resolveLocalWorkspace(input?:string){
   return workspace;
 }
 const sceneKey=(s:ChatScenario):SceneKey|undefined=>s==='log-inspection'?'logs':s==='message-inspection'?'message':s==='data-analysis'?'data':undefined;
-export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:{mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore;bindings?:ChatBindingStore;serviceIdentity?:string}){
+export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:{mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore;bindings?:ChatBindingStore;execution?:ExecutionRegistry;multiUser?:boolean}){
   const localClient=chatConnection(options.mayStart??false);
-  const client=localClient;
-  const serviceIdentity=()=>options.serviceIdentity??'local';
+  const client=()=>options.multiUser?options.execution!.client():localClient();
+  const serviceIdentity=()=>options.execution?.serviceIdentity()??'local';
   const configured=configuredRoots(),workspace=options.workspace,sceneConfig=options.sceneConfig;
-  const effective=(path:string)=>path;
+  const effective=(path:string)=>options.execution?.directory(path)??path;
   const currentWorkspace=()=>workspace?effective(workspace):undefined;
   const roots=workspace?[workspace]:configured.length?configured:[defaultDirectory];
   async function directory(input:string){

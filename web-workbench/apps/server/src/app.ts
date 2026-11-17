@@ -1,3 +1,4 @@
+import type {ExecutionRegistry} from './execution-registry.ts';
 import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
 import { MultiUserAuth } from './multi-user-auth.ts';
 import { parseProfile, profileKey, WorkspaceProfile } from './local-profile.ts';
@@ -25,7 +26,7 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=!(opts.auth instanceof MultiUserAuth)&&Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -149,8 +150,16 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
       return reply.header('Cache-Control','no-store').send(result({...saved,canEdit:true}));
     });
   }
-  if(multi)app.addHook('onRequest',async req=>{if(req.url.startsWith('/api/v1/chat/'))throw new AuthProblem(503,'EXECUTION_NOT_PROVISIONED');});
-  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig,...(multi?{bindings:new MysqlChatBindings(opts.pool!),serviceIdentity:'MULTI_EXECUTION_PENDING'}:{})});
+  if(multi)app.addHook('onRoute',route=>{
+    if(!String(route.url).startsWith('/api/v1/chat/'))return;
+    const handler=route.handler;
+    route.handler=async function(req,reply){
+      const session=await opts.auth.session(req);
+      if(!opts.execution)throw new AuthProblem(503,'EXECUTION_NOT_PROVISIONED');
+      return opts.execution.run(session.ownerId,async()=>handler.call(this,req,reply));
+    };
+  });
+  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       await opts.auth.session(req);return result({items:[],nextCursor:null});

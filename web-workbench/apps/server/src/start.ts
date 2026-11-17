@@ -1,3 +1,6 @@
+import {readFile,realpath} from 'node:fs/promises';
+import {ExecutionRegistry,type ExecutionRecord} from './execution-registry.ts';
+import {chatConnection} from './modules/chat/connection.ts';
 import { MultiUserAuth } from './multi-user-auth.ts';
 import { MysqlIdentityStore } from '../../../packages/storage/src/identity.ts';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -21,7 +24,13 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   const pairingCode=randomBytes(32).toString('base64url');
   const printCode=(code:string)=>process.stdout.write('智能工作台本地配对码（5 分钟内有效，仅可使用一次）：'+code+'\n');
   const auth=multiUser?new MultiUserAuth(new MysqlIdentityStore(pool!),process.env.HARNESS_PUBLIC_ORIGIN??''):new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode);
-  const app=await createApp({pool,auth,native,localOnly,workspace,autoOpenCode:localOnly});
+  let execution:ExecutionRegistry|undefined;
+  if(multiUser&&process.env.HARNESS_EXECUTION_REGISTRY){
+    const entries:ExecutionRecord[]=JSON.parse(await readFile(process.env.HARNESS_EXECUTION_REGISTRY,'utf8'));
+    for(const entry of entries){const directories:Record<string,string>={};for(const [source,target]of Object.entries(entry.directories))directories[await realpath(source)]=await realpath(target);entry.directories=directories;}
+    execution=new ExecutionRegistry(entries,(url,authorization)=>chatConnection(false,{url,authorization})());
+  }
+  const app=await createApp({pool,auth,native,execution,localOnly,workspace,autoOpenCode:localOnly});
   const shutdown=async()=>{await app.close();await pool?.end();};
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
