@@ -409,7 +409,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(submit).toBeEnabled();
     await page.getByLabel('查询日期').fill('');
     await expect(submit).toBeDisabled();
-    await expect(page.locator('.range-footer')).toContainText('请填写完整');
+    await expect(page.locator('.range-footer')).toContainText('请选择有效的查询日期');
     await page.getByLabel('查询日期').fill('2026-11-11');
     await expect(submit).toBeEnabled();
     await page.getByLabel('msgSn',{exact:true}).fill('');

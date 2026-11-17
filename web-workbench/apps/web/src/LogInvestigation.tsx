@@ -137,9 +137,9 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   function selectDay(value:string){
     setDay(value);
     const selected=wholeDay(value);
-    // An emptied/invalid calendar selection must never reuse the previously
-    // valid day when the user presses "开始排查".
-    setRange(selected??{start:'',end:'',from:NaN,to:NaN,preset:'day'});
+    // Keep the last complete bounds while typing a date; validation below
+    // blocks submitting an empty/invalid selection without unmounting inputs.
+    if(selected)setRange(selected);
   }
   function beginDayMode(){
     const selected=wholeDay(day);
@@ -148,7 +148,8 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   function beginCustomMode(){
     setRange(previous=>({...previous,preset:null}));
   }
-  const timeError=!start||!end?'请填写完整的开始和结束时间。':
+  const timeError=range.preset==='day'&&!wholeDay(day)?'请选择有效的查询日期。':
+    !start||!end?'请填写完整的开始和结束时间。':
     !Number.isFinite(from)||!Number.isFinite(to)?'所选时间无效，请重新选择。':
     from>=to?'结束时间必须晚于开始时间。':'';
   const validTime=!timeError;
