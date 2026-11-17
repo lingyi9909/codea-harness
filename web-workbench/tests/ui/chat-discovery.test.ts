@@ -363,7 +363,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.ok(actionBox.y-(textareaBox.y+textareaBox.height)>=18,'separate submit actions from text area');
     await page.screenshot({path:join(shots,'03-log-criteria.png')});
     await page.setViewportSize({width:390,height:844});
-    const stacked=await Promise.all(['开始时间','结束时间'].map(label=>page.getByLabel(label,{exact:true}).boundingBox()));
+    const stacked=await Promise.all(['开始时刻','结束时刻'].map(label=>page.getByLabel(label,{exact:true}).boundingBox()));
     assert.ok(stacked[0]&&stacked[1]&&stacked[1].y>=stacked[0].y+stacked[0].height,
       'narrow layouts stack date/time inputs vertically');
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),
@@ -379,34 +379,40 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
     await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
     await quarter.click();
-    await expect(page.getByLabel('开始时间',{exact:true})).toHaveValue('2026-11-11T23:50:43');
-    await expect(page.getByLabel('结束时间',{exact:true})).toHaveValue('2026-11-12T00:05:43');
+    await expect(page.getByLabel('开始日期',{exact:true})).toHaveValue('2026-11-11');
+    await expect(page.getByLabel('开始时刻',{exact:true})).toHaveValue('23:50:43');
+    await expect(page.getByLabel('结束日期',{exact:true})).toHaveValue('2026-11-12');
+    await expect(page.getByLabel('结束时刻',{exact:true})).toHaveValue('00:05:43');
     await expect(page.locator('.range-zone')).toHaveText('精确到秒');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
-    // Windows Chromium owns the native datetime picker. React clicks must not
-    // call showPicker() a second time and close/reopen the popup.
-    await page.evaluate(()=>{
-      const native=HTMLInputElement.prototype.showPicker;
-      HTMLInputElement.prototype.showPicker=function(){
-        this.dataset.pickerCalls=String(Number(this.dataset.pickerCalls??0)+1);
-        return native.call(this);
-      };
-    });
-    for(const label of ['开始时间','结束时间']){
-      const input=page.getByLabel(label,{exact:true}),box=await input.boundingBox();
-      assert.ok(box);
-      await expect(input).toHaveAttribute('step','1');
-      await input.click({position:{x:8,y:box.height/2}});
-      await expect(input).not.toHaveAttribute('data-picker-calls',/./);
-      await expect(input).toBeVisible();
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.log-time-range')).toBeVisible();
+    // No native time scroll columns: exact HH:mm:ss remains stable under
+    // mouse-wheel scrolling; dates keep Chromium's built-in calendar popup.
+    for(const [date,time] of [['开始日期','开始时刻'],['结束日期','结束时刻']] as const){
+      await expect(page.getByLabel(date)).toHaveAttribute('type','date');
+      await expect(page.getByLabel(time)).toHaveAttribute('type','text');
     }
-    await page.getByLabel('开始时间').fill('2026-11-11T23:57:11');
-    await page.getByLabel('结束时间').fill('2026-11-12T00:03:42');
-    await expect(page.getByLabel('开始时间')).toHaveValue('2026-11-11T23:57:11');
-    await expect(page.getByLabel('结束时间')).toHaveValue('2026-11-12T00:03:42');
+    await page.getByLabel('开始时刻').hover();
+    await page.mouse.wheel(0,720);
+    await expect(page.getByLabel('开始时刻')).toHaveValue('23:50:43');
+    // One-click whole-day filtering fills local midnight-to-midnight bounds.
+    await page.getByRole('button',{name:'选择某一天'}).click();
+    await expect(page.getByLabel('查询日期')).toBeVisible();
+    await page.getByLabel('查询日期').fill('2026-11-10');
+    await expect(page.getByLabel('开始日期')).toHaveValue('2026-11-10');
+    await expect(page.getByLabel('开始时刻')).toHaveValue('00:00:00');
+    await expect(page.getByLabel('结束日期')).toHaveValue('2026-11-11');
+    await expect(page.getByLabel('结束时刻')).toHaveValue('00:00:00');
+    await expect(page.locator('.range-footer')).toContainText('已选择整天');
+    await expect(page.getByLabel('查询日期')).toHaveCount(0);
+    await quarter.click();
+    await page.getByLabel('开始日期').fill('2026-11-11');
+    await page.getByLabel('开始时刻').fill('23:57:11');
+    await page.getByLabel('结束日期').fill('2026-11-12');
+    await page.getByLabel('结束时刻').fill('00:03:42');
+    await expect(page.getByLabel('开始时刻')).toHaveValue('23:57:11');
+    await expect(page.getByLabel('结束时刻')).toHaveValue('00:03:42');
+    await expect(page.locator('.range-footer')).toContainText('6 分钟 31 秒');
     await expect(page.locator('.log-time-range')).toBeVisible();
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
     await expect(submit).toBeEnabled();

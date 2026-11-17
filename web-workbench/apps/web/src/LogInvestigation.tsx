@@ -7,7 +7,7 @@ import './log-time-range.css';
 const presets=[{minutes:15,label:'最近 15 分钟'},{minutes:60,label:'最近 1 小时'},{minutes:1440,label:'最近 24 小时'}];
 const localZone=Intl.DateTimeFormat().resolvedOptions().timeZone;
 type Bounds={from:number;to:number};
-type TimeRange={start:string;end:string;from:number;to:number;preset:number|null};
+type TimeRange={start:string;end:string;from:number;to:number;preset:number|'day'|null};
 function localTime(instant:number){
   const date=new Date(instant);
   return new Date(instant-date.getTimezoneOffset()*60000).toISOString().slice(0,19);
@@ -21,7 +21,7 @@ function formatBounds({from,to}:Bounds){
 }
 // The UI, saved ranges, and prompts share the same whole-second precision.
 function seconds(instant:number){return Math.floor(instant/1000)*1000;}
-function rangeFromBounds({from,to}:Bounds,preset:number|null=null):TimeRange{
+function rangeFromBounds({from,to}:Bounds,preset:TimeRange['preset']=null):TimeRange{
   const start=seconds(from),end=seconds(to);
   return {start:localTime(start),end:localTime(end),from:start,to:end,preset};
 }
@@ -87,14 +87,24 @@ function elapsed(ms:number){
   return [hours&&hours+' 小时',minutes&&minutes+' 分钟',remainder&&remainder+' 秒'].filter(Boolean).join(' ');
 }
 function parseLocal(value:string){
-  // Native datetime-local may omit :00; any fractional input is rejected
-  // rather than silently flowing into the downstream log query.
+  // Date and direct HH:mm:ss text are assembled into a local wall time.
+  // Accept omitted seconds as :00, but reject fractional seconds.
   const normalized=value.length===16?value+':00':value;
   if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized))return NaN;
   const ms=Date.parse(normalized);
   if(!Number.isFinite(ms))return NaN;
   // Reject invalid dates and wall times skipped by a daylight-saving transition.
   return localTime(ms)===normalized?ms:NaN;
+}
+// Local midnights, not a hard-coded 24-hour delta: DST days can have 23 or 25 hours.
+function wholeDay(day:string):TimeRange|null{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return null;
+  const from=parseLocal(day+'T00:00:00');
+  const [year,month,date]=day.split('-').map(Number);
+  const to=new Date(year,month-1,date+1,0,0,0).getTime();
+  const bounds=validBounds(from,to);
+  if(!bounds||localTime(from).slice(0,10)!==day)return null;
+  return rangeFromBounds(bounds,'day');
 }
 export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'message';globalModel?:Pick<ChatModel,'id'|'providerID'|'variant'>}={}){
   const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
@@ -104,9 +114,25 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   const [applied,setApplied]=useState(()=>readAppliedRange(sessionStorage.getItem(storageKey)??'',undefined,storageKey));
   const [appliedFilters,setAppliedFilters]=useState({trace:'',keyword:'',msgSn:''});
   const [range,setRange]=useState(()=>applied?rangeFromBounds(applied):recentRange(60));
+  const [choosingDay,setChoosingDay]=useState(false);
+  const [day,setDay]=useState(()=>localTime(Date.now()).slice(0,10));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
+    setChoosingDay(false);
     setRange(previous=>({...previous,[side]:value,[side==='start'?'from':'to']:parseLocal(value),preset:null}));
+  }
+  function editDate(side:'start'|'end',value:string){
+    const previous=side==='start'?start:end;
+    editTime(side,value+'T'+(previous.split('T')[1]||'00:00:00'));
+  }
+  function editClock(side:'start'|'end',value:string){
+    const previous=side==='start'?start:end;
+    editTime(side,(previous.split('T')[0]||'')+'T'+value);
+  }
+  function selectDay(value:string){
+    setDay(value);
+    const selected=wholeDay(value);
+    if(selected){setRange(selected);setChoosingDay(false);}
   }
   const timeError=!start||!end?'请填写完整的开始和结束时间。':
     !Number.isFinite(from)||!Number.isFinite(to)?'所选时间无效，请重新选择。':
@@ -117,10 +143,12 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
     const restored=readAppliedRange(session,rangePrompt,storageKey);
     const filters=readAppliedFilters(session,rangePrompt,storageKey);
     setApplied(restored);setRange(restored?rangeFromBounds(restored):recentRange(60));
+    setChoosingDay(false);setDay(localTime(restored?.from??Date.now()).slice(0,10));
     setAppliedFilters(filters);setForm(!session);setTrace(filters.trace);setKeyword(filters.keyword);setMsgSn(filters.msgSn);
   }
   function onSent(session=sessionStorage.getItem(storageKey)){
     if(form){
+      setChoosingDay(false);
       const filters={trace:trace.trim(),keyword:keyword.trim(),msgSn:msgSn.trim()};
       setApplied({from,to});setAppliedFilters(filters);
       if(session){
@@ -131,11 +159,13 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
     }
   }
   function beginEdit(){
-    if(applied)setRange(rangeFromBounds(applied));
+    setChoosingDay(false);
+    if(applied){setRange(rangeFromBounds(applied));setDay(localTime(applied.from).slice(0,10));}
     setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);setMsgSn(appliedFilters.msgSn);
     setForm(true);
   }
   function cancelEdit(){
+    setChoosingDay(false);
     if(applied)setRange(rangeFromBounds(applied));
     setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);setMsgSn(appliedFilters.msgSn);
     setForm(false);
@@ -159,17 +189,40 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">精确到秒</span></header>
       <div className="range-presets" role="group" aria-label="快捷时间范围">
         {presets.map(p=><button key={p.minutes} type="button" aria-pressed={range.preset===p.minutes}
-          onClick={()=>setRange(recentRange(p.minutes))}>{p.label}</button>)}
+          onClick={()=>{setChoosingDay(false);setRange(recentRange(p.minutes));}}>{p.label}</button>)}
+        <button type="button" aria-pressed={range.preset==='day'||choosingDay}
+          aria-expanded={choosingDay} onClick={()=>setChoosingDay(value=>!value)}>选择某一天</button>
       </div>
+      {choosingDay&&<div className="range-day-picker">
+        <label>查询日期<input aria-label="查询日期" type="date" value={day} onChange={e=>selectDay(e.target.value)}/></label>
+        <button type="button" disabled={!wholeDay(day)} onClick={()=>selectDay(day)}>使用全天</button>
+        <span>按当天 00:00:00 至次日 00:00:00 查询</span>
+      </div>}
       <div className="range-fields">
-        <label>开始时间<input required type="datetime-local" step="1" value={start} onChange={e=>editTime('start',e.target.value)}
-          aria-invalid={!Number.isFinite(from)} aria-describedby="log-range-feedback"/></label>
+        <div className="range-bound">
+          <span className="range-bound-title">开始时间</span>
+          <div className="range-split-inputs">
+            <label>日期<input required aria-label="开始日期" type="date" value={start.split('T')[0]||''}
+              onChange={e=>editDate('start',e.target.value)} aria-invalid={!Number.isFinite(from)} aria-describedby="log-range-feedback"/></label>
+            <label>时刻<input required aria-label="开始时刻" type="text" inputMode="numeric" maxLength={8}
+              placeholder="HH:mm:ss" autoComplete="off" value={start.split('T')[1]||''}
+              onChange={e=>editClock('start',e.target.value)} aria-invalid={!Number.isFinite(from)} aria-describedby="log-range-feedback"/></label>
+          </div>
+        </div>
         <span className="range-direction" aria-hidden="true">→</span>
-        <label>结束时间<input required type="datetime-local" step="1" value={end} onChange={e=>editTime('end',e.target.value)}
-          aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
+        <div className="range-bound">
+          <span className="range-bound-title">结束时间</span>
+          <div className="range-split-inputs">
+            <label>日期<input required aria-label="结束日期" type="date" value={end.split('T')[0]||''}
+              onChange={e=>editDate('end',e.target.value)} aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
+            <label>时刻<input required aria-label="结束时刻" type="text" inputMode="numeric" maxLength={8}
+              placeholder="HH:mm:ss" autoComplete="off" value={end.split('T')[1]||''}
+              onChange={e=>editClock('end',e.target.value)} aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
+          </div>
+        </div>
       </div>
       <div className="range-footer" id="log-range-feedback">
-        {timeError?<span role="alert">{timeError}</span>:<><strong>跨度 {elapsed(to-from)}</strong><span>含开始，不含结束</span></>}
+        {timeError?<span role="alert">{timeError}</span>:<><strong>跨度 {elapsed(to-from)||'0 秒'}</strong><span>{range.preset==='day'?'已选择整天 · 次日 00:00 截止':'含开始，不含结束'}</span></>}
       </div>
     </section>
     <div className="log-grid">

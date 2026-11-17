@@ -43,10 +43,22 @@
   .log-time-range .range-direction { justify-self: start; margin-left: 8px; line-height: 1; transform: rotate(90deg); }
 }
 
-/* Let Windows Chromium/Edge own the native calendar icon and popup.
- * A transparent indicator covering the whole input caused double-opening
- * together with showPicker() and could dismiss the popup on selection. */
-.range-fields input[type="datetime-local"]{cursor:text}
-.range-fields input[type="datetime-local"]::-webkit-calendar-picker-indicator{
-  position:static;width:16px;height:16px;margin:0 0 0 4px;opacity:1;cursor:pointer
+/* Only the date uses the native calendar. Time is typed directly, avoiding
+ * Chromium's oversensitive datetime-local hour/minute/second scroll columns. */
+.log-time-range .range-bound{display:grid;gap:8px;min-width:0}
+.log-time-range .range-bound-title{font-size:13px;font-weight:650;color:#414a57}
+.log-time-range .range-split-inputs{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(105px,.85fr);gap:10px;min-width:0}
+.log-time-range .range-split-inputs label{display:grid;gap:6px;min-width:0}
+.log-time-range input[type="date"]{cursor:default}
+.log-time-range input[type="text"]{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.log-time-range .range-day-picker{
+  display:flex;align-items:end;flex-wrap:wrap;gap:10px 12px;
+  margin:-6px 0 18px;padding:12px;border:1px solid #dce3eb;border-radius:8px;background:#fff
+}
+.log-time-range .range-day-picker label{display:grid;gap:5px;min-width:150px;font-size:12px;font-weight:650;color:#414a57}
+.log-time-range .range-day-picker input{min-height:36px;padding:7px 9px;border:1px solid #cfd7e1;border-radius:7px;background:#fff;color:#222b35;font:inherit;font-size:13px}
+.log-time-range .range-day-picker button{min-height:36px;padding:7px 11px;border:1px solid #d8dfe7;border-radius:7px;background:#eef2f6;color:#263443;font-size:12px}
+.log-time-range .range-day-picker span{align-self:center;color:#76828e;font-size:11px}
+@container (max-width:360px){
+  .log-time-range .range-split-inputs{grid-template-columns:1fr}
 }
