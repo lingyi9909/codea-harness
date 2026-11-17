@@ -652,12 +652,14 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('button',{name:'历史对话'}).click();
     const secondRow=history.locator('li').filter({hasText:'第二次排查'});
     await secondRow.getByRole('button',{name:'重命名'}).click();
-    await secondRow.getByRole('textbox',{name:'对话名称'}).fill('放弃的草稿标题');
-    await secondRow.getByRole('button',{name:'取消'}).click();
+    // Editing replaces the title text with an input value; the original
+    // text-filtered row locator therefore no longer matches while editing.
+    await history.getByRole('textbox',{name:'对话名称'}).fill('放弃的草稿标题');
+    await history.getByRole('button',{name:'取消'}).click();
     await expect(secondRow).toContainText('第二次排查');
     await secondRow.getByRole('button',{name:'重命名'}).click();
-    await secondRow.getByRole('textbox',{name:'对话名称'}).fill('订单超时调查 · 人工命名');
-    await secondRow.getByRole('button',{name:'保存'}).click();
+    await history.getByRole('textbox',{name:'对话名称'}).fill('订单超时调查 · 人工命名');
+    await history.getByRole('button',{name:'保存'}).click();
     await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toBeVisible();
     await page.reload();
     await page.getByRole('button',{name:'历史对话'}).click();
