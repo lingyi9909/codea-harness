@@ -85,7 +85,19 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
       const save=(suffix,done)=>{let body='';req.on('data',s=>body+=s);req.on('end',()=>{
         fs.writeFileSync(flag+suffix,body);done(JSON.parse(body));res.writeHead(204);res.end();});};
-      if(req.url===secondBase)return res.end(JSON.stringify({data:secondLog}));
+      if(req.url===secondBase&&req.method==='PATCH'){
+        let body='';req.on('data',s=>body+=s);req.on('end',()=>{
+          secondLog={...secondLog,title:JSON.parse(body).title};
+          res.writeHead(204);res.end();
+        });return;
+      }
+      if(req.url===secondBase&&req.method==='DELETE'){
+        secondLog=null;res.writeHead(204);return res.end();
+      }
+      if(req.url===secondBase){
+        if(!secondLog){res.writeHead(404);return res.end('{}');}
+        return res.end(JSON.stringify({data:secondLog}));
+      }
       if(req.url===secondBase+'/prompt'){
         let body='';req.on('data',s=>body+=s);req.on('end',()=>{
           fs.writeFileSync(flag+'.second-prompt',body);
@@ -636,6 +648,34 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.deepEqual(rerun.files,[]);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('harness.logs')),'ses_logs_fixture');
     assert.deepEqual(retiredRequests,[]);
+    // History management must persist in native OpenCode, not only localStorage.
+    await page.getByRole('button',{name:'历史对话'}).click();
+    const secondRow=history.locator('li').filter({hasText:'第二次排查'});
+    await secondRow.getByRole('button',{name:'重命名'}).click();
+    await secondRow.getByRole('textbox',{name:'对话名称'}).fill('放弃的草稿标题');
+    await secondRow.getByRole('button',{name:'取消'}).click();
+    await expect(secondRow).toContainText('第二次排查');
+    await secondRow.getByRole('button',{name:'重命名'}).click();
+    await secondRow.getByRole('textbox',{name:'对话名称'}).fill('订单超时调查 · 人工命名');
+    await secondRow.getByRole('button',{name:'保存'}).click();
+    await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toBeVisible();
+    await page.reload();
+    await page.getByRole('button',{name:'历史对话'}).click();
+    await history.getByRole('button',{name:/订单超时调查 · 人工命名/}).click();
+    await expect(page.locator('.conversation-title')).toHaveText('订单超时调查 · 人工命名');
+    await page.getByRole('button',{name:'历史对话'}).click();
+    const renamedRow=history.locator('li').filter({hasText:'订单超时调查 · 人工命名'});
+    await renamedRow.getByRole('button',{name:'删除'}).click();
+    await expect(renamedRow).toContainText('无法恢复');
+    await renamedRow.getByRole('button',{name:'取消'}).click();
+    await expect(renamedRow.getByRole('button',{name:'删除'})).toBeVisible();
+    await renamedRow.getByRole('button',{name:'删除'}).click();
+    await renamedRow.getByRole('button',{name:'确认删除'}).click();
+    await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toHaveCount(0);
+    await expect(page.locator('.log-investigation-setup')).toBeVisible();
+    await page.reload();
+    await page.getByRole('button',{name:'历史对话'}).click();
+    await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toHaveCount(0);
     await page.getByRole('button',{name:'退出登录'}).click();
     await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
     assert.equal(await sessionCookie(),undefined);
