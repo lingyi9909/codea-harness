@@ -75,7 +75,9 @@ export function summarizeFirstInput(text='',logInspection=false){
     const keyword=criteria.match(/^关键字：(.+)$/m)?.[1],trace=criteria.match(/^Trace ID：(.+)$/m)?.[1];
     const msgSn=criteria.match(/^msgSn：(.+)$/m)?.[1];
     const identity=msgSn?'msgSn '+msgSn:trace?'Trace ID '+trace:keyword?'关键词 '+keyword:'';
-    if(question){text=question;identitySuffix=identity?' · '+identity:'';}
+    // The first user question is followed by workbench execution instructions.
+    // Never use those instructions as the conversation title.
+    if(question){text=question.split(/\r?\n/,1)[0].trim();identitySuffix=identity?' · '+identity:'';}
     else if(identity)text='排查 · '+[msgSn?'msgSn '+msgSn:'',trace?'Trace ID '+trace:'',keyword?'关键词 '+keyword:''].filter(Boolean).join(' · ');
   }
   const clean=text.trim().replace(/^(?:你好[，,！!。\s]+|您好[，,！!。\s]+|(?:hi|hello)[!,\s]+)+/i,'')
