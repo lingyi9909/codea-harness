@@ -152,7 +152,12 @@ export function WorkbenchApp() {
       try {
         const boot=await api.bootstrap();
         if(cancelled)return;
-        api.setCsrf(boot.csrfToken);setGlobalModel(savedGlobalModel());setSelected(sessionStorage.getItem('harness.task')??'');setPending(sessionStorage.getItem('harness.operation'));setBootstrap(boot);
+        const savedScene=sessionStorage.getItem('harness.scene')??'home';
+        const restoredScene=Object.hasOwn(scenes,savedScene)?savedScene as Scene:'home';
+        api.setCsrf(boot.csrfToken);
+        setScene(restoredScene);setExpandedGroup(groupForScene(restoredScene));
+        setGlobalModel(savedGlobalModel());setSelected(sessionStorage.getItem('harness.task')??'');
+        setPending(sessionStorage.getItem('harness.operation'));setBootstrap(boot);
         await refreshLists();
       }catch(e){
         if(cancelled)return;
