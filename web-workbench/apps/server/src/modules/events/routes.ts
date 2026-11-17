@@ -1,16 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';
-import type { LocalAuth } from '../../auth.ts';
+import type { RequestAuth } from '../../auth.ts';
 import { AuthProblem } from '../../auth.ts';
 import { checkUuid } from '../repositories/service.ts';
 import { EventError, parseEventSeq, readTaskEvents, taskLastSeq } from '../../../../../packages/storage/src/events.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export function registerEventRoutes(app:FastifyInstance,opts:{pool:Pool;auth:LocalAuth}):void{
+export function registerEventRoutes(app:FastifyInstance,opts:{pool:Pool;auth:RequestAuth}):void{
   const connections=new Map<string,number>();
   app.get<{Params:{taskId:string};Querystring:{after?:string}}>(
     '/api/v1/tasks/:taskId/events',async(req,reply)=>{
-      const {ownerId}=opts.auth.session(req);
+      const {ownerId}=await opts.auth.session(req);
       const taskId=checkUuid(req.params.taskId);
       if((connections.get(ownerId)??0)>=5)throw new AuthProblem(429,'SSE_CONNECTION_LIMIT');
       const requestCursor=req.headers['last-event-id']??req.query.after??'0';
@@ -39,6 +39,7 @@ export function registerEventRoutes(app:FastifyInstance,opts:{pool:Pool;auth:Loc
         let cursor=after,lastHeartbeat=Date.now();
         try{
           while(!ended&&!reply.raw.destroyed){
+            await opts.auth.session(req);
             const events=await readTaskEvents(opts.pool,taskId,cursor,500);
             for(const event of events){
               if(ended)break;

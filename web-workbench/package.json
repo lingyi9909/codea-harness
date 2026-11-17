@@ -35,7 +35,9 @@
     "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts",
     "test:continuations": "node --experimental-strip-types --test tests/api/continuations.test.ts",
     "test:reports": "node --experimental-strip-types --test tests/reports/collect.test.ts",
-    "test:dispatch-continue": "node --experimental-strip-types --test tests/workers/continuation-dispatch.test.ts"
+    "test:dispatch-continue": "node --experimental-strip-types --test tests/workers/continuation-dispatch.test.ts",
+    "test:multi-user": "node --experimental-strip-types --test tests/api/multi-user-auth.test.ts tests/api/multi-user-isolation.test.ts tests/api/execution-isolation.test.ts tests/api/multi-user-routes.test.ts tests/api/user-context.test.ts tests/api/business-verification.test.ts tests/ui/user-storage-auth.test.ts",
+    "test:mysql:multi-user": "node --experimental-strip-types --test tests/mysql/multi-user.test.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

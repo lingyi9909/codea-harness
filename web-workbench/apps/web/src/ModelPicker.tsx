@@ -1,3 +1,4 @@
+import {localStorage} from './userStorage.ts';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChatModel } from '../../../packages/contracts/src/chat.ts';

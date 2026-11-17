@@ -1,3 +1,4 @@
+import {localStorage,sessionStorage} from './userStorage.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api/client.ts';
 import type { Schema } from './api/client.ts';
@@ -42,6 +43,7 @@ function savedGlobalModel():SelectedModel|undefined{
 }
 
 export function WorkbenchApp() {
+  useEffect(()=>{const changed=(event:StorageEvent)=>{if(event.key==='harness.account-change')window.location.reload();};window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed);},[]);
   const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);
   const [loginMode,setLoginMode]=useState<'profile'|'pair'|null>(null);
   const [connectionAttempt,setConnectionAttempt]=useState(0);
@@ -150,7 +152,12 @@ export function WorkbenchApp() {
       try {
         const boot=await api.bootstrap();
         if(cancelled)return;
-        api.setCsrf(boot.csrfToken);setBootstrap(boot);
+        const savedScene=sessionStorage.getItem('harness.scene')??'home';
+        const restoredScene=Object.hasOwn(scenes,savedScene)?savedScene as Scene:'home';
+        api.setCsrf(boot.csrfToken);
+        setScene(restoredScene);setExpandedGroup(groupForScene(restoredScene));
+        setGlobalModel(savedGlobalModel());setSelected(sessionStorage.getItem('harness.task')??'');
+        setPending(sessionStorage.getItem('harness.operation'));setBootstrap(boot);
         await refreshLists();
       }catch(e){
         if(cancelled)return;
@@ -271,9 +278,8 @@ export function WorkbenchApp() {
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
   if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    const session=await api.login(name,phone);
-    setBootstrap(session);
-    await refreshLists().catch(e=>setError(text(e)));
+    await api.login(name,phone);
+    window.location.reload();
   }}/>;
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">
     {error?<><p role="alert">{error}</p><button onClick={reconnect}>重新连接</button></>:<p role="status">正在连接本地工作台…</p>}

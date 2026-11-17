@@ -1,12 +1,16 @@
+import {configureUserStorage,resetUserStorage} from '../userStorage.ts';
 import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) { super(message); }
+  readonly status:number;
+  readonly code:string;
+  constructor(status: number, code: string, message: string) { super(message);this.status=status;this.code=code; }
 }
 export class HarnessApi {
   private csrf = '';
+  businessVerificationEnabled=false;
   private connecting?: Promise<Schema<'Bootstrap'>>;
   setCsrf(token: string): void { this.csrf = token; }
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -53,9 +57,14 @@ export class HarnessApi {
     const body = await response.json() as { data?: Schema<'Bootstrap'>; error?: { message?: string } };
     if (!response.ok || !body.data) throw new ApiError(response.status, 'PAIRING_FAILED',
       body.error?.message ?? '配对失败，请检查一次性配对码');
+    configureUserStorage(body.data.owner.id,(body.data as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
+    this.businessVerificationEnabled=(body.data as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     this.setCsrf(body.data.csrfToken);
     return body.data;
   }
+  businessStatus(id:string){return this.request<{state:string;challengeId?:string;expiresAt?:number;maskedPhone?:string;verified?:boolean}>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification');}
+  submitBusinessCode(id:string,challenge:string,code:string){return this.request<{state:string;verified?:boolean}>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification/'+encodeURIComponent(challenge)+'/code',{method:'POST',body:JSON.stringify({code})});}
+  cancelBusinessCode(id:string,challenge:string){return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification/'+encodeURIComponent(challenge),{method:'DELETE'});}
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
   sceneConfig(){return this.request<SceneConfigResponse>('/scene-config');}
   saveSceneConfig(config:SceneConfigValue,revision:string){return this.request<SceneConfigResponse>('/scene-config',{method:'PUT',body:JSON.stringify({config,revision})});}
@@ -84,19 +93,23 @@ export class HarnessApi {
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() {
-    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').finally(()=>{this.connecting=undefined;});
+    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
   async login(name:string,phone:string) {
     const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
       method:'POST',body:JSON.stringify({name,phone}),
     });
+    this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
+    configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
     this.setCsrf(session.csrfToken);
+    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
     return session;
   }
   async logout() {
     await this.request<void>('/auth/session',{method:'DELETE'});
-    this.setCsrf('');
+    this.setCsrf('');this.businessVerificationEnabled=false;resetUserStorage();
+    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
   }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }

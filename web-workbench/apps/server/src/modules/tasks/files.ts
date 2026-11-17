@@ -5,7 +5,7 @@ import type { DTO, Snapshot } from '../../../../../packages/contracts/src/domain
 import { GitFailure } from '../../../../../packages/git-provider/src/repository.ts';
 import { listSnapshotFiles, readSnapshotLines } from '../../../../../packages/git-provider/src/files.ts';
 import { AuthProblem } from '../../auth.ts';
-import type { LocalAuth } from '../../auth.ts';
+import type { RequestAuth } from '../../auth.ts';
 
 export async function loadTaskSnapshot(pool:Pool,ownerId:string,taskId:string):Promise<Snapshot>{
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(taskId))
@@ -26,17 +26,17 @@ export async function loadTaskSnapshot(pool:Pool,ownerId:string,taskId:string):P
 }
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
 export function registerTaskFileRoutes(app:FastifyInstance,opts:{
-  pool:Pool;auth:LocalAuth;dataRoot:string;
+  pool:Pool;auth:RequestAuth;dataRoot:string;
 }):void{
   app.get<{Params:{taskId:string}}>('/api/v1/tasks/:taskId/files',async(req,reply)=>{
-    const {ownerId}=opts.auth.session(req);
+    const {ownerId}=await opts.auth.session(req);
     const snap=await loadTaskSnapshot(opts.pool,ownerId,req.params.taskId);
     try{return reply.send(wrap(await listSnapshotFiles(opts.dataRoot,snap)));}
     catch(e){if(e instanceof GitFailure)throw new AuthProblem(409,'SNAPSHOT_INTEGRITY_FAILED');throw e;}
   });
   app.get<{Params:{taskId:string;fileId:string};Querystring:{startLine?:string;endLine?:string}}>(
     '/api/v1/tasks/:taskId/files/:fileId',async(req,reply)=>{
-      const {ownerId}=opts.auth.session(req);
+      const {ownerId}=await opts.auth.session(req);
       const snap=await loadTaskSnapshot(opts.pool,ownerId,req.params.taskId);
       const start=req.query.startLine===undefined?1:Number(req.query.startLine);
       const end=req.query.endLine===undefined?Math.min(start+199,500000):Number(req.query.endLine);

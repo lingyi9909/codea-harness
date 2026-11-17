@@ -5,6 +5,8 @@ import './profile-login.css';
 function loginError(error:unknown){
   if(error instanceof ApiError){
     switch(error.code){
+      case 'PROFILE_CONFLICT': return '该手机号登记的姓名不一致，请联系管理员核对。';
+      case 'PHONE_REQUIRED': case 'PHONE_INVALID': case 'USERNAME_INVALID':
       case 'PROFILE_INVALID': return '请检查姓名和手机号。境外号码请带上国家或地区代码。';
       case 'PROFILE_IN_USE': return '另一个会话正在使用此工作目录。请先在该会话退出，再重新登录。';
       case 'PROFILE_WRITE_FAILED': return '无法保存资料。请检查工作目录的写入权限后重试。';
