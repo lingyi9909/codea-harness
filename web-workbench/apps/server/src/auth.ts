@@ -2,11 +2,17 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
-type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string}};
+export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string}};
 const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
-export class LocalAuth {
+export interface RequestAuth {
+  origin(req:FastifyRequest):boolean;
+  session(req:FastifyRequest):Session|Promise<Session>;
+  mutation(req:FastifyRequest):Session|Promise<Session>;
+  logout(req:FastifyRequest,reply:FastifyReply):void|Promise<void>;
+}
+export class LocalAuth implements RequestAuth {
   private pairingHash:Buffer;
   private paired=false;
   private createdAt=Date.now();
