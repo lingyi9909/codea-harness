@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import {streamingMessages,useChatStream} from './chatStream.ts';
 import {useProgressiveMessages} from './progressiveMessages.ts';
 import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
-import {activateChat,displayChatTitle,summarizeFirstInput,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
+import {activateChat,displayChatTitle,summarizeFirstInput,uniqueChatTitle,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
 import {ChatRequests} from './ChatRequests.tsx';
 import {api,ApiError} from './api/client.ts';
 import type {ChatStatus,ChatSettings,ChatModel,ChatScenario,SceneId,SceneConfigResponse} from '../../../packages/contracts/src/chat.ts';
@@ -115,8 +115,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     if(draft||refs)sessionStorage.setItem(composerKey,JSON.stringify({text:draft,files:refs}));
     else sessionStorage.removeItem(composerKey);
   },[composerKey,draft,refs]);
-  function switchTo(next:string){
-    showHistory(false);setEditorOpen(false);
+  function switchTo(next:string,keepHistory=false){
+    if(!keepHistory)showHistory(false);setEditorOpen(false);
     if(next===id)return;
     const saved=readDraft(draftKey(sessionKey,directory,next));
     setCachedTitle(readHistory(localStorage,sessionKey,directory).find(row=>row.id===next)?.title??'');
@@ -216,7 +216,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     if(text.length>16000)throw Error('排查条件和问题合计过长，请缩短后再发送。');
     let session=id;
     if(!session){
-      const title=draft.trim()?summarizeFirstInput(draft):summarizeFirstInput(text,Boolean(investigation));
+      const title=uniqueChatTitle(summarizeFirstInput(investigation?text:draft.trim(),Boolean(investigation)),
+        readHistory(localStorage,sessionKey,directory));
       const s=await api.newChat(directory||undefined,globalModel,scenario==='direct-chat'?undefined:scenario,title);
       session=s.id;createdSession.current=session;setCachedTitle(s.title||title);
       rememberChat(localStorage,sessionKey,directory,{id:session,title:s.title||title,updated:Date.now()});
@@ -259,9 +260,17 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       onClick={openAdjustment}>调整排查条件</button>}
       <button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
       {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
-    {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy} onSelect={row=>{
-      rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);
-    }}/>}
+    {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy}
+      running={state?.active&&state.id===id?id:undefined}
+      onSelect={row=>{rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);}}
+      onRenamed={row=>{
+        if(row.id!==id)return;
+        setCachedTitle(row.title);
+        update(previous=>previous?.id===row.id?{...previous,title:row.title}:previous);
+      }}
+      onDeleted={removed=>{
+        if(removed===id)switchTo('',true);
+      }}/>} 
     <div className="chat-layout"><div className="chat-box">
       {(!investigation||messages.length>0||stream.tools.length>0||state?.active)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
