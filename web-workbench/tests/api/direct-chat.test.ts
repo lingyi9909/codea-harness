@@ -12,7 +12,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
   const root=await realpath(await mkdtemp(join(tmpdir(),'chat-contract-')));
   const id='ses_chat_fixture',per='per_fixture',base='/api/session/'+id;
   const received:Array<{path:string;body:Record<string,unknown>}>=[];
-  let session:Record<string,unknown>={},pending=true;
+  let session:Record<string,unknown>={},pending=true,deleted=false,activeForDelete=false;
   let skillIDs:string[]=[],skillLookupFailure=false,skillDirectory=root;
   let failure=0,formMode='legacy',formTitle='选择下一步';
   const formID='frm_example';
@@ -56,7 +56,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       const query=new URL(req.url!,'http://localhost').searchParams;
       assert.equal(query.get('directory'),root);
       const item={id,title:session.title??'旧会话',location:{directory:root},time:{updated:17},metadata:{harnessOwner:'local-workbench',harnessScenario:'direct-chat'}};
-      const page=query.get('cursor')?[{...item,id:'ses_older'}]:[item,
+      const page=query.get('cursor')?[{...item,id:'ses_older'}]:[...(!deleted?[item]:[]),
         {...item,id:'ses_other',metadata:{...item.metadata,harnessOwner:'other'}},
         {...item,id:'ses_logs',metadata:{...item.metadata,harnessScenario:'log-inspection'}},
         {...item,id:'ses_folder',location:{directory:join(root,'another')}},
@@ -64,7 +64,11 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
       return res.end(JSON.stringify({data:page,cursor:query.get('cursor')?{}:{next:'next-page'}}));
     }
     if(path==='/api/session'){session={id,title:body.title,location:body.location,metadata:body.metadata};return data(session);}
-    if(path===base)return data(session);
+    if(path===base&&req.method==='PATCH'){
+      session={...session,title:body.title};res.statusCode=204;return res.end();
+    }
+    if(path===base&&req.method==='DELETE'){deleted=true;res.statusCode=204;return res.end();}
+    if(path===base)return deleted?(res.statusCode=404,res.end('{}')):data(session);
     if(path===instructionPath){
       assert.equal(req.method,'PUT');res.statusCode=instructionStatus;return res.end();
     }
@@ -82,7 +86,7 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     if(path===base+'/form/'+formID+'/reply'||(path===base+'/form/'+formID&&req.method==='DELETE')){
       formMode='done';res.statusCode=204;return res.end();}
     if(path===base+'/inbox')return data(echoPrompt?[{id:'queued',type:'user',payload:echoPrompt}]:[]);
-    if(path==='/api/session/active')return data({});
+    if(path==='/api/session/active')return data(activeForDelete?{[id]:{}}:{});
     if(path===base+'/permission')return data(pending?[{id:per,sessionID:id,action:'edit',resources:['notes.txt']}]:[]);
     if(path===base+'/permission/'+per+'/reply'){pending=false;res.statusCode=204;return res.end();}
     if(path===base+'/interrupt')return res.end(JSON.stringify({interrupted:true}));
@@ -116,8 +120,8 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     const historyRequest={directory:root,scenario:'direct-chat'};
     const firstPage=await history(historyRequest);
     assert.equal(firstPage.statusCode,200,firstPage.body);
-    assert.deepEqual(firstPage.json().data,{items:[{id,title:'Code Harness · 直接对话',updated:17}],next:'next-page'});
-    assert.deepEqual((await history({...historyRequest,cursor:'next-page'})).json().data,{items:[{id:'ses_older',title:'Code Harness · 直接对话',updated:17}]});
+    assert.deepEqual(firstPage.json().data,{items:[{id,title:'智能工作台 · 直接对话',updated:17}],next:'next-page'});
+    assert.deepEqual((await history({...historyRequest,cursor:'next-page'})).json().data,{items:[{id:'ses_older',title:'智能工作台 · 直接对话',updated:17}]});
     assert.equal((await history({...historyRequest,directory:tmpdir()})).statusCode,403);
     const options=await app.inject({method:'POST',url:'/api/v1/chat/models',headers});
     assert.deepEqual(options.json().data,[{id:'corp-alias',name:'Private',providerID:'corp'}]);
@@ -130,6 +134,19 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     assert.deepEqual(received.filter(r=>r.path==='/api/session').at(-1)?.body.model,model);
     const url='/api/v1/chat/sessions/'+id;
     const post=(suffix:string,payload:object)=>app.inject({method:'POST',url:url+suffix,headers,payload});
+    // Changes must reach OpenCode, survive native history reads, and reject invalid data.
+    const rename=(title:string)=>app.inject({method:'PATCH',url,headers,payload:{title}});
+    assert.equal((await rename('')).statusCode,400);
+    assert.equal((await rename('   ')).statusCode,400);
+    assert.equal((await rename('A'.repeat(121))).statusCode,400);
+    const renamed=await rename('订单排查 · 人工命名');
+    assert.equal(renamed.statusCode,200,renamed.body);
+    assert.deepEqual(renamed.json().data,{id,title:'订单排查 · 人工命名'});
+    assert.equal(session.title,'订单排查 · 人工命名');
+    assert.equal((await history(historyRequest)).json().data.items[0].title,'订单排查 · 人工命名');
+    assert.equal(received.filter(r=>r.path===base&&r.body.title==='订单排查 · 人工命名').length,1);
+    // Preserve subsequent fixture expectations, then test actual native delete at the end.
+    await rename(title);
     assert.equal((await post('/messages',{text:'阅读这个文件',files:['notes.txt']})).statusCode,202);
     assert.equal((await post('/messages',{text:'继续整理文档'})).statusCode,202);
     const languageEntries=received.filter(r=>r.path===instructionPath);
@@ -268,6 +285,18 @@ it('uses the official client against a scripted OpenCode HTTP peer; no model is 
     skillLookupFailure=true;
     assert.equal((await ask()).json().error.code,'LOG_QUERY_CATALOG_UNAVAILABLE');
     session.metadata={harnessScenario:'code-review'};
+    assert.equal((await rename('越权名称')).statusCode,404);
+    assert.equal((await app.inject({method:'DELETE',url,headers})).statusCode,404);
+    session.metadata={harnessScenario:'direct-chat',harnessOwner:'local-workbench'};
+    activeForDelete=true;
+    assert.equal((await app.inject({method:'DELETE',url,headers})).statusCode,409);
+    assert.equal(deleted,false);
+    activeForDelete=false;
+    const removed=await app.inject({method:'DELETE',url,headers});
+    assert.equal(removed.statusCode,200,removed.body);
+    assert.deepEqual(removed.json().data,{id,deleted:true});
+    assert.equal(deleted,true);
+    assert.equal((await history(historyRequest)).json().data.items.some((item:{id:string})=>item.id===id),false);
     assert.equal((await post('/form',submit)).statusCode,404);
     assert.equal((await post('/messages',{text:'hello'})).statusCode,404);
     assert.equal(received.filter(r=>r.path===base+'/prompt').length,5);

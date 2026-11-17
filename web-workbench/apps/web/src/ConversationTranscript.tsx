@@ -102,7 +102,9 @@ function Reasoning({session,entries,expanded}:{session:string;entries:ReasoningE
       return <div className="reasoning-part" key={message+':'+(step.ordinal??part)}>
         {step.complete&&step.ordinal!=null&&hasEnglishProse(original)
           ?<TranslatableReasoning key={original} session={session} message={message} ordinal={step.ordinal} original={original} open={open}/>
-          :open&&<Markdown text={original}/>}
+          :open&&(step.live&&!step.complete
+            ?<p className="reasoning-live-text">{original}</p>
+            :<Markdown text={original}/>)}
       </div>;
     })}</div>
   </details>;

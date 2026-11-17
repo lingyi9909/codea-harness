@@ -9,14 +9,14 @@ import { LocalAuth } from './auth.ts';
 import { createApp } from './app.ts';
 
 export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal'>,localOnly=false,workspace?:string){
-  if(workspace!==undefined&&!localOnly)throw new Error('--workspace requires --local-only');
+  if(!workspace?.trim())throw new Error('STARTUP_WORKSPACE_REQUIRED: specify --workspace with an existing absolute directory.');
   if(localOnly&&!existsSync(fileURLToPath(new URL('../../web/dist/index.html',import.meta.url))))
     throw new Error('FRONTEND_BUILD_MISSING: run npm run web:build from web-workbench before starting the local app.');
   const config=localOnly?{port:Number(process.env.HARNESS_HTTP_PORT??4176),mysql:null}:runtimeConfig();
   if(!Number.isInteger(config.port)||config.port<1024||config.port>65535)throw new Error('INVALID_LOOPBACK_PORT');
   const pool=config.mysql?await createPool(config.mysql):undefined;
   const pairingCode=randomBytes(32).toString('base64url');
-  const printCode=(code:string)=>process.stdout.write('Code Harness local pairing code (valid 5 min, one use): '+code+'\n');
+  const printCode=(code:string)=>process.stdout.write('智能工作台本地配对码（5 分钟内有效，仅可使用一次）：'+code+'\n');
   const auth=new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode);
   const app=await createApp({pool,auth,native,localOnly,workspace,autoOpenCode:localOnly});
   const shutdown=async()=>{await app.close();await pool?.end();};

@@ -11,6 +11,7 @@ type Props = {
   loadModels: () => Promise<ChatModel[]>;
   onSelect: (model: ChatModel | undefined) => void | Promise<void>;
   onApplied?: () => void;
+  initialOpen?: boolean;
 };
 
 const identity = (model?: ModelId) => model ? JSON.stringify([model.providerID, model.id]) : '';
@@ -55,7 +56,10 @@ function buildGroups(catalog: ChatModel[], query: string, favorites: string[], r
 }
 
 export function ModelPicker(props: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(props.initialOpen));
+  // The scenario binding arrives asynchronously from .workbench/scenarios.json.
+  // Opening /models is a UI action, not a native session.command call.
+  useEffect(()=>{if(props.initialOpen)setOpen(true);},[props.initialOpen]);
   const [last, setLast] = useState<ChatModel>();
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {

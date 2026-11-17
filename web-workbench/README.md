@@ -1,4 +1,4 @@
-# Code Harness Web Workbench
+# 智能工作台 · Web Workbench
 
 The local review workbench serves the React application and Fastify API on the same loopback port. It stores tasks, runs, messages, native checkpoints, permissions and report metadata in MySQL 8.4. Git snapshots and archived report files live under the configured data directory.
 
@@ -10,7 +10,7 @@ The workbench supports Node.js 22.16+ (22.x), 24.x and 26.x, with npm 10 or 11. 
 cd web-workbench
 npm ci --ignore-scripts --no-audit --no-fund
 npm run web:build
-./启动工作台.command                  # optional: pass an existing project directory
+./启动工作台.command "/Users/me/Projects/workbench"  # required startup workspace
 ```
 
 Visit http://127.0.0.1:4176/. A missing build now produces `FRONTEND_BUILD_MISSING` instead of the misleading `Route GET:/ not found`. To verify the local HTTP homepage without OpenCode or MySQL, run `npm run smoke:local` after building. CI tests this on macOS and Windows with Node 22, 24 and 26. Real company OpenCode, model and MySQL integration remain separate acceptance requirements.
@@ -22,7 +22,7 @@ Use one of the supported Node.js versions and the locked npm dependencies. Set `
 ```text
 npm ci --ignore-scripts --no-audit --no-fund
 npm run web:build
-npm run server:start
+npm run server:start -- --workspace "/absolute/path/to/workbench"
 ```
 
 Apply the versioned migrations with the migration account before starting the service. Set `HARNESS_MIGRATION_CONFIRM_DATABASE` to the exact database name, set `HARNESS_MIGRATION_USER` and `HARNESS_MIGRATION_PASSWORD`, then run `npm run migrate`. Open the address printed by the service and enter the pairing code from its console.
@@ -45,27 +45,86 @@ The worker records control sends before contacting the native service. An uncert
 
 ## 内网使用多场景工作台与 OpenCode 对话
 
-首页提供直接对话、代码审查、日志排查和数据分析。日志排查支持按时间区间和 Trace ID 或关键字查询，通过独立的 OpenCode 会话排查和追问。可导入 UTF-8 日志并预览按时间、级别和文本筛选的行；点击开始排查时发送匹配摘录。没有导入文件时由当前项目可用的日志工具提供数据。数据页在浏览器本地读取 CSV，按列统计数值。
+启动智能工作台时 **必须明确指定一个已经存在的工作目录**。它是工作台配置与登录资料的存储根，不等于所有子场景的执行目录。
 
-Windows 离线包解压后运行 `start-chat.cmd`，打开本机工作台地址，填写姓名和手机号后即可进入“直接对话”。第一次发送消息时，工作台通过官方客户端发现同一用户已注册的 OpenCode 2.x 后台，并使用注册的认证信息。离线包在发现失败时尝试使用已安装的 `opencode serve --service` 启动后台。公司版本需要支持这个服务协议。已有部署仍可使用服务端的 `HARNESS_OPENCODE_URL` 和 `HARNESS_OPENCODE_AUTHORIZATION`。
+- Windows：`start-chat.cmd "D:\\projects\\my-workbench"`
+- macOS：`./启动工作台.command "/Users/me/Projects/my-workbench"`
+- Node CLI：`npm run server:start -- --workspace "/absolute/path/to/my-workbench"`（如使用本地模式，可添加 `--local-only`）
 
-启动智能工作台时指定已有项目文件夹。Windows 可运行 `start-chat.cmd "D:\projects\order-service"`，macOS 可在启动脚本旁运行 `./启动工作台.command "/Users/me/Projects/order-service"`。路径包含空格时保留引号。省略路径时使用已有的目录环境配置，未配置则使用包内的 `chat-files`。更换项目时关闭工作台，用新路径重新启动。直接对话、文件引用、模型列表、项目 Skill 和会话历史都使用启动目录。
+路径支持空格，建议使用绝对路径。省略或指向不存在的目录会拒绝启动，不会回退到 `chat-files`。更换启动目录后，需关闭旧进程、使用新目录重新启动。
 
-新会话按用户首条输入概括命名，后续追问沿用原题。可从“历史对话”切回原会话。升级后用原项目目录启动即可查看该目录的历史记录。对话框左下角可选择当前项目已启用的模型。
+首页仍然是 OpenCode 原生对话；侧栏包括代码审查，以及「问题排查 → 公管问题排查 / 报文问题排查」「数据分析 → 公管数据分析」。公管数据分析已经改为直接对话，不再使用旧版 CSV 浏览器统计表单。代码审查继续保留原有固定 Git 版本执行、报告和授权流程。
 
-`npm run test:chat` 使用临时注册文件和模拟 HTTP 服务验证发现、会话、文件引用、权限、中断和错误处理。
+两个问题排查表单包含开始时间、结束时间、Trace ID、msgSn、关键词。时间范围必须有效，Trace ID、msgSn、关键词至少填写一项。msgSn 按原始字符串传递（保留前导零），参与首次排查、调整条件与历史恢复。可使用最近 15 分钟、1 小时、24 小时预设，也可点击「选择某一天」进入独立全天模式，页面仅显示所选日期与当天 00:00:00—23:59:59，不再把次日 00:00:00 的查询技术边界展示成结束日期；实际查询仍是当天 00:00:00（含）到次日 00:00:00（不含），夏令时切换日按当地日历日计算。需要指定时段时点击「自定义范围」切换为起止时间编辑。也支持分别用浏览器原生日历选择起止日期、在独立文本框直接输入 HH:mm:ss，避免 Chrome/Edge 原生时间滚轮轻滑过快的问题。**时间统一精确到秒，不含毫秒**；不覆盖原生日历图标，也不调用 `showPicker()`。起止时间以当前浏览器时区传给执行入口，范围为包含起点、不包含终点。无日志级别、文件上传、自动 SQL 查询等隐式参数。
 
-直接对话和日志排查按用户提问组织回复。OpenCode 返回的公开思考文本集中在“思考”里，最近一轮默认展开，也可手动折叠。思考标题根据原生片段的起止时间显示耗时。正文后显示本轮实际记录的模型、用时和生成速度，数据缺失时省略对应字段。重开历史对话时，一次展开即可读到该轮各个公开片段。工具参数、结果和运行状态在独立的“执行过程”里，最终回答保持 Markdown 排版。布局参考 [OpenCode Desktop 的会话组件](https://github.com/anomalyco/opencode/blob/fedc6f208aa2bd54c1019227214568083f6380ad/packages/session-ui/src/components/session-turn.css)。
+**输出过程保持布局稳定**：OpenCode 的实时思考文本在接收过程中以固定排版显示，完成后才进行 Markdown 排版；自动滚动只在聊天内容高度实际增加且用户仍在底部时执行，禁用聊天区浏览器滚动锚点与平滑动画的互相争抢。用户主动向上阅读历史时不强制追底，结果页标题和底部追问框不随思考过程抖动。直接对话和问题排查共用此修复。
 
-新回复随原生事件更新。上游一次返回整句或轮询补回一段内容时，页面将新收到的文字分帧显示。已完成的历史内容打开即显示；使用系统“减少动态效果”设置可直接显示收到的文本。工作台向直接对话和日志排查会话指定简体中文，用于模型公开展示的思考摘要和进度说明。对于已经生成的英文段落，可展开“思考”后点击“译成中文”，工作台会通过当前 OpenCode 会话额外请求一次译文，原文仍可查看。该操作需要 OpenCode 服务支持会话生成接口。
+**结果优先的排查工作流**：首次进入场景使用完整的时间、Trace ID、msgSn、关键词和选填问题表单。创建 OpenCode 会话并成功提交排查后，隐藏原始查询表单；结果页不再显示占空间的条件摘要。标题右侧保留「调整排查条件」按钮，与历史对话、新建对话并列，结果区优先占据可滚动页面高度，底部追问输入框保持紧凑。只有用户主动点击该按钮才打开右侧独立抽屉，首次提交或历史恢复绝不自动弹出；支持 Esc、右上角关闭、背景点击或「取消调整」，均不改变已应用条件和已有结果。抽屉可再次编辑时间/Trace ID/msgSn/关键词；点击「应用并重新排查」才提交当前条件到**同一个 OpenCode Session**，成功后自动收起，旧结果仍在会话历史中；若执行失败，保留编辑内容和错误提示供重试。追问本身不重复提交原始筛选条件，依靠原 Session 上下文。浏览器会话恢复时从最近一次排查条件的用户消息或兼容存储还原当前时间范围；不改服务端能力路由或 TeamAI 目录绑定。
 
-日志排查支持按最近 15 分钟、1 小时或 24 小时选取时间，也可手动指定本地起止时间。工作台将带时区偏移的起止时间传给 OpenCode，查询范围包含开始时刻，到结束时刻为止（不含）。发送后可核对本次使用的范围。对话框左下角可搜索、收藏、切换当前项目已启用的模型。网页的收藏与最近使用记录保存在当前浏览器。
+### 配置文件与安全边界
 
-当当前会话发来提问或权限请求时，输入区上方会显示待办，浏览器标签页也会提示等待回应。提交回答、取消提问、本次允许或拒绝会回传给同一个 OpenCode 会话。直接对话和日志排查使用相同的交互控件。
+启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（三个子场景均有可见的默认绑定）和 **`.workbench/config-access.json`**（新目录初始 `{"version":1,"editors":["zhangzhanhui"]}`，仅允许该登录用户名编辑）。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
 
-助手回复与思考文本支持 Markdown 标题、引用、表格、任务列表和代码块。排版样式取自 [OpenCode Desktop v2.2.7](https://github.com/anomalyco/opencode/blob/v2.2.7/packages/session-ui/src/components/markdown.css)，React 渲染层适配本工作台，代码高亮及样式随网页离线分发。
+通过「场景配置」页面保存 `.workbench/scenarios.json`。此文件将子场景 ID 映射到**绝对路径**工作目录和原生执行入口。**不安装 Superpowers，也不新增任何第三方 Skill 文件。** 启动时，若子场景没有配置，系统按以下默认值填充到启动工作目录中；已有的自定义绑定不覆盖：
 
-日志排查绑定当前项目加载的自定义 Skill `log-query`。工作台按名称定位它，并在首轮及每次追问的 OpenCode prompt 的 `skills` 字段指定实际 ID。该 Skill 由内网项目提供。缺失、同名冲突或目录查询失败会保留用户输入并提示原因。
+| 子场景 | 默认工作目录 | 默认执行入口 | 使用限制 |
+| --- | --- | --- | --- |
+| 公管问题排查 | 启动工作目录 | Skill `brainstorming` | 仅是能力名称引用；没有在 OpenCode 加载该 Skill 时会明确拒绝执行，不会假装已安装 Superpowers |
+| 报文问题排查 | 启动工作目录 | Command `models`（TUI `/models`） | 它只是**模型选择器**，页面打开内置模型列表；发送问题走普通对话，不会把 `/models` 当作报文排查工具调用 |
+| 公管数据分析 | 启动工作目录 | Built-in `chat` | 直接使用 OpenCode 对话，不依赖第三方 Skill |
+
+已有 `.workbench/scenarios.json` 若未配置某个子场景，会在**下一次工作台服务启动**时补齐该子场景默认值，其他场景绑定保留不变。若用户保存了一个不存在的 Skill 名称，执行仍严格校验目录内真实的 OpenCode Catalog。
+
+以下 JSON 演示如何把默认绑定替换成项目中**实际存在**的业务入口（名称只是示例）：
+
+```json
+{
+  "version": 1,
+  "scenes": {
+    "logs": {
+      "directory": "D:\\\\projects\\\\public-service",
+      "executor": {"type": "skill", "name": "log-query"}
+    },
+    "message": {
+      "directory": "D:\\\\projects\\\\message-service",
+      "executor": {"type": "subagent", "name": "message-diagnoser"}
+    },
+    "data": {
+      "directory": "D:\\\\projects\\\\public-data",
+      "executor": {"type": "command", "name": "public-analysis"}
+    }
+  }
+}
+```
+
+三个配置键：`logs` 对应公管问题排查，`message` 对应报文问题排查，`data` 对应公管数据分析。可以分别绑定不同目录。首次启动或重启后，未配置的场景自动绑定启动目录及上述默认入口；自定义 Skill 如果不存在仍会拒绝执行。所有绑定必须为已存在的绝对目录；服务端按实际文件解析路径并检查。Skill、命令和 Agent 通过 OpenCode 的目录级 catalog 验证，不存在、重名或接口不可用时不执行。Command 通过原生 `session.command` 提交而不是把斜杠命令当普通提示词。Subagent 经原生 Agent catalog 验证并附加 Agent 提及；是否真正创建子会话和运行结果须以实际 OpenCode 工具轨迹为准，不能把文本提及视为已经执行成功。
+
+配置页面的**编辑权限**独立保存在启动目录的 **`.workbench/config-access.json`**。新工作目录首次启动默认只允许登录用户名 `zhangzhanhui` 编辑配置，其他登录用户名只读。打开配置页显示当前登录用户名；管理员可以在本机文件系统中直接用用户名维护 `editors`。已有的权限文件不会自动覆盖，因此旧工作目录若仍是空名单，需要手动把用户名写入：
+
+```json
+{
+  "version": 1,
+  "editors": ["zhangzhanhui"]
+}
+```
+
+保存权限文件后刷新配置页面。前端会根据 `canEdit` 切换编辑状态；服务端按**登录用户名精确匹配（区分大小写）**判断权限，并在每次保存时独立校验会话、CSRF、ACL、配置结构、目录存在性和文件版本。**不能在 Web 页面修改此权限文件**，防止自我提权。没有登录用户名的配对码会话默认只读。注意：当前本地登录只需填写姓名和手机号，没有凭证验证，因此任何知道 `zhangzhanhui` 的人都可能填同名冒用；此规则只适用于受控本机开发测试环境，不构成严格的人员身份认证。真正的多人内网部署必须接入受信任的账户认证与授权。
+
+`.workbench/user.json` 包含本机个人资料，请勿将这些文件与内部业务路径和用户资料提交到公共 Git 仓库。场景配置文件和权限文件可包含敏感路径与身份标识，同样应排除在共享版本控制之外。建议工作台启动目录与受控业务仓库分离。
+
+### 全局模型选择（右上角）
+
+在工作台右上角的「全局模型」下拉菜单选择一次公司内网模型。**直接对话、公管问题排查、报文问题排查、公管数据分析共用这一选择**，切换场景、打开其他对话或刷新页面都不需要重复选择，当前浏览器使用 `localStorage['harness.global.model']` 保存模型 ID、提供商和可选变体。这里保存的是模型标识，不是 API Key 或模型访问令牌。
+
+首次创建 OpenCode Session 时显式传入所选模型；对已有 Session 追问时，若其原模型不同，先通过 `session.switchModel` 切换，成功后再发送消息。**切换失败就不发送，绝不悄悄回退到 OpenCode 默认模型**。执行目录仍采用各场景独立绑定，服务端校验目标目录的模型是否可用；不支持该模型的目录会明确提示错误，需重新选择对应模型或配置目录。若用户主动选「默认模型」，则仍由 OpenCode 决定默认提供商（内网请优先明确选择已配置的私有模型）。
+
+报文场景若保持默认的 `/models` 入口，则进入场景时直接打开右上角的统一模型选择器，不把 `/models` 当作报文分析命令执行。顶部模型配置仅控制**本地 OpenCode 对话及三个专项聊天场景**；代码审查任务仍按独立 Review 调度服务的配置执行，不受此下拉选择影响。当前版本存储于**浏览器本地**，不是所有设备、不同浏览器之间同步的服务器配置。
+
+### 对话与执行
+
+每个子场景使用自身的已绑定工作目录获取模型、Skill、Command、Agent 和文件引用。配置缺失时，页面会明确显示「当前子场景尚未配置」，不会试图在默认目录执行；页面的「重新检查配置」可在保存配置后重新读取。网络无法读取配置时会单独提示本地服务连接问题并允许重试。历史会话、草稿与时间范围按场景区分；旧的公管日志会话保留既有 `harness.logs` 存储键。切换场景不自动创建 OpenCode 会话，当前会话也不会因为管理员修改配置而无提示迁移目录；执行时仍在服务端检查当前绑定。
+
+模型选择、流式输出、工具执行、授权等待、原生表单补参、中断和恢复与之前一致。等待权限时仍只有「拒绝」「仅本次允许」，不会新增自动授权。测试中的模拟工具或会话输出不是企业内网真实运行证据。
 
 ### 登录资料供项目 Skill 读取
 

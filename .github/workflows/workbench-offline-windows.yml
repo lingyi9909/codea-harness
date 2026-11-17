@@ -1,0 +1,72 @@
+name: Workbench Windows Offline Download
+
+on:
+  push:
+    branches:
+      - feature/smart-workbench-scenario-groups-20261115
+    paths:
+      - 'web-workbench/**'
+      - '.github/workflows/workbench-offline-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v4
+      - name: Setup Windows Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Install locked Windows dependencies
+        working-directory: web-workbench
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build web UI
+        working-directory: web-workbench
+        run: npm run web:build
+      - name: Check frontend and server, scenario bindings, and local launch
+        working-directory: web-workbench
+        run: |
+          npm run typecheck
+          npm run web:typecheck
+          npm run test:chat
+          npm run smoke:local
+      - name: Keep only runtime dependencies
+        working-directory: web-workbench
+        run: npm prune --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Verify runtime after pruning dev dependencies
+        working-directory: web-workbench
+        run: npm run smoke:local
+      - name: Package Windows offline runtime as ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $out=Join-Path $env:RUNNER_TEMP 'codea-workbench-windows-offline.zip'
+          if (-not (Test-Path 'web-workbench/apps/web/dist/index.html')) { throw 'frontend dist is missing' }
+          if (-not (Test-Path 'web-workbench/node_modules/fastify')) { throw 'runtime modules missing' }
+          Compress-Archive -Path 'web-workbench' -DestinationPath $out -CompressionLevel Optimal -Force
+          if (-not (Test-Path $out)) { throw 'offline ZIP missing' }
+          $unpack=Join-Path $env:RUNNER_TEMP 'workbench-offline-validation'
+          Expand-Archive -Path $out -DestinationPath $unpack -Force
+          if (-not (Test-Path (Join-Path $unpack 'web-workbench/apps/web/dist/index.html'))) { throw 'unpacked UI missing' }
+          if (-not (Test-Path (Join-Path $unpack 'web-workbench/node_modules/fastify'))) { throw 'unpacked modules missing' }
+          Push-Location (Join-Path $unpack 'web-workbench')
+          try { npm run smoke:local; if ($LASTEXITCODE -ne 0) { throw 'Extracted offline bundle did not start' } }
+          finally { Pop-Location }
+          $size=[math]::Round((Get-Item $out).Length/1MB,1)
+          Write-Output "OFFLINE_ZIP_READY size=${size}MB commit=$env:GITHUB_SHA"
+          Copy-Item $out (Join-Path $env:GITHUB_WORKSPACE 'codea-workbench-windows-offline.zip')
+      - name: Upload offline ZIP (download this artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-workbench-windows-offline
+          path: codea-workbench-windows-offline.zip
+          if-no-files-found: error
+          retention-days: 14

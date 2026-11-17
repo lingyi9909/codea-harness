@@ -37,26 +37,21 @@ export function ProfileLogin({onLogin}:{onLogin:(name:string,phone:string)=>Prom
   return <main className="profile-page">
     <section className="profile-card" aria-labelledby="profile-title">
       <aside className="profile-side">
-        <div className="profile-brand"><strong>Code Harness</strong><span>智能研发工作台</span></div>
+        <div className="profile-brand"><strong>智能工作台</strong><span>智能研发场景协作</span></div>
         <div className="profile-side-copy">
           <span className="profile-overline">LOCAL AI WORKSPACE</span>
           <h2>让研发工作<br/>更专注、更清晰</h2>
-          <p>在同一个工作台中连接 OpenCode 对话、代码审查、日志排查和数据分析。</p>
         </div>
-        <span className="profile-side-footer">本地运行 · 资源随项目使用</span>
       </aside>
       <div className="profile-form-pane">
         <span className="profile-overline">欢迎使用</span>
         <h1 id="profile-title">登录工作台</h1>
-        <p className="profile-subtitle">填写本地工作台资料，继续当前项目。</p>
         <form onSubmit={submit} autoComplete="off">
           <label>姓名<input name="name" value={name} required autoComplete="off" placeholder="请输入姓名" onChange={e=>setName(e.target.value)}/></label>
           <label>手机号<input name="phone" type="tel" value={phone} required maxLength={40} autoComplete="off" placeholder="请输入手机号" onChange={e=>setPhone(e.target.value)}/></label>
-          <p className="profile-disclosure">登录后，姓名和手机号将保存到当前工作目录的 <code>.workbench/user.json</code>，供此目录中的 Skill 读取。</p>
           {error&&<p className="profile-error" role="alert">{error}</p>}
           <button className="profile-submit" disabled={busy} type="submit">{busy?'正在登录…':'登录工作台'}<span aria-hidden="true">↗</span></button>
         </form>
-        <p className="profile-footnote">仅用于本地工作台资料登记，不进行短信验证。</p>
       </div>
     </section>
   </main>;

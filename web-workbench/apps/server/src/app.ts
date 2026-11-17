@@ -1,5 +1,6 @@
 import { parseProfile, profileKey, WorkspaceProfile } from './local-profile.ts';
 import { registerChat, resolveLocalWorkspace } from './modules/chat/routes.ts';
+import { SceneConfigStore, SCENE_CONFIG_PATH, SCENE_ACCESS_PATH } from './scene-config.ts';
 import Fastify from 'fastify';
 import serveStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
@@ -7,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { dispatchNext,type SchedulerConfig } from './workers/scheduler.ts';
 import { randomUUID } from 'node:crypto';
-import { delimiter } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { registerGitRoutes } from './modules/repositories/routes.ts';
 import { registerTaskFileRoutes } from './modules/tasks/files.ts';
 import { registerTaskRoutes } from './modules/tasks/routes.ts';
@@ -47,7 +48,7 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
   }
   const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>>=>({
     owner,csrfToken:csrf,
-    scenarios:[{id:'direct-chat',name:'直接对话',enabled:true,reason:null},{id:'log-inspection',name:'日志排查',enabled:true,reason:null},
+    scenarios:[{id:'direct-chat',name:'直接对话',enabled:true,reason:null},{id:'log-inspection',name:'问题排查',enabled:true,reason:null},
       {id:'data-analysis',name:'数据分析',enabled:true,reason:null},{id:'code-review',name:'Codea Review',enabled:capability.ready,
       reason:capability.ready?null:'OpenCode native capabilities require target-environment validation'}],
     capabilities:capability.capabilities,
@@ -70,8 +71,10 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     return reply.status(health.status==='READY'?200:503).send(result(health));
   });
   const localSession=opts.localOnly===true&&!opts.pool;
-  const workspace=localSession?await resolveLocalWorkspace(opts.workspace):undefined;
-  if(workspace){
+  const workspace=opts.workspace?await resolveLocalWorkspace(opts.workspace):localSession?await resolveLocalWorkspace():undefined;
+  const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
+  await sceneConfig?.initialize();
+  if(workspace&&localSession){
     const store=new WorkspaceProfile(workspace);
     app.addHook('onRequest',async(req,reply)=>{
       const route=req.routeOptions.url;
@@ -107,7 +110,29 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
-  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace});
+  if(sceneConfig){
+    // Only a named local login can match the configured editor usernames.
+    // Pairing-code sessions have no verified username and remain read-only.
+    const editorUsername=(session:{profile?:{name:string}})=>session.profile?.name??null;
+    app.get('/api/v1/scene-config',async(req,reply)=>{
+      const session=opts.auth.session(req),username=editorUsername(session);
+      return reply.header('Cache-Control','no-store').send(result({
+        workspace,configPath:join(workspace!,SCENE_CONFIG_PATH),accessPath:join(workspace!,SCENE_ACCESS_PATH),
+        ...sceneConfig.read(),canEdit:sceneConfig.canEdit(username??undefined),
+        username,
+      }));
+    });
+    app.put<{Body:{config:unknown;revision:string}}>('/api/v1/scene-config',{
+      schema:{body:{type:'object',additionalProperties:false,required:['config','revision'],properties:{
+        config:{type:'object'},revision:{type:'string',minLength:64,maxLength:64}}}},
+    },async(req,reply)=>{
+      const session=opts.auth.mutation(req);
+      if(!sceneConfig.canEdit(editorUsername(session)??undefined))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
+      const saved=await sceneConfig.save(req.body.config,req.body.revision);
+      return reply.header('Cache-Control','no-store').send(result({...saved,canEdit:true}));
+    });
+  }
+  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       opts.auth.session(req);return result({items:[],nextCursor:null});

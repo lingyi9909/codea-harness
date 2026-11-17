@@ -22,7 +22,6 @@ async function observePaintedText(page:Page){
 
 async function login(page:Page){
   await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
-  await expect(page.getByText('.workbench/user.json',{exact:true})).toBeVisible();
   await page.getByLabel('姓名',{exact:true}).fill('测试同事');
   await page.getByLabel('手机号',{exact:true}).fill('13800000000');
   await page.getByRole('button',{name:'登录工作台',exact:true}).click();
@@ -86,7 +85,19 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       if(req.url===logBase)return res.end(JSON.stringify({data:logSession}));
       const save=(suffix,done)=>{let body='';req.on('data',s=>body+=s);req.on('end',()=>{
         fs.writeFileSync(flag+suffix,body);done(JSON.parse(body));res.writeHead(204);res.end();});};
-      if(req.url===secondBase)return res.end(JSON.stringify({data:secondLog}));
+      if(req.url===secondBase&&req.method==='PATCH'){
+        let body='';req.on('data',s=>body+=s);req.on('end',()=>{
+          secondLog={...secondLog,title:JSON.parse(body).title};
+          res.writeHead(204);res.end();
+        });return;
+      }
+      if(req.url===secondBase&&req.method==='DELETE'){
+        secondLog=null;res.writeHead(204);return res.end();
+      }
+      if(req.url===secondBase){
+        if(!secondLog){res.writeHead(404);return res.end('{}');}
+        return res.end(JSON.stringify({data:secondLog}));
+      }
       if(req.url===secondBase+'/prompt'){
         let body='';req.on('data',s=>body+=s);req.on('end',()=>{
           fs.writeFileSync(flag+'.second-prompt',body);
@@ -155,6 +166,13 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
   process.env.HARNESS_OPENCODE_SERVICE_FILE=file;
   const project=join(root,'业务项目');
   await mkdir(project);
+  const settingsDir=join(project,'.workbench');
+  await mkdir(settingsDir,{recursive:true});
+  await writeFile(join(settingsDir,'scenarios.json'),JSON.stringify({version:1,scenes:{
+    logs:{directory:project,executor:{type:'skill',name:'log-query'}},
+    message:{directory:project,executor:{type:'skill',name:'log-query'}},
+    data:{directory:project,executor:{type:'skill',name:'log-query'}},
+  }}));
   process.env.HARNESS_CHAT_ROOTS=project;
   delete process.env.HARNESS_REPOSITORY_ROOTS;delete process.env.HARNESS_OPENCODE_URL;
   const port=31881;
@@ -177,6 +195,17 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.goto('http://127.0.0.1:'+port);
     await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
     await expect(page.locator('.profile-side')).toBeVisible();
+    // Keep the login form simple: no disclosure, promotional copy or footer.
+    for(const removed of [
+      '登录后，姓名和手机号将保存到当前工作目录',
+      '在同一个工作台中连接 OpenCode 对话',
+      '填写本地工作台资料，继续当前项目。',
+      '仅用于本地工作台资料登记，不进行短信验证。',
+      '本地运行 · 资源随项目使用',
+    ])await expect(page.getByText(removed,{exact:false})).toHaveCount(0);
+    await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
+    await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('手机号',{exact:true})).toBeVisible();
     await expect(page.locator('.profile-submit')).toHaveCSS('background-color','rgb(36, 39, 44)');
     await page.screenshot({path:join(shots,'00-login-silver.png')});
     await expect(page.getByRole('navigation')).toHaveCount(0);
@@ -192,7 +221,13 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
     await expect(page.getByLabel('对话内容')).toBeVisible();
     await expect(page.locator('.main > .topbar')).toBeVisible();
-    await expect(page.locator('.workspace-pill')).toContainText('业务项目');
+    const topModel=page.locator('.main > .topbar').getByRole('button',{name:'选择模型'});
+    await expect(topModel).toBeVisible();
+    await expect(page.locator('.composer-actions').getByLabel('选择模型')).toHaveCount(0);
+    await expect(page.locator('.workspace-context')).toHaveText('对话首页');
+    await expect(page.locator('.workspace-pill')).toHaveCount(0);
+    await expect(page.locator('.chat-project-hint')).toHaveCount(0);
+    await expect(page.locator('.chat-workspace-path')).toHaveCount(0);
     await expect(page.locator('.sidebar')).toHaveCSS('width','282px');
     await expect(page.getByRole('navigation').getByRole('button',{name:'代码审查'})).toHaveCSS('color','rgb(43, 48, 56)');
     await expect(page.locator('.silver-chat-home')).toHaveClass(/silver-chat-empty/);
@@ -207,7 +242,45 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.equal(await sessionCookie(),cookie);
     // The home is already the native OpenCode chat; do not navigate to a separate scene.
     await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
-    await expect(page.locator('.sidebar .brand')).toContainText('Code Harness');
+    await expect(page.locator('.sidebar .brand')).toContainText('智能工作台');
+    // The browser must render the actual file-backed editor and respect ACL changes.
+    await page.getByRole('button',{name:'场景配置'}).click();
+    await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
+    await expect(page.getByLabel('公管问题排查工作目录')).toHaveValue(project);
+    await expect(page.getByRole('button',{name:'保存场景配置'})).toHaveCount(0);
+    await page.screenshot({path:join(shots,'09-scene-config-readonly.png')});
+    await writeFile(join(settingsDir,'config-access.json'),
+      JSON.stringify({version:1,editors:['测试同事']}));
+    await page.reload();
+    await expect(page.getByRole('button',{name:'保存场景配置'})).toBeVisible();
+    await page.getByRole('button',{name:'保存场景配置'}).click();
+    await expect(page.getByRole('status').last()).toContainText('配置已写入当前启动目录');
+    await page.screenshot({path:join(shots,'10-scene-config-editor.png')});
+    // A missing scenario binding must show actionable local configuration guidance,
+    // not an offline error or an attempt to contact OpenCode.
+    const sceneFile=join(settingsDir,'scenarios.json');
+    const configured=await readFile(sceneFile,'utf8');
+    // Built-in /models must open the actual model selector, not issue a fake
+    // custom command in OpenCode when the message scene first opens.
+    const modelScene=JSON.parse(configured);
+    modelScene.scenes.message={directory:project,executor:{type:'command',name:'models'}};
+    await writeFile(sceneFile,JSON.stringify(modelScene));
+    const sceneNav=page.getByRole('navigation',{name:'场景导航'});
+    await sceneNav.getByRole('button',{name:'问题排查',exact:true}).click();
+    await sceneNav.getByRole('button',{name:'报文问题排查',exact:true}).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByText('默认入口 /models', {exact:false})).toBeVisible();
+    await page.screenshot({path:join(shots,'12-default-model-picker.png')});
+    await page.getByRole('button',{name:'关闭模型选择'}).click();
+    await writeFile(sceneFile,JSON.stringify({version:1,scenes:{}}));
+    await sceneNav.getByRole('button',{name:'公管问题排查',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'当前子场景尚未配置'})).toBeVisible();
+    await expect(page.getByText('连接已中断')).toHaveCount(0);
+    await page.screenshot({path:join(shots,'11-scene-unconfigured.png')});
+    await writeFile(sceneFile,configured);
+    await page.getByRole('button',{name:'重新检查配置'}).click();
+    await expect(page.getByRole('heading',{name:'公管问题排查'})).toBeVisible();
+    await sceneNav.getByRole('button',{name:'对话首页'}).click();
     await expect(page.locator('.chat-hero,.scene-cards')).toHaveCount(0);
     await expect(page).toHaveTitle('智能工作台');
     async function checkChatLayout(){
@@ -218,13 +291,16 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       assert.ok(layout&&box&&Math.abs(layout.width-box.width)<1);
     }
     await checkChatLayout();
-    await page.locator('.composer-actions').getByLabel('选择模型').click();
+    await topModel.click();
     const search=page.getByRole('combobox',{name:'搜索模型'});
     await search.fill('company');
     await expect(page.getByRole('option',{name:/Analysis fixture/})).toHaveCount(0);
     await expect(page.getByRole('option',{name:/Company fixture/})).toBeVisible();
     await page.screenshot({path:join(shots,'02-model-picker.png')});
     await search.press('Enter');
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','company/intranet');
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+      {id:'intranet',providerID:'company'});
     const composer=page.getByLabel('对话内容');
     await composer.fill('第一行');
     await composer.press('Shift+Enter');
@@ -243,73 +319,154 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     const created=JSON.parse(await readFile(file+'.body','utf8'));
     assert.deepEqual(created.model,{id:'intranet',providerID:'company'});
     assert.equal(created.location.directory,await realpath(project));
-    await page.getByRole('navigation').getByRole('button',{name:'日志排查',exact:true}).click();
+    const nav=page.getByRole('navigation',{name:'场景导航'});
+    const problem=nav.getByRole('button',{name:'问题排查',exact:true});
+    await expect(problem).toHaveAttribute('aria-expanded','false');
+    await problem.click();
+    await expect(problem).toHaveAttribute('aria-expanded','true');
+    await expect(nav.getByRole('button',{name:'公管问题排查'})).toBeVisible();
+    await expect(nav.getByRole('button',{name:'报文问题排查'})).toBeVisible();
+    await nav.getByRole('button',{name:'报文问题排查'}).click();
+    await expect(page.getByRole('heading',{name:'报文问题排查'})).toBeVisible();
+    await expect(page.getByLabel('msgSn',{exact:true})).toBeVisible();
+    const messageSubmit=page.getByRole('button',{name:'开始排查'});
+    await expect(messageSubmit).toBeDisabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('000456');
+    await expect(messageSubmit).toBeEnabled();
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','company/intranet');
+    await page.getByLabel('对话内容').fill('报文模式独立草稿');
+    await nav.getByRole('button',{name:'公管问题排查'}).click();
+    await expect(page.getByRole('heading',{name:'公管问题排查'})).toBeVisible();
+    await expect(page.getByLabel('msgSn',{exact:true})).toHaveValue('');
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','company/intranet');
+    await expect(page.getByLabel('对话内容')).toHaveValue('');
+    await nav.getByRole('button',{name:'报文问题排查'}).click();
+    await expect(page.getByLabel('对话内容')).toHaveValue('报文模式独立草稿');
+    await nav.getByRole('button',{name:'公管问题排查'}).click();
+    await expect(problem).toHaveAttribute('aria-expanded','true');
+    await expect(nav.getByRole('button',{name:'公管问题排查'})).toHaveAttribute('aria-current','page');
+    await expect(nav.getByRole('button',{name:'数据分析',exact:true})).toHaveAttribute('aria-expanded','false');
     const submit=page.getByRole('button',{name:'开始排查'});
     await checkChatLayout();
     await expect(page.getByText('要排查哪次请求？')).toHaveCount(0);
     await expect(page.locator('.chat-feed')).toHaveCount(0);
+    // The investigation composer must have breathing room between the
+    // filtering criteria, optional question and footer actions on Windows.
+    await expect(page.getByText('补充排查问题',{exact:true})).toBeVisible();
+    const filterBox=await page.locator('.log-grid').boundingBox();
+    const questionBox=await page.locator('.investigation-question-heading').boundingBox();
+    const textareaBox=await page.getByLabel('对话内容').boundingBox();
+    const actionBox=await page.locator('.log-investigation .composer-actions').boundingBox();
+    assert.ok(filterBox&&questionBox&&textareaBox&&actionBox);
+    assert.ok(questionBox.y-(filterBox.y+filterBox.height)>=20,'separate optional question from filters');
+    assert.ok(textareaBox.y-(questionBox.y+questionBox.height)>=8,'leave space below question label');
+    assert.ok(actionBox.y-(textareaBox.y+textareaBox.height)>=18,'separate submit actions from text area');
     await page.screenshot({path:join(shots,'03-log-criteria.png')});
+    await page.setViewportSize({width:390,height:844});
+    const stacked=await Promise.all(['开始时刻','结束时刻'].map(label=>page.getByLabel(label,{exact:true}).boundingBox()));
+    assert.ok(stacked[0]&&stacked[1]&&stacked[1].y>=stacked[0].y+stacked[0].height,
+      'narrow layouts stack date/time inputs vertically');
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),
+      'investigation criteria must not overflow the narrow viewport');
+    await page.screenshot({path:join(shots,'03-log-criteria-mobile.png')});
+    await page.setViewportSize({width:1280,height:720});
+    await expect(submit).toBeDisabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('000123');
+    await expect(submit).toBeEnabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('');
     await expect(submit).toBeDisabled();
     await expect(page.getByRole('textbox',{name:'请求入参'})).toHaveCount(0);
     const quarter=page.getByRole('button',{name:'最近 15 分钟'});
     await page.clock.setFixedTime(new Date('2026-11-12T00:05:43.125+08:00'));
     await quarter.click();
-    await expect(page.getByLabel('开始时间',{exact:true})).toHaveValue('2026-11-11T23:50:43.125');
-    await expect(page.getByLabel('结束时间',{exact:true})).toHaveValue('2026-11-12T00:05:43.125');
-    await expect(page.locator('.range-zone')).toContainText('Asia/Shanghai');
-    await expect(page.locator('.range-zone')).toContainText('UTC+08:00');
+    await expect(page.getByLabel('开始日期',{exact:true})).toHaveValue('2026-11-11');
+    await expect(page.getByLabel('开始时刻',{exact:true})).toHaveValue('23:50:43');
+    await expect(page.getByLabel('结束日期',{exact:true})).toHaveValue('2026-11-12');
+    await expect(page.getByLabel('结束时刻',{exact:true})).toHaveValue('00:05:43');
+    await expect(page.locator('.range-zone')).toHaveText('精确到秒');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
-    await page.evaluate(()=>{
-      const native=HTMLInputElement.prototype.showPicker;
-      HTMLInputElement.prototype.showPicker=function(){
-        native.call(this);this.dataset.pickerCalls=String(Number(this.dataset.pickerCalls??0)+1);
-      };
-    });
-    for(const label of ['开始时间','结束时间']){
-      const input=page.getByLabel(label,{exact:true}),box=await input.boundingBox();
-      assert.ok(box);
-      for(const [index,x] of [8,box.width/2,box.width-10].entries()){
-        await input.click({position:{x,y:box.height/2}});
-        await expect(input).toHaveAttribute('data-picker-calls',String(index+1));
-        await page.keyboard.press('Escape');
-      }
+    // No native time scroll columns: exact HH:mm:ss remains stable under
+    // mouse-wheel scrolling; dates keep Chromium's built-in calendar popup.
+    for(const [date,time] of [['开始日期','开始时刻'],['结束日期','结束时刻']] as const){
+      await expect(page.getByLabel(date)).toHaveAttribute('type','date');
+      await expect(page.getByLabel(time)).toHaveAttribute('type','text');
     }
-    await page.getByLabel('开始时间').fill('2026-11-11T23:57');
-    await page.getByLabel('结束时间').fill('2026-11-12T00:03');
+    await page.getByLabel('开始时刻').hover();
+    await page.mouse.wheel(0,720);
+    await expect(page.getByLabel('开始时刻')).toHaveValue('23:50:43');
+    // A selected calendar day is displayed as ONE day, not as technical
+    // midnight-to-next-midnight bounds. The native prompt remains half-open.
+    await page.getByRole('button',{name:'选择某一天'}).click();
+    await expect(page.getByLabel('查询日期')).toBeVisible();
+    await page.getByLabel('查询日期').fill('2026-11-11');
+    await expect(page.locator('.range-day-summary')).toContainText('2026/11/11 · 全天');
+    await expect(page.locator('.range-day-summary')).toContainText('00:00:00 — 23:59:59');
+    await expect(page.getByLabel('开始日期')).toHaveCount(0);
+    await expect(page.getByLabel('结束日期')).toHaveCount(0);
+    await expect(page.locator('.range-footer')).toContainText('已选择 2026/11/11 全天');
+    // Switching directly between dates must keep exactly one day in view.
+    await page.getByLabel('查询日期').fill('2026-11-10');
+    await expect(page.locator('.range-day-summary')).toContainText('2026/11/10 · 全天');
+    await page.getByLabel('查询日期').fill('2026-11-11');
+    await expect(page.locator('.range-day-summary')).toContainText('2026/11/11 · 全天');
+    await page.getByLabel('msgSn',{exact:true}).fill('000123');
+    await expect(submit).toBeEnabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('');
+    await page.getByRole('button',{name:'自定义范围'}).click();
+    await expect(page.getByLabel('开始日期')).toHaveValue('2026-11-11');
+    await expect(page.getByLabel('结束日期')).toHaveValue('2026-11-12');
+    await quarter.click();
+    await page.getByLabel('开始日期').fill('2026-11-11');
+    await page.getByLabel('开始时刻').fill('23:57:11');
+    await page.getByLabel('结束日期').fill('2026-11-12');
+    await page.getByLabel('结束时刻').fill('00:03:42');
+    await expect(page.getByLabel('开始时刻')).toHaveValue('23:57:11');
+    await expect(page.getByLabel('结束时刻')).toHaveValue('00:03:42');
+    await expect(page.locator('.range-footer')).toContainText('6 分钟 31 秒');
+    await expect(page.locator('.log-time-range')).toBeVisible();
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
     await expect(submit).toBeEnabled();
     await page.getByLabel('Trace ID',{exact:true}).fill('');
     await expect(submit).toBeDisabled();
-    await page.getByLabel('关键字',{exact:true}).fill('timeout');
+    await page.getByLabel('关键词',{exact:true}).fill('timeout');
     await expect(submit).toBeEnabled();
     await page.getByLabel('Trace ID',{exact:true}).fill('abc123');
-    await page.getByText('日志来源与级别',{exact:true}).click();
-    await page.getByLabel('导入本地日志').setInputFiles({name:'service.log',mimeType:'text/plain',buffer:Buffer.from([
-      '2026-11-11 23:56:59.999 ERROR abc123 timeout before-window','2026-11-11 23:57:00 ERROR abc123 timeout included',
-      '2026-11-11 23:59:59 INFO abc123 timeout wrong-level','2026-11-12 00:03:00 ERROR abc123 timeout at-end',
-      '2026-11-12 00:02:00 ERROR def timeout wrong-id','2026-11-11T16:02:59.999Z ERROR abc123 timeout last-ms',
-      '2026-11-12T05:29:00+13:30 ERROR abc123 timeout offset-row'].join('\n'))});
-    await page.getByLabel('日志级别').selectOption('ERROR');
-    await expect(page.locator('.log-query pre')).toHaveText([
-      '2  2026-11-11 23:57:00 ERROR abc123 timeout included',
-      '6  2026-11-11T16:02:59.999Z ERROR abc123 timeout last-ms',
-      '7  2026-11-12T05:29:00+13:30 ERROR abc123 timeout offset-row'].join('\n'));
+    await page.getByLabel('msgSn',{exact:true}).fill('000123');
+    await expect(page.getByLabel('日志级别')).toHaveCount(0);
+    await expect(page.getByLabel('导入本地日志')).toHaveCount(0);
     await page.getByLabel('对话内容').fill('检查超时原因');
     await submit.click();
-    await expect(page.getByRole('alert')).toContainText('未加载自定义 Skill「log-query」');
+    await expect(page.getByRole('alert')).toContainText('未发现配置的执行入口');
     await expect(page.getByLabel('对话内容')).toHaveValue('检查超时原因');
     const painted=await observePaintedText(page);
     await writeFile(file+'.skill','1');
+    // Regression: first submit must never mount the adjustment drawer, even
+    // briefly between native session creation and message submission.
+    await page.evaluate(()=>{
+      const watcher=new MutationObserver(()=>{
+        if(document.querySelector('.investigation-drawer-backdrop'))
+          document.documentElement.dataset.autoDrawerOpened='true';
+      });
+      watcher.observe(document.body,{childList:true,subtree:true});
+      window.addEventListener('harness:stop-drawer-observer',()=>watcher.disconnect(),{once:true});
+    });
     await submit.click();
-    await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
-    const expectedRange='2026-11-11T23:57:00.000+08:00 至 2026-11-12T00:03:00.000+08:00';
-    const appliedRange=page.locator('.log-applied-range');
-    await expect(appliedRange).toContainText(expectedRange);
-    await expect(appliedRange).toContainText('Asia/Shanghai');
+    const adjustment=page.getByRole('button',{name:'调整排查条件'});
+    await expect(page.locator('.log-investigation-active > .scene-title').getByRole('button',{name:'调整排查条件'})).toBeVisible();
+    await expect(page.getByRole('dialog',{name:'调整排查条件'})).toHaveCount(0);
+    assert.deepEqual((await recorded('.body')).model,{id:'intranet',providerID:'company'},
+      'the global model must apply to new investigation sessions');
+    const expectedRange='2026-11-11T23:57:11+08:00 至 2026-11-12T00:03:42+08:00';
+    const summaryBar=page.locator('.investigation-summary-bar');
+    await expect(summaryBar).toHaveCount(0);
+    await expect(page.getByText('当前排查条件',{exact:true})).toHaveCount(0);
+    await page.evaluate(()=>window.dispatchEvent(new Event('harness:stop-drawer-observer')));
+    await expect(page.locator('html')).not.toHaveAttribute('data-auto-drawer-opened','true');
     const sentRange=(await recorded('.prompt')).text;
     assert.ok(sentRange.includes(expectedRange));
     assert.ok(sentRange.includes('Asia/Shanghai'));
+    assert.ok(sentRange.includes('msgSn：000123'));
     const running=page.getByRole('button',{name:'正在执行 · 中断执行'});
     await expect(running).toBeVisible();
     await expect(running).toHaveCSS('background-color','rgb(170, 39, 46)');
@@ -327,6 +484,18 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(thought.locator('summary')).toContainText('思考');
     await expect(feed.getByText('客户端可见的测试片段',{exact:true})).toBeVisible();
     await expect(feed.getByText(firstReasoning,{exact:true})).toBeVisible();
+    await expect(thought.locator('.reasoning-live-text')).toContainText(firstReasoning);
+    await expect(feed).toHaveCSS('overflow-anchor','none');
+    await expect(feed).toHaveCSS('scroll-behavior','auto');
+    // Streamed thought text may grow, but it must not shift the workbench
+    // heading or the bottom reply composer as it is progressively painted.
+    const stableFrame=async()=>{
+      const heading=await page.locator('.log-investigation-active > .scene-title').boundingBox();
+      const composer=await page.locator('.log-investigation-active .composer').boundingBox();
+      assert.ok(heading&&composer);
+      return {headingY:heading.y,composerY:composer.y};
+    };
+    const initialFrame=await stableFrame();
     await expect(feed).not.toContainText('private-marker');
     await thought.locator('summary').click();
     await expect(feed.getByText(firstReasoning,{exact:true})).not.toBeVisible();
@@ -337,6 +506,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await writeFile(file+'.next','1');
     await expect(feed.getByText(firstReasoning+'时间线',{exact:true})).toBeVisible();
     await expect(feed.getByText('已找到',{exact:true})).toBeVisible();
+    const afterFrame=await stableFrame();
+    assert.ok(Math.abs(initialFrame.headingY-afterFrame.headingY)<2,'live thinking must not move the scene header');
+    assert.ok(Math.abs(initialFrame.composerY-afterFrame.composerY)<2,'live thinking must not move the reply composer');
     await expect(feed).not.toContainText('两条记录');
     await writeFile(file+'.finish','1');
     await expect(feed.getByText(finalAnswer,{exact:true})).toBeVisible();
@@ -346,12 +518,46 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       assert.ok(partial.size>=3,'a whole upstream chunk produces multiple visible prefixes: '+chunk);
     }
     await page.reload();
-    await expect(appliedRange).toContainText(expectedRange);
+    await expect(summaryBar).toHaveCount(0);
+    await expect(page.getByRole('dialog',{name:'调整排查条件'})).toHaveCount(0);
     await expect(feed.getByText(finalAnswer,{exact:true})).toHaveCount(1);
     await expect(running).toHaveCount(0);
     await expect(feed.locator('.turn-process').first()).not.toHaveAttribute('open','');
     await expect(feed.getByRole('heading',{name:'排查结果'})).toBeVisible();
     await page.screenshot({path:join(shots,'04-log-results.png')});
+    // Result-first editing: the editor overlays the answer rather than
+    // growing the composer; Escape and Cancel must restore applied criteria.
+    const answerBefore=await feed.boundingBox(),composerBefore=await page.locator('.log-investigation-active .composer').boundingBox();
+    assert.ok(answerBefore&&composerBefore&&answerBefore.height>=220,
+      'results must have a substantial independent reading area');
+    await adjustment.click();
+    const dialog=page.getByRole('dialog',{name:'调整排查条件'});
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
+    await expect(dialog.getByLabel('关键词',{exact:true})).toHaveValue('timeout');
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
+    const answerDuring=await feed.boundingBox(),composerDuring=await page.locator('.log-investigation-active .composer').boundingBox();
+    assert.ok(answerDuring&&composerDuring);
+    assert.ok(Math.abs(answerBefore.height-answerDuring.height)<3,'editing must not shrink the result pane');
+    assert.ok(Math.abs(composerBefore.height-composerDuring.height)<3,'editing must not grow the reply composer');
+    await page.screenshot({path:join(shots,'04a-log-adjustment-drawer.png')});
+    await dialog.getByLabel('Trace ID',{exact:true}).fill('temporary-trace');
+    await dialog.getByLabel('msgSn',{exact:true}).fill('000987');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(summaryBar).toHaveCount(0);
+    await adjustment.click();
+    await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
+    await dialog.getByLabel('关键词',{exact:true}).fill('draft-keyword');
+    await dialog.getByRole('button',{name:'取消调整'}).click();
+    await expect(dialog).toHaveCount(0);
+    await adjustment.click();
+    await expect(dialog.getByLabel('关键词',{exact:true})).toHaveValue('timeout');
+    await dialog.getByRole('button',{name:'关闭调整面板'}).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(feed.getByText(finalAnswer,{exact:true})).toBeVisible();
     await expect(feed.getByRole('cell',{name:'120 ms'})).toBeVisible();
     await expect(feed.locator('pre code.language-json')).toContainText('"count"');
     await page.getByRole('button',{name:'选择模型'}).click();
@@ -359,8 +565,12 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('option',{name:/Analysis fixture/}).click();
     await page.getByRole('combobox',{name:'模型变体'}).selectOption('high');
     await page.getByRole('button',{name:'使用此模型'}).click();
-    await expect.poll(async()=>(await recorded('.model')).model).toEqual({id:'analysis',providerID:'labs',variant:'high'});
-    await expect(page.getByLabel('对话内容')).toBeFocused();
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','labs/analysis');
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+      {id:'analysis',providerID:'labs',variant:'high'});
+    await page.reload();
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','labs/analysis');
+    await expect(page.getByLabel('对话内容')).toBeVisible();
     await page.getByLabel('对话内容').fill('保存这份草稿');
     await expect(page.getByLabel('对话内容')).toHaveValue('保存这份草稿');
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
@@ -377,9 +587,12 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByLabel('对话内容').fill('第二次排查');
     await submit.click();
     await expect(feed).toContainText('第二个会话的结果');
+    assert.deepEqual((await recorded('.body')).model,{id:'analysis',providerID:'labs',variant:'high'},
+      'new conversations use the latest global model, even after switching scenes');
     await expect(page.getByRole('button',{name:'调整排查条件'})).toBeVisible();
-    const presetBounds='2026-11-11T23:50:43.125+08:00 至 2026-11-12T00:05:43.125+08:00';
-    await expect(appliedRange).toContainText(presetBounds);
+    const presetBounds='2026-11-11T23:50:43+08:00 至 2026-11-12T00:05:43+08:00';
+    await expect(summaryBar).toHaveCount(0);
+    await expect(page.getByRole('dialog',{name:'调整排查条件'})).toHaveCount(0);
     assert.ok((await recorded('.second-prompt')).text.includes(presetBounds));
     await page.getByLabel('对话内容').fill('第二个会话草稿');
     await page.getByRole('button',{name:'历史对话'}).click();
@@ -421,24 +634,82 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('button',{name:/^发送/})).toBeEnabled();
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     const request=JSON.parse(await readFile(file+'.prompt','utf8')).text;
-    for(const value of ['检查超时原因','abc123','timeout','included','ERROR'])assert.ok(request.includes(value));
-    for(const value of ['请求入参','wrong-level','at-end','before-window','wrong-id'])assert.ok(!request.includes(value));
+    for(const value of ['检查超时原因','abc123','timeout'])assert.ok(request.includes(value));
+    assert.ok(!request.includes('日志级别：'));
+    assert.ok(!request.includes('导入日志：'));
     await page.getByLabel('对话内容').fill('下一步怎么查？');
     await page.getByLabel('对话内容').press('Enter');
+    await expect.poll(async()=>(await recorded('.model')).model).toEqual({id:'analysis',providerID:'labs',variant:'high'});
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
-    await expect(appliedRange).toContainText(expectedRange);
+    await expect(summaryBar).toHaveCount(0);
+    assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('harness.logs.filters.ses_logs_fixture')??'{}').msgSn),'000123');
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/第二次排查/}).click();
     await page.reload();
     await expect(page.getByLabel('对话内容')).toHaveValue('第二个会话草稿');
     await expect(feed).toContainText('第二个会话的结果');
-    await expect(appliedRange).not.toContainText(expectedRange);
+    await expect(summaryBar).toHaveCount(0);
+    await expect(page.getByRole('dialog',{name:'调整排查条件'})).toHaveCount(0);
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/检查超时原因/}).click();
-    await expect(appliedRange).toContainText(expectedRange);
+    await expect(summaryBar).toHaveCount(0);
+    await expect(page.getByRole('dialog',{name:'调整排查条件'})).toHaveCount(0);
     assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
+    // Applying conditions reuses the current session, closes the drawer,
+    // preserves a pending reply draft and does not attach reply-only files.
+    const pendingDraft='未发送的追问草稿';
+    await page.getByLabel('对话内容').fill(pendingDraft);
+    await adjustment.click();
+    await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
+    await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
+    await dialog.getByLabel('msgSn',{exact:true}).fill('000789');
+    await dialog.getByLabel('关键词',{exact:true}).fill('retry-timeout');
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
+    await dialog.getByRole('button',{name:'应用并重新排查'}).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(summaryBar).toHaveCount(0);
+    await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('harness.logs.filters.ses_logs_fixture')??'{}')))
+      .toMatchObject({keyword:'retry-timeout',msgSn:'000789'});
+    await expect(page.getByLabel('对话内容')).toHaveValue(pendingDraft);
+    await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text)
+      .toContain('关键字：retry-timeout');
+    const rerun=await recorded('.prompt');
+    assert.ok(rerun.text.includes('msgSn：000789'));
+    assert.ok(!rerun.text.includes(pendingDraft));
+    assert.deepEqual(rerun.files,[]);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('harness.logs')),'ses_logs_fixture');
     assert.deepEqual(retiredRequests,[]);
+    // History management must persist in native OpenCode, not only localStorage.
+    await page.getByRole('button',{name:'历史对话'}).click();
+    const secondRow=history.locator('li').filter({hasText:'第二次排查'});
+    await secondRow.getByRole('button',{name:'重命名'}).click();
+    // Editing replaces the title text with an input value; the original
+    // text-filtered row locator therefore no longer matches while editing.
+    await history.getByRole('textbox',{name:'对话名称'}).fill('放弃的草稿标题');
+    await history.getByRole('button',{name:'取消'}).click();
+    await expect(secondRow).toContainText('第二次排查');
+    await secondRow.getByRole('button',{name:'重命名'}).click();
+    await history.getByRole('textbox',{name:'对话名称'}).fill('订单超时调查 · 人工命名');
+    await history.getByRole('button',{name:'保存'}).click();
+    await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toBeVisible();
+    await page.reload();
+    await page.getByRole('button',{name:'历史对话'}).click();
+    await history.getByRole('button',{name:/订单超时调查 · 人工命名/}).click();
+    await expect(page.locator('.conversation-title')).toHaveText('订单超时调查 · 人工命名');
+    await page.getByRole('button',{name:'历史对话'}).click();
+    const renamedRow=history.locator('li').filter({hasText:'订单超时调查 · 人工命名'});
+    await renamedRow.getByRole('button',{name:'删除'}).click();
+    await expect(renamedRow).toContainText('无法恢复');
+    await renamedRow.getByRole('button',{name:'取消'}).click();
+    await expect(renamedRow.getByRole('button',{name:'删除'})).toBeVisible();
+    await renamedRow.getByRole('button',{name:'删除'}).click();
+    await renamedRow.getByRole('button',{name:'确认删除'}).click();
+    await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toHaveCount(0);
+    await expect(page.locator('.log-investigation-setup')).toBeVisible();
+    await page.reload();
+    await page.getByRole('button',{name:'历史对话'}).click();
+    await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toHaveCount(0);
     await page.getByRole('button',{name:'退出登录'}).click();
     await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
     assert.equal(await sessionCookie(),undefined);
@@ -459,6 +730,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
 it('groups a multi-step weather response and keeps verification output out of the answer',async()=>{
   const port=31882,id='ses_weather_example';
   const root=await realpath(await mkdtemp(join(tmpdir(),'harness weather ')));
+  await mkdir(join(root,'.workbench'),{recursive:true});
+  await writeFile(join(root,'.workbench','scenarios.json'),JSON.stringify({version:1,scenes:{
+    data:{directory:root,executor:{type:'skill',name:'analysis-fixture'}},
+  }}));
   const app=await createApp({localOnly:true,workspace:root,auth:new LocalAuth('unused',port)});
   const browser=await chromium.launch(process.env.HARNESS_TEST_CHROME?{channel:'chrome'}:{});
 
@@ -595,11 +870,14 @@ it('groups a multi-step weather response and keeps verification output out of th
     });
     const navigation=page.getByRole('navigation',{name:'场景导航'});
     await navigation.getByRole('button',{name:'数据分析',exact:true}).click();
-    await expect(page.getByRole('heading',{name:'数据分析'})).toBeVisible();
-    await page.locator('input[type="file"][accept*=".csv"]').setInputFiles({
-      name:'orders.csv',mimeType:'text/csv',buffer:Buffer.from('order,amount\nA001,120\nA002,220\n')});
-    await expect(page.getByText(/2 行 · 2 列/)).toBeVisible();
-    await page.screenshot({path:join(shots,'08-csv-analysis.png')});
+    await expect(navigation.getByRole('button',{name:'数据分析',exact:true})).toHaveAttribute('aria-expanded','true');
+    await navigation.getByRole('button',{name:'公管数据分析',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'公管数据分析'})).toBeVisible();
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toBeVisible();
+    await expect(page.getByLabel('对话内容')).toBeVisible();
+    await page.getByLabel('对话内容').fill('请分析公管订单超时原因');
+    await expect(page.getByLabel('对话内容')).toHaveValue('请分析公管订单超时原因');
+    await page.screenshot({path:join(shots,'08-data-chat.png')});
     await expect(page.getByRole('heading',{name:'直接开始你的工作'})).toHaveCount(0);
     await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
     await expect(response.last()).toContainText(fallbackAnswer);
@@ -607,6 +885,7 @@ it('groups a multi-step weather response and keeps verification output out of th
     await page.getByLabel('对话内容').fill('跨场景保存这份草稿');
     await navigation.getByRole('button',{name:'代码审查',exact:true}).click();
     await expect(page.getByRole('heading',{name:'代码审查',exact:true})).toBeVisible();
+    await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toBeVisible();
     await navigation.getByRole('button',{name:'对话首页',exact:true}).click();
     await expect(page.getByLabel('对话内容')).toHaveValue('跨场景保存这份草稿');
     assert.deepEqual(createdSessions,[],'navigating never creates a native OpenCode session');

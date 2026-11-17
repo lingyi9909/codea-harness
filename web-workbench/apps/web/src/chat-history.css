@@ -1,9 +1,40 @@
 .chat-history-actions{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
-.conversation-history{margin:0 0 18px;padding:16px 20px;background:white;border:1px solid #dedfd9;border-radius:12px}
-.conversation-history ul{list-style:none;padding:0;margin:8px 0 0;max-height:15rem;overflow-y:auto}
-.conversation-history li button{width:100%;display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px;border:0;background:transparent;border-radius:6px;text-align:left}
-.conversation-history li button:is(:hover,[aria-current]){background:#f1f3ef}
-.conversation-history li button span{overflow-wrap:anywhere}
-.conversation-history small,.conversation-history p{font-size:12px;color:#59645e}
-.conversation-history small{flex-shrink:0}
-@media(max-width:600px){.chat-history-actions .secondary{font-size:12px;padding:4px 8px}.scene-page:has(.chat-history-actions) .scene-title{align-items:center;flex-wrap:wrap;gap:8px}.conversation-history li button{align-items:start;flex-direction:column;gap:4px}}
+.conversation-history{margin:0 0 18px;padding:15px 18px;background:#fff;border:1px solid #dce2e9;border-radius:10px;min-width:0}
+.history-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.history-panel-heading h2{margin:0;font-size:15px;color:#343c47;font-weight:700}
+.history-panel-heading small{color:#87919e;font-size:11px}
+.conversation-history ul{list-style:none;padding:0;margin:10px 0 0;max-height:22rem;overflow-y:auto}
+.conversation-history li{border-bottom:1px solid #edf0f3}
+.conversation-history li:last-child{border-bottom:0}
+.conversation-history .history-row{display:flex;align-items:center;gap:12px;min-width:0;border-radius:7px}
+.conversation-history .history-row:hover,.conversation-history .history-row:has(.history-open[aria-current=true]){background:#f4f6f9}
+.conversation-history .history-open{flex:1;min-width:0;display:grid;gap:5px;align-content:center;padding:11px 10px;border:0;background:transparent;border-radius:7px;text-align:left;color:#313b47}
+.conversation-history .history-open .history-row-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:550}
+.conversation-history .history-open small{font-size:11px;color:#84909d}
+.conversation-history .history-row-actions{display:flex;flex:none;gap:4px;padding-right:8px}
+.conversation-history .history-row-actions button,.conversation-history .history-inline-actions button,.conversation-history .history-load-more{
+  border:1px solid transparent;background:transparent;border-radius:6px;color:#596675;
+  font-size:12px;padding:6px 9px;cursor:pointer;white-space:nowrap
+}
+.conversation-history .history-row-actions button:hover,.conversation-history .history-inline-actions button:hover{background:#e9eef4}
+.conversation-history .history-row-actions .history-delete{color:#a64747}
+.conversation-history .history-inline-editor,.conversation-history .history-delete-confirm{padding:11px 10px;display:grid;gap:10px;background:#f8f9fb;border-radius:7px}
+.conversation-history .history-inline-editor label{display:grid;gap:6px;color:#424d5a;font-weight:600;font-size:12px}
+.conversation-history .history-inline-editor input{width:100%;min-width:0;padding:9px 11px;border:1px solid #cbd5e1;border-radius:6px;font:inherit;font-size:13px;background:#fff;color:#27313b}
+.conversation-history .history-inline-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.conversation-history .history-inline-actions button{border-color:#dbe1e7;background:#fff}
+.conversation-history .history-inline-actions .history-save{color:#fff;background:#2b333e;border-color:#2b333e}
+.conversation-history .history-inline-actions .history-danger{color:#fff;background:#a53636;border-color:#a53636}
+.conversation-history .history-delete-confirm p{margin:0;font-size:12px;line-height:1.65;color:#6a4141}
+.conversation-history .history-error{font-size:12px;color:#a53636;margin:10px 0 0}
+.conversation-history .history-load-more{padding:8px;margin:8px 0 0;border-color:#dce2e9}
+.conversation-history button:disabled{opacity:.48;cursor:not-allowed}
+.conversation-history button:focus-visible,.conversation-history input:focus-visible{outline:2px solid #7f91a6;outline-offset:2px}
+@media(max-width:600px){
+  .chat-history-actions .secondary{font-size:12px;padding:4px 8px}
+  .scene-page:has(.chat-history-actions) .scene-title{align-items:center;flex-wrap:wrap;gap:8px}
+  .conversation-history{padding:12px}
+  .conversation-history .history-row{align-items:stretch}
+  .conversation-history .history-open{padding:9px 6px}
+  .conversation-history .history-row-actions{flex-wrap:wrap;align-content:center;justify-content:flex-end;padding-right:0}
+}

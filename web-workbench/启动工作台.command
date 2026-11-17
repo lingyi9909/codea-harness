@@ -1,14 +1,12 @@
 #!/bin/zsh
 set -eu
-if (( $# > 1 )); then
-  print -u2 '用法：启动工作台.command [项目目录]'
+if (( $# != 1 )); then
+  print -u2 '用法：启动工作台.command "/Users/me/project"（必须指定已有工作目录）'
   exit 2
 fi
-workspace_args=()
-if (( $# == 1 )); then
-  project_dir="$1"
-  workspace_args=(--workspace "${project_dir:a}")
-fi
+project_dir="$1"
+[[ -d "$project_dir" ]] || { print -u2 "工作目录不存在：$project_dir"; exit 2; }
+workspace_args=(--workspace "${project_dir:a}")
 cd "${0:A:h}"
 export PATH="$HOME/.opencode/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 node_bin="$(command -v node)" || { print -u2 '找不到 Node.js，请安装项目要求的 Node.js 22.16+、24 或 26。'; exit 1; }

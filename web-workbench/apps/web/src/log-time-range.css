@@ -43,13 +43,35 @@
   .log-time-range .range-direction { justify-self: start; margin-left: 8px; line-height: 1; transform: rotate(90deg); }
 }
 
-.range-fields input[type="datetime-local"]{position:relative;cursor:pointer}
-.range-fields input[type="datetime-local"]::-webkit-calendar-picker-indicator{
-  position:absolute;inset:0;width:auto;height:auto;margin:0;opacity:0;cursor:pointer
+/* Only the date uses the native calendar. Time is typed directly, avoiding
+ * Chromium's oversensitive datetime-local hour/minute/second scroll columns. */
+.log-time-range .range-bound{display:grid;gap:8px;min-width:0}
+.log-time-range .range-bound-title{font-size:13px;font-weight:650;color:#414a57}
+.log-time-range .range-split-inputs{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(105px,.85fr);gap:10px;min-width:0}
+.log-time-range .range-split-inputs label{display:grid;gap:6px;min-width:0}
+.log-time-range input[type="date"]{cursor:default}
+.log-time-range input[type="text"]{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.log-time-range .range-day-mode{
+  display:grid;grid-template-columns:minmax(180px,.7fr) minmax(0,1.3fr);
+  align-items:end;gap:14px;margin:0 0 4px;min-width:0
 }
-.range-fields label:has(input[type="datetime-local"]){position:relative}
-.range-fields label:has(input[type="datetime-local"])::after{
-  content:"";position:absolute;right:12px;bottom:12px;width:12px;height:11px;box-sizing:border-box;
-  border:1.5px solid currentColor;border-top-width:3px;border-radius:2px;pointer-events:none
+.log-time-range .range-day-mode label{display:grid;gap:8px;font-size:13px;font-weight:650;color:#414a57;min-width:0}
+.log-time-range .range-day-mode input{
+  box-sizing:border-box;min-height:47px;width:100%;min-width:0;
+  padding:10px 13px;border:1px solid #cfd7e1;border-radius:8px;
+  background:#fff;color:#222b35;font:inherit;font-size:14px;font-weight:450
 }
-.range-fields input[type="datetime-local"]{padding-inline-end:30px}
+.log-time-range .range-day-summary{
+  display:flex;align-items:baseline;gap:8px 13px;flex-wrap:wrap;
+  min-height:47px;padding:10px 13px;border:1px solid #d8e2ed;
+  border-radius:8px;background:#fff;color:#344052
+}
+.log-time-range .range-day-summary strong{font-size:14px;font-weight:680}
+.log-time-range .range-day-summary span{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;font-variant-numeric:tabular-nums}
+.log-time-range .range-day-summary small{font-size:11px;color:#798592}
+@container (max-width:480px){
+  .log-time-range .range-day-mode{grid-template-columns:1fr;gap:10px}
+}
+@container (max-width:360px){
+  .log-time-range .range-split-inputs{grid-template-columns:1fr}
+}
