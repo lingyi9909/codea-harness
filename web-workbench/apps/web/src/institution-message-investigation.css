@@ -1,0 +1,38 @@
+/* Scoped exclusively to the additional institution message investigation scene. */
+.institution-message{width:100%;max-width:none;padding:8px 0 28px;color:#28313f}
+.institution-heading{display:flex;align-items:flex-start;gap:14px;margin:3px 0 26px}
+.institution-heading h1{margin:0 0 8px;font-size:25px;font-weight:740;letter-spacing:-.6px}
+.institution-heading p{margin:0;font-size:13px;line-height:1.6;color:#6d788a}
+.institution-symbol{display:grid;place-items:center;width:40px;height:40px;flex-shrink:0;border-radius:10px;background:#e9efff;color:#366fe5;font-size:23px}
+.institution-layout{display:grid;grid-template-columns:minmax(285px,390px) minmax(0,1fr);gap:14px;align-items:stretch}
+.institution-form-panel,.institution-result-panel{box-sizing:border-box;background:#fff;border:1px solid #e0e5ed;border-radius:10px;box-shadow:0 2px 9px rgba(20,34,57,.035)}
+.institution-form-panel{display:flex;flex-direction:column;gap:9px;padding:24px 21px 26px}
+.institution-form-panel h2{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:720;margin:0;color:#202a3c}
+.institution-form-panel h2 span{color:#5e7397;font-size:23px;font-weight:500}
+.institution-divider{border-top:1px solid #e8ecf2;margin:9px 0 8px}
+.institution-form-panel label{font-size:13px;font-weight:650;color:#2c3544;margin-top:7px}
+.institution-required{color:#c74f4a}
+.institution-form-panel input{box-sizing:border-box;width:100%;height:45px;min-width:0;padding:10px 12px;border:1px solid #d4dce7;border-radius:7px;font:inherit;font-size:14px;font-weight:450;background:#fff;color:#293240;outline:none}
+.institution-form-panel input:focus-visible{border-color:#7fa2ef;box-shadow:0 0 0 3px rgba(54,111,229,.11)}
+.institution-form-panel input[aria-invalid="true"]{border-color:#c74f4a}
+.institution-form-panel input::placeholder{color:#9ba7b8}
+.institution-day-summary{font-size:11px;color:#798598;line-height:1.6;margin:0 0 2px}
+.institution-secret{position:relative;display:flex;align-items:center}
+.institution-secret input{padding-right:54px}
+.institution-secret button{position:absolute;right:6px;top:5px;bottom:5px;min-width:46px;border:0;border-radius:5px;color:#697b94;background:transparent;font-size:12px;cursor:pointer}
+.institution-secret button:hover{color:#3d65b8;background:#f2f5fb}
+.institution-submit{min-height:46px;width:100%;margin-top:22px;border:0;border-radius:7px;font-size:15px;font-weight:660;color:white;background:#275be8;cursor:pointer}
+.institution-submit span{font-size:13px;margin-right:6px}
+.institution-submit:hover:not(:disabled){background:#204ed0}
+.institution-submit:disabled{cursor:not-allowed;opacity:.52}
+.institution-notice{margin:7px 0 0;padding:11px 12px;border:1px solid #e6d8b5;border-radius:7px;background:#fffaf0;color:#745b24;font-size:12px;line-height:1.6}
+.institution-result-panel{min-height:625px;display:flex;flex-direction:column}
+.institution-result-panel>header{min-height:61px;padding:0 18px;border-bottom:1px solid #e5e9f0;display:flex;align-items:center}
+.institution-result-panel>header h2{margin:0;color:#325ec4;font-size:15px;font-weight:720}
+.institution-result-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px}
+.institution-chat-icon{display:grid;place-items:center;width:105px;height:76px;border:3px solid #acc3f9;border-radius:19px;color:#6593fa;font-size:26px;letter-spacing:6px;position:relative;margin-bottom:28px;background:#f8faff}
+.institution-chat-icon:after{content:"";position:absolute;bottom:-13px;left:18px;width:19px;height:19px;background:#f8faff;border-left:3px solid #acc3f9;border-bottom:3px solid #acc3f9;transform:skewY(-38deg)}
+.institution-result-empty h3{font-size:19px;margin:0 0 15px;font-weight:720;color:#24304a}
+.institution-result-empty p{font-size:13px;line-height:1.8;margin:0;color:#8390a5}
+@media(max-width:980px){.institution-layout{grid-template-columns:1fr}.institution-result-panel{min-height:360px}.institution-result-empty{min-height:270px}.institution-form-panel{max-width:none}}
+@media(max-width:640px){.institution-heading h1{font-size:21px}.institution-form-panel{padding:19px 16px}.institution-result-empty h3{font-size:16px}}

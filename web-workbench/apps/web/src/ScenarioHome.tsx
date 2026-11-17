@@ -5,18 +5,19 @@ export const scenes={
   review:'代码审查',
   logs:'公管问题排查',
   message:'报文问题排查',
+  'institution-message':'机构报文排查',
   data:'公管数据分析',
   settings:'场景配置',
 } as const;
 export type Scene=keyof typeof scenes;
 
 export const scenarioGroups=[
-  {id:'problem',label:'问题排查',icon:'≡',children:['logs','message']},
+  {id:'problem',label:'问题排查',icon:'≡',children:['logs','message','institution-message']},
   {id:'analysis',label:'数据分析',icon:'▥',children:['data']},
 ] as const;
 export type ScenarioGroup=typeof scenarioGroups[number]['id'];
 export function groupForScene(scene:Scene):ScenarioGroup|null{
-  return scene==='logs'||scene==='message'?'problem':scene==='data'?'analysis':null;
+  return scene==='logs'||scene==='message'||scene==='institution-message'?'problem':scene==='data'?'analysis':null;
 }
 
 // Kept for compatibility with callers of the old introductory component.

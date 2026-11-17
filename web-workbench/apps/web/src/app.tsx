@@ -8,6 +8,7 @@ import { DirectChat } from './DirectChat.tsx';
 import { ModelPicker } from './ModelPicker.tsx';
 import type { ChatModel, SceneConfigResponse } from '../../../packages/contracts/src/chat.ts';
 import {LogInvestigation} from './LogInvestigation.tsx';
+import {InstitutionMessageInvestigation} from './InstitutionMessageInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
 import { scenes, scenarioGroups, groupForScene, type Scene, type ScenarioGroup } from './ScenarioHome.tsx';
 import { SidebarChatHistory } from './SidebarChatHistory.tsx';
@@ -363,7 +364,7 @@ export function WorkbenchApp() {
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
       {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:
-       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'} globalModel={globalModel}/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:!selected&&scene==='settings'?<SceneConfigPage/>:!selected?<section className="workbench">
+       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'} globalModel={globalModel}/>:!selected&&scene==='institution-message'?<InstitutionMessageInvestigation/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:!selected&&scene==='settings'?<SceneConfigPage/>:!selected?<section className="workbench">
         <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
         <h1>代码审查</h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
