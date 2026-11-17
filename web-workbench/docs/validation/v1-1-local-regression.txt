@@ -1,0 +1,162 @@
+✔ T4/T5: A/B/C phones and tokens stay scoped; correct, wrong, replay, expiry and cancel (4.54625ms)
+✔ T5: cancellation during target verification cannot authorize; concurrent/repeated submits rejected (0.471917ms)
+▶ T08 scoped continuation transactions (SQL stub, not live MySQL)
+  ✔ DISCUSS creates one new run, user message, operation and outbox; replay is stable (4.678916ms)
+  ✔ RECHECK preserves the task and allocates a report-capable run (0.396875ms)
+  ✔ blocks concurrent execution, wrong snapshot, unverified slot and oversized user text (0.814166ms)
+  ✔ message listing requires owner and validates signed pagination key (0.453917ms)
+✔ T08 scoped continuation transactions (SQL stub, not live MySQL) (7.578583ms)
+
+  #  /opt/homebrew/Cellar/node/26.0.0/bin/node[23664]: void node::InternalCallbackScope::Close() at ../src/api/callback.cc:185
+  #  Assertion failed: (env_->execution_async_id()) == (0)
+
+----- Native stack trace -----
+
+ 1: 0x1049d9e70 node::Assert(node::AssertionInfo const&) [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+ 2: 0x105a22ca0 node::InternalCallbackScope::Close() (.cold.1) [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+ 3: 0x10492010c node::InternalCallbackScope::Close() [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+ 4: 0x10491fe10 node::InternalCallbackScope::~InternalCallbackScope() [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+ 5: 0x105a3a95c node::Environment::RunAndClearNativeImmediates(bool) [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+ 6: 0x105a3a38c node::Environment::CheckImmediate(uv_check_s*) [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+ 7: 0x1000a424c uv__run_check [/opt/homebrew/Cellar/libuv/1.52.1/lib/libuv.1.0.0.dylib]
+ 8: 0x10009eb94 uv_run [/opt/homebrew/Cellar/libuv/1.52.1/lib/libuv.1.0.0.dylib]
+ 9: 0x104920fa4 node::SpinEventLoopInternal(node::Environment*) [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+10: 0x104a08fcc node::NodeMainInstance::Run(node::ExitCode*, node::Environment*) [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+11: 0x104a08d00 node::NodeMainInstance::Run() [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+12: 0x1049ac4dc node::Start(int, char**) [/opt/homebrew/Cellar/node/26.0.0/lib/libnode.147.dylib]
+13: 0x181677e00 start [/usr/lib/dyld]
+✖ tests/api/direct-chat.test.ts (797.453542ms)
+✔ T3: three interleaved execution scopes retain service, directory and credential ownership (5.074792ms)
+✔ T3: shared endpoints, credentials and overlapping writable roots are rejected (0.452792ms)
+▶ T04 task file owner and readiness API
+  ✔ does not expose the existence of another owner task (1.585458ms)
+  ✔ only allows READY snapshots tied to the requested task (1.527042ms)
+✔ T04 task file owner and readiness API (4.256125ms)
+▶ T09 owner-bound native interaction answers (transaction stub only)
+  ✔ accepts only one allow-once permission and returns the original operation on retry (4.360833ms)
+  ✔ rejects global allow, unknown interaction, mismatched revision and stale waiting state (10.388875ms)
+  ✔ validates native form schema, required fields and cancel, without trusting user-supplied fields (0.826459ms)
+  ✔ GET only returns current-user native requests (0.418375ms)
+✔ T09 owner-bound native interaction answers (transaction stub only) (17.289042ms)
+✔ packaged local sessions require a loopback Host and matching Origin, reuse their cookie and retain CSRF checks (174.715875ms)
+✔ serializes different logins, allows a switch after logout, and gates externally changed profiles (57.145375ms)
+✔ rejects redirected profile directories and files before opening a session (41.904833ms)
+✔ the default server requires the pairing code and does not register automatic session creation (18.33025ms)
+✔ binds packaged operations to the one existing project selected at startup (95.776875ms)
+﹣ Windows launcher resolves quoted project paths before changing into the bundle (0.102917ms) # SKIP
+✔ T1: three simultaneous users, stable identities, restart, CSRF and independent logout (4.157417ms)
+✔ T1: validation, host/origin restrictions, disabled identities and expiry (1.714417ms)
+✔ T2: unbound, foreign, deleted and metadata-inconsistent chats fail closed (1.978125ms)
+✔ T2: browser switches A/B/C without reading legacy or foreign drafts/history/preferences (0.365666ms)
+✔ scene config is file-backed, editor-ACL guarded, and revision-safe (171.662292ms)
+✔ paired sessions without a login username stay read-only despite editor ACL (40.303583ms)
+✔ only the exact configured login username can edit without hashes or phone coupling (55.124375ms)
+✔ startup fills missing default scene bindings without overwriting custom configured scenes (52.740459ms)
+✖ routes each configured subscene through its own native executor and directory (35.279917ms)
+▶ T05 task transaction and operation idempotency (deterministic SQL stub, not MySQL)
+  ✔ creates Task/Run/Outbox/Event once and replays the same operation identity (412.248584ms)
+  ✔ requires a valid uuid and rejects malformed Controller names before persistence (0.417416ms)
+✔ T05 task transaction and operation idempotency (deterministic SQL stub, not MySQL) (414.190084ms)
+▶ T01 Adapter local HTTP harness: not company native evidence
+  ✔ blocks actions with UNKNOWN production readiness (1.90375ms)
+  ✖ creates pinned Session, sends command once, handles permission, prompt, interrupt and messages (20.711333ms)
+✖ T01 Adapter local HTTP harness: not company native evidence (28.845ms)
+▶ T01 strict capability gate
+  ✔ does not declare readiness without company Windows evidence (1.376917ms)
+  ✔ missing command, trusted skill or native permission blocks execution (0.2715ms)
+  ✔ missing instruction entry disables notes but durable log absence only degrades continuity (0.117083ms)
+  ✔ private model unavailable blocks readiness and evidence-only claims stay UNKNOWN (0.16075ms)
+  ✔ only accepts safe fixed-base command arguments (0.302625ms)
+✔ T01 strict capability gate (3.422791ms)
+▶ T01 wire transport boundaries
+  ✔ rejects any non-loopback or unverified native service (0.253ms)
+  ✔ rejects unknown native route shapes rather than guessing endpoints (0.502375ms)
+✔ T01 wire transport boundaries (0.891292ms)
+▶ T01 fixed committed-only Git task location
+  ✔ allows independent clean clone with pinned OIDs and rejects subsequent dirty snapshot (481.133958ms)
+✔ T01 fixed committed-only Git task location (481.255833ms)
+▶ T01 native report file proof
+  ✔ requires five ordered chapters, fresh physical file and digest (7.408791ms)
+✔ T01 native report file proof (7.538042ms)
+▶ T07 persisted event and cursor semantics (SQL stub, not MySQL)
+  ✔ allocates monotonic string seq, dedupes by stable native ID and replays in order (4.014125ms)
+  ✔ rejects invalid, negative, fractional, huge and leading-zero SSE cursors (0.27625ms)
+  ✔ rejects oversized event payloads before any database write (0.350542ms)
+✔ T07 persisted event and cursor semantics (SQL stub, not MySQL) (5.870666ms)
+▶ T03 local committed Git preview (real git, no remote)
+  ✔ pins base OID and excludes uncommitted changes (315.021458ms)
+✔ T03 local committed Git preview (real git, no remote) (316.257833ms)
+▶ T04 immutable Git snapshot and bounded file evidence (real local Git)
+  ✔ freezes HEAD/base independently, blocks protected evidence and preserves source (580.057167ms)
+  ✔ rejects any preexisting snapshot destination without silently overwriting (257.206ms)
+✔ T04 immutable Git snapshot and bounded file evidence (real local Git) (838.380875ms)
+▶ MySQL 8.4 migration static contract; not a real DB test
+  ✔ contains all 14 design business tables, no DROP, and one execution slot seed (17.843458ms)
+✔ MySQL 8.4 migration static contract; not a real DB test (19.123125ms)
+▶ T10 safe per-run report archive (real filesystem, SQL stub)
+  ✔ archives five-section report with same-run native write evidence and detects tampering (409.630083ms)
+  ✔ requires trusted native write provenance, no model-claim-only success (0.297625ms)
+✔ T10 safe per-run report archive (real filesystem, SQL stub) (410.950667ms)
+✔ keeps previous chats when creating a new one and restores the active chat per project and scene (4.112625ms)
+✔ summarizes the requested task in the first input, including multiline and long requests (1.975625ms)
+✔ titles log requests from the question or filters and preserves existing session names (0.521917ms)
+✔ uniquifies repeated generated titles and forgets only the deleted session (0.370083ms)
+✔ reveals both public fields across live, stale and final polls and paints history immediately (3.41025ms)
+✔ keeps grapheme clusters intact and catches up to large chunks (5.064875ms)
+✔ preserves genuine live fields across a shorter final snapshot and avoids duplicate parts (0.521708ms)
+✔ keeps final-only text moving for a freshly created chat and drains it when motion is disabled (0.237792ms)
+✔ shows delta-only text and fills transport gaps from overlapping snapshots without replay (0.489417ms)
+✔ keeps the native snapshot type and timing when live text reuses a reasoning ordinal (0.3935ms)
+▶ T06/T08 native continuation dispatch selection (no real model)
+  ✔ calls fixed Review command only for first REVIEW or RECHECK (3.011667ms)
+  ✔ refuses to send DISCUSS without a committed user message (0.609333ms)
+✔ T06/T08 native continuation dispatch selection (no real model) (5.016417ms)
+▶ T06 leased outbox safety (deterministic SQL contract, not MySQL)
+  ✔ does not claim a slot or call native when required evidence is UNKNOWN (1.521791ms)
+  ✔ claims only one pending run, records fence and PREPARING, renews and accepts once (2.291ms)
+  ✔ never reclaims an occupied expired slot; it quarantines instead (0.26ms)
+  ✔ rejects stale fence and does not send the native command (0.35025ms)
+  ✔ unknown native response quarantines outbox and run; does not restart (0.547375ms)
+  ✔ queued stop cancels dispatch and commits a final stopped event without session (2.307791ms)
+  ✔ active stop persists STOP_REQUESTED and interrupt outbox but not STOPPED (0.252833ms)
+✔ T06 leased outbox safety (deterministic SQL contract, not MySQL) (8.9995ms)
+ℹ tests 71
+ℹ suites 16
+ℹ pass 67
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 1466.505541
+
+✖ failing tests:
+
+test at tests/api/direct-chat.test.ts:1:1
+✖ tests/api/direct-chat.test.ts (797.453542ms)
+  'test failed'
+
+test at tests/api/scene-execution.test.ts:11:1
+✖ routes each configured subscene through its own native executor and directory (35.279917ms)
+  Error: listen EPERM: operation not permitted 127.0.0.1
+      at Server.setupListenHandle [as _listen2] (node:net:1986:21)
+      at listenInCluster (node:net:2065:12)
+      at node:net:2274:7
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+    code: 'EPERM',
+    errno: -1,
+    syscall: 'listen',
+    address: '127.0.0.1'
+  }
+
+test at tests/capabilities/adapter.test.ts:48:3
+✖ creates pinned Session, sends command once, handles permission, prompt, interrupt and messages (20.711333ms)
+  Error: listen EPERM: operation not permitted 127.0.0.1
+      at Server.setupListenHandle [as _listen2] (node:net:1986:21)
+      at listenInCluster (node:net:2065:12)
+      at node:net:2274:7
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+    code: 'EPERM',
+    errno: -1,
+    syscall: 'listen',
+    address: '127.0.0.1'
+  }

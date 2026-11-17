@@ -8,6 +8,7 @@ export class ApiError extends Error {
 }
 export class HarnessApi {
   private csrf = '';
+  businessVerificationEnabled=false;
   private connecting?: Promise<Schema<'Bootstrap'>>;
   setCsrf(token: string): void { this.csrf = token; }
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -88,13 +89,14 @@ export class HarnessApi {
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() {
-    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');return boot;}).finally(()=>{this.connecting=undefined;});
+    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
   async login(name:string,phone:string) {
     const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
       method:'POST',body:JSON.stringify({name,phone}),
     });
+    this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
     this.setCsrf(session.csrfToken);
     window.localStorage.setItem('harness.account-change',crypto.randomUUID());
@@ -102,7 +104,7 @@ export class HarnessApi {
   }
   async logout() {
     await this.request<void>('/auth/session',{method:'DELETE'});
-    this.setCsrf('');resetUserStorage();
+    this.setCsrf('');this.businessVerificationEnabled=false;resetUserStorage();
     window.localStorage.setItem('harness.account-change',crypto.randomUUID());
   }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }

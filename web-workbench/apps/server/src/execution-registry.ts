@@ -12,6 +12,7 @@ export class ExecutionRegistry {
   private readonly clients=new Map<string,Promise<Client>>();
   constructor(entries:ExecutionRecord[],connect:(url:string,authorization:string)=>Promise<Client>){
     this.connect=connect;
+    const allSources=entries.flatMap(entry=>Object.keys(entry.directories));
     const urls=new Set<string>(),services=new Set<string>(),roots:string[]=[],credentials=new Set<string>();
     for(const entry of entries){
       const url=new URL(entry.url);
@@ -21,7 +22,7 @@ export class ExecutionRegistry {
       const destinations=Object.entries(entry.directories);
       if(!destinations.length)throw new Error('EXECUTION_DIRECTORIES_REQUIRED');
       for(const [source,target]of destinations){
-        if(!isAbsolute(source)||!isAbsolute(target)||overlaps(source,target)||overlaps(target,source)||roots.some(root=>overlaps(root,target)||overlaps(target,root)))throw new Error('EXECUTION_DIRECTORY_OVERLAP');
+        if(!isAbsolute(source)||!isAbsolute(target)||allSources.some(root=>overlaps(root,target)||overlaps(target,root))||roots.some(root=>overlaps(root,target)||overlaps(target,root)))throw new Error('EXECUTION_DIRECTORY_OVERLAP');
         roots.push(target);
       }
       credentials.add(entry.authorization);urls.add(url.href);services.add(entry.serviceIdentity);this.records.set(entry.ownerId,structuredClone(entry));

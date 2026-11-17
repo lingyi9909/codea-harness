@@ -5,6 +5,7 @@ export function BusinessVerification({sessionId}:{sessionId:string}){
   const [status,setStatus]=useState<Awaited<ReturnType<typeof api.businessStatus>>|null>(null);
   const [code,setCode]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
   useEffect(()=>{
+    if(!api.businessVerificationEnabled)return;
     let live=true;
     const poll=()=>api.businessStatus(sessionId).then(s=>{if(live)setStatus(s);}).catch(()=>{});
     void poll();const interval=setInterval(()=>void poll(),2000);

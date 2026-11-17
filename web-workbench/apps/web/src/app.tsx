@@ -273,9 +273,8 @@ export function WorkbenchApp() {
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
   if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    const session=await api.login(name,phone);
+    await api.login(name,phone);
     window.location.reload();
-    await refreshLists().catch(e=>setError(text(e)));
   }}/>;
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">
     {error?<><p role="alert">{error}</p><button onClick={reconnect}>重新连接</button></>:<p role="status">正在连接本地工作台…</p>}
