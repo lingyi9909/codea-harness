@@ -106,6 +106,13 @@ function wholeDay(day:string):TimeRange|null{
   if(!bounds||localTime(from).slice(0,10)!==day)return null;
   return rangeFromBounds(bounds,'day');
 }
+// Preserve the simple "one day" view when reopening applied filters or
+// restoring an existing OpenCode session (including old sessions).
+function restoredRange(bounds:Bounds):TimeRange{
+  const calendarDay=localTime(bounds.from).slice(0,10);
+  const day=wholeDay(calendarDay);
+  return day&&day.from===bounds.from&&day.to===bounds.to?day:rangeFromBounds(bounds);
+}
 export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'message';globalModel?:Pick<ChatModel,'id'|'providerID'|'variant'>}={}){
   const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
   const title=mode==='message'?'报文问题排查':'公管问题排查';
@@ -113,12 +120,10 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   const [trace,setTrace]=useState(''),[msgSn,setMsgSn]=useState(''),[keyword,setKeyword]=useState('');
   const [applied,setApplied]=useState(()=>readAppliedRange(sessionStorage.getItem(storageKey)??'',undefined,storageKey));
   const [appliedFilters,setAppliedFilters]=useState({trace:'',keyword:'',msgSn:''});
-  const [range,setRange]=useState(()=>applied?rangeFromBounds(applied):recentRange(60));
-  const [choosingDay,setChoosingDay]=useState(false);
+  const [range,setRange]=useState(()=>applied?restoredRange(applied):recentRange(60));
   const [day,setDay]=useState(()=>localTime(Date.now()).slice(0,10));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
-    setChoosingDay(false);
     setRange(previous=>({...previous,[side]:value,[side==='start'?'from':'to']:parseLocal(value),preset:null}));
   }
   function editDate(side:'start'|'end',value:string){
@@ -132,7 +137,14 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   function selectDay(value:string){
     setDay(value);
     const selected=wholeDay(value);
-    if(selected){setRange(selected);setChoosingDay(false);}
+    if(selected)setRange(selected);
+  }
+  function beginDayMode(){
+    const selected=wholeDay(day);
+    if(selected)setRange(selected);
+  }
+  function beginCustomMode(){
+    setRange(previous=>({...previous,preset:null}));
   }
   const timeError=!start||!end?'请填写完整的开始和结束时间。':
     !Number.isFinite(from)||!Number.isFinite(to)?'所选时间无效，请重新选择。':
@@ -142,13 +154,12 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
   function reset(session='',rangePrompt?:string){
     const restored=readAppliedRange(session,rangePrompt,storageKey);
     const filters=readAppliedFilters(session,rangePrompt,storageKey);
-    setApplied(restored);setRange(restored?rangeFromBounds(restored):recentRange(60));
-    setChoosingDay(false);setDay(localTime(restored?.from??Date.now()).slice(0,10));
+    setApplied(restored);setRange(restored?restoredRange(restored):recentRange(60));
+    setDay(localTime(restored?.from??Date.now()).slice(0,10));
     setAppliedFilters(filters);setForm(!session);setTrace(filters.trace);setKeyword(filters.keyword);setMsgSn(filters.msgSn);
   }
   function onSent(session=sessionStorage.getItem(storageKey)){
     if(form){
-      setChoosingDay(false);
       const filters={trace:trace.trim(),keyword:keyword.trim(),msgSn:msgSn.trim()};
       setApplied({from,to});setAppliedFilters(filters);
       if(session){
@@ -159,14 +170,12 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
     }
   }
   function beginEdit(){
-    setChoosingDay(false);
-    if(applied){setRange(rangeFromBounds(applied));setDay(localTime(applied.from).slice(0,10));}
+    if(applied){setRange(restoredRange(applied));setDay(localTime(applied.from).slice(0,10));}
     setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);setMsgSn(appliedFilters.msgSn);
     setForm(true);
   }
   function cancelEdit(){
-    setChoosingDay(false);
-    if(applied)setRange(rangeFromBounds(applied));
+    if(applied)setRange(restoredRange(applied));
     setTrace(appliedFilters.trace);setKeyword(appliedFilters.keyword);setMsgSn(appliedFilters.msgSn);
     setForm(false);
   }
@@ -189,16 +198,20 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       <header><h2 id="log-range-title">时间范围</h2><span className="range-zone">精确到秒</span></header>
       <div className="range-presets" role="group" aria-label="快捷时间范围">
         {presets.map(p=><button key={p.minutes} type="button" aria-pressed={range.preset===p.minutes}
-          onClick={()=>{setChoosingDay(false);setRange(recentRange(p.minutes));}}>{p.label}</button>)}
-        <button type="button" aria-pressed={range.preset==='day'||choosingDay}
-          aria-expanded={choosingDay} onClick={()=>setChoosingDay(value=>!value)}>选择某一天</button>
+          onClick={()=>setRange(recentRange(p.minutes))}>{p.label}</button>)}
+        <button type="button" aria-pressed={range.preset==='day'}
+          onClick={beginDayMode}>选择某一天</button>
+        <button type="button" aria-pressed={range.preset===null}
+          onClick={beginCustomMode}>自定义范围</button>
       </div>
-      {choosingDay&&<div className="range-day-picker">
+      {range.preset==='day'?<div className="range-day-mode">
         <label>查询日期<input aria-label="查询日期" type="date" value={day} onChange={e=>selectDay(e.target.value)}/></label>
-        <button type="button" disabled={!wholeDay(day)} onClick={()=>selectDay(day)}>使用全天</button>
-        <span>按当天 00:00:00 至次日 00:00:00 查询</span>
-      </div>}
-      <div className="range-fields">
+        <div className="range-day-summary" role="status">
+          <strong>{day.replaceAll('-','/')} · 全天</strong>
+          <span>00:00:00 — 23:59:59</span>
+          <small>包含当天所有秒</small>
+        </div>
+      </div>:<div className="range-fields">
         <div className="range-bound">
           <span className="range-bound-title">开始时间</span>
           <div className="range-split-inputs">
@@ -220,9 +233,11 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
               onChange={e=>editClock('end',e.target.value)} aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
           </div>
         </div>
-      </div>
+      </div>}
       <div className="range-footer" id="log-range-feedback">
-        {timeError?<span role="alert">{timeError}</span>:<><strong>跨度 {elapsed(to-from)||'0 秒'}</strong><span>{range.preset==='day'?'已选择整天 · 次日 00:00 截止':'含开始，不含结束'}</span></>}
+        {timeError?<span role="alert">{timeError}</span>:
+          range.preset==='day'?<><strong>已选择 {day.replaceAll('-','/')} 全天</strong><span>时间范围已覆盖该日所有记录</span></>:
+          <><strong>跨度 {elapsed(to-from)||'0 秒'}</strong><span>含开始，不含结束</span></>}
       </div>
     </section>
     <div className="log-grid">

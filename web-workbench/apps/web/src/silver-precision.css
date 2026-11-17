@@ -684,7 +684,10 @@ body{background:#fff;color:var(--silver-ink);}
 .investigation-drawer .range-direction{justify-self:start;margin-left:12px;line-height:1;transform:rotate(90deg);}
 .investigation-drawer .range-split-inputs{grid-template-columns:minmax(0,1.2fr) minmax(105px,.85fr);gap:8px}
 .investigation-drawer .range-bound-title{font-size:12px}
-.investigation-drawer .range-day-picker{margin:0 0 15px;padding:10px}
+.investigation-drawer .range-day-mode{grid-template-columns:1fr;gap:9px;margin:0}
+.investigation-drawer .range-day-mode label{font-size:12px}
+.investigation-drawer .range-day-mode input{min-height:41px;padding:9px 11px;font-size:13px}
+.investigation-drawer .range-day-summary{min-height:41px;padding:9px 11px}
 @container (max-width:360px){
   .investigation-drawer .range-split-inputs{grid-template-columns:1fr}
 }

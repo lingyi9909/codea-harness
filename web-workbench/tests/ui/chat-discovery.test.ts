@@ -395,16 +395,19 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByLabel('开始时刻').hover();
     await page.mouse.wheel(0,720);
     await expect(page.getByLabel('开始时刻')).toHaveValue('23:50:43');
-    // One-click whole-day filtering fills local midnight-to-midnight bounds.
+    // A selected calendar day is displayed as ONE day, not as technical
+    // midnight-to-next-midnight bounds. The native prompt remains half-open.
     await page.getByRole('button',{name:'选择某一天'}).click();
     await expect(page.getByLabel('查询日期')).toBeVisible();
-    await page.getByLabel('查询日期').fill('2026-11-10');
-    await expect(page.getByLabel('开始日期')).toHaveValue('2026-11-10');
-    await expect(page.getByLabel('开始时刻')).toHaveValue('00:00:00');
-    await expect(page.getByLabel('结束日期')).toHaveValue('2026-11-11');
-    await expect(page.getByLabel('结束时刻')).toHaveValue('00:00:00');
-    await expect(page.locator('.range-footer')).toContainText('已选择整天');
-    await expect(page.getByLabel('查询日期')).toHaveCount(0);
+    await page.getByLabel('查询日期').fill('2026-11-11');
+    await expect(page.locator('.range-day-summary')).toContainText('2026/11/11 · 全天');
+    await expect(page.locator('.range-day-summary')).toContainText('00:00:00 — 23:59:59');
+    await expect(page.getByLabel('开始日期')).toHaveCount(0);
+    await expect(page.getByLabel('结束日期')).toHaveCount(0);
+    await expect(page.locator('.range-footer')).toContainText('已选择 2026/11/11 全天');
+    await page.getByRole('button',{name:'自定义范围'}).click();
+    await expect(page.getByLabel('开始日期')).toHaveValue('2026-11-11');
+    await expect(page.getByLabel('结束日期')).toHaveValue('2026-11-12');
     await quarter.click();
     await page.getByLabel('开始日期').fill('2026-11-11');
     await page.getByLabel('开始时刻').fill('23:57:11');
