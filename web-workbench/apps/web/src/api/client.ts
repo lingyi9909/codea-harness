@@ -4,7 +4,9 @@ import type { components } from '../../../../packages/contracts/src/api.generate
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) { super(message); }
+  readonly status:number;
+  readonly code:string;
+  constructor(status: number, code: string, message: string) { super(message);this.status=status;this.code=code; }
 }
 export class HarnessApi {
   private csrf = '';
