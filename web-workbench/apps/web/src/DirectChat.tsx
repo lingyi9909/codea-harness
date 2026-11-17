@@ -242,14 +242,29 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     if(!rerun){write('');attach('');toggleFiles(false);}
   });
   const feed=useRef<HTMLDivElement>(null),follow=useRef(true);
+  const lastFeedHeight=useRef(0);
   const snapshot=state?.id===id?state:undefined;
   const streamAhead=stream.parts.some(part=>!snapshot?.messages.some(m=>m.id===part.message));
   const active=Boolean(!pending&&(snapshot?.active||streamAhead));
   const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts),[snapshot,stream.parts]);
   const messages=useProgressiveMessages(id,merged,snapshot?.messages,Boolean(snapshot?.active),createdSession.current===id);
-  useLayoutEffect(()=>{follow.current=true;},[id]);
   useLayoutEffect(()=>{
-    if(follow.current&&feed.current)feed.current.scrollTop=feed.current.scrollHeight;
+    follow.current=true;
+    lastFeedHeight.current=0;
+  },[id]);
+  useLayoutEffect(()=>{
+    const node=feed.current;
+    if(!node)return;
+    const nextHeight=node.scrollHeight;
+    const bottom=Math.max(0,nextHeight-node.clientHeight);
+    // The progressive character reveal can repaint on every animation frame.
+    // Only move the feed if actual content height grew and the user still
+    // follows the bottom. Unconditional scrollTop assignments conflict with
+    // browser scroll anchoring and make the whole workbench appear to jitter.
+    if(follow.current&&bottom>1&&
+      (nextHeight>lastFeedHeight.current||lastFeedHeight.current===0)&&
+      bottom-node.scrollTop>1)node.scrollTop=bottom;
+    lastFeedHeight.current=nextHeight;
   },[messages,stream.tools]);
   const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;

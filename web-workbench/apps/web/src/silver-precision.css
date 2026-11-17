@@ -594,6 +594,12 @@ body{background:#fff;color:var(--silver-ink);}
   flex:1;min-height:0;max-height:none;overflow:auto;
   margin:0;padding:18px 15px 28px;
   scrollbar-gutter:stable;
+  /* React owns intentional follow-to-bottom; browser anchoring must not
+     fight its position updates while streaming text grows. */
+  overflow-anchor:none;scroll-behavior:auto;overscroll-behavior:contain;
+}
+.silver-chat-active .chat-feed{
+  overflow-anchor:none;scroll-behavior:auto;overscroll-behavior:contain;
 }
 .log-investigation-active .conversation-transcript{max-width:940px;margin:0 auto;}
 .log-investigation-active .chat-layout .composer,

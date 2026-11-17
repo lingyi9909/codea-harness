@@ -484,6 +484,18 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(thought.locator('summary')).toContainText('思考');
     await expect(feed.getByText('客户端可见的测试片段',{exact:true})).toBeVisible();
     await expect(feed.getByText(firstReasoning,{exact:true})).toBeVisible();
+    await expect(thought.locator('.reasoning-live-text')).toContainText(firstReasoning);
+    await expect(feed).toHaveCSS('overflow-anchor','none');
+    await expect(feed).toHaveCSS('scroll-behavior','auto');
+    // Streamed thought text may grow, but it must not shift the workbench
+    // heading or the bottom reply composer as it is progressively painted.
+    const stableFrame=async()=>{
+      const heading=await page.locator('.log-investigation-active > .scene-title').boundingBox();
+      const composer=await page.locator('.log-investigation-active .composer').boundingBox();
+      assert.ok(heading&&composer);
+      return {headingY:heading.y,composerY:composer.y};
+    };
+    const initialFrame=await stableFrame();
     await expect(feed).not.toContainText('private-marker');
     await thought.locator('summary').click();
     await expect(feed.getByText(firstReasoning,{exact:true})).not.toBeVisible();
@@ -494,6 +506,9 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await writeFile(file+'.next','1');
     await expect(feed.getByText(firstReasoning+'时间线',{exact:true})).toBeVisible();
     await expect(feed.getByText('已找到',{exact:true})).toBeVisible();
+    const afterFrame=await stableFrame();
+    assert.ok(Math.abs(initialFrame.headingY-afterFrame.headingY)<2,'live thinking must not move the scene header');
+    assert.ok(Math.abs(initialFrame.composerY-afterFrame.composerY)<2,'live thinking must not move the reply composer');
     await expect(feed).not.toContainText('两条记录');
     await writeFile(file+'.finish','1');
     await expect(feed.getByText(finalAnswer,{exact:true})).toBeVisible();
