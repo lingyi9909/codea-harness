@@ -41,7 +41,7 @@ it('summarizes the requested task in the first input, including multiline and lo
 it('titles log requests from the question or filters and preserves existing session names',()=>{
   const log='请根据以下条件排查日志，列出证据、异常原因及下一步。\nTrace ID：req-23\n关键字：支付超时\n日志级别：WARN';
   assert.equal(summarizeFirstInput(log,true),'排查 · Trace ID req-23 · 关键词 支付超时');
-  assert.equal(summarizeFirstInput(log+'\n排查问题：为什么订单重复扣款？\n导入日志：orders.txt',true),'为什么订单重复扣款？ · Trace ID req-23');
+  assert.equal(summarizeFirstInput(log+'\n排查问题：为什么订单重复扣款？\n导入日志：orders.txt',true),'为什么订单重复扣款 · Trace ID req-23');
   assert.equal(summarizeFirstInput(log+'\nmsgSn：0000456\n排查问题：核查失败',true),'核查失败 · msgSn 0000456');
   assert.equal(displayChatTitle('团队自定义名称','缓存的名称'),'团队自定义名称');
   assert.equal(displayChatTitle('Code Harness · 直接对话','以前的对话'),'以前的对话');

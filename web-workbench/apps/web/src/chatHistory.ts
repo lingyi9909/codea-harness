@@ -68,13 +68,14 @@ export function displayChatTitle(native?:string,cached?:string){
 }
 
 export function summarizeFirstInput(text='',logInspection=false){
+  let identitySuffix='';
   if(logInspection){
     const criteria=text.split(/^导入日志：|^请用当前项目可用的日志工具/m,1)[0];
     const question=criteria.match(/^排查问题：([\s\S]*)/m)?.[1];
     const keyword=criteria.match(/^关键字：(.+)$/m)?.[1],trace=criteria.match(/^Trace ID：(.+)$/m)?.[1];
     const msgSn=criteria.match(/^msgSn：(.+)$/m)?.[1];
     const identity=msgSn?'msgSn '+msgSn:trace?'Trace ID '+trace:keyword?'关键词 '+keyword:'';
-    if(question)text=question+(identity?' · '+identity:'');
+    if(question){text=question;identitySuffix=identity?' · '+identity:'';}
     else if(identity)text='排查 · '+[msgSn?'msgSn '+msgSn:'',trace?'Trace ID '+trace:'',keyword?'关键词 '+keyword:''].filter(Boolean).join(' · ');
   }
   const clean=text.trim().replace(/^(?:你好[，,！!。\s]+|您好[，,！!。\s]+|(?:hi|hello)[!,\s]+)+/i,'')
@@ -85,6 +86,6 @@ export function summarizeFirstInput(text='',logInspection=false){
   const title=main.replace(/^(?:请(?:问|你)?(?:帮我|协助我)?|麻烦(?:你)?(?:帮我)?|帮我|需求[：:]|目标[：:])\s*/,'')
     .replace(/^(?:(?:can|could) you (?:please )?|please )([a-z])/i,(_,first:string)=>first.toUpperCase())
     .replace(/\s+/g,' ').trim()||main;
-  const points=Array.from(title);
-  return points.length>48?points.slice(0,47).join('').trimEnd()+'…':title;
+  const points=Array.from(title+identitySuffix);
+  return points.length>48?points.slice(0,47).join('').trimEnd()+'…':points.join('');
 }
