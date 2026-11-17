@@ -342,6 +342,36 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByLabel('对话内容')).toHaveValue('');
     await nav.getByRole('button',{name:'报文问题排查'}).click();
     await expect(page.getByLabel('对话内容')).toHaveValue('报文模式独立草稿');
+    // New institution scene must not mutate either existing investigation scene.
+    await nav.getByRole('button',{name:'机构报文排查',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'机构报文排查'})).toBeVisible();
+    await expect(page.getByLabel('日期',{exact:true})).toHaveAttribute('type','date');
+    await expect(page.getByLabel('msgSn',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('账号',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('密码',{exact:true})).toHaveAttribute('type','password');
+    await expect(page.getByLabel('验证码',{exact:true})).toHaveAttribute('type','password');
+    await expect(page.getByLabel('Trace ID')).toHaveCount(0);
+    await expect(page.getByLabel('关键词')).toHaveCount(0);
+    await page.getByLabel('日期',{exact:true}).fill('2026-11-11');
+    await expect(page.locator('.institution-day-summary')).toContainText('00:00:00 — 23:59:59');
+    const institutionSubmit=page.getByRole('button',{name:'开始排查'});
+    await expect(institutionSubmit).toBeDisabled();
+    await page.getByLabel('msgSn',{exact:true}).fill('000123');
+    await page.getByLabel('账号',{exact:true}).fill('institute-fixture');
+    await page.getByLabel('密码',{exact:true}).fill('secret-do-not-persist');
+    await page.getByLabel('验证码',{exact:true}).fill('001234');
+    await expect(institutionSubmit).toBeEnabled();
+    await institutionSubmit.click();
+    await expect(page.locator('.institution-message').getByRole('alert')).toContainText('本次未发送账号、密码或验证码');
+    await expect(page.getByLabel('密码',{exact:true})).toHaveValue('');
+    await expect(page.getByLabel('验证码',{exact:true})).toHaveValue('');
+    const institutionCache=await page.evaluate(()=>JSON.stringify([
+      Object.entries(localStorage),Object.entries(sessionStorage)]));
+    assert.ok(!institutionCache.includes('secret-do-not-persist'));
+    assert.ok(!institutionCache.includes('001234'));
+    await page.screenshot({path:join(shots,'13-institution-message.png')});
+    await nav.getByRole('button',{name:'报文问题排查'}).click();
+    await expect(page.getByLabel('对话内容')).toHaveValue('报文模式独立草稿');
     await nav.getByRole('button',{name:'公管问题排查'}).click();
     await expect(problem).toHaveAttribute('aria-expanded','true');
     await expect(nav.getByRole('button',{name:'公管问题排查'})).toHaveAttribute('aria-current','page');
