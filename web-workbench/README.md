@@ -1,5 +1,7 @@
 # 智能工作台 · Web Workbench
 
+> **研发方案（尚未实现）：** [V1.1 多用户隔离与业务 Skill 短信验证协同实施方案](docs/multi-user-and-skill-business-verification-v1.md)。工作台登录仅用户名 + 手机号（无登录验证码）；业务日志 Skill 需要短信时由日志平台发码/核验。方案以 PR #110 为基线，不代表当前版本已支持多人并发。
+
 The local review workbench serves the React application and Fastify API on the same loopback port. It stores tasks, runs, messages, native checkpoints, permissions and report metadata in MySQL 8.4. Git snapshots and archived report files live under the configured data directory.
 
 ## Node.js and npm compatibility
