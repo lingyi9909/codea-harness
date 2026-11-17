@@ -35,5 +35,5 @@ jobs:
           cache-dependency-path: web-workbench/package-lock.json
       - run: npm ci
       - run: npm run typecheck && npm run web:typecheck && npm run web:build
-      - run: node --test tests/api/*.test.ts tests/capabilities/*.test.ts tests/events/*.test.ts tests/git/*.test.ts tests/reports/*.test.ts tests/workers/*.test.ts tests/ui/chat-history-storage.test.ts tests/ui/progressive-messages.test.ts tests/mysql/migration.test.ts
+      - run: node --test tests/api/*.test.ts tests/capabilities/*.test.ts tests/events/*.test.ts tests/git/*.test.ts tests/reports/*.test.ts tests/workers/*.test.ts tests/ui/chat-history-storage.test.ts tests/ui/progressive-messages.test.ts tests/ui/user-storage-auth.test.ts tests/mysql/migration.test.ts
       - run: node --test tests/mysql/multi-user.test.ts

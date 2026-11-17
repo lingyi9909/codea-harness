@@ -71,7 +71,7 @@
 
 - `node --test tests/api/multi-user-auth.test.ts tests/api/multi-user-isolation.test.ts tests/api/execution-isolation.test.ts tests/api/multi-user-routes.test.ts tests/api/user-context.test.ts tests/api/business-verification.test.ts`
 - 在独立 `harness_ci_test` 数据库配置完成后执行 `node --test tests/mysql/multi-user.test.ts`。它会运行迁移、真实并发唯一账号、会话恢复/撤销和绑定授权检查，并清理自身创建的用户。不得改为生产库名来执行。
-- 新增 GitHub Workflow `workbench-multi-user.yml` 提供 Node 24 + MySQL 8.4 验证；实际 CI 结果应按运行记录确认。
+- 新增 GitHub Workflow `workbench-multi-user.yml` 提供 Node 24 + MySQL 8.4 验证；首次 Run 44037192474 已通过真实 MySQL 8.4.13 测试，详见测试记录。最终提交仍以最新 Actions Run 为准。
 - Windows 两浏览器/三用户、真实 OpenCode、文件 ACL 和内网短信仍需使用方实测。HTTP 注入和模拟器结果不能代替这些检查。
 
 ## 回退

@@ -47,3 +47,9 @@ node --test tests/api/*.test.ts tests/capabilities/*.test.ts tests/events/*.test
 3. Windows/真实 OpenCode 三人并发、进程/目录 ACL、浏览器实测，以及真实短信平台适配条件与内网验证。
 
 部署及回退见 [v1-1-deployment-and-acceptance.md](v1-1-deployment-and-acceptance.md)。
+
+## GitHub CI 补充证据
+
+在提交 21c039fbc76bc6811e00db43549277c899ae0379 上，V1.1 Workflow [Run 44037192474](https://github.com/lingyi9909/codea-harness/actions/runs/44037192474) 通过：Node 24 标准 npm ci、前后端类型检查、生产构建；回归 73 项中 72 通过、0 失败、1 跳过；真实 MySQL 8.4.13 迁移/并发唯一账号/持久会话/归属测试 1/1 通过。
+
+旧端到端测试随后发现配对码入口未初始化缓存作用域，刷新无法恢复任务；在 e29989ddde8133b59026e97ea4ed56526fef0d16 补齐 API.pair 初始化，并新增 user-storage-auth.test.ts 防止回归。补丁后的浏览器与 CI 结果待最新 Run 核验。该缺陷是真实回归，未归因于沙箱，也未修改原有断言。
