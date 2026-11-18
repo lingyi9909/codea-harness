@@ -30,7 +30,7 @@ async function login(page:Page){
 }
 
 it('browser uses the startup directory, starts the CLI fixture and shows upstream failure',{timeout:90000},async()=>{
-  const root=await mkdtemp(join(tmpdir(),'harness cli ')),file=join(root,'service.json');
+  const root=await realpath(await mkdtemp(join(tmpdir(),'harness cli '))),file=join(root,'service.json');
   const win=process.platform==='win32',cli=join(root,win?'opencode.cmd':'opencode'),script=join(root,'fixture.cjs');
   const firstReasoning='先核对本次查询的起止日期和时区，再按时间顺序检查每个匹配项。';
   const finalAnswer='已找到两条记录，来自相同的服务，请对照这两条记录的请求时间。';
