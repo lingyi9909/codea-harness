@@ -3,7 +3,7 @@ import type {FastifyRequest,FastifyReply} from 'fastify';
 import {AuthProblem,type RequestAuth} from './auth.ts';
 import type {EmbedStore,EmbedGrant} from '../../../packages/storage/src/embed.ts';
 export type EmbedClient={id:string;secret:string;parentOrigin:string;principals:Record<string,string>};
-export type EmbedConfig={publicOrigin:string;clients:EmbedClient[];sessionTTLSeconds?:number};
+export type EmbedConfig={publicOrigin:string;clients:EmbedClient[];sessionTTLSeconds?:number;anonymous?:{parentOrigins:string[];executionOwners:string[];resetCommand?:string[]}};
 export const embedDigest=(s:string)=>createHash('sha256').update(s).digest('hex');
 export function trustedOrigin(origin:string){
   const url=new URL(origin);
@@ -20,7 +20,8 @@ export class EmbeddedAuth implements RequestAuth {
   constructor(config:EmbedConfig,store:EmbedStore,now=Date.now){
     trustedOrigin(config.publicOrigin);
     const ids=new Set<string>(),secrets=new Set<string>(),owners=new Map<string,string>();
-    if(!config.clients.length)throw new Error('EMBED_CLIENTS_REQUIRED');
+    config={...config,clients:config.clients??[]};
+    if(!config.clients.length&&!config.anonymous)throw new Error('EMBED_CLIENTS_REQUIRED');
     for(const c of config.clients){
       trustedOrigin(c.parentOrigin);
       if(!/^[A-Za-z0-9_-]{1,80}$/.test(c.id)||ids.has(c.id)||typeof c.secret!=='string'||c.secret.length<32||secrets.has(c.secret)||!Object.keys(c.principals).length)throw new Error('EMBED_CLIENT_CONFIG_INVALID');
@@ -29,6 +30,13 @@ export class EmbeddedAuth implements RequestAuth {
         if(!subject||subject.length>128||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)||owners.has(id))throw new Error('EMBED_PRINCIPAL_MAPPING_INVALID');
         owners.set(id,c.id+':'+subject);
       }
+    }
+    if(config.anonymous){
+      const {parentOrigins,executionOwners,resetCommand}=config.anonymous;
+      if(!Array.isArray(parentOrigins)||!parentOrigins.length||!Array.isArray(executionOwners)||!executionOwners.length||executionOwners.length>100)throw new Error('EMBED_ANONYMOUS_CONFIG_INVALID');
+      parentOrigins.forEach(trustedOrigin);
+      for(const id of executionOwners){if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)||owners.has(id))throw new Error('EMBED_SLOT_INVALID');owners.set(id,'anonymous');}
+      if(resetCommand&&(!resetCommand.length||resetCommand.some(v=>typeof v!=='string'||!v)))throw new Error('EMBED_RESET_COMMAND_INVALID');
     }
     if(!Number.isInteger(config.sessionTTLSeconds??7200)||(config.sessionTTLSeconds??7200)<60||(config.sessionTTLSeconds??7200)>28800)throw new Error('EMBED_TTL_INVALID');
     this.config=structuredClone(config);this.store=store;this.now=now;
@@ -60,12 +68,22 @@ export class EmbeddedAuth implements RequestAuth {
     if(!grant)throw new AuthProblem(401,'EMBED_TICKET_INVALID');
     return {token,csrfToken:embedDigest('csrf:'+token),expiresAt:expires};
   }
+  async anonymous(req:FastifyRequest,slots:{ownerId:string;serviceIdentity:string}[]){
+    this.check(req,true);if(!this.config.anonymous)throw new AuthProblem(404,'EMBED_ANONYMOUS_DISABLED');
+    const key='anonymous',recent=(this.issuance.get(key)??[]).filter(t=>t>this.now()-60000);
+    if(recent.length>=120)throw new AuthProblem(429,'EMBED_SESSION_RATE_LIMIT');
+    recent.push(this.now());this.issuance.set(key,recent);
+    const token=randomBytes(32).toString('base64url'),expires=this.now()+(this.config.sessionTTLSeconds??7200)*1000;
+    const grant=await this.store.allocate({id:randomUUID(),digest:embedDigest(token),expires,parentOrigin:this.config.publicOrigin},slots);
+    if(!grant)throw new AuthProblem(503,'EMBED_CAPACITY_FULL');
+    return {token,csrfToken:embedDigest('csrf:'+token),expiresAt:expires};
+  }
   async grant(req:FastifyRequest){
     this.check(req);const header=req.headers.authorization??'';
     if(!/^Bearer [\w-]{43}$/.test(header))throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
     const grant=await this.store.find(embedDigest(header.slice(7)));
     if(!grant||grant.expires<=this.now())throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
-    if(!this.config.clients.some(client=>client.parentOrigin===grant.parentOrigin&&Object.values(client.principals).includes(grant.ownerId))){
+    if(!(grant.accessMode==='ANONYMOUS'?grant.parentOrigin===this.config.publicOrigin&&this.config.anonymous?.executionOwners.includes(grant.ownerId):this.config.clients.some(client=>client.parentOrigin===grant.parentOrigin&&Object.values(client.principals).includes(grant.ownerId)))){
       await this.store.revoke(grant.id);throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
     }
     this.sessions.set(req,grant);return grant;

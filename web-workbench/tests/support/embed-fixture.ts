@@ -3,6 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'mysql2/promise';
+import type {InstitutionQueryAdapter} from '../../apps/server/src/institution-query.ts';
 import {createApp} from '../../apps/server/src/app.ts';
 import {MultiUserAuth} from '../../apps/server/src/multi-user-auth.ts';
 import {EmbeddedAuth,type EmbedConfig} from '../../apps/server/src/embed-auth.ts';
@@ -11,6 +12,14 @@ import type {EmbedStore,EmbedGrant,EmbedTicket} from '../../packages/storage/src
 export class MemoryEmbedStore implements EmbedStore {
   tickets=new Map<string,EmbedTicket>();grants=new Map<string,EmbedGrant>();revoked=new Set<string>();clean=new Set<string>();
   now=Date.now;
+  recycledIds=new Set<string>();queries=new Map<string,{state:string;fingerprint:string;evidence?:string}>();
+  async allocate(g:Pick<EmbedGrant,'id'|'digest'|'expires'|'parentOrigin'>,slots:{ownerId:string;serviceIdentity:string}[]){
+    const slot=[...slots].sort((a,b)=>a.ownerId.localeCompare(b.ownerId)).find(s=>![...this.grants.values()].some(g=>g.ownerId===s.ownerId&&(!this.clean.has(g.id)||g.serviceIdentity===s.serviceIdentity&&!this.recycledIds.has(g.id))));
+    if(!slot)return undefined;const grant:EmbedGrant={...g,...slot,state:'NEW',accessMode:'ANONYMOUS'};this.grants.set(g.digest,grant);return {...grant};
+  }
+  async recycled(id:string){this.recycledIds.add(id);}
+  async claimQuery(id:string,fingerprint:string){const query=this.queries.get(id);if(query)return {...query,claimed:false};this.queries.set(id,{state:'RUNNING',fingerprint});return {state:'RUNNING',fingerprint,claimed:true};}
+  async finishQuery(id:string,evidence?:string){const q=this.queries.get(id)!;q.state=evidence===undefined?'FAILED':'READY';q.evidence=evidence;}
   async ticket(ticket:EmbedTicket){this.tickets.set(ticket.digest,ticket);}
   async exchange(digest:string,parentOrigin:string,g:Pick<EmbedGrant,'id'|'digest'|'expires'>){
     const t=this.tickets.get(digest);if(!t||t.parentOrigin!==parentOrigin||t.expires<=this.now())return undefined;
@@ -22,19 +31,20 @@ export class MemoryEmbedStore implements EmbedStore {
   async bind(id:string,nativeId:string,serviceIdentity:string){const g=this.byId(id);if(!g||g.state!=='CREATING'||this.revoked.has(id))throw Error('bind');g.nativeId=nativeId;g.serviceIdentity=serviceIdentity;g.state='BOUND';}
   async fail(id:string){const g=this.byId(id);if(g?.state==='CREATING')g.state='FAILED';}
   async revoke(id:string){this.revoked.add(id);}
-  async cleanupCandidates(){return [...this.grants.values()].filter(g=>(g.expires<=this.now()||this.revoked.has(g.id))&&!this.clean.has(g.id));}
+  async cleanupCandidates(){return [...this.grants.values()].filter(g=>(g.expires<=this.now()||this.revoked.has(g.id))&&(!this.clean.has(g.id)||g.accessMode==='ANONYMOUS'&&!this.recycledIds.has(g.id)));}
   async cleaned(id:string){this.clean.add(id);}
   async otherSessions(ownerId:string,grantId:string){return [...this.grants.values()].filter(g=>g.ownerId===ownerId&&g.id!==grantId&&g.state==='BOUND'&&!this.revoked.has(g.id)&&g.expires>this.now()).map(g=>g.nativeId!);}
   private readonly locked=new Set<string>();
   async serialize<T>(ownerId:string,fn:()=>Promise<T>){if(this.locked.has(ownerId))throw Error('EMBED_EXECUTOR_BUSY');this.locked.add(ownerId);try{return await fn();}finally{this.locked.delete(ownerId);}}
 }
-export async function embedFixture(origin='https://workbench.example',parentOrigin='https://host.example',hold=true){
+export async function embedFixture(origin='https://workbench.example',parentOrigin='https://host.example',hold=true,options:{anonymous?:boolean;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}={}){
   const base=await realpath(await mkdtemp(join(tmpdir(),'embed-fixture-'))),workspace=join(base,'shared');await mkdir(workspace);
   await mkdir(join(workspace,'.workbench'));
   await writeFile(join(workspace,'.workbench','scenarios.json'),JSON.stringify({version:1,scenes:{message:{directory:workspace,executor:{type:'skill',name:'message-query'}}}}));
   const owners=[randomUUID(),randomUUID(),randomUUID()];
   const records:ExecutionRecord[]=await Promise.all(owners.map(async(ownerId,i)=>{const dir=join(base,'user-'+i);await mkdir(dir);return {ownerId,serviceIdentity:'service-'+i,url:'http://127.0.0.1:'+String(6000+i),authorization:'private-service-'+i,isolation:'os-user',directories:{[workspace]:dir}};}));
   const config:EmbedConfig={publicOrigin:origin,clients:[{id:'host',secret:'host-backend-secret-that-is-not-in-the-browser',parentOrigin,principals:{alice:owners[0],bob:owners[1],carol:owners[2]}}]};
+  if(options.anonymous){config.clients=[];config.anonymous={parentOrigins:[parentOrigin],executionOwners:owners};}
   const store=new MemoryEmbedStore(),embedded=new EmbeddedAuth(config,store);
   const bindings=new Map<string,{owner:string;scenario:string;directory:string}>();
   const pool={execute:async(sql:string,args:unknown[])=>{
@@ -67,7 +77,9 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     } as never;
   });
   const userAuth=new MultiUserAuth({identify:async()=>{throw Error('no login');},issue:async()=>{},find:async()=>undefined,revoke:async()=>{}},'https://workbench.example');
-  const app=await createApp({auth:userAuth,pool,execution,embedded,workspace});
+  const makeApp=()=>createApp({auth:userAuth,pool,execution,embedded:new EmbeddedAuth(config,store),workspace,institutionAdapter:options.institutionAdapter,resetEmbedSlot:options.resetSlot});
+  let app=await makeApp();
+  const restart=async()=>{await app.close();app=await makeApp();};
   const headers=(token?:string,csrf?:string)=>({host:new URL(origin).host,origin,...(token?{authorization:'Bearer '+token}:{}),...(csrf?{'x-csrf-token':csrf}:{})});
   const ticket=async(subject:string)=>{
     const r=await app.inject({method:'POST',url:'/api/v1/embed/tickets',headers:{host:new URL(origin).host,authorization:'Bearer '+config.clients[0].secret},payload:{clientId:'host',subject}});
@@ -77,5 +89,5 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     const t=await ticket(subject);const r=await app.inject({method:'POST',url:'/api/v1/embed/exchange',headers:headers(),payload:{ticket:t.ticket,parentOrigin}});
     if(r.statusCode!==200)throw Error(r.body);return r.json().data as {token:string;csrfToken:string;expiresAt:number};
   };
-  return {app,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
+  return {get app(){return app;},restart,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
 }

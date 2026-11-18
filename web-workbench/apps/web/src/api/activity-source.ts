@@ -19,6 +19,7 @@ export class BearerEventSource implements ChatEventSource {
   private async connect(){
     try{
       const response=await fetch(this.url,{headers:this.headers,credentials:'omit',cache:'no-store',redirect:'error',signal:this.stop.signal});
+      if(response.status>=500){await response.body?.cancel();throw new Error('SSE_TEMPORARILY_UNAVAILABLE');}
       if(!response.ok||!response.headers.get('content-type')?.includes('text/event-stream')||!response.body){await response.body?.cancel();this.onerror?.();return;}
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
       try{

@@ -46,7 +46,7 @@ function explain(e:unknown){
   return e instanceof ApiError?(labels[e.code]??e.message):String(e);
 }
 type Investigation={
-  controls:ReactNode;initial:boolean;ready:boolean;prompt:(text:string)=>string;
+  controls:ReactNode;initial:boolean;ready:boolean;allowAdjustment?:boolean;prompt:(text:string)=>string|Promise<string>;
   onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;
   beginEdit:()=>void;cancel:()=>void;title:string;sessionKey:'harness.logs'|'harness.message';
 };
@@ -164,6 +164,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         const rangePrompt=value.messages.slice().reverse().find(m=>m.role==='user'&&/^时间范围（起点含、终点不含）：/m.test(m.text));
         investigationRef.current?.reset(id,rangePrompt?.text);
       }
+      if(embedded)fail('');
       update(value);stream.prune.current(value.messages);
     }catch(e){
       if(!live)return;
@@ -219,7 +220,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const canRerun=Boolean(adjustmentOpen&&investigation?.ready&&settings.configured&&state?.id===id&&!state.active&&!pending&&!busy);
   const send=(rerun=false)=>run(async()=>{
     if(rerun?!canRerun:!maySend)return;
-    const text=investigation?investigation.prompt(rerun?'':draft.trim()):draft.trim();
+    const text=investigation?await investigation.prompt(rerun?'':draft.trim()):draft.trim();
     if(text.length>16000)throw Error('排查条件和问题合计过长，请缩短后再发送。');
     let session=id;
     if(!session){
@@ -277,7 +278,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
   return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
-    <div className="chat-history-actions">{investigation&&id&&<button type="button" className="secondary log-adjust-button"
+    <div className="chat-history-actions">{investigation&&investigation.allowAdjustment!==false&&id&&<button type="button" className="secondary log-adjust-button"
       aria-expanded={adjustmentOpen} disabled={busy||pending||state?.id!==id||Boolean(state?.active)||restoreContext.current}
       onClick={openAdjustment}>调整排查条件</button>}
       {!embedded&&<button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>}

@@ -1,3 +1,4 @@
+import type {InstitutionQueryAdapter} from './institution-query.ts';
 import {registerEmbedded} from './embed-routes.ts';
 import type {EmbeddedAuth} from './embed-auth.ts';
 import {MysqlIdentityStore} from '../../../packages/storage/src/identity.ts';
@@ -31,7 +32,7 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=!(opts.auth instanceof MultiUserAuth)&&Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -172,13 +173,13 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
   }
   if(opts.embedded){
     if(!multi||!opts.pool||!opts.execution||!workspace||!sceneConfig)throw new Error('EMBED_REQUIRES_MULTI_USER_EXECUTION');
-    app.get('/embed/message',async(req,reply)=>{
+    for(const path of ['/embed/message','/embed/institution-message'])app.get(path,async(req,reply)=>{
       if(!opts.embedded!.origin(req))throw new AuthProblem(403,'ORIGIN_INVALID');
       if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
-      reply.header('Content-Security-Policy',"frame-ancestors 'self' "+[...new Set(opts.embedded!.config.clients.map(c=>c.parentOrigin))].join(' '));
+      reply.header('Content-Security-Policy',"frame-ancestors 'self' "+[...new Set([...opts.embedded!.config.clients.map(c=>c.parentOrigin),...(opts.embedded!.config.anonymous?.parentOrigins??[])])].join(' '));
       return reply.header('Referrer-Policy','no-referrer').header('Cache-Control','no-store').sendFile('index.html');
     });
-    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,pool:opts.pool});
+    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,pool:opts.pool,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
   }
   await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
   if(!opts.pool){

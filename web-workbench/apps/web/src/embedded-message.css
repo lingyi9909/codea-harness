@@ -9,3 +9,5 @@
 .embedded-model-hint{margin:12px 24px 0;color:#69717d;font-size:13px}
 .embedded-message-shell .chat-history-actions{gap:8px}
 @media(max-width:620px){.embedded-message-header{padding:12px;flex-wrap:wrap}.embedded-message-shell>.log-investigation{padding:16px}}
+
+.anonymous-institution>.institution-message{flex:1;min-height:0;overflow:auto;padding:24px;box-sizing:border-box}.anonymous-institution .institution-result-panel>.log-investigation{width:100%;max-width:none;box-sizing:border-box;padding:16px;min-height:450px}.anonymous-institution .institution-result-panel .scene-title{display:none}.anonymous-institution .institution-result-panel .chat-feed{min-height:240px;max-height:58vh;overflow:auto}.anonymous-institution .institution-form-panel{align-self:start}

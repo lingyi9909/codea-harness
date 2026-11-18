@@ -1,3 +1,4 @@
+import {httpInstitutionAdapter} from './institution-query.ts';
 import {EmbeddedAuth,type EmbedConfig} from './embed-auth.ts';
 import {MysqlEmbedStore} from '../../../packages/storage/src/embed.ts';
 import {readFile,realpath} from 'node:fs/promises';
@@ -43,7 +44,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
     embedLocks=await createPool(config.mysql!);
     embedded=new EmbeddedAuth(embedConfig,new MysqlEmbedStore(pool,embedLocks));
   }
-  app=await createApp({pool,auth,native,execution,embedded,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly});
+  app=await createApp({pool,auth,native,execution,embedded,institutionAdapter:process.env.HARNESS_INSTITUTION_ADAPTER_URL?httpInstitutionAdapter(process.env.HARNESS_INSTITUTION_ADAPTER_URL,process.env.HARNESS_INSTITUTION_ADAPTER_AUTH??''):undefined,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly});
   const shutdown=async()=>{await app?.close();await pool?.end();await embedLocks?.end();};
   await app.listen({host:'127.0.0.1',port:config.port});
   process.once('SIGTERM',()=>{void shutdown()});

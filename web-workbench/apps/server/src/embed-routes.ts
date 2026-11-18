@@ -1,3 +1,7 @@
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import type {InstitutionQueryAdapter} from './institution-query.ts';
+import {institutionEvidence} from './institution-query.ts';
 import {randomUUID} from 'node:crypto';
 import type {FastifyInstance} from 'fastify';
 import type {Pool} from 'mysql2/promise';
@@ -9,9 +13,15 @@ import {registerChat} from './modules/chat/routes.ts';
 import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;pool:Pool;bindings?:ChatBindingStore}){
+export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;pool:Pool;bindings?:ChatBindingStore;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}){
   const {auth,execution,workspace,sceneConfig,pool}=opts;
-  async function cleanup(g:{id:string;ownerId:string;nativeId?:string;serviceIdentity?:string}){
+  async function cleanup(g:{id:string;ownerId:string;nativeId?:string;serviceIdentity?:string;accessMode?:string}){
+    return auth.store.serialize(g.ownerId,async()=>{
+    // Another replica may have cleaned this grant since the sweep selected it.
+    if(!(await auth.store.cleanupCandidates()).some(candidate=>candidate.id===g.id)){
+      await auth.store.revoke(g.id);
+      if(!(await auth.store.cleanupCandidates()).some(candidate=>candidate.id===g.id))return;
+    }
     await auth.store.revoke(g.id);
     if(g.nativeId)await execution.run(g.ownerId,async()=>{
       if(g.serviceIdentity!==execution.serviceIdentity())throw new Error('EMBED_CLEANUP_SERVICE_CHANGED');
@@ -28,6 +38,19 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
       await client.session.remove({sessionID:g.nativeId!});
     });
     await auth.store.cleaned(g.id);
+    if(g.accessMode==='ANONYMOUS'){
+      // Never lend an unreset execution environment to another anonymous visitor.
+      if(opts.resetSlot)await opts.resetSlot(g.ownerId);
+      else if(auth.config.anonymous?.resetCommand){
+        await execution.run(g.ownerId,async()=>{
+          if(g.serviceIdentity!==execution.serviceIdentity())throw new Error('EMBED_RESET_SERVICE_CHANGED');
+          const [command,...args]=auth.config.anonymous!.resetCommand!;
+          await promisify(execFile)(command,[...args,'--owner',g.ownerId,'--directory',execution.directory((await binding()).directory),'--service',g.serviceIdentity!],{timeout:60000,maxBuffer:4096,windowsHide:true});
+        });
+      }else return; // Retire the slot until an operator reprovisions its generation.
+      await auth.store.recycled(g.id);
+    }
+    });
   }
   let sweeping:Promise<void>|undefined;
   const sweep=()=>{
@@ -39,6 +62,16 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
   const timer=setInterval(()=>void sweep(),15000);timer.unref();
   app.addHook('onClose',async()=>{clearInterval(timer);await sweeping;});
   for(const c of auth.config.clients)for(const owner of Object.values(c.principals))if(!execution.has(owner))throw new Error('EMBED_EXECUTION_NOT_PROVISIONED');
+  for(const owner of auth.config.anonymous?.executionOwners??[])if(!execution.has(owner))throw new Error('EMBED_EXECUTION_NOT_PROVISIONED');
+  app.post('/api/v1/embed/anonymous',async(req,reply)=>{
+    const slots=await Promise.all((auth.config.anonymous?.executionOwners??[]).map(ownerId=>execution.run(ownerId,async()=>({ownerId,serviceIdentity:execution.serviceIdentity()}))));
+    return reply.header('Cache-Control','no-store').send(wrap(await auth.anonymous(req,slots)));
+  });
+  app.post('/api/v1/embed/institution-query',async(req,reply)=>{
+    await auth.mutation(req);const grant=await auth.grant(req);
+    if(grant.accessMode!=='ANONYMOUS')throw new AuthProblem(403,'EMBED_ACTION_FORBIDDEN');
+    return reply.header('Cache-Control','no-store').send(wrap(await institutionEvidence(opts.institutionAdapter,auth.store,grant.id,req.body)));
+  });
   const binding=async()=>{
     const value=await sceneConfig.binding('message');
     if(value.executor.type==='builtin'||value.executor.type==='command'&&value.executor.name==='models')throw new AuthProblem(503,'EMBED_EXECUTOR_NOT_CONFIGURED');

@@ -19,6 +19,7 @@ export class HarnessApi {
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('..'))
       throw new Error('UNSAFE_API_PATH');
+    if(this.base==='/api/v1/embed'&&!this.embedToken)throw new ApiError(401,'EMBED_SESSION_REQUIRED','本次排查会话已结束。');
     const verb = init.method?.toUpperCase() ?? 'GET';
     const headers: Record<string, string> = { Accept: 'application/json' };
     if(this.embedToken)headers.Authorization='Bearer '+this.embedToken;
@@ -53,9 +54,17 @@ export class HarnessApi {
     return (data as {data:T}).data;
   }
   activity(id:string):ChatEventSource{
+    if(this.base==='/api/v1/embed'&&!this.embedToken)throw new ApiError(401,'EMBED_SESSION_REQUIRED','本次排查会话已结束。');
     const url=this.base+'/chat/sessions/'+encodeURIComponent(id)+'/activity';
     return this.embedToken?new BearerEventSource(url,{Authorization:'Bearer '+this.embedToken}):new EventSource(url) as unknown as ChatEventSource;
   }
+  async openAnonymousEmbedded(){
+    const response=await fetch('/api/v1/embed/anonymous',{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{'Content-Type':'application/json'},body:'{}'});
+    const body=await response.json();if(!response.ok||!body.data?.token||!body.data?.csrfToken)throw new ApiError(response.status,body.error?.code??'EMBED_SESSION_REQUIRED',body.error?.code==='EMBED_CAPACITY_FULL'?'当前排查名额已用完，请稍后重新打开页面。':'无法建立独立排查会话');
+    this.base='/api/v1/embed';this.embedToken=body.data.token;this.csrf=body.data.csrfToken;this.businessVerificationEnabled=false;resetUserStorage();return body.data.expiresAt as number;
+  }
+  embeddedSession(){return this.request<{sessionId:string|null;state:string;expiresAt:number}>('/session');}
+  institutionEvidence(input:{day:string;from:number;to:number;msgSn:string;account:string;password:string;verificationCode:string}){return this.request<{evidence:string}>('/institution-query',{method:'POST',body:JSON.stringify(input)});}
   async openEmbedded(ticket:string,parentOrigin:string){
     const response=await fetch('/api/v1/embed/exchange',{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket,parentOrigin})});
     const body=await response.json();if(!response.ok||!body.data?.token||!body.data?.csrfToken)throw new ApiError(response.status,'EMBED_SESSION_REQUIRED','无法建立排查会话');
@@ -63,7 +72,7 @@ export class HarnessApi {
     return body.data.expiresAt as number;
   }
   async closeEmbedded(){try{await this.request<void>('/session',{method:'DELETE'});}finally{this.clearEmbedded();}}
-  clearEmbedded(){this.embedToken='';this.csrf='';this.base='/api/v1';resetUserStorage();}
+  clearEmbedded(){this.embedToken='';this.csrf='';resetUserStorage();}
   async pair(pairingCode: string): Promise<Schema<'Bootstrap'>> {
     const response = await fetch('/api/v1/auth/session', {
       method: 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store',

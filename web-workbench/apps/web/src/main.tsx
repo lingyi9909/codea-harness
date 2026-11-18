@@ -1,3 +1,4 @@
+import {AnonymousInstitutionPage} from './AnonymousInstitutionPage.tsx';
 import {EmbeddedMessagePage} from './EmbeddedMessagePage.tsx';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,4 +8,4 @@ import './silver-precision.css';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('WEB_ROOT_NOT_FOUND');
-createRoot(container).render(<React.StrictMode>{window.location.pathname==='/embed/message'?<EmbeddedMessagePage/>:<WorkbenchApp/>}</React.StrictMode>);
+createRoot(container).render(<React.StrictMode>{window.location.pathname==='/embed/institution-message'?<AnonymousInstitutionPage/>:window.location.pathname==='/embed/message'?<EmbeddedMessagePage/>:<WorkbenchApp/>}</React.StrictMode>);
