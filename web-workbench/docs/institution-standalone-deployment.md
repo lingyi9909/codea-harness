@@ -1,69 +1,76 @@
-# 机构报文排查：单 OpenCode 服务简易部署
+# 一个服务：工作台、机构报文页与配置页
 
-## 本机三步
+## 启动一次
 
-1. 下载本分支、进入 web-workbench，沿用已有离线依赖，首次执行 npm run web:build。
-2. 保持现有 OpenCode 服务正常，执行：
-
-```powershell
-.\启动机构报文排查.cmd "D:\teamai"
-```
-
-也可直接运行：
+Windows 离线包解压后进入 web-workbench，沿用现有 Node/OpenCode 环境执行：
 
 ```powershell
-node --experimental-strip-types apps/server/src/start.ts --embedded-only --workspace "D:\teamai"
+.\启动工作台.cmd "D:\teamai"
 ```
 
-3. 打开终端打印的地址，默认 http://127.0.0.1:4176/embed/institution-message。
+离线包已带运行依赖和构建产物，无需 npm ci / web:build。源码开发需先安装锁定依赖并执行 npm run web:build。macOS 使用 `./启动工作台.command "/唯一业务工作目录"`。
 
-不需要执行注册表、embed-clients.json、槽位 UUID、多个服务地址、多个工作目录、重置脚本或 MySQL。自动发现并复用现有 OpenCode 服务；找不到且登记文件不存在时只尝试启动一个原生服务。HARNESS_OPENCODE_URL / HARNESS_OPENCODE_AUTHORIZATION 仍可指定公司现有的一个服务，未设置时复用 service.json。
+| 用途 | 默认地址 |
+| --- | --- |
+| 工作台 | http://127.0.0.1:4176/ |
+| 独立机构报文排查 | http://127.0.0.1:4176/embed/institution-message |
+| 独立场景配置 | http://127.0.0.1:4176/config |
 
-macOS 使用 sh 启动机构报文排查.command "/唯一工作目录"。原 --local-only 工作台保留原来的场景/工具能力。
+三个地址由同一进程、同一端口提供。start-chat.cmd、旧“启动机构报文排查”脚本与 --embedded-only 兼容转到同一服务，无需分别启动。工作台不再挂载配置组件或侧栏入口。主工作台与配置页沿用原本机登录和编辑权限；机构页无需登录，每次打开独立会话。
 
-## 对方只加 iframe
+OpenCode 连接发现、缓存和首次启动复用同一工厂。默认复用 service.json；HARNESS_OPENCODE_URL / HARNESS_OPENCODE_AUTHORIZATION 可指定现有的一个服务。无需执行槽位注册表、多个工作目录或 MySQL 来运行机构页。旧 MySQL Review/任务模块没有迁移到 SQLite，仍按原部署方式使用。
 
-正式发布使用现有网关将固定 HTTPS 域名代理到 127.0.0.1:4176，保留 Host/Origin/Authorization 并关闭 SSE 缓冲。只需设置访问域名与允许嵌入的宿主 Origin：
+## 同一配置文件绑定 Skill
+
+唯一文件在**启动工作目录**下：`D:\teamai\.workbench\scenarios.json`，不是源码目录。配置项为 logs、message、institution-message、data。
+
+本机打开 `/config`，使用原有资料登记会话，编辑权限仍由 `.workbench/config-access.json` 的 editors 数组控制，首次目录默认 zhangzhanhui。用户名登记不是远程管理员认证；配置写接口继续限于本机有权会话，不对匿名 iframe 开放。
+
+在“机构报文排查”行选择 Skill，填写 OpenCode 已加载的 Skill 名称并保存。以下仅展示机构项，应保留其他 scenes：
+
+```json
+{
+  "version": 1,
+  "scenes": {
+    "institution-message": {
+      "directory": "D:\\teamai",
+      "executor": {"type": "skill", "name": "institution-log-query"}
+    }
+  }
+}
+```
+
+Skill 可继续由 TeamAI 分发；name 必须匹配 OpenCode 在该目录下 skill.list 的名称，不带斜杠或路径。不存在或重名明确拒绝，不降级。Command / Subagent 使用相同 executor 结构及原生分发逻辑。普通报文用 message，机构报文用 institution-message，互不覆盖；不自动继承旧 message 绑定。
+
+首次启动只补齐缺失项，不覆盖已有配置。机构项默认 builtin/chat，需要 Skill 时修改该行。单服务机构项的 directory 必须与唯一启动目录一致。页面保存与手工编辑修改同一文件，新请求读取最新绑定；已有会话目录变更要求新建，避免静默切换。升级前的 message-inspection 机构 Session 仍兼容恢复和追问。
+
+## iframe 接入
 
 ```powershell
 $env:HARNESS_PUBLIC_ORIGIN = "https://workbench.example"
 $env:HARNESS_EMBED_PARENTS = "https://portal.example"
-.\启动机构报文排查.cmd "D:\teamai"
+.\启动工作台.cmd "D:\teamai"
 ```
 
-多个获准 Origin 用逗号分隔，不带页面路径。对方添加：
+现有网关将 HTTPS 域名代理到 127.0.0.1:4176，保留 Host/Origin/Authorization，关闭 SSE 缓冲。对方只加：
 
 ```html
 <iframe src="https://workbench.example/embed/institution-message"
   title="机构报文排查" style="width:100%;height:900px;border:0"></iframe>
 ```
 
-无登录、用户身份接口、宿主后端票据或 postMessage；不依赖第三方 Cookie。
+允许的宿主 Origin 用逗号分隔。机构页使用内存 Bearer 凭据，不依赖第三方 Cookie。配置页设置 frame-ancestors 'none'，配置管理保持本机地址访问限制。
 
-## 一个服务如何多人使用
+## 执行与凭据边界
 
-一个原生服务管理不同 Session。每页独立随机凭据、SQLite 归属记录、原生 Session，所有 Session 使用同一个 --workspace。消息、结果、SSE、Form/Permission、中断和清理按页面归属校验。
+**本轮恢复原生执行器绑定和分发，未放宽单服务工具权限。** Skill 从目录解析 ID 后通过 session.prompt 的 skills 字段传入；Command 调用 session.command；Subagent 通过 agents/@mention 传入。单服务 Session 仍强制 permissions 通配 deny，创建及后续请求均核验回显，权限回复不能扩大。Skill/命令需要 Shell、文件、MCP 或子任务时仍受此策略限制。绑定成功不等于任意业务工具已获准执行，协议桩不代表真实引擎工具验收。
 
-A 结束只中断/删除 A 的 Session，不停止服务、不清理公共目录、不重置 B/C。多个页面可以同时提交；实际模型并行度由原生 OpenCode 和模型本身决定。默认允许 100 个未过期页面，可选 HARNESS_EMBED_MAX_PAGES，不是执行槽位。
+机构页继续通过专用安全接口完成目标系统认证/取证，再把安全证据交给选定执行器。真实接口需配置 HARNESS_INSTITUTION_ADAPTER_URL / HARNESS_INSTITUTION_ADAPTER_AUTH，接收 day/from/to/msgSn/account/password/verificationCode，仅返回可展示的 evidence。密码/验证码不进入普通对话、模型上下文或日志。未配置接口明确拒绝。本轮没有真实内网联调。
 
-## 真实查询与工具边界
+## 持久化与验收
 
-机构入口沿用“专用接口完成机构认证/取证 → OpenCode 分析证据和追问”流程。真实接口仍需设置 HARNESS_INSTITUTION_ADAPTER_URL/AUTH，接收 day/from/to/msgSn/account/password/verificationCode，仅返回 {"evidence":"允许展示的日志证据"}。适配器负责目标系统认证、授权隔离及脱敏。未配置时明确拒绝，不会调用模型或伪造数据。真实内网联调尚未完成。
+SQLite 首次按版本化迁移建库，默认当前账户私有 `.smart-workbench/state/embedded.sqlite`（Windows 优先 LOCALAPPDATA）。HARNESS_SQLITE_PATH 可指定公共工作目录外的本地绝对路径。正常重启保留原页面归属及证据，SSE 重连不重放模型任务；刷新按约定新建会话。
 
-**单服务机构入口为证据分析模式，不是任意工具执行模式。** 每个原生 Session 强制 permissions: [{"action":"*","resource":"*","effect":"deny"}]；创建及后续操作核验回显，缺失/扩大权限即拒绝执行，权限确认不能绕过。模型不执行 Shell、文件、MCP、Skill/Command/Subagent 工具，避免通过同一个原生用户目录读取其他会话状态。不要用此独立入口运行需要这些工具的旧 Skill。
+每个机构页面有独立凭据与原生 Session，A 结束只中断/删除 A，不停止 OpenCode、不清公共目录、不影响 B/C。默认100个未过期页面，可用 HARNESS_EMBED_MAX_PAGES 调整。备份使用 `npm run embedded:storage -- --backup "D:\workbench-backup\embedded.sqlite"`，不要只复制运行中的主文件而遗漏 WAL。旧多槽位/MySQL 数据不自动迁入。本轮只新增配置键，不改变数据库结构。
 
-这不是关闭权限检查，而是收紧此入口的工具能力。原工作台其他场景继续用原启动方式；不要将 OpenCode 服务密钥交给访问者。真实引擎规则生效仍须内网验证，HTTP 桩不代替模型/工具验收。
-
-## 自动保存与恢复
-
-SQLite 首次启动按版本化迁移建库，无需账号或建表命令。默认文件位于当前账户私有 .smart-workbench/state/embedded.sqlite（Windows 优先 LOCALAPPDATA）。可选 HARNESS_SQLITE_PATH 指定本地绝对路径，不能放进公共工作目录、UNC 或符号链接。
-
-正常重启工作台后，原页面凭内存凭据恢复绑定和安全证据，SSE 重连，不重发验证码或模型任务。刷新按需求新建会话。OpenCode 本身中断不保证任务续跑，不自动重放结果不明的任务。
-
-备份：npm run embedded:storage -- --backup "D:\workbench-backup\embedded.sqlite"。运行时不要只复制主文件而遗漏 WAL；异常强杀留下的不确定 owner 锁仍需管理员核验后显式恢复，正常重启释放锁。
-
-旧 MySQL/多槽位会话不会自动迁入新单服务身份范围。清理按服务身份过滤，不会操作其他服务的会话。原 MySQL Review/任务/报告模块未整体迁移。
-
-## 验证
-
-官方 SDK + 单一真实 HTTP 监听地址：三个 Session 同时活跃、同一目录、停止互不影响、越权拒绝，且没有工具/命令接口调用。真实 SQLite 与 CLI 测试不配置 MySQL、注册表或嵌入文件。浏览器三 iframe 页面验证单客户端、后端/SQLite 重开、追问及敏感字段隔离。Windows/Linux × Node 22/24/26 继续验证；真实机构接口、私有模型与原生规则留待内网验收。
+验收：一次启动访问三个地址；工作台无配置菜单；独立配置页保存/刷新一致；机构与普通报文绑定独立；三人并发原生 Skill 调用和跨会话操作拒绝；重启恢复；匿名凭据不能写配置；密码/验证码不进入模型输入。真实 Skill 工具权限、业务接口及私有模型仍需内网验证。

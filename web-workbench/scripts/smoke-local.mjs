@@ -13,6 +13,7 @@ if(!existsSync(join(root,'apps/web/dist/index.html')))
   throw new Error('Build the UI first: npm run web:build');
 
 const workspace=await mkdtemp(join(tmpdir(),'codea-workbench-smoke-'));
+const privateData=await mkdtemp(join(tmpdir(),'workbench-smoke-private-'));
 const listener=createServer();
 let child;
 try{
@@ -26,7 +27,7 @@ try{
 
   let output='';
   child=spawn(process.execPath,['--experimental-strip-types','apps/server/src/start.ts','--local-only','--workspace',workspace],{
-    cwd:root,env:{...process.env,HARNESS_HTTP_PORT:String(port)},stdio:['ignore','pipe','pipe'],
+    cwd:root,env:{...process.env,HARNESS_HTTP_PORT:String(port),HARNESS_SQLITE_PATH:join(privateData,'embedded.sqlite')},stdio:['ignore','pipe','pipe'],
   });
   for(const stream of [child.stdout,child.stderr])
     stream?.on('data',chunk=>{output+=String(chunk).slice(0,2000);});
@@ -53,5 +54,7 @@ try{
 }finally{
   if(child&&!child.killed)child.kill();
   if(listener.listening)listener.close();
+  if(child&&child.exitCode===null&&child.signalCode===null)await once(child,'exit');
+  await rm(privateData,{recursive:true,force:true});
   await rm(workspace,{recursive:true,force:true});
 }

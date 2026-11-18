@@ -120,7 +120,7 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
       </form>
       <section className="institution-result-panel" aria-labelledby="institution-result-title">
         <header><h2 id="institution-result-title">排查结果</h2></header>
-        {embedded?<DirectChat sceneId="message" embedded globalModel={globalModel} investigation={{controls:null,initial:!submitted,ready,allowAdjustment:false,prompt,onSent:()=>setSubmitted(true),reset:()=>{},beginEdit:()=>{},cancel:()=>{},title:'机构报文排查',sessionKey:'harness.message'}}/>:<div className="institution-result-empty">
+        {embedded?<DirectChat sceneId="institution-message" embedded globalModel={globalModel} investigation={{controls:null,initial:!submitted,ready,allowAdjustment:false,prompt,onSent:()=>setSubmitted(true),reset:()=>{},beginEdit:()=>{},cancel:()=>{},title:'机构报文排查',sessionKey:'harness.institution-message'}}/>:<div className="institution-result-empty">
           <div className="institution-chat-icon" aria-hidden="true">•••</div>
           <h3>请填写查询参数并开始排查</h3>
           <p>排查结果将在此处展示。账号、密码及验证码不会写入聊天记录。</p>

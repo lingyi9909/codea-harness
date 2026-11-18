@@ -418,7 +418,7 @@ body{background:#fff;color:var(--silver-ink);}
 }
 .sidebar > .sidebar-settings.selected{background:#e3e6eb;color:#252a30;font-weight:650;}
 .sidebar > .sidebar-settings > span{width:24px;min-width:24px;text-align:center;font-size:18px;color:#67717e;}
-.sidebar .workbench-account{margin-top:12px;}
+.sidebar .workbench-account{margin-top:auto;}
 .scene-config-page{max-width:1050px;margin:20px auto 44px;}
 .scene-config-meta{padding:12px 0 22px;border-bottom:1px solid #dce1e7;font-size:13px;line-height:1.7;}
 .scene-config-meta p{margin:4px 0;overflow-wrap:anywhere;}

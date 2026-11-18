@@ -60,7 +60,9 @@ jobs:
             'packages/storage/src/sqlite-embed.ts',
             'packages/storage/migrations/sqlite/001_embedded.sql',
             'scripts/embedded-storage.ts',
-            '启动机构报文排查.cmd',
+            '启动工作台.cmd',
+            'start-chat.cmd',
+            'apps/web/src/StandaloneConfigPage.tsx',
             'node_modules/fastify/package.json',
             'node_modules/@fastify/static/package.json',
             'node_modules/@opencode/client/package.json',
@@ -74,11 +76,15 @@ jobs:
           版本：$env:GITHUB_SHA
           已包含 Windows 运行依赖 node_modules 和前端 apps/web/dist。
           解压后进入 web-workbench，运行：
-          .\启动机构报文排查.cmd "D:\teamai"
+          .\启动工作台.cmd "D:\teamai"
           将 D:\teamai 替换为唯一业务工作目录。
+          工作台：http://127.0.0.1:4176/
+          场景配置：http://127.0.0.1:4176/config
+          机构报文：http://127.0.0.1:4176/embed/institution-message
+          三个地址来自同一个服务，共用工作目录中的 .workbench/scenarios.json。
           不需要 npm ci，不需要 npm run web:build，不需要安装 MySQL。
           Node 和一个现有 OpenCode 服务沿用已有环境，不包含在此 ZIP 中。
-          真实机构认证/查询接口仍需接入；当前机构入口只分析安全证据，不直接执行工具型 Skill。
+          真实机构认证/查询接口仍需接入；机构入口现复用配置绑定的原生 Skill/Command/Subagent 调用，单服务 Session 工具权限仍受限制。
           OFFLINE-MANIFEST.json 记录本包文件大小和 SHA256。
           "@ | Set-Content -LiteralPath (Join-Path $base '离线运行说明.txt') -Encoding utf8
           $entries=@(Get-ChildItem -LiteralPath $base -Recurse -File -Force | ForEach-Object {
@@ -125,7 +131,7 @@ jobs:
           await new Promise(r=>listener.listen(0,'127.0.0.1',r));
           const port=listener.address().port;await new Promise(r=>listener.close(r));
           const workspace=await mkdtemp(join(tmpdir(),'offline shared workspace ')),privateData=await mkdtemp(join(tmpdir(),'offline-private-'));
-          const origin='http://127.0.0.1:'+port,launcher=join(bundle,'启动机构报文排查.cmd');
+          const origin='http://127.0.0.1:'+port,launcher=join(bundle,'启动工作台.cmd');
           const child=spawn(process.env.ComSpec??'cmd.exe',['/d','/s','/c','""'+launcher+'" "'+workspace+'""'],{
             cwd:bundle,windowsVerbatimArguments:true,windowsHide:true,stdio:['ignore','pipe','pipe'],
             env:{...process.env,HARNESS_HTTP_PORT:String(port),HARNESS_PUBLIC_ORIGIN:origin,HARNESS_EMBED_PARENTS:origin,HARNESS_SQLITE_PATH:join(privateData,'embedded.sqlite'),HARNESS_EXECUTION_REGISTRY:'',HARNESS_EMBED_CONFIG:'',HARNESS_MYSQL_DATABASE:'',HARNESS_INSTITUTION_ADAPTER_URL:''}
@@ -143,11 +149,12 @@ jobs:
               await sleep(100);
             }
             if(!ready)throw Error('Offline launcher failed: '+output);
+            for(const path of ['/','/config','/embed/institution-message'])if(!(await fetch(origin+path)).ok)throw Error('Offline page missing: '+path);
             const page=await fetch(origin+'/embed/institution-message');if(!page.ok)throw Error('Offline institution page missing');
             const html=await page.text(),asset=html.match(/src="(\/assets\/[^"]+\.js)"/);
             if(!asset||!(await fetch(origin+asset[1])).ok)throw Error('Offline frontend asset missing');
             if(!(await stat(join(privateData,'embedded.sqlite'))).size)throw Error('SQLite file missing');
-            console.log('OFFLINE_LAUNCHER_SMOKE_OK: CMD, spaces in paths, HTML/JS, SQLite, no npm install/build/MySQL');
+            console.log('OFFLINE_LAUNCHER_SMOKE_OK: one CMD, three pages, spaces in paths, HTML/JS, SQLite, no npm install/build/MySQL');
           }finally{
             if(child.pid&&child.exitCode===null){try{execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});}catch{}}
             await sleep(250);

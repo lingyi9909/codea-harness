@@ -25,17 +25,18 @@ jobs:
           cache-dependency-path: web-workbench/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run web:build
       - run: npm run test:sqlite
       - run: node --experimental-strip-types --test tests/api/shared-workspace.test.ts tests/api/execution-isolation.test.ts
       - if: matrix.os == 'ubuntu-24.04' && matrix.node == '24'
-        run: npm run web:build
-      - if: matrix.os == 'ubuntu-24.04' && matrix.node == '24'
         run: npx playwright install --with-deps chromium
       - if: matrix.os == 'ubuntu-24.04' && matrix.node == '24'
-        run: npm run test:anonymous:ui
+        run: node --experimental-strip-types --test tests/ui/anonymous-institution.test.ts tests/ui/unified-config.test.ts
       - uses: actions/upload-artifact@v4
         if: always() && matrix.os == 'ubuntu-24.04' && matrix.node == '24'
         with:
           name: sqlite-shared-workspace-browser-${{ github.run_id }}
-          path: web-workbench/screenshots/anonymous-institution-*.png
+          path: |
+            web-workbench/screenshots/anonymous-institution-*.png
+            web-workbench/screenshots/unified-*.png
           if-no-files-found: ignore

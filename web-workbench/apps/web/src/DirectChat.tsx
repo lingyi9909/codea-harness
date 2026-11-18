@@ -48,9 +48,9 @@ function explain(e:unknown){
 type Investigation={
   controls:ReactNode;initial:boolean;ready:boolean;allowAdjustment?:boolean;prompt:(text:string)=>string|Promise<string>;
   onSent:(id:string)=>void;reset:(id:string,rangePrompt?:string)=>void;
-  beginEdit:()=>void;cancel:()=>void;title:string;sessionKey:'harness.logs'|'harness.message';
+  beginEdit:()=>void;cancel:()=>void;title:string;sessionKey:'harness.logs'|'harness.message'|'harness.institution-message';
 };
-const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='data'?'data-analysis':'direct-chat';
+const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='institution-message'?'institution-message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
 type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
 export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel,embedded=false}:{embedded?:boolean;investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){

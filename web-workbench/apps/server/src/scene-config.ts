@@ -4,7 +4,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { AuthProblem } from './auth.ts';
 
 /** Configuration lives in the *startup* workspace; per-scene directories are separate. */
-export const SCENE_KEYS=['logs','message','data'] as const;
+export const SCENE_KEYS=['logs','message','institution-message','data'] as const;
 export type SceneKey=typeof SCENE_KEYS[number];
 export type Executor={type:'skill'|'subagent'|'command'|'builtin';name:string};
 export type Binding={directory:string;executor:Executor};
@@ -19,6 +19,7 @@ export function defaultSceneConfiguration(root:string):SceneConfiguration{
   return {version:1,scenes:{
     logs:{directory:root,executor:{type:'skill',name:'brainstorming'}},
     message:{directory:root,executor:{type:'command',name:'models'}},
+    'institution-message':{directory:root,executor:{type:'builtin',name:'chat'}},
     data:{directory:root,executor:{type:'builtin',name:'chat'}},
   }};
 }

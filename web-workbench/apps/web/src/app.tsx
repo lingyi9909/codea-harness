@@ -13,7 +13,6 @@ import { FileScene } from './FileScenes.tsx';
 import { scenes, scenarioGroups, groupForScene, type Scene, type ScenarioGroup } from './ScenarioHome.tsx';
 import { SidebarChatHistory } from './SidebarChatHistory.tsx';
 import { SourceView } from './SourceView.tsx';
-import { SceneConfigPage } from './SceneConfigPage.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
 
 type Repository=Schema<'Repository'>;
@@ -343,7 +342,6 @@ export function WorkbenchApp() {
         <div className="side-section task-history-heading">Review 任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
         <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
       </>}
-      <button className={"side-link sidebar-settings "+(scene==="settings"?"selected":"")} aria-current={scene==="settings"?"page":undefined} onClick={()=>navigate("settings")}><span aria-hidden="true">⚙</span> 场景配置</button>
       <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
         <button aria-label="退出登录" disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
       </div>
@@ -369,7 +367,7 @@ export function WorkbenchApp() {
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
       {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:
-       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'} globalModel={globalModel}/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:!selected&&scene==='settings'?<SceneConfigPage/>:!selected?<section className="workbench">
+       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'} globalModel={globalModel}/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:!selected?<section className="workbench">
         <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
         <h1>代码审查</h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>

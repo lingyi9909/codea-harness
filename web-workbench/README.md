@@ -1,8 +1,6 @@
-> **机构报文排查：一个 OpenCode 服务、一个工作目录。** 首次构建后运行 `启动机构报文排查.cmd "D:\teamai"`，SQLite 自动保存，不用注册表、槽位或 MySQL。见 [三步部署](docs/institution-standalone-deployment.md)。机构入口仅分析安全查询证据，真实机构接口仍需接入；其他工作台场景沿用原启动方式。
-
-> 当前机构入口支持 **一个共享业务工作目录 + SQLite 本地文件**，无需安装 MySQL、无需登录或宿主票据接口。按 [独立部署说明](docs/institution-standalone-deployment.md) 使用 --embedded-only；原 MySQL 完整工作台和本地单人模式继续兼容。
-
-> 当前优先入口：**机构报文排查匿名 iframe 页面**，对方仅需添加 iframe，无工作台登录、无宿主身份/票据接口。会话持久化和后端重启恢复见 [接入及验收说明](docs/anonymous-institution-embed.md)。真实机构查询适配器、槽位重置与 OS 权限仍需内网配置和验收。
+> **当前部署：一个启动命令、一个服务、三处入口。** Windows 离线包解压后执行 `启动工作台.cmd "D:\teamai"`；工作台 `/`、独立机构报文页 `/embed/institution-message`、独立配置页 `/config` 同时提供。共同读取唯一启动目录的 `.workbench/scenarios.json`；配置页已从工作台导航和组件树移除。机构报文使用独立的 `institution-message` 绑定。详见 [统一部署与 Skill 配置](docs/institution-standalone-deployment.md)。
+>
+> 机构页无需工作台登录；主工作台与配置编辑继续使用原有本机资料/编辑权限校验。SQLite 保存机构页归属及会话，原 MySQL Review/任务模块保持原部署方式。机构认证适配器和单服务工具权限边界仍须按部署文档验收。
 
 # 智能工作台 · Web Workbench
 
@@ -72,7 +70,7 @@ The worker records control sends before contacting the native service. An uncert
 
 ### 配置文件与安全边界
 
-启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（三个子场景均有可见的默认绑定）和 **`.workbench/config-access.json`**（新目录初始 `{"version":1,"editors":["zhangzhanhui"]}`，仅允许该登录用户名编辑）。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
+启动时会在工作目录下自动创建 **`.workbench/scenarios.json`**（四个子场景均有可见的默认绑定）和 **`.workbench/config-access.json`**（新目录初始 `{"version":1,"editors":["zhangzhanhui"]}`，仅允许该登录用户名编辑）。本地登录成功后才生成或更新 **`.workbench/user.json`**，因此未登录时它尚不存在。这些文件位于启动目录而非代码仓库；macOS Finder 中以点开头的目录默认隐藏，可按 Command+Shift+. 显示，或通过 `ls -la` 查看。配置页面现在显示两份配置文件的绝对路径。
 
 通过「场景配置」页面保存 `.workbench/scenarios.json`。此文件将子场景 ID 映射到**绝对路径**工作目录和原生执行入口。**不安装 Superpowers，也不新增任何第三方 Skill 文件。** 启动时，若子场景没有配置，系统按以下默认值填充到启动工作目录中；已有的自定义绑定不覆盖：
 

@@ -1,3 +1,5 @@
+import type {chatConnection} from './modules/chat/connection.ts';
+import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 import type {InstitutionQueryAdapter} from './institution-query.ts';
 import {registerEmbedded} from './embed-routes.ts';
 import type {EmbeddedAuth} from './embed-auth.ts';
@@ -32,7 +34,7 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatConnection>;localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;embeddedBindings?:ChatBindingStore;embeddedStorageCheck?:()=>void;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=!(opts.auth instanceof MultiUserAuth)&&Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -41,6 +43,10 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
   const capability={ready:enabled,capabilities};
   const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
   if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false});
+  app.get('/config',async(_req,reply)=>{
+    if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
+    return reply.header('Cache-Control','no-store').header('Content-Security-Policy',"frame-ancestors 'none'").sendFile('index.html');
+  });
   if(!(opts.auth instanceof MultiUserAuth) && opts.native && opts.pool && enabled){
     const stop=new AbortController();
     const config={...opts.native,pool:opts.pool,signal:stop.signal};
@@ -70,6 +76,10 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     reply.status(status).send({error:{code,message:code,retryable:status>=500,details:{}},requestId:randomUUID()});
   });
   app.get('/api/v1/health',async(req,reply)=>{
+    if(opts.embeddedStorageCheck){
+      try{opts.embeddedStorageCheck();return result({status:'READY',storage:'sqlite'});}
+      catch{return reply.status(503).send(result({status:'UNAVAILABLE',storage:'sqlite'}));}
+    }
     let database:'READY'|'UNAVAILABLE'='READY';
     try{if(!opts.pool)throw new Error();await opts.pool.query('SELECT 1');}catch{database='UNAVAILABLE';}
     const health:DTO<'Health'>={
@@ -102,7 +112,7 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     const store=new WorkspaceProfile(workspace);
     app.addHook('onRequest',async(req,reply)=>{
       const route=req.routeOptions.url;
-      if(!route?.startsWith('/api/v1/')||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
+      if(!route?.startsWith('/api/v1/')||route.startsWith('/api/v1/embed/')||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
         (route==='/api/v1/auth/session'&&req.method==='DELETE'))return;
       let session;
       try{session=await opts.auth.session(req);}catch(e){
@@ -172,16 +182,16 @@ export async function createApp(opts:{localOnly?:boolean;workspace?:string;autoO
     business={resolver,bridge:new BusinessVerificationBridge(resolver,new MockLogProvider())};
   }
   if(opts.embedded){
-    if(!multi||!opts.pool||!opts.execution||!workspace||!sceneConfig)throw new Error('EMBED_REQUIRES_MULTI_USER_EXECUTION');
+    if((!multi&&!localSession)||(!opts.pool&&!opts.embeddedBindings)||!opts.execution||!workspace||!sceneConfig)throw new Error('EMBED_REQUIRES_MULTI_USER_EXECUTION');
     for(const path of ['/embed/message','/embed/institution-message'])app.get(path,async(req,reply)=>{
       if(!opts.embedded!.origin(req))throw new AuthProblem(403,'ORIGIN_INVALID');
       if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
       reply.header('Content-Security-Policy',"frame-ancestors 'self' "+[...new Set([...opts.embedded!.config.clients.map(c=>c.parentOrigin),...(opts.embedded!.config.anonymous?.parentOrigins??[])])].join(' '));
       return reply.header('Referrer-Policy','no-referrer').header('Cache-Control','no-store').sendFile('index.html');
     });
-    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,pool:opts.pool,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
+    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,pool:opts.pool,bindings:opts.embeddedBindings,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
   }
-  await registerChat(app,opts.auth,{mayStart:opts.autoOpenCode,workspace,sceneConfig,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
+  await registerChat(app,opts.auth,{nativeConnection:opts.nativeConnection,mayStart:opts.autoOpenCode,workspace,sceneConfig,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       await opts.auth.session(req);return result({items:[],nextCursor:null});

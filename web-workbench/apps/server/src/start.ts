@@ -19,7 +19,7 @@ import { createApp } from './app.ts';
 export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal'>,localOnly=false,workspace?:string,multiUser=false,embeddedOnly=false){
   if(embeddedOnly){
     if(localOnly||multiUser)throw new Error('INCOMPATIBLE_RUN_MODES');
-    const {startEmbeddedWorkbench}=await import('./embedded-start.ts');return startEmbeddedWorkbench(workspace);
+    return startWorkbench(native,true,workspace);
   }
   if(localOnly&&multiUser)throw new Error('INCOMPATIBLE_RUN_MODES');
   if(!workspace?.trim())throw new Error('STARTUP_WORKSPACE_REQUIRED: specify --workspace with an existing absolute directory.');
@@ -30,6 +30,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   const pool=config.mysql?await createPool(config.mysql):undefined;
   let app:Awaited<ReturnType<typeof createApp>>|undefined;
   let embedLocks:Awaited<ReturnType<typeof createPool>>|undefined;
+  let localEmbed:Awaited<ReturnType<typeof import('./embedded-start.ts').createEmbeddedRuntime>>|undefined;
   try{
   const pairingCode=randomBytes(32).toString('base64url');
   const printCode=(code:string)=>process.stdout.write('智能工作台本地配对码（5 分钟内有效，仅可使用一次）：'+code+'\n');
@@ -39,21 +40,26 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
     execution=await loadExecutionRegistry(process.env.HARNESS_EXECUTION_REGISTRY,workspace,(url,authorization)=>chatConnection(false,{url,authorization})());
   }
   let embedded:EmbeddedAuth|undefined;
-  if(process.env.HARNESS_EMBED_CONFIG){
+  if(localOnly){
+    const {createEmbeddedRuntime}=await import('./embedded-start.ts');
+    localEmbed=await createEmbeddedRuntime(workspace);execution=localEmbed.execution;embedded=localEmbed.auth;
+  }
+  if(!localOnly&&process.env.HARNESS_EMBED_CONFIG){
     if(!multiUser||!pool||!execution)throw new Error('EMBED_REQUIRES_MULTI_USER_EXECUTION');
     const embedConfig:EmbedConfig=JSON.parse(await readFile(process.env.HARNESS_EMBED_CONFIG,'utf8'));
     if(embedConfig.publicOrigin!==process.env.HARNESS_PUBLIC_ORIGIN)throw new Error('EMBED_ORIGIN_MISMATCH');
     embedLocks=await createPool(config.mysql!);
     embedded=new EmbeddedAuth(embedConfig,new MysqlEmbedStore(pool,embedLocks));
   }
-  app=await createApp({pool,auth,native,execution,embedded,institutionAdapter:process.env.HARNESS_INSTITUTION_ADAPTER_URL?httpInstitutionAdapter(process.env.HARNESS_INSTITUTION_ADAPTER_URL,process.env.HARNESS_INSTITUTION_ADAPTER_AUTH??''):undefined,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly});
+  app=await createApp({pool,auth,native,nativeConnection:localEmbed?.connection,execution,embedded,embeddedBindings:localEmbed?.store.bindings,embeddedStorageCheck:localEmbed?()=>localEmbed!.store.check():undefined,institutionAdapter:process.env.HARNESS_INSTITUTION_ADAPTER_URL?httpInstitutionAdapter(process.env.HARNESS_INSTITUTION_ADAPTER_URL,process.env.HARNESS_INSTITUTION_ADAPTER_AUTH??''):undefined,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly});
+  if(localEmbed)app.addHook('onClose',async()=>{await localEmbed!.store.close();});
   const shutdown=async()=>{await app?.close();await pool?.end();await embedLocks?.end();};
   await app.listen({host:'127.0.0.1',port:config.port});
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
   if(!localOnly&&!multiUser)printCode(pairingCode);
-  process.stdout.write('Local API: http://127.0.0.1:'+config.port+'\n');
-  }catch(error){await app?.close().catch(()=>{});await embedLocks?.end().catch(()=>{});await pool?.end().catch(()=>{});throw error;}
+  process.stdout.write('工作台: http://127.0.0.1:'+config.port+'/\n场景配置: http://127.0.0.1:'+config.port+'/config\n机构报文排查: '+(localEmbed?.publicOrigin??('http://127.0.0.1:'+config.port))+'/embed/institution-message\n');
+  }catch(error){await app?.close().catch(()=>{});await embedLocks?.end().catch(()=>{});await pool?.end().catch(()=>{});await localEmbed?.store.close().catch(()=>{});throw error;}
 }
 async function main(){
   const {values}=parseArgs({options:{'local-only':{type:'boolean'},'multi-user':{type:'boolean'},'embedded-only':{type:'boolean'},workspace:{type:'string'}}});

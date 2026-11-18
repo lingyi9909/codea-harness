@@ -244,7 +244,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
     await expect(page.locator('.sidebar .brand')).toContainText('智能工作台');
     // The browser must render the actual file-backed editor and respect ACL changes.
-    await page.getByRole('button',{name:'场景配置'}).click();
+    await expect(page.getByRole('button',{name:'场景配置'})).toHaveCount(0);
+    await page.goto('http://127.0.0.1:'+port+'/config');
     await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await expect(page.getByLabel('公管问题排查工作目录')).toHaveValue(project);
     await expect(page.getByRole('button',{name:'保存场景配置'})).toHaveCount(0);
@@ -258,6 +259,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.screenshot({path:join(shots,'10-scene-config-editor.png')});
     // A missing scenario binding must show actionable local configuration guidance,
     // not an offline error or an attempt to contact OpenCode.
+    await page.goto('http://127.0.0.1:'+port+'/');
+    await expect(page.getByRole('navigation',{name:'场景导航'})).toBeVisible();
     const sceneFile=join(settingsDir,'scenarios.json');
     const configured=await readFile(sceneFile,'utf8');
     // Built-in /models must open the actual model selector, not issue a fake

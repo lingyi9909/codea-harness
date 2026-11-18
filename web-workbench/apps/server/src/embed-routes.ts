@@ -90,10 +90,10 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
     if(grant.accessMode!=='ANONYMOUS')throw new AuthProblem(403,'EMBED_ACTION_FORBIDDEN');
     return reply.header('Cache-Control','no-store').send(wrap(await institutionEvidence(opts.institutionAdapter,auth.store,grant.id,req.body)));
   });
-  const binding=async()=>{
-    if(execution.singleService())return {directory:workspace,executor:{type:'builtin' as const,name:'chat'}};
-    const value=await sceneConfig.binding('message');
-    if(value.executor.type==='builtin'||value.executor.type==='command'&&value.executor.name==='models')throw new AuthProblem(503,'EMBED_EXECUTOR_NOT_CONFIGURED');
+  const binding=async(institution=false)=>{
+    const value=await sceneConfig.binding(institution?'institution-message':'message');
+    if(execution.singleService()&&value.directory!==workspace)throw new AuthProblem(403,'EMBED_DIRECTORY_FORBIDDEN');
+    if(!institution&&(value.executor.type==='builtin'||value.executor.type==='command'&&value.executor.name==='models'))throw new AuthProblem(503,'EMBED_EXECUTOR_NOT_CONFIGURED');
     return value;
   };
   app.get<{Querystring:{parentOrigin?:string}}>('/api/v1/embed/config',async(req,reply)=>{
@@ -123,13 +123,16 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
       route.handler=async function(req,reply){
         const grant=await auth.authorize(req);
         return execution.run(grant.ownerId,async()=>{
-          const value=await binding();
+          const institution=grant.accessMode==='ANONYMOUS',value=await binding(institution);
           if(req.method==='POST'&&['/api/v1/embed/chat/models','/api/v1/embed/chat/sessions'].includes(req.url.split('?')[0])){
             const input=(req.body??{}) as {directory?:string;scenario?:string};
             if(input.directory!==undefined&&input.directory!==value.directory&&input.directory!==execution.directory(value.directory))throw new AuthProblem(403,'EMBED_DIRECTORY_FORBIDDEN');
-            if(req.url.split('?')[0].endsWith('/sessions')&&input.scenario!=='message-inspection')throw new AuthProblem(403,'EMBED_SCENARIO_FORBIDDEN');
+            if(req.url.split('?')[0].endsWith('/sessions')&&input.scenario!=='message-inspection'&&!(institution&&input.scenario==='institution-message-inspection'))throw new AuthProblem(403,'EMBED_SCENARIO_FORBIDDEN');
             input.directory=value.directory;req.body=input;
           }
+          // Older institution clients used the generic message scenario. Normalize
+          // the alias server-side so the stored binding is always institution-specific.
+          if(institution&&req.body&&typeof req.body==='object'&&'scenario' in req.body&&req.body.scenario==='message-inspection')req.body.scenario='institution-message-inspection';
           try{
             if(grant.accessMode==='ANONYMOUS'&&req.method==='POST'&&req.url.split('?')[0]==='/api/v1/embed/chat/sessions')return await auth.store.serialize(grant.ownerId,async()=>handler.call(this,req,reply));
             if(req.method==='POST'&&req.url.split('?')[0].endsWith('/messages')){
@@ -149,8 +152,8 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
     embedded.get('/api/v1/embed/scene-config',async req=>{
       const grant=await auth.grant(req);
       return execution.run(grant.ownerId,async()=>{
-        const value=await binding();
-        return wrap({workspace:value.directory,configPath:'',accessPath:'',username:null,canEdit:false,revision:'embedded',config:{version:1,scenes:{message:value}}});
+        const institution=grant.accessMode==='ANONYMOUS',value=await binding(institution);
+        return wrap({workspace:value.directory,configPath:'',accessPath:'',username:null,canEdit:false,revision:'embedded',config:{version:1,scenes:{[institution?'institution-message':'message']:value}}});
       });
     });
     await registerChat(embedded,auth,{sessionMetadata:req=>auth.metadata(req),blockSensitiveForms:true,prefix:'/api/v1/embed/chat',workspace,sceneConfig,execution,multiUser:true,bindings:opts.bindings??new MysqlChatBindings(pool!),onSessionCreated:(req,id)=>auth.bind(req,id,execution.serviceIdentity())});

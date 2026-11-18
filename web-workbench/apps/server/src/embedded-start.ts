@@ -5,11 +5,10 @@ import {createHash} from 'node:crypto';
 import {EmbeddedAuth,type EmbedConfig} from './embed-auth.ts';
 import {ExecutionRegistry} from './execution-registry.ts';
 import {chatConnection} from './modules/chat/connection.ts';
-import {httpInstitutionAdapter} from './institution-query.ts';
 import {SqliteEmbedStore} from '../../../packages/storage/src/sqlite-embed.ts';
-import {createEmbeddedApp} from './embedded-app.ts';
+
 export function defaultEmbeddedDatabase(){return join(process.env.LOCALAPPDATA??homedir(),'.smart-workbench','state','embedded.sqlite');}
-export async function startEmbeddedWorkbench(workspace?:string){
+export async function createEmbeddedRuntime(workspace?:string){
   if(!workspace||!isAbsolute(workspace))throw Error('STARTUP_WORKSPACE_REQUIRED');
   const port=Number(process.env.HARNESS_HTTP_PORT??4176);if(!Number.isInteger(port)||port<1024||port>65535)throw Error('INVALID_LOOPBACK_PORT');
   const root=await realpath(workspace),path=process.env.HARNESS_SQLITE_PATH??defaultEmbeddedDatabase();
@@ -24,13 +23,12 @@ export async function startEmbeddedWorkbench(workspace?:string){
   const config:EmbedConfig={publicOrigin,clients:[],anonymous:{parentOrigins:parents,executionOwners:[],singleService:{identity,maxPages:Number(process.env.HARNESS_EMBED_MAX_PAGES??100)}}};
   const connection=chatConnection(true);
   const execution=new ExecutionRegistry([],async()=>connection(),{workspace:root,singleServiceIdentity:identity});
-  const store=new SqliteEmbedStore(path,identity);let app:Awaited<ReturnType<typeof createEmbeddedApp>>|undefined;
-  try{
-    app=await createEmbeddedApp({auth:new EmbeddedAuth(config,store),execution,workspace:root,bindings:store.bindings,ensureOwner:(id,subject)=>store.ensureOwner(id,subject),storageCheck:()=>store.check(),institutionAdapter:process.env.HARNESS_INSTITUTION_ADAPTER_URL?httpInstitutionAdapter(process.env.HARNESS_INSTITUTION_ADAPTER_URL,process.env.HARNESS_INSTITUTION_ADAPTER_AUTH??''):undefined});
-    await app.listen({host:'127.0.0.1',port});
-    let shutdown:Promise<void>|undefined;
-    const close=()=>shutdown??=(async()=>{await app!.close();await store.close();})();
-    process.once('SIGINT',()=>{void close();});process.once('SIGTERM',()=>{void close();});
-    process.stdout.write('机构报文排查: '+publicOrigin+'/embed/institution-message\nStorage: SQLite (local file)\nOpenCode: one service, independent Sessions, analysis-only permissions\n');
-  }catch(e){await app?.close().catch(()=>{});await store.close().catch(()=>{});throw e;}
+  const store=new SqliteEmbedStore(path,identity);
+  try{return {auth:new EmbeddedAuth(config,store),execution,connection,store,workspace:root,publicOrigin,port};}
+  catch(error){await store.close();throw error;}
+}
+/** Compatibility API: both launchers now start the same complete service. */
+export async function startEmbeddedWorkbench(workspace?:string){
+  const {startWorkbench}=await import('./start.ts');
+  return startWorkbench(undefined,true,workspace);
 }

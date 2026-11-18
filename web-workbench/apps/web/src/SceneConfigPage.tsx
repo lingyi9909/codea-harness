@@ -5,6 +5,7 @@ import type {SceneConfigResponse,SceneConfigValue,SceneId,SceneBinding} from '..
 const rows:{id:SceneId;name:string;description:string}[]=[
   {id:'logs',name:'公管问题排查',description:'基于时间范围、Trace ID 或关键词排查业务问题'},
   {id:'message',name:'报文问题排查',description:'使用绑定目录中的原生执行入口分析报文链路'},
+  {id:'institution-message',name:'机构报文排查',description:'独立访问页面与工作台共用此文件中的原生执行入口绑定'},
   {id:'data',name:'公管数据分析',description:'直接使用 OpenCode 对话分析当前业务数据'},
 ];
 const empty=():SceneConfigValue=>({version:1,scenes:{}});

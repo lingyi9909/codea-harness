@@ -102,7 +102,7 @@ export class EmbeddedAuth implements RequestAuth {
     if(req.method==='POST'){
       await this.mutation(req);
       const body=req.body as {scenario?:unknown;files?:unknown;directory?:unknown}|undefined;
-      if(body?.scenario!==undefined&&body.scenario!=='message-inspection')throw new AuthProblem(403,'EMBED_SCENARIO_FORBIDDEN');
+      if(body?.scenario!==undefined&&body.scenario!=='message-inspection'&&!(grant.accessMode==='ANONYMOUS'&&body.scenario==='institution-message-inspection'))throw new AuthProblem(403,'EMBED_SCENARIO_FORBIDDEN');
       if(body?.files!==undefined)throw new AuthProblem(403,'EMBED_ATTACHMENTS_FORBIDDEN');
       if(path==='/api/v1/embed/chat/sessions'&&!await this.store.reserve(grant.id))throw new AuthProblem(409,'EMBED_ALREADY_INITIALIZED');
     }
