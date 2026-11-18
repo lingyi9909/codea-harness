@@ -175,6 +175,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
       throw error;
     });
     if(binding)matchNativeBinding(binding,session);
+    options.execution?.assertPermissions(session);
     const kind=session.metadata?.harnessScenario as ChatScenario|undefined;
     if(session.id!==id||!kind||!['direct-chat','log-inspection','message-inspection','data-analysis'].includes(kind)||session.metadata?.harnessOwner!==owner)
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
@@ -346,7 +347,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     else if(scenario==='log-inspection')await logQuerySkill(dir);
     const title=req.body?.title?.trim()||(scenario==='direct-chat'?'智能工作台 · 直接对话':'智能工作台 · 专项场景');
     const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title,
-      metadata:{...options.sessionMetadata?.(req),harnessScenario:scenario,harnessOwner:ownerId}}).catch((error:unknown)=>{
+      metadata:{...options.sessionMetadata?.(req),harnessScenario:scenario,harnessOwner:ownerId},...(options.execution?.permissions()?{permissions:options.execution.permissions()}:{} )}).catch((error:unknown)=>{
         if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
         if(error instanceof Error&&'reason' in error&&error.reason==='Transport'){
           const timedOut=error.cause instanceof Error&&error.cause.name==='TimeoutError';
@@ -356,6 +357,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
       });
     if(!session?.id||typeof session.location?.directory!=='string')throw new AuthProblem(502,'OPENCODE_SESSION_RESPONSE');
     if(resolve(session.location.directory)!==dir)throw new AuthProblem(409,'SESSION_DIRECTORY_CHANGED');
+    try{options.execution?.assertPermissions(session);}catch(error){await (await client()).session.remove({sessionID:session.id}).catch(()=>{});throw error;}
     if(options.bindings){
       try{await options.bindings.create({serviceIdentity:serviceIdentity(),id:session.id,ownerId,scenario,directory:dir});}
       catch(error){await (await client()).session.remove({sessionID:session.id}).catch(()=>{});throw error;}
@@ -552,6 +554,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     await owned(sessionID,ownerId);
     const pending=await (await client()).permission.list({sessionID});
     const request=pending.find(p=>p.sessionID===sessionID&&p.id===req.body.requestId);
+    if(options.execution?.sharedWorkspace()&&request?.action==='edit'&&req.body.decision!=='reject')throw new AuthProblem(403,'SHARED_WORKSPACE_READ_ONLY');
     if(!request||revision(request)!==req.body.revision)throw new AuthProblem(409,'PERMISSION_CHANGED');
     await (await client()).permission.reply({sessionID,requestID:request.id,decision:req.body.decision});
     return wrap({submitted:true});

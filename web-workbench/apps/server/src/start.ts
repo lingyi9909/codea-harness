@@ -33,8 +33,11 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   let execution:ExecutionRegistry|undefined;
   if(multiUser&&process.env.HARNESS_EXECUTION_REGISTRY){
     const entries:ExecutionRecord[]=JSON.parse(await readFile(process.env.HARNESS_EXECUTION_REGISTRY,'utf8'));
-    for(const entry of entries){const directories:Record<string,string>={};for(const [source,target]of Object.entries(entry.directories))directories[await realpath(source)]=await realpath(target);entry.directories=directories;}
-    execution=new ExecutionRegistry(entries,(url,authorization)=>chatConnection(false,{url,authorization})());
+    const startupWorkspace=await realpath(workspace);
+    for(const entry of entries){
+      if(entry.workspaceAccess==='shared-readonly'&&!entry.directories)entry.directories={[startupWorkspace]:startupWorkspace};
+      const directories:Record<string,string>={};for(const [source,target]of Object.entries(entry.directories))directories[await realpath(source)]=await realpath(target);entry.directories=directories;}
+    execution=new ExecutionRegistry(entries,(url,authorization)=>chatConnection(false,{url,authorization})(),{workspace:startupWorkspace});
   }
   let embedded:EmbeddedAuth|undefined;
   if(process.env.HARNESS_EMBED_CONFIG){

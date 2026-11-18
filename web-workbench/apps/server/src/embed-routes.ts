@@ -40,6 +40,15 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
     if(g.accessMode==='ANONYMOUS'){
       // Never lend an unreset execution environment to another anonymous visitor.
       if(opts.resetSlot)await opts.resetSlot(g.ownerId);
+      else if(await execution.run(g.ownerId,async()=>execution.sharedWorkspace())){
+        const command=auth.config.anonymous?.resetPrivateCommand;
+        if(!command)return; // Never recycle an unreset private native profile.
+        await execution.run(g.ownerId,async()=>{
+          if(g.serviceIdentity!==execution.serviceIdentity())throw new Error('EMBED_RESET_SERVICE_CHANGED');
+          const [file,...args]=command;
+          await promisify(execFile)(file,[...args,'--owner',g.ownerId,'--service',g.serviceIdentity!],{timeout:60000,maxBuffer:4096,windowsHide:true});
+        });
+      }
       else if(auth.config.anonymous?.resetCommand){
         await execution.run(g.ownerId,async()=>{
           if(g.serviceIdentity!==execution.serviceIdentity())throw new Error('EMBED_RESET_SERVICE_CHANGED');
@@ -61,7 +70,15 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
   const timer=setInterval(()=>void sweep(),15000);timer.unref();
   app.addHook('onClose',async()=>{clearInterval(timer);await sweeping;});
   for(const c of auth.config.clients)for(const owner of Object.values(c.principals))if(!execution.has(owner))throw new Error('EMBED_EXECUTION_NOT_PROVISIONED');
-  for(const owner of auth.config.anonymous?.executionOwners??[])if(!execution.has(owner))throw new Error('EMBED_EXECUTION_NOT_PROVISIONED');
+  for(const owner of auth.config.anonymous?.executionOwners??[]){
+    if(!execution.has(owner))throw new Error('EMBED_EXECUTION_NOT_PROVISIONED');
+    await execution.run(owner,async()=>{
+      if(execution.sharedWorkspace()){
+        if(auth.config.anonymous?.resetCommand)throw new Error('SHARED_WORKSPACE_RESET_COMMAND_FORBIDDEN');
+        if((await sceneConfig.binding('message')).directory!==workspace)throw new Error('SHARED_WORKSPACE_SCENE_MUST_MATCH_STARTUP');
+      }
+    });
+  }
   app.post('/api/v1/embed/anonymous',async(req,reply)=>{
     const slots=await Promise.all((auth.config.anonymous?.executionOwners??[]).map(ownerId=>execution.run(ownerId,async()=>({ownerId,serviceIdentity:execution.serviceIdentity()}))));
     return reply.header('Cache-Control','no-store').send(wrap(await auth.anonymous(req,slots)));

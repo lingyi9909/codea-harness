@@ -3,7 +3,7 @@ import type {FastifyRequest,FastifyReply} from 'fastify';
 import {AuthProblem,type RequestAuth} from './auth.ts';
 import type {EmbedStore,EmbedGrant} from '../../../packages/storage/src/embed.ts';
 export type EmbedClient={id:string;secret:string;parentOrigin:string;principals:Record<string,string>};
-export type EmbedConfig={publicOrigin:string;clients:EmbedClient[];sessionTTLSeconds?:number;anonymous?:{parentOrigins:string[];executionOwners:string[];resetCommand?:string[]}};
+export type EmbedConfig={publicOrigin:string;clients:EmbedClient[];sessionTTLSeconds?:number;anonymous?:{parentOrigins:string[];executionOwners:string[];resetCommand?:string[];resetPrivateCommand?:string[]}};
 export const embedDigest=(s:string)=>createHash('sha256').update(s).digest('hex');
 export function trustedOrigin(origin:string){
   const url=new URL(origin);
@@ -32,11 +32,11 @@ export class EmbeddedAuth implements RequestAuth {
       }
     }
     if(config.anonymous){
-      const {parentOrigins,executionOwners,resetCommand}=config.anonymous;
+      const {parentOrigins,executionOwners,resetCommand,resetPrivateCommand}=config.anonymous;
       if(!Array.isArray(parentOrigins)||!parentOrigins.length||!Array.isArray(executionOwners)||!executionOwners.length||executionOwners.length>100)throw new Error('EMBED_ANONYMOUS_CONFIG_INVALID');
       parentOrigins.forEach(trustedOrigin);
       for(const id of executionOwners){if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)||owners.has(id))throw new Error('EMBED_SLOT_INVALID');owners.set(id,'anonymous');}
-      if(resetCommand&&(!resetCommand.length||resetCommand.some(v=>typeof v!=='string'||!v)))throw new Error('EMBED_RESET_COMMAND_INVALID');
+      for(const command of [resetCommand,resetPrivateCommand])if(command&&(!command.length||command.some(v=>typeof v!=='string'||!v)))throw new Error('EMBED_RESET_COMMAND_INVALID');
     }
     if(!Number.isInteger(config.sessionTTLSeconds??7200)||(config.sessionTTLSeconds??7200)<60||(config.sessionTTLSeconds??7200)>28800)throw new Error('EMBED_TTL_INVALID');
     this.config=structuredClone(config);this.store=store;this.now=now;

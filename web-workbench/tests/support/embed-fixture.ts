@@ -37,14 +37,14 @@ export class MemoryEmbedStore implements EmbedStore {
   private readonly locked=new Set<string>();
   async serialize<T>(ownerId:string,fn:()=>Promise<T>){if(this.locked.has(ownerId))throw Error('EMBED_EXECUTOR_BUSY');this.locked.add(ownerId);try{return await fn();}finally{this.locked.delete(ownerId);}}
 }
-export async function embedFixture(origin='https://workbench.example',parentOrigin='https://host.example',hold=true,options:{anonymous?:boolean;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}={}){
+export async function embedFixture(origin='https://workbench.example',parentOrigin='https://host.example',hold=true,options:{anonymous?:boolean;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>;sharedWorkspace?:boolean;resetPrivateCommand?:string[]}={}){
   const base=await realpath(await mkdtemp(join(tmpdir(),'embed-fixture-'))),workspace=join(base,'shared');await mkdir(workspace);
   await mkdir(join(workspace,'.workbench'));
   await writeFile(join(workspace,'.workbench','scenarios.json'),JSON.stringify({version:1,scenes:{message:{directory:workspace,executor:{type:'skill',name:'message-query'}}}}));
   const owners=[randomUUID(),randomUUID(),randomUUID()];
-  const records:ExecutionRecord[]=await Promise.all(owners.map(async(ownerId,i)=>{const dir=join(base,'user-'+i);await mkdir(dir);return {ownerId,serviceIdentity:'service-'+i,url:'http://127.0.0.1:'+String(6000+i),authorization:'private-service-'+i,isolation:'os-user',directories:{[workspace]:dir}};}));
+  const records:ExecutionRecord[]=await Promise.all(owners.map(async(ownerId,i)=>{const dir=options.sharedWorkspace?workspace:join(base,'user-'+i);if(!options.sharedWorkspace)await mkdir(dir);return {ownerId,serviceIdentity:'service-'+i,url:'http://127.0.0.1:'+String(6000+i),authorization:'private-service-'+i,isolation:'os-user',...(options.sharedWorkspace?{workspaceAccess:'shared-readonly' as const}:{}),directories:{[workspace]:dir}};}));
   const config:EmbedConfig={publicOrigin:origin,clients:[{id:'host',secret:'host-backend-secret-that-is-not-in-the-browser',parentOrigin,principals:{alice:owners[0],bob:owners[1],carol:owners[2]}}]};
-  if(options.anonymous){config.clients=[];config.anonymous={parentOrigins:[parentOrigin],executionOwners:owners};}
+  if(options.anonymous){config.clients=[];config.anonymous={parentOrigins:[parentOrigin],executionOwners:owners,...(options.resetPrivateCommand?{resetPrivateCommand:options.resetPrivateCommand}:{})};}
   const store=new MemoryEmbedStore(),embedded=new EmbeddedAuth(config,store);
   const bindings=new Map<string,{owner:string;scenario:string;directory:string}>();
   const pool={execute:async(sql:string,args:unknown[])=>{
@@ -75,7 +75,7 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
         remove:async({sessionID}:any)=>{nativeSessions.delete(sessionID);messages.delete(sessionID);},
       },
     } as never;
-  });
+  },{workspace});
   const userAuth=new MultiUserAuth({identify:async()=>{throw Error('no login');},issue:async()=>{},find:async()=>undefined,revoke:async()=>{}},'https://workbench.example');
   const makeApp=()=>createApp({auth:userAuth,pool,execution,embedded:new EmbeddedAuth(config,store),workspace,institutionAdapter:options.institutionAdapter,resetEmbedSlot:options.resetSlot});
   let app=await makeApp();

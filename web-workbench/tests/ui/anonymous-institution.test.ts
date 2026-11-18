@@ -4,9 +4,9 @@ import {createServer} from 'node:http';
 import {mkdir} from 'node:fs/promises';
 import {chromium,expect} from '@playwright/test';
 import {embedFixture} from '../support/embed-fixture.ts';
-test('anonymous institution: iframe-only host, three pages, secret isolation, backend restart and fresh reopening',{timeout:90000},async()=>{
+test('anonymous institution: one shared workspace, iframe-only host, three pages, secret isolation and backend restart',{timeout:90000},async()=>{
   const origin='http://127.0.0.1:4186',parent='http://127.0.0.1:4187';let queryCalls=0;
-  const f=await embedFixture(origin,parent,false,{anonymous:true,resetSlot:async()=>{},institutionAdapter:async input=>{queryCalls++;return {evidence:'查询报文 '+input.msgSn+' 的应答状态为失败。'};}});
+  const f=await embedFixture(origin,parent,false,{anonymous:true,sharedWorkspace:true,resetSlot:async()=>{},institutionAdapter:async input=>{queryCalls++;return {evidence:'查询报文 '+input.msgSn+' 的应答状态为失败。'};}});
   const host=createServer((_req,res)=>{res.setHeader('Content-Type','text/html');res.end(`<!doctype html><title>Host iframe only</title><style>body{margin:0}iframe{width:100%;height:100vh;border:0}</style><iframe title="机构报文排查" src="${origin}/embed/institution-message"></iframe>`);});
   let browser:Awaited<ReturnType<typeof chromium.launch>>|undefined;
   try{
@@ -25,7 +25,7 @@ test('anonymous institution: iframe-only host, three pages, secret isolation, ba
       await frame.getByRole('button',{name:'开始排查',exact:true}).click();await expect(frame.getByText(/仅本会话结果：/)).toBeVisible({timeout:20000});
       await expect(frame.getByLabel('密码',{exact:true})).toHaveValue('');await expect(frame.getByLabel('验证码',{exact:true})).toHaveValue('');
     }));
-    assert.equal(f.calls.length,3);assert.equal(queryCalls,3);const grants=[...f.store.grants.values()].map(g=>g.id);
+    assert.equal(f.calls.length,3);assert.equal(queryCalls,3);assert.ok([...f.nativeSessions.values()].every(s=>s.location.directory===f.workspace));assert.ok([...f.nativeSessions.values()].every(s=>s.permissions?.some((r:{action:string;effect:string})=>r.action==='edit'&&r.effect==='deny')));const grants=[...f.store.grants.values()].map(g=>g.id);
     await f.restart();await new Promise(resolve=>setTimeout(resolve,3300));await f.app.listen({host:'127.0.0.1',port:4186});
     for(const frame of frames){await expect(frame.getByText(/仅本会话结果：/)).toBeVisible();await expect(frame.getByText('服务暂时不可用，正在重新连接当前会话，请勿重复提交。')).toHaveCount(0,{timeout:15000});}
     assert.deepEqual([...f.store.grants.values()].map(g=>g.id),grants);assert.equal(f.calls.length,3);assert.equal(queryCalls,3);
