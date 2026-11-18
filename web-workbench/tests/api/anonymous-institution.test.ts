@@ -71,3 +71,16 @@ test('institution: missing adapters, secret echoes and ambiguous/restarted attem
     }finally{await f.close();}
   }
 });
+test('anonymous: ending a page during native Session creation cannot reset its still-running executor',async()=>{
+  let resets=0;const f=await embedFixture(undefined,undefined,false,{anonymous:true,resetSlot:async()=>{resets++;}});
+  let release!:()=>void;let creating:Promise<unknown>|undefined;
+  try{
+    const v=(await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',headers:f.headers(),payload:{}})).json().data;
+    const grant=f.store.grants.get(embedDigest(v.token))!;let entered!:()=>void;const ready=new Promise<void>(resolve=>{entered=resolve;});
+    await f.execution.run(grant.ownerId,async()=>{const client=await f.execution.client(),create=client.session.create;client.session.create=async input=>{entered();await new Promise<void>(resolve=>{release=resolve;});return create(input);};});
+    creating=f.app.inject({method:'POST',url:'/api/v1/embed/chat/sessions',headers:f.headers(v.token,v.csrfToken),payload:{scenario:'message-inspection'}});
+    await ready;const ended=await f.app.inject({method:'DELETE',url:'/api/v1/embed/session',headers:f.headers(v.token,v.csrfToken)});assert.equal(ended.statusCode,204);
+    assert.equal(resets,0);assert.equal(f.store.clean.has(grant.id),false,'locked native creation must stay quarantined until safe cleanup');
+    release();await creating;assert.equal(f.nativeSessions.size,0,'failed binding compensates its own native Session');
+  }finally{release?.();await creating?.catch(()=>{});await f.close();}
+});

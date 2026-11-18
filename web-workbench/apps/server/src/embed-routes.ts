@@ -17,12 +17,11 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
   const {auth,execution,workspace,sceneConfig,pool}=opts;
   async function cleanup(g:{id:string;ownerId:string;nativeId?:string;serviceIdentity?:string;accessMode?:string}){
     return auth.store.serialize(g.ownerId,async()=>{
-    // Another replica may have cleaned this grant since the sweep selected it.
-    if(!(await auth.store.cleanupCandidates()).some(candidate=>candidate.id===g.id)){
-      await auth.store.revoke(g.id);
-      if(!(await auth.store.cleanupCandidates()).some(candidate=>candidate.id===g.id))return;
-    }
     await auth.store.revoke(g.id);
+    // Creation may have completed since logout/sweep took its snapshot. Read the
+    // persisted binding again under the same lock as native Session creation.
+    const current=(await auth.store.cleanupCandidates()).find(candidate=>candidate.id===g.id);
+    if(!current)return;g=current;
     if(g.nativeId)await execution.run(g.ownerId,async()=>{
       if(g.serviceIdentity!==execution.serviceIdentity())throw new Error('EMBED_CLEANUP_SERVICE_CHANGED');
       const client=await execution.client();
@@ -110,6 +109,7 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
             input.directory=value.directory;req.body=input;
           }
           try{
+            if(req.method==='POST'&&req.url.split('?')[0]==='/api/v1/embed/chat/sessions')return await auth.store.serialize(grant.ownerId,async()=>handler.call(this,req,reply));
             if(req.method==='POST'&&req.url.split('?')[0].endsWith('/messages')){
               try{return await auth.store.serialize(grant.ownerId,async()=>{
                 const client=await execution.client(),active=await client.session.active();
