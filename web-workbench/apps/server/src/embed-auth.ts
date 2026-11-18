@@ -65,6 +65,9 @@ export class EmbeddedAuth implements RequestAuth {
     if(!/^Bearer [\w-]{43}$/.test(header))throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
     const grant=await this.store.find(embedDigest(header.slice(7)));
     if(!grant||grant.expires<=this.now())throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
+    if(!this.config.clients.some(client=>client.parentOrigin===grant.parentOrigin&&Object.values(client.principals).includes(grant.ownerId))){
+      await this.store.revoke(grant.id);throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
+    }
     this.sessions.set(req,grant);return grant;
   }
   async session(req:FastifyRequest){const grant=await this.grant(req);return {ownerId:grant.ownerId,csrf:embedDigest('csrf:'+(req.headers.authorization??'').slice(7)),expires:grant.expires};}

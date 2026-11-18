@@ -68,5 +68,8 @@ test('embedded: one-use expiring host tickets, no browser secrets, bound scenari
     f.nativeSessions.get(id).metadata.harnessOwner=f.owners[1];
     assert.equal((await f.app.inject({method:'DELETE',url:'/api/v1/embed/session',headers:f.headers(v.token,v.csrfToken)})).statusCode,204);
     assert.equal(f.active[id],true,'cleanup must not interrupt a metadata-mismatched session');assert.equal(f.store.clean.has(g.id),false);
+    const bob=await f.visit('bob'),changed=structuredClone(f.config);delete changed.clients[0].principals.bob;
+    await assert.rejects(new EmbeddedAuth(changed,f.store).session({headers:f.headers(bob.token)} as never),/EMBED_SESSION_REQUIRED/);
+    assert.ok(f.store.revoked.has(f.store.grants.get(embedDigest(bob.token))!.id));
   }finally{await f.close();}
 });
