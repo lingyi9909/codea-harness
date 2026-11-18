@@ -38,6 +38,7 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
       await client.session.remove({sessionID:g.nativeId!});
     });
     await auth.store.cleaned(g.id);
+    if(g.accessMode==='ANONYMOUS'&&execution.singleService()){await auth.store.recycled(g.id);return;}
     if(g.accessMode==='ANONYMOUS'){
       // Never lend an unreset execution environment to another anonymous visitor.
       if(opts.resetSlot)await opts.resetSlot(g.ownerId);
@@ -90,6 +91,7 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
     return reply.header('Cache-Control','no-store').send(wrap(await institutionEvidence(opts.institutionAdapter,auth.store,grant.id,req.body)));
   });
   const binding=async()=>{
+    if(execution.singleService())return {directory:workspace,executor:{type:'builtin' as const,name:'chat'}};
     const value=await sceneConfig.binding('message');
     if(value.executor.type==='builtin'||value.executor.type==='command'&&value.executor.name==='models')throw new AuthProblem(503,'EMBED_EXECUTOR_NOT_CONFIGURED');
     return value;
@@ -133,8 +135,8 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
             if(req.method==='POST'&&req.url.split('?')[0].endsWith('/messages')){
               try{return await auth.store.serialize(grant.ownerId,async()=>{
                 const client=await execution.client(),active=await client.session.active();
-                if(Object.values(active).some(Boolean))throw new AuthProblem(409,'EMBED_EXECUTOR_BUSY');
-                const ids=[grant.nativeId!,...await auth.store.otherSessions(grant.ownerId,grant.id)];
+                if(execution.singleService()?Boolean(active[grant.nativeId!]):Object.values(active).some(Boolean))throw new AuthProblem(409,'EMBED_EXECUTOR_BUSY');
+                const ids=execution.singleService()?[grant.nativeId!]:[grant.nativeId!,...await auth.store.otherSessions(grant.ownerId,grant.id)];
                 for(const id of ids)if((await client.session.inbox.list({sessionID:id})).length)throw new AuthProblem(409,'EMBED_EXECUTOR_BUSY');
                 return handler.call(this,req,reply);
               });}catch(error){if(error instanceof Error&&error.message==='EMBED_EXECUTOR_BUSY')throw new AuthProblem(409,'EMBED_EXECUTOR_BUSY');throw error;}

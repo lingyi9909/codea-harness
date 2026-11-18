@@ -12,10 +12,12 @@ const alive=(pid:number)=>{if(!Number.isInteger(pid)||pid<=0)return true;try{pro
 /** Local-disk, single-host persistence. No native npm extension or database service. */
 export class SqliteEmbedStore implements EmbedStore {
   private readonly db:DatabaseSync;
+  private readonly cleanupIdentity?:string;
   private closing=false;
   private readonly pending=new Set<Promise<unknown>>();
   readonly bindings:ChatBindingStore;
-  constructor(path:string){
+  constructor(path:string,cleanupIdentity?:string){
+    this.cleanupIdentity=cleanupIdentity;
     if(!isAbsolute(path)||path.startsWith('\\\\')||path.startsWith('//'))throw Error('SQLITE_LOCAL_ABSOLUTE_PATH_REQUIRED');
     mkdirSync(dirname(path),{recursive:true,mode:0o700});
     if(existsSync(path)&&lstatSync(path).isSymbolicLink())throw Error('SQLITE_SYMLINK_FORBIDDEN');
@@ -52,6 +54,15 @@ export class SqliteEmbedStore implements EmbedStore {
   }
   check(){this.db.prepare('SELECT 1').get();}
   async ensureOwner(id:string,subject:string){this.db.prepare('INSERT INTO wh_owners(id,subject) VALUES (?,?) ON CONFLICT(id) DO NOTHING').run(id,subject);}
+  async createSingle(g:Pick<EmbedGrant,'id'|'digest'|'expires'|'parentOrigin'>,serviceIdentity:string,maxPages:number){
+    return this.transaction(()=>{
+      const count=this.db.prepare('SELECT COUNT(*) AS n FROM wh_embed_sessions WHERE owner_id=id AND service_identity=? AND revoked=0 AND expires>?').get(serviceIdentity,Date.now());
+      if(Number(count?.n)>=maxPages)return undefined;
+      this.db.prepare('INSERT INTO wh_owners(id,subject) VALUES (?,?)').run(g.id,'single:'+g.id);
+      this.db.prepare("INSERT INTO wh_embed_sessions(id,digest,owner_id,parent_origin,expires,service_identity,access_mode) VALUES (?,?,?,?,?,?,'ANONYMOUS')").run(g.id,g.digest,g.id,g.parentOrigin,g.expires,serviceIdentity);
+      return {...g,ownerId:g.id,serviceIdentity,state:'NEW' as const,accessMode:'ANONYMOUS' as const};
+    });
+  }
   async allocate(g:Pick<EmbedGrant,'id'|'digest'|'expires'|'parentOrigin'>,slots:{ownerId:string;serviceIdentity:string}[]){
     for(const slot of [...slots].sort((a,b)=>a.ownerId.localeCompare(b.ownerId))){
       try{
@@ -76,7 +87,7 @@ export class SqliteEmbedStore implements EmbedStore {
   async bind(id:string,nativeId:string,service:string){if(Number(this.db.prepare("UPDATE wh_embed_sessions SET state='BOUND',native_session_id=?,service_identity=? WHERE id=? AND state='CREATING' AND revoked=0 AND expires>?").run(nativeId,service,id,Date.now()).changes)!==1)throw Error('EMBED_BIND_FAILED');}
   async fail(id:string){this.db.prepare("UPDATE wh_embed_sessions SET state='FAILED' WHERE id=? AND state='CREATING'").run(id);}
   async revoke(id:string){this.db.prepare('UPDATE wh_embed_sessions SET revoked=1 WHERE id=?').run(id);}
-  async cleanupCandidates(){return this.db.prepare("SELECT * FROM wh_embed_sessions WHERE (expires<=? OR revoked=1) AND (cleaned=0 OR (access_mode='ANONYMOUS' AND recycled=0)) LIMIT 100").all(Date.now()).map(grant);}
+  async cleanupCandidates(){const sql="SELECT * FROM wh_embed_sessions WHERE (expires<=? OR revoked=1) AND (cleaned=0 OR (access_mode='ANONYMOUS' AND recycled=0))";return (this.cleanupIdentity?this.db.prepare(sql+' AND service_identity=? LIMIT 100').all(Date.now(),this.cleanupIdentity):this.db.prepare(sql+' LIMIT 100').all(Date.now())).map(grant);}
   async cleaned(id:string){this.db.prepare('UPDATE wh_embed_sessions SET cleaned=1,query_evidence=NULL WHERE id=?').run(id);}
   async recycled(id:string){this.db.prepare('UPDATE wh_embed_sessions SET recycled=1 WHERE id=? AND cleaned=1').run(id);}
   async otherSessions(owner:string,id:string){return this.db.prepare("SELECT native_session_id FROM wh_embed_sessions WHERE owner_id=? AND id<>? AND state='BOUND' AND revoked=0 AND expires>?").all(owner,id,Date.now()).map(r=>String(r.native_session_id));}

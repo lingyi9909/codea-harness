@@ -182,7 +182,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     const activeDirectory=await directory(session.location.directory);
     if(kind==='direct-chat'&&workspace&&activeDirectory!==currentWorkspace())
       throw new AuthProblem(404,'CHAT_NOT_FOUND');
-    if(sceneConfig&&sceneKey(kind)){
+    if(!options.execution?.singleService()&&sceneConfig&&sceneKey(kind)){
       const binding=await sceneConfig.binding(sceneKey(kind)!);
       if(effective(binding.directory)!==session.location.directory)throw new AuthProblem(409,'SCENE_DIRECTORY_CHANGED');
     }
@@ -227,6 +227,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     return directory(input??roots[0]);
   }
   async function sceneDirectory(kind:ChatScenario,input?:string){
+    if(options.execution?.singleService())return project(workspace);
     const key=sceneKey(kind);
     if(key&&sceneConfig){
       const binding=await sceneConfig.binding(key);
@@ -343,7 +344,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     const scenario=req.body?.scenario??'direct-chat';
     const dir=await sceneDirectory(scenario,req.body?.directory),model=req.body?.model;
     if(model)await validateModel(dir,model);
-    if(sceneConfig&&sceneKey(scenario))await execution(dir,await sceneConfig.binding(sceneKey(scenario)!));
+    if(!options.execution?.singleService()&&sceneConfig&&sceneKey(scenario))await execution(dir,await sceneConfig.binding(sceneKey(scenario)!));
     else if(scenario==='log-inspection')await logQuerySkill(dir);
     const title=req.body?.title?.trim()||(scenario==='direct-chat'?'智能工作台 · 直接对话':'智能工作台 · 专项场景');
     const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title,
@@ -477,8 +478,8 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
       if(!target||!within(root,target)||!(await stat(target)).isFile())throw new AuthProblem(400,'FILE_OUTSIDE_WORKSPACE_OR_MISSING');
       return {uri:pathToFileURL(target).href,name};
     }));
-    const binding=sceneConfig&&sceneKey(scenario as ChatScenario)?await sceneConfig.binding(sceneKey(scenario as ChatScenario)!):undefined;
-    const action:Execution=binding?await execution(root,binding):scenario==='log-inspection'?{kind:'skill',skills:[await logQuerySkill(root)]}:{kind:'direct'};
+    const binding=!options.execution?.singleService()&&sceneConfig&&sceneKey(scenario as ChatScenario)?await sceneConfig.binding(sceneKey(scenario as ChatScenario)!):undefined;
+    const action:Execution=options.execution?.singleService()?{kind:'direct'}:binding?await execution(root,binding):scenario==='log-inspection'?{kind:'skill',skills:[await logQuerySkill(root)]}:{kind:'direct'};
     const native=await client();
     let prompt:{text:string;metadata?:{workbenchLanguageSuffix:1}}={text};
     try{
@@ -554,7 +555,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     await owned(sessionID,ownerId);
     const pending=await (await client()).permission.list({sessionID});
     const request=pending.find(p=>p.sessionID===sessionID&&p.id===req.body.requestId);
-    if(options.execution?.sharedWorkspace()&&request?.action==='edit'&&req.body.decision!=='reject')throw new AuthProblem(403,'SHARED_WORKSPACE_READ_ONLY');
+    if((options.execution?.singleService()||options.execution?.sharedWorkspace()&&request?.action==='edit')&&req.body.decision!=='reject')throw new AuthProblem(403,'SHARED_WORKSPACE_READ_ONLY');
     if(!request||revision(request)!==req.body.revision)throw new AuthProblem(409,'PERMISSION_CHANGED');
     await (await client()).permission.reply({sessionID,requestID:request.id,decision:req.body.decision});
     return wrap({submitted:true});

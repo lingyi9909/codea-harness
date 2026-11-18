@@ -1,3 +1,5 @@
+> **机构报文排查：一个 OpenCode 服务、一个工作目录。** 首次构建后运行 `启动机构报文排查.cmd "D:\teamai"`，SQLite 自动保存，不用注册表、槽位或 MySQL。见 [三步部署](docs/institution-standalone-deployment.md)。机构入口仅分析安全查询证据，真实机构接口仍需接入；其他工作台场景沿用原启动方式。
+
 > 当前机构入口支持 **一个共享业务工作目录 + SQLite 本地文件**，无需安装 MySQL、无需登录或宿主票据接口。按 [独立部署说明](docs/institution-standalone-deployment.md) 使用 --embedded-only；原 MySQL 完整工作台和本地单人模式继续兼容。
 
 > 当前优先入口：**机构报文排查匿名 iframe 页面**，对方仅需添加 iframe，无工作台登录、无宿主身份/票据接口。会话持久化和后端重启恢复见 [接入及验收说明](docs/anonymous-institution-embed.md)。真实机构查询适配器、槽位重置与 OS 权限仍需内网配置和验收。

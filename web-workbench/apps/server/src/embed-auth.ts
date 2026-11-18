@@ -3,7 +3,7 @@ import type {FastifyRequest,FastifyReply} from 'fastify';
 import {AuthProblem,type RequestAuth} from './auth.ts';
 import type {EmbedStore,EmbedGrant} from '../../../packages/storage/src/embed.ts';
 export type EmbedClient={id:string;secret:string;parentOrigin:string;principals:Record<string,string>};
-export type EmbedConfig={publicOrigin:string;clients:EmbedClient[];sessionTTLSeconds?:number;anonymous?:{parentOrigins:string[];executionOwners:string[];resetCommand?:string[];resetPrivateCommand?:string[]}};
+export type EmbedConfig={publicOrigin:string;clients:EmbedClient[];sessionTTLSeconds?:number;anonymous?:{parentOrigins:string[];executionOwners:string[];singleService?:{identity:string;maxPages?:number};resetCommand?:string[];resetPrivateCommand?:string[]}};
 export const embedDigest=(s:string)=>createHash('sha256').update(s).digest('hex');
 export function trustedOrigin(origin:string){
   const url=new URL(origin);
@@ -32,8 +32,9 @@ export class EmbeddedAuth implements RequestAuth {
       }
     }
     if(config.anonymous){
-      const {parentOrigins,executionOwners,resetCommand,resetPrivateCommand}=config.anonymous;
-      if(!Array.isArray(parentOrigins)||!parentOrigins.length||!Array.isArray(executionOwners)||!executionOwners.length||executionOwners.length>100)throw new Error('EMBED_ANONYMOUS_CONFIG_INVALID');
+      const {parentOrigins,executionOwners,resetCommand,resetPrivateCommand,singleService}=config.anonymous;
+      if(!Array.isArray(parentOrigins)||!parentOrigins.length||!Array.isArray(executionOwners)||(!singleService&&!executionOwners.length)||executionOwners.length>100)throw new Error('EMBED_ANONYMOUS_CONFIG_INVALID');
+      if(singleService&&(executionOwners.length||config.clients.length||resetCommand||resetPrivateCommand||!/^single:[a-f0-9]{64}$/.test(singleService.identity)||!Number.isInteger(singleService.maxPages??100)||(singleService.maxPages??100)<1||(singleService.maxPages??100)>1000))throw new Error('SINGLE_SERVICE_CONFIG_INVALID');
       parentOrigins.forEach(trustedOrigin);
       for(const id of executionOwners){if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)||owners.has(id))throw new Error('EMBED_SLOT_INVALID');owners.set(id,'anonymous');}
       for(const command of [resetCommand,resetPrivateCommand])if(command&&(!command.length||command.some(v=>typeof v!=='string'||!v)))throw new Error('EMBED_RESET_COMMAND_INVALID');
@@ -74,7 +75,9 @@ export class EmbeddedAuth implements RequestAuth {
     if(recent.length>=120)throw new AuthProblem(429,'EMBED_SESSION_RATE_LIMIT');
     recent.push(this.now());this.issuance.set(key,recent);
     const token=randomBytes(32).toString('base64url'),expires=this.now()+(this.config.sessionTTLSeconds??7200)*1000;
-    const grant=await this.store.allocate({id:randomUUID(),digest:embedDigest(token),expires,parentOrigin:this.config.publicOrigin},slots);
+    const input={id:randomUUID(),digest:embedDigest(token),expires,parentOrigin:this.config.publicOrigin},single=this.config.anonymous.singleService;
+    if(single&&!this.store.createSingle)throw new AuthProblem(503,'SINGLE_SERVICE_STORAGE_REQUIRED');
+    const grant=single?await this.store.createSingle!(input,single.identity,single.maxPages??100):await this.store.allocate(input,slots);
     if(!grant)throw new AuthProblem(503,'EMBED_CAPACITY_FULL');
     return {token,csrfToken:embedDigest('csrf:'+token),expiresAt:expires};
   }
@@ -83,7 +86,7 @@ export class EmbeddedAuth implements RequestAuth {
     if(!/^Bearer [\w-]{43}$/.test(header))throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
     const grant=await this.store.find(embedDigest(header.slice(7)));
     if(!grant||grant.expires<=this.now())throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
-    if(!(grant.accessMode==='ANONYMOUS'?grant.parentOrigin===this.config.publicOrigin&&this.config.anonymous?.executionOwners.includes(grant.ownerId):this.config.clients.some(client=>client.parentOrigin===grant.parentOrigin&&Object.values(client.principals).includes(grant.ownerId)))){
+    if(!(grant.accessMode==='ANONYMOUS'?grant.parentOrigin===this.config.publicOrigin&&(this.config.anonymous?.singleService?grant.ownerId===grant.id&&grant.serviceIdentity===this.config.anonymous.singleService.identity:this.config.anonymous?.executionOwners.includes(grant.ownerId)):this.config.clients.some(client=>client.parentOrigin===grant.parentOrigin&&Object.values(client.principals).includes(grant.ownerId)))){
       await this.store.revoke(grant.id);throw new AuthProblem(401,'EMBED_SESSION_REQUIRED');
     }
     this.sessions.set(req,grant);return grant;

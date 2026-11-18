@@ -3,17 +3,23 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {isAbsolute,relative,sep} from 'node:path';
 import {AuthProblem} from './auth.ts';
 import type {chatConnection} from './modules/chat/connection.ts';
+export const singleServicePermissions=[{action:'*',resource:'*',effect:'deny' as const}];
 export const sharedWorkspacePermissions=[{action:'edit',resource:'*',effect:'deny' as const}];
 type Client=Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
 export type ExecutionRecord={ownerId:string;serviceIdentity:string;url:string;authorization:string;isolation:'os-user'|'container';workspaceAccess?:'shared-readonly';directories:Record<string,string>};
 const overlaps=(a:string,b:string)=>{const r=relative(a,b);return r===''||(!r.startsWith('..'+sep)&&r!=='..'&&!isAbsolute(r));};
 export class ExecutionRegistry {
   private readonly records=new Map<string,ExecutionRecord>();
-  private readonly context=new AsyncLocalStorage<ExecutionRecord>();
+  private readonly context=new AsyncLocalStorage<Omit<ExecutionRecord,'isolation'>&{isolation:ExecutionRecord['isolation']|'session'}>();
+  private readonly single?:{workspace:string;serviceIdentity:string};
   private readonly connect:(url:string,authorization:string)=>Promise<Client>;
   private readonly clients=new Map<string,Promise<Client>>();
-  constructor(entries:ExecutionRecord[],connect:(url:string,authorization:string)=>Promise<Client>,options?:{workspace:string}){
+  constructor(entries:ExecutionRecord[],connect:(url:string,authorization:string)=>Promise<Client>,options?:{workspace:string;singleServiceIdentity?:string}){
     this.connect=connect;
+    if(options?.singleServiceIdentity){
+      if(entries.length||!isAbsolute(options.workspace)||!options.singleServiceIdentity.startsWith('single:'))throw new Error('SINGLE_SERVICE_CONFIG_INVALID');
+      this.single={workspace:options.workspace,serviceIdentity:options.singleServiceIdentity};
+    }
     const allSources=entries.flatMap(entry=>Object.keys(entry.directories));
     const urls=new Set<string>(),services=new Set<string>(),roots:{path:string;shared:boolean}[]=[],credentials=new Set<string>();
     for(const entry of entries){
@@ -35,19 +41,20 @@ export class ExecutionRegistry {
       credentials.add(entry.authorization);urls.add(url.href);services.add(entry.serviceIdentity);this.records.set(entry.ownerId,structuredClone(entry));
     }
   }
-  has(owner:string){return this.records.has(owner);}
+  has(owner:string){return this.single?/^[0-9a-f-]{36}$/.test(owner):this.records.has(owner);}
   async run<T>(owner:string,fn:()=>Promise<T>){
-    const record=this.records.get(owner);if(!record)throw new AuthProblem(503,'EXECUTION_NOT_PROVISIONED');
+    const record=this.single&&this.has(owner)?{ownerId:owner,serviceIdentity:this.single.serviceIdentity,url:'',authorization:'',isolation:'session' as const,workspaceAccess:'shared-readonly' as const,directories:{[this.single.workspace]:this.single.workspace}}:this.records.get(owner);if(!record)throw new AuthProblem(503,'EXECUTION_NOT_PROVISIONED');
     return this.context.run(record,fn);
   }
   private current(){const record=this.context.getStore();if(!record)throw new AuthProblem(403,'EXECUTION_CONTEXT_REQUIRED');return record;}
+  singleService(){return Boolean(this.single);}
   sharedWorkspace(){return this.current().workspaceAccess==='shared-readonly';}
-  permissions(){return this.sharedWorkspace()?structuredClone(sharedWorkspacePermissions):undefined;}
+  permissions(){return this.single?structuredClone(singleServicePermissions):this.sharedWorkspace()?structuredClone(sharedWorkspacePermissions):undefined;}
   assertPermissions(session:{permissions?:{action:string;resource:string;effect:string}[]}){
     if(!this.sharedWorkspace())return;
     // Fail closed if the installed native API drops or mutates the deny rules.
-    const rules=session.permissions;
-    if(!Array.isArray(rules)||rules.length!==sharedWorkspacePermissions.length||sharedWorkspacePermissions.some((rule,i)=>rules[i].action!==rule.action||rules[i].resource!==rule.resource||rules[i].effect!==rule.effect))throw new AuthProblem(409,'SHARED_WORKSPACE_PERMISSION_MISMATCH');
+    const rules=session.permissions,expected=this.single?singleServicePermissions:sharedWorkspacePermissions;
+    if(!Array.isArray(rules)||rules.length!==expected.length||expected.some((rule,i)=>rules[i].action!==rule.action||rules[i].resource!==rule.resource||rules[i].effect!==rule.effect))throw new AuthProblem(409,'SHARED_WORKSPACE_PERMISSION_MISMATCH');
   }
   serviceIdentity(){return this.current().serviceIdentity;}
   directory(input:string){
@@ -57,6 +64,7 @@ export class ExecutionRegistry {
     throw new AuthProblem(403,'EXECUTION_DIRECTORY_FORBIDDEN');
   }
   async client(){
+    if(this.single){this.current();return this.connect('','');}
     const record=this.current();let pending=this.clients.get(record.ownerId);
     if(!pending){pending=this.connect(record.url,record.authorization).catch(error=>{this.clients.delete(record.ownerId);throw error;});this.clients.set(record.ownerId,pending);}
     return pending;

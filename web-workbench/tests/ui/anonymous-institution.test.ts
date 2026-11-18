@@ -5,7 +5,7 @@ import {mkdir} from 'node:fs/promises';
 import {chromium,expect} from '@playwright/test';
 import {sqliteEmbedFixture} from '../support/sqlite-embed-fixture.ts';
 import {DatabaseSync} from 'node:sqlite';
-test('anonymous institution: SQLite file, one workspace, iframe-only host, three pages, secret isolation and backend restart',{timeout:90000},async()=>{
+test('anonymous institution: one OpenCode service, SQLite file, one workspace, iframe-only host, three pages, secret isolation and backend restart',{timeout:90000},async()=>{
   const origin='http://127.0.0.1:4186',parent='http://127.0.0.1:4187';let queryCalls=0;
   const f=await sqliteEmbedFixture(origin,parent,false,async input=>{queryCalls++;return {evidence:'查询报文 '+input.msgSn+' 的应答状态为失败。'};});
   const grants=()=>{const db=new DatabaseSync(f.path,{readOnly:true});try{return db.prepare('SELECT id FROM wh_embed_sessions ORDER BY id').all().map(r=>r.id);}finally{db.close();}};
@@ -27,7 +27,7 @@ test('anonymous institution: SQLite file, one workspace, iframe-only host, three
       await frame.getByRole('button',{name:'开始排查',exact:true}).click();await expect(frame.getByText(/仅本会话结果：/)).toBeVisible({timeout:20000});
       await expect(frame.getByLabel('密码',{exact:true})).toHaveValue('');await expect(frame.getByLabel('验证码',{exact:true})).toHaveValue('');
     }));
-    assert.equal(f.calls.length,3);assert.equal(queryCalls,3);assert.ok([...f.nativeSessions.values()].every(s=>s.location.directory===f.workspace));assert.ok([...f.nativeSessions.values()].every(s=>s.permissions?.some((r:{action:string;effect:string})=>r.action==='edit'&&r.effect==='deny')));const originalGrants=grants();
+    assert.equal(f.calls.length,3);assert.equal(queryCalls,3);assert.ok([...f.nativeSessions.values()].every(s=>s.location.directory===f.workspace));assert.ok([...f.nativeSessions.values()].every(s=>s.permissions?.some((r:{action:string;effect:string})=>r.action==='*'&&r.effect==='deny')));const originalGrants=grants();
     await f.restart();await new Promise(resolve=>setTimeout(resolve,3300));await f.app.listen({host:'127.0.0.1',port:4186});
     for(const frame of frames){await expect(frame.getByText(/仅本会话结果：/)).toBeVisible();await expect(frame.getByText('服务暂时不可用，正在重新连接当前会话，请勿重复提交。')).toHaveCount(0,{timeout:15000});}
     assert.deepEqual(grants(),originalGrants);assert.equal(f.calls.length,3);assert.equal(queryCalls,3);

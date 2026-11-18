@@ -3,6 +3,7 @@ import {withTransaction} from './db.ts';
 export type EmbedTicket={digest:string;ownerId:string;clientId:string;parentOrigin:string;expires:number};
 export type EmbedGrant={id:string;digest:string;ownerId:string;parentOrigin:string;expires:number;accessMode?:'HOST'|'ANONYMOUS';nativeId?:string;serviceIdentity?:string;state:'NEW'|'CREATING'|'BOUND'|'FAILED'};
 export interface EmbedStore {
+  createSingle?(grant:Pick<EmbedGrant,'id'|'digest'|'expires'|'parentOrigin'>,serviceIdentity:string,maxPages:number):Promise<EmbedGrant|undefined>;
   allocate(grant:Pick<EmbedGrant,'id'|'digest'|'expires'|'parentOrigin'>,slots:{ownerId:string;serviceIdentity:string}[]):Promise<EmbedGrant|undefined>;
   recycled(id:string):Promise<void>;
   claimQuery(id:string,fingerprint:string):Promise<{state:string;fingerprint?:string;evidence?:string;claimed:boolean}>;

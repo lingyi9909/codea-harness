@@ -14,7 +14,7 @@ export async function createEmbeddedApp(opts:{auth:EmbeddedAuth;execution:Execut
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   try{
     const workspace=await resolveLocalWorkspace(opts.workspace),sceneConfig=new SceneConfigStore(workspace);
-    await sceneConfig.initialize();
+    if(!opts.execution.singleService())await sceneConfig.initialize();
     const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
     if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false,index:false});
     app.setErrorHandler((e,_req,reply)=>{
