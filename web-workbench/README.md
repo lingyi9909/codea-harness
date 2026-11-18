@@ -1,3 +1,5 @@
+> 当前机构入口支持 **一个共享业务工作目录 + SQLite 本地文件**，无需安装 MySQL、无需登录或宿主票据接口。按 [独立部署说明](docs/institution-standalone-deployment.md) 使用 --embedded-only；原 MySQL 完整工作台和本地单人模式继续兼容。
+
 > 当前优先入口：**机构报文排查匿名 iframe 页面**，对方仅需添加 iframe，无工作台登录、无宿主身份/票据接口。会话持久化和后端重启恢复见 [接入及验收说明](docs/anonymous-institution-embed.md)。真实机构查询适配器、槽位重置与 OS 权限仍需内网配置和验收。
 
 # 智能工作台 · Web Workbench

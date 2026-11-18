@@ -1,3 +1,4 @@
+import {readFile,realpath} from 'node:fs/promises';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {isAbsolute,relative,sep} from 'node:path';
 import {AuthProblem} from './auth.ts';
@@ -60,4 +61,16 @@ export class ExecutionRegistry {
     if(!pending){pending=this.connect(record.url,record.authorization).catch(error=>{this.clients.delete(record.ownerId);throw error;});this.clients.set(record.ownerId,pending);}
     return pending;
   }
+}
+
+export async function loadExecutionRegistry(path:string,workspace:string,connect:(url:string,authorization:string)=>Promise<Client>){
+  const entries:ExecutionRecord[]=JSON.parse(await readFile(path,'utf8'));
+  const startupWorkspace=await realpath(workspace);
+  for(const entry of entries){
+    if(entry.workspaceAccess==='shared-readonly'&&!entry.directories)entry.directories={[startupWorkspace]:startupWorkspace};
+    const directories:Record<string,string>={};
+    for(const [source,target]of Object.entries(entry.directories))directories[await realpath(source)]=await realpath(target);
+    entry.directories=directories;
+  }
+  return new ExecutionRegistry(entries,connect,{workspace:startupWorkspace});
 }

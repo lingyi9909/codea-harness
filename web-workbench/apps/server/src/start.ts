@@ -1,8 +1,8 @@
 import {httpInstitutionAdapter} from './institution-query.ts';
 import {EmbeddedAuth,type EmbedConfig} from './embed-auth.ts';
 import {MysqlEmbedStore} from '../../../packages/storage/src/embed.ts';
-import {readFile,realpath} from 'node:fs/promises';
-import {ExecutionRegistry,type ExecutionRecord} from './execution-registry.ts';
+import {readFile} from 'node:fs/promises';
+import {ExecutionRegistry,loadExecutionRegistry} from './execution-registry.ts';
 import {chatConnection} from './modules/chat/connection.ts';
 import { MultiUserAuth } from './multi-user-auth.ts';
 import { MysqlIdentityStore } from '../../../packages/storage/src/identity.ts';
@@ -16,7 +16,11 @@ import { runtimeConfig } from './config.ts';
 import { LocalAuth } from './auth.ts';
 import { createApp } from './app.ts';
 
-export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal'>,localOnly=false,workspace?:string,multiUser=false){
+export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal'>,localOnly=false,workspace?:string,multiUser=false,embeddedOnly=false){
+  if(embeddedOnly){
+    if(localOnly||multiUser)throw new Error('INCOMPATIBLE_RUN_MODES');
+    const {startEmbeddedWorkbench}=await import('./embedded-start.ts');return startEmbeddedWorkbench(workspace);
+  }
   if(localOnly&&multiUser)throw new Error('INCOMPATIBLE_RUN_MODES');
   if(!workspace?.trim())throw new Error('STARTUP_WORKSPACE_REQUIRED: specify --workspace with an existing absolute directory.');
   if(localOnly&&!existsSync(fileURLToPath(new URL('../../web/dist/index.html',import.meta.url))))
@@ -32,12 +36,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   const auth=multiUser?new MultiUserAuth(new MysqlIdentityStore(pool!),process.env.HARNESS_PUBLIC_ORIGIN??''):new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode);
   let execution:ExecutionRegistry|undefined;
   if(multiUser&&process.env.HARNESS_EXECUTION_REGISTRY){
-    const entries:ExecutionRecord[]=JSON.parse(await readFile(process.env.HARNESS_EXECUTION_REGISTRY,'utf8'));
-    const startupWorkspace=await realpath(workspace);
-    for(const entry of entries){
-      if(entry.workspaceAccess==='shared-readonly'&&!entry.directories)entry.directories={[startupWorkspace]:startupWorkspace};
-      const directories:Record<string,string>={};for(const [source,target]of Object.entries(entry.directories))directories[await realpath(source)]=await realpath(target);entry.directories=directories;}
-    execution=new ExecutionRegistry(entries,(url,authorization)=>chatConnection(false,{url,authorization})(),{workspace:startupWorkspace});
+    execution=await loadExecutionRegistry(process.env.HARNESS_EXECUTION_REGISTRY,workspace,(url,authorization)=>chatConnection(false,{url,authorization})());
   }
   let embedded:EmbeddedAuth|undefined;
   if(process.env.HARNESS_EMBED_CONFIG){
@@ -57,8 +56,8 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   }catch(error){await app?.close().catch(()=>{});await embedLocks?.end().catch(()=>{});await pool?.end().catch(()=>{});throw error;}
 }
 async function main(){
-  const {values}=parseArgs({options:{'local-only':{type:'boolean'},'multi-user':{type:'boolean'},workspace:{type:'string'}}});
-  await startWorkbench(undefined,values['local-only'],values.workspace,values['multi-user']);
+  const {values}=parseArgs({options:{'local-only':{type:'boolean'},'multi-user':{type:'boolean'},'embedded-only':{type:'boolean'},workspace:{type:'string'}}});
+  await startWorkbench(undefined,values['local-only'],values.workspace,values['multi-user'],values['embedded-only']);
 }
 if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url)
   main().catch(e=>{console.error('Server startup blocked:',e instanceof Error?e.message:'UNKNOWN');process.exitCode=2});

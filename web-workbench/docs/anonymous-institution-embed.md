@@ -1,3 +1,5 @@
+> 最新单工作目录、免 MySQL 的机构入口请使用 [SQLite 独立部署说明](institution-standalone-deployment.md)。本文保留早期接口契约及旧 MySQL/独立目录部署记录；其中多套业务目录及 resetCommand 配置不适用于新的共享目录模式。
+
 # 机构报文排查：匿名 iframe 接入与重启恢复
 
 ## 本轮需求基线与改造计划

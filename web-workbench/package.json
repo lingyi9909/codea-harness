@@ -43,7 +43,9 @@
     "test:embed:mysql": "node --experimental-strip-types --test tests/mysql/embedded-message.test.ts",
     "test:anonymous": "node --experimental-strip-types --test tests/api/anonymous-institution.test.ts",
     "test:anonymous:mysql": "node --experimental-strip-types --test tests/mysql/anonymous-embed.test.ts",
-    "test:anonymous:ui": "node --experimental-strip-types --test tests/ui/anonymous-institution.test.ts"
+    "test:anonymous:ui": "node --experimental-strip-types --test tests/ui/anonymous-institution.test.ts",
+    "test:sqlite": "node --experimental-strip-types --test tests/sqlite/*.test.ts",
+    "embedded:storage": "node --experimental-strip-types scripts/embedded-storage.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

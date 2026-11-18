@@ -13,8 +13,9 @@ import {registerChat} from './modules/chat/routes.ts';
 import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;pool:Pool;bindings?:ChatBindingStore;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}){
+export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;pool?:Pool;bindings?:ChatBindingStore;ensureOwner?:(id:string,subject:string)=>Promise<void>;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}){
   const {auth,execution,workspace,sceneConfig,pool}=opts;
+  if(!opts.bindings&&!pool)throw new Error('EMBED_BINDING_STORE_REQUIRED');
   async function cleanup(g:{id:string;ownerId:string;nativeId?:string;serviceIdentity?:string;accessMode?:string}){
     return auth.store.serialize(g.ownerId,async()=>{
     await auth.store.revoke(g.id);
@@ -101,6 +102,8 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
   });
   app.post('/api/v1/embed/tickets',async(req,reply)=>reply.header('Cache-Control','no-store').send(wrap(await auth.issue(req,req.body,async(id,subject)=>{
     // Operator-provisioned owner mapping; never trust a browser-supplied owner ID.
+    if(opts.ensureOwner)return opts.ensureOwner(id,'embed:'+subject);
+    if(!pool)throw new Error('EMBED_OWNER_STORE_REQUIRED');
     await pool.execute("INSERT INTO wh_owners(id,subject,display_name,created_at,updated_at) VALUES (?,?,'Embedded user',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE id=id",[id,'embed:'+subject]);
   }))));
   app.post('/api/v1/embed/exchange',async(req,reply)=>reply.header('Cache-Control','no-store').send(wrap(await auth.exchange(req,req.body))));
@@ -148,6 +151,6 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
         return wrap({workspace:value.directory,configPath:'',accessPath:'',username:null,canEdit:false,revision:'embedded',config:{version:1,scenes:{message:value}}});
       });
     });
-    await registerChat(embedded,auth,{sessionMetadata:req=>auth.metadata(req),blockSensitiveForms:true,prefix:'/api/v1/embed/chat',workspace,sceneConfig,execution,multiUser:true,bindings:opts.bindings??new MysqlChatBindings(pool),onSessionCreated:(req,id)=>auth.bind(req,id,execution.serviceIdentity())});
+    await registerChat(embedded,auth,{sessionMetadata:req=>auth.metadata(req),blockSensitiveForms:true,prefix:'/api/v1/embed/chat',workspace,sceneConfig,execution,multiUser:true,bindings:opts.bindings??new MysqlChatBindings(pool!),onSessionCreated:(req,id)=>auth.bind(req,id,execution.serviceIdentity())});
   });
 }

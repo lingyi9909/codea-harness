@@ -38,7 +38,7 @@ jobs:
       - run: node --test tests/api/*.test.ts tests/capabilities/*.test.ts tests/events/*.test.ts tests/git/*.test.ts tests/reports/*.test.ts tests/workers/*.test.ts tests/ui/chat-history-storage.test.ts tests/ui/progressive-messages.test.ts tests/ui/user-storage-auth.test.ts tests/mysql/migration.test.ts
       - run: node --test tests/mysql/multi-user.test.ts
 
-      - run: npm run test:embed && npm run test:embed:mysql && npm run test:anonymous && npm run test:anonymous:mysql
+      - run: npm run test:embed && npm run test:embed:mysql && npm run test:anonymous && npm run test:anonymous:mysql && npm run test:sqlite
       - run: npx playwright install --with-deps chromium
       - run: npm run test:embed:ui && npm run test:anonymous:ui
       - uses: actions/upload-artifact@v4
