@@ -59,6 +59,8 @@ test('embedded: one-use expiring host tickets, no browser secrets, bound scenari
     f.forms.set(id,[{id:'otp-form',sessionID:id,title:'认证',fields:[{key:'otp',title:'验证码',type:'string',required:true,default:'must-not-leak'}]}]);
     const secretForm=await f.app.inject({url:'/api/v1/embed/chat/sessions/'+id,headers:f.headers(v.token)});
     assert.equal(secretForm.statusCode,409,secretForm.body);assert.equal(secretForm.json().error.code,'EMBED_BUSINESS_AUTH_REQUIRED');assert.equal(secretForm.body.includes('must-not-leak'),false);
+    f.forms.set(id,[{id:'masked',sessionID:id,title:'输入信息',fields:[{key:'value',title:'填写值',type:'string',format:'password',required:true}]}]);
+    assert.equal((await f.app.inject({url:'/api/v1/embed/chat/sessions/'+id,headers:f.headers(v.token)})).statusCode,409);
     assert.equal((await f.app.inject({url:'/api/v1/embed/config?parentOrigin=https%3A%2F%2Fevil.example',headers:f.headers()})).statusCode,403);
     assert.equal((await f.app.inject({url:'/api/v1/embed/session',headers:{...f.headers(v.token),origin:'https://evil.example'}})).statusCode,403);
     const page=await f.app.inject({url:'/embed/message',headers:{host:'workbench.example'}});

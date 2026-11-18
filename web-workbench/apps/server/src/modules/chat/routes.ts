@@ -208,7 +208,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     try{
       const native=await (await client()).session.form.list({sessionID});
       const forms=native.filter(form=>form.sessionID===sessionID);
-      if(options.blockSensitiveForms&&forms.some(form=>form.fields.some(field=>/password|passwd|secret|token|credential|otp|验证码|密码|口令/i.test([field.key,field.title,field.description].join(' ')))))throw new AuthProblem(409,'EMBED_BUSINESS_AUTH_REQUIRED');
+      if(options.blockSensitiveForms&&forms.some(form=>form.fields.some(field=>/password|passwd|secret|token|credential|otp|verification.?code|sms.?code|one.?time|验证码|校验码|动态码|密码|口令/i.test([form.title,field.key,field.title,field.description,'format' in field?field.format:''].join(' ')))))throw new AuthProblem(409,'EMBED_BUSINESS_AUTH_REQUIRED');
       return forms.map(nativeForm);
     }catch(error){
       const problem=upstreamProblem(error);
