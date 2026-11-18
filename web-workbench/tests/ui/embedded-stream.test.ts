@@ -16,3 +16,14 @@ test('embedded streaming uses an Authorization header, parses chunked SSE, and n
     assert.deepEqual(values,['{}','{"text":"仅本会话"}','{"id":"tool-1"}']);assert.equal(url.includes('private-capability'),false);assert.equal(authorization,'Bearer private-capability');assert.equal(credentials,'omit');
   }finally{source.close();controller.abort();globalThis.fetch=original;}
 });
+test('embedded streaming reconnects after a temporary HTTP 503',async()=>{
+  const original=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;if(calls===1)return new Response('temporarily unavailable',{status:503});return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('event: ready\ndata: {}\n\n'));}}),{headers:{'content-type':'text/event-stream'}});};
+  const source=new BearerEventSource('/api/v1/embed/chat/sessions/own/activity',{Authorization:'Bearer capability'});
+  try{await new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('RECONNECT_TIMEOUT')),5000);source.addEventListener('ready',()=>{clearTimeout(timeout);resolve();});});assert.equal(calls,2);}finally{source.close();globalThis.fetch=original;}
+});
+test('an ended embedded API cannot fall back to the workbench cookie APIs',async()=>{
+  const {HarnessApi}=await import('../../apps/web/src/api/client.ts');const original=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({data:{token:'temporary',csrfToken:'csrf',expiresAt:Date.now()+60000}}),{headers:{'content-type':'application/json'}});};
+  try{const api=new HarnessApi();await api.openAnonymousEmbedded();api.clearEmbedded();await assert.rejects(api.chatModels(),/本次排查会话已结束/);assert.throws(()=>api.activity('own'),/本次排查会话已结束/);assert.equal(calls,1);}finally{globalThis.fetch=original;}
+});
