@@ -23,3 +23,15 @@ OpenCode 使用脚本化客户端；本阶段不以此证明真实 OS/容器或�
 - `npm run test:embed:ui`：真实 Chromium iframe 三页面，1/1 通过。覆盖已有工作台 Cookie 但嵌入 API/SSE 仍不携带 Cookie、三个页面各自结果、刷新新页面空白、其他页面不变、浏览器存储无持久化。
 - 测试截图见 [新页面](validation/embedded-message-fresh.png) / [结果页](validation/embedded-message-result.png)，来自真实 Chromium + 模拟 OpenCode。
 
+## 阶段三：兼容、迁移与接入交付
+
+- 前后端 TypeScript 检查通过，Vite 生产构建通过。
+- 原有 API/capabilities/events/git/reports/workers、聊天缓存/渐进消息及迁移静态检查：77 项，76 通过、0 失败、1 项 Windows 平台检查在 Linux 跳过。
+- 新增真实 MySQL 8.4 专项：原子票据兑换、会话绑定、撤销/清理、跨实例 advisory lock、独立连接池保持普通查询可用。由 CI 的独立 harness_ci_test 库执行，本地无 MySQL 服务，未虚构本地通过。
+- CI 扩展原 V1.1 workflow 运行嵌入 API/SSE/MySQL/Chromium，并上传实际截图。
+
+本地第一次使用系统 Chromium 时，执行环境拒绝其 Unix socket；随后使用 Playwright 自带 Headless Shell 成功执行浏览器测试，没有修改产品权限或削弱断言。
+
+实际内网的宿主 SSO/后端、真实报文 Skill、私有模型、独立 OS/容器权限与真实业务系统仍由使用方联调。此 PR 优先交付嵌入页，不声明原 V1.1 的多人 Review 调度已完成；手机号和短信协同不再作为本入口依赖。
+
+具体启动、API、前端宿主代码、账号映射、迁移和回退见 [接入文档](embedded-message-v1.md)。最新 CI 结果以 PR 中的 Actions Run 为准。

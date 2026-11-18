@@ -5,3 +5,5 @@ dist/
 *.local.json
 artifacts/
 probe-output/
+
+screenshots/

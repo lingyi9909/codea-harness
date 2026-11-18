@@ -1,6 +1,7 @@
 # 智能工作台 · Web Workbench
 
-> **V1.1 开发草稿（未完成全量验收）：** [V1.1 多用户隔离与业务 Skill 短信验证协同实施方案](docs/multi-user-and-skill-business-verification-v1.md)。[交付状态与 Windows 验收](docs/v1-1-deployment-and-acceptance.md) · [文件级计划](docs/v1-1-implementation-plan.md) · [测试记录](docs/v1-1-test-records.md)。工作台登录仅用户名 + 手机号（无登录验证码）；业务日志 Skill 需要短信时由日志平台发码/核验。方案以 PR #110 为基线，不代表当前版本已支持多人并发。
+> **当前优先交付：** [报文排查嵌入页 V1](docs/embedded-message-v1.md)：宿主身份接入、免工作台登录、每次打开独立临时会话、多人隔离；不要求手机号，不依赖业务短信框架。原单机与工作台入口保留。
+> **此前方案及阶段记录：** [V1.1 多用户设计](docs/multi-user-and-skill-business-verification-v1.md) · [原阶段交付](docs/v1-1-deployment-and-acceptance.md) · [嵌入页验证记录](docs/embedded-message-validation.md)。原方案中的手机号/业务短信不再作为当前嵌入页的依赖。
 
 The local review workbench serves the React application and Fastify API on the same loopback port. It stores tasks, runs, messages, native checkpoints, permissions and report metadata in MySQL 8.4. Git snapshots and archived report files live under the configured data directory.
 
