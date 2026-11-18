@@ -28,6 +28,7 @@ export class ExecutionRegistry {
       credentials.add(entry.authorization);urls.add(url.href);services.add(entry.serviceIdentity);this.records.set(entry.ownerId,structuredClone(entry));
     }
   }
+  has(owner:string){return this.records.has(owner);}
   async run<T>(owner:string,fn:()=>Promise<T>){
     const record=this.records.get(owner);if(!record)throw new AuthProblem(503,'EXECUTION_NOT_PROVISIONED');
     return this.context.run(record,fn);
