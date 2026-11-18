@@ -109,7 +109,7 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
             input.directory=value.directory;req.body=input;
           }
           try{
-            if(req.method==='POST'&&req.url.split('?')[0]==='/api/v1/embed/chat/sessions')return await auth.store.serialize(grant.ownerId,async()=>handler.call(this,req,reply));
+            if(grant.accessMode==='ANONYMOUS'&&req.method==='POST'&&req.url.split('?')[0]==='/api/v1/embed/chat/sessions')return await auth.store.serialize(grant.ownerId,async()=>handler.call(this,req,reply));
             if(req.method==='POST'&&req.url.split('?')[0].endsWith('/messages')){
               try{return await auth.store.serialize(grant.ownerId,async()=>{
                 const client=await execution.client(),active=await client.session.active();
