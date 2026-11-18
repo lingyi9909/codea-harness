@@ -39,6 +39,13 @@ jobs:
           npm run web:typecheck
           npm run test:sqlite
           npm run smoke:local
+      - name: Verify standalone configuration in Windows Chromium
+        working-directory: web-workbench
+        run: |
+          npx playwright install chromium
+          if($LASTEXITCODE -ne 0) { throw 'Windows Chromium install failed' }
+          node --experimental-strip-types --test tests/ui/unified-config.test.ts
+          if($LASTEXITCODE -ne 0) { throw 'Standalone configuration browser test failed' }
       - name: Keep only runtime dependencies
         working-directory: web-workbench
         run: npm prune --omit=dev --ignore-scripts --no-audit --no-fund
