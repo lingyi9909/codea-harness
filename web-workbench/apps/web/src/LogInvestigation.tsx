@@ -114,7 +114,7 @@ function restoredRange(bounds:Bounds):TimeRange{
   const day=wholeDay(calendarDay);
   return day&&day.from===bounds.from&&day.to===bounds.to?day:rangeFromBounds(bounds);
 }
-export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'message';globalModel?:Pick<ChatModel,'id'|'providerID'|'variant'>}={}){
+export function LogInvestigation({mode='public',globalModel,embedded=false}:{embedded?:boolean;mode?:'public'|'message';globalModel?:Pick<ChatModel,'id'|'providerID'|'variant'>}={}){
   const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
   const title=mode==='message'?'报文问题排查':'公管问题排查';
   const [form,setForm]=useState(()=>!sessionStorage.getItem(storageKey));
@@ -189,6 +189,7 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
       mode==='message'?
         '排查场景：报文问题排查。关注报文收发、字段校验与处理链路；仅使用可验证的数据源，缺少报文查询工具时说明证据不足。':
         '排查场景：公管问题排查。关注公管业务操作及上下游链路，使用当前可用日志证据，不臆测数据库或服务状态。',
+      embedded?'使用当前已授权的业务工具执行。若业务系统需要额外认证，请停止并说明需要在业务系统完成认证，不要在聊天或原生表单中索取密码、验证码或 Token。':
       '若当前配置的执行入口需要验证码等补充信息，请使用当前会话的 OpenCode question 表单收集回答，保留前导零，再继续排查。网页无法向后台脚本的 stdin 输入。',
       '查询时区：'+localZone+'。请按以下起止时刻查询；若工具需要无时区的本地时间，使用该时区对应的日期和时间。',
       '时间范围（起点含、终点不含）：'+formatBounds({from,to}),
@@ -251,5 +252,5 @@ export function LogInvestigation({mode='public',globalModel}:{mode?:'public'|'me
     </div>
     {!ready&&<small className="muted" role="status">时间为必填；Trace ID、msgSn、关键词至少填写一项。</small>}
   </fieldset>:null;
-  return <DirectChat sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,initial:form,ready,prompt,onSent,reset,beginEdit,cancel:cancelEdit,title,sessionKey:storageKey}}/>;
+  return <DirectChat embedded={embedded} sceneId={mode==='message'?'message':'logs'} globalModel={globalModel} investigation={{controls,initial:form,ready:ready&&(!embedded||Boolean(globalModel)),prompt,onSent,reset,beginEdit,cancel:cancelEdit,title,sessionKey:storageKey}}/>;
 }

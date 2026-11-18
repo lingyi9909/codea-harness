@@ -16,6 +16,11 @@ function explain(e:unknown){
   const labels:Record<string,string>={DIRECTORY_OUTSIDE_CHAT_ROOTS:'该目录不在启动时配置的工作范围内。',FILE_OUTSIDE_WORKSPACE_OR_MISSING:'引用的文件不存在，或位于当前工作目录之外。',
     SERVICE_UNAVAILABLE:'OpenCode 暂时无法响应，请检查内网服务地址和鉴权配置。',PERMISSION_CHANGED:'授权请求已改变，请查看最新请求。',CHAT_NOT_FOUND:'原会话不可用，请新建对话。'};
   Object.assign(labels,{
+    EMBED_BUSINESS_AUTH_REQUIRED:'目标业务系统要求认证，请在业务系统完成认证后重新发起排查。不要在对话中输入密码或验证码。',
+    EMBED_EXECUTOR_BUSY:'当前执行环境仍有排查任务，请等待完成后重试。',
+    EMBED_EXECUTOR_NOT_CONFIGURED:'报文排查入口尚未配置，请联系工作台管理员。',
+    EMBED_ALREADY_INITIALIZED:'本页面已经建立过会话，请重新打开页面后再开始排查。',
+    EMBED_SESSION_REQUIRED:'本次排查会话已失效，请从业务系统重新打开页面。',
     ABSOLUTE_DIRECTORY_REQUIRED:'请输入项目文件夹的绝对路径。',DIRECTORY_NOT_FOUND:'工作台找不到这个文件夹，请检查路径。',
     LOG_QUERY_SKILL_MISSING:'当前工作目录的 OpenCode 未加载自定义 Skill「log-query」。请在启动时指定已配置该 Skill 的内网项目目录。',
     LOG_QUERY_SKILL_AMBIGUOUS:'当前目录有多个同名的 log-query，请在 OpenCode 中保留要用于排查的那一个后重试。',
@@ -48,7 +53,7 @@ type Investigation={
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
 type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
-export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel}:{investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){
+export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel,embedded=false}:{embedded?:boolean;investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){
   const [baseSettings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
   const [sceneSettings,setSceneSettings]=useState<SceneConfigResponse|null>(null);
   const [attempt,retry]=useState(0);
@@ -89,9 +94,9 @@ export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,g
     sceneSettings.config.scenes.message.executor.name==='models';
   return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat'))}
     directory={directory} settings={settings} investigation={investigation} navigation={navigation} sceneId={sceneId}
-    modelCommand={modelCommand} globalModel={globalModel}/>;
+    modelCommand={modelCommand} globalModel={globalModel} embedded={embedded}/>;
 }
-function ChatWorkspace({investigation,directory,settings,navigation,sceneId,modelCommand,globalModel}:{
+function ChatWorkspace({investigation,directory,settings,navigation,sceneId,modelCommand,globalModel,embedded=false}:{embedded?:boolean;
   investigation?:Investigation;navigation?:ChatNavigation;directory:string;settings:ChatSettings;sceneId?:SceneId;
   modelCommand?:boolean;globalModel?:GlobalModel;
 }){
@@ -234,7 +239,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       update(previous=>previous?.id===session?{...previous,model:globalModel}:previous);
     }
     await stream.connect(session);
-    await api.chatAction(session,'messages',{text,scenario,files:rerun?[]:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)});
+    await api.chatAction(session,'messages',{text,scenario,...(embedded?{}:{files:rerun?[]:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)})});
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
     rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);
@@ -275,9 +280,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     <div className="chat-history-actions">{investigation&&id&&<button type="button" className="secondary log-adjust-button"
       aria-expanded={adjustmentOpen} disabled={busy||pending||state?.id!==id||Boolean(state?.active)||restoreContext.current}
       onClick={openAdjustment}>调整排查条件</button>}
-      <button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>
-      {id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
-    {history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy}
+      {!embedded&&<button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>}
+      {!embedded&&id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
+    {!embedded&&history&&<ChatHistoryPanel scene={sessionKey} directory={directory} active={id} disabled={busy}
       running={state?.active&&state.id===id?id:undefined}
       onSelect={row=>{rememberChat(localStorage,sessionKey,directory,row);switchTo(row.id);}}
       onRenamed={row=>{
@@ -313,9 +318,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
           e.preventDefault();
           if(maySend&&!e.repeat)void send();
         }}/>
-        {showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
+        {!embedded&&showFiles&&<label>文件相对路径，每行一个<textarea value={refs} rows={2} onChange={e=>attach(e.target.value)} placeholder="例如 src/app.ts"/></label>}
         <div className="composer-actions">
-          <button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>
+          {!embedded&&<button onClick={()=>toggleFiles(!showFiles)}>＋ 引用文件</button>}
           {interrupt}
           <button className="primary" disabled={!maySend} title="Enter 发送，Shift+Enter 换行" onClick={()=>void send()}>{busy?'提交中…':investigation&&!id?'开始排查':'发送 ↑'}</button></div>
       </div>}

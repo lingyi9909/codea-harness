@@ -1,3 +1,4 @@
+import {BearerEventSource,type ChatEventSource} from './activity-source.ts';
 import {configureUserStorage,resetUserStorage} from '../userStorage.ts';
 import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
@@ -10,6 +11,8 @@ export class ApiError extends Error {
 }
 export class HarnessApi {
   private csrf = '';
+  private embedToken='';
+  private base='/api/v1';
   businessVerificationEnabled=false;
   private connecting?: Promise<Schema<'Bootstrap'>>;
   setCsrf(token: string): void { this.csrf = token; }
@@ -18,6 +21,7 @@ export class HarnessApi {
       throw new Error('UNSAFE_API_PATH');
     const verb = init.method?.toUpperCase() ?? 'GET';
     const headers: Record<string, string> = { Accept: 'application/json' };
+    if(this.embedToken)headers.Authorization='Bearer '+this.embedToken;
     if (init.body) headers['Content-Type'] = 'application/json';
     if (!['GET','HEAD'].includes(verb) && path!=='/auth/local-session') {
       if (!this.csrf) throw new ApiError(0, 'CSRF_REQUIRED', '本机会话未就绪，请重新连接');
@@ -25,8 +29,8 @@ export class HarnessApi {
     }
     let response: Response;
     try {
-      response = await fetch('/api/v1' + path, {
-        ...init, method: verb, credentials: 'same-origin', redirect: 'error',
+      response = await fetch(this.base + path, {
+        ...init, method: verb, credentials: this.embedToken?'omit':'same-origin', redirect: 'error',
         headers: { ...headers, ...(init.headers ?? {}) }, cache: 'no-store',
       });
     } catch {
@@ -43,11 +47,23 @@ export class HarnessApi {
       throw new ApiError(response.status, error?.code ?? 'HTTP_' + response.status,
         error?.message ?? '服务请求失败');
     }
-    if (response.status===204 && verb==='DELETE' && path==='/auth/session') return undefined as T;
+    if (response.status===204 && verb==='DELETE' && ['/auth/session','/session'].includes(path)) return undefined as T;
     if (typeof data !== 'object' || data === null || !('data' in data))
       throw new ApiError(response.status, 'CONTRACT_MISMATCH', '服务返回值不符合 OpenAPI 契约');
     return (data as {data:T}).data;
   }
+  activity(id:string):ChatEventSource{
+    const url=this.base+'/chat/sessions/'+encodeURIComponent(id)+'/activity';
+    return this.embedToken?new BearerEventSource(url,{Authorization:'Bearer '+this.embedToken}):new EventSource(url) as unknown as ChatEventSource;
+  }
+  async openEmbedded(ticket:string,parentOrigin:string){
+    const response=await fetch('/api/v1/embed/exchange',{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket,parentOrigin})});
+    const body=await response.json();if(!response.ok||!body.data?.token||!body.data?.csrfToken)throw new ApiError(response.status,'EMBED_SESSION_REQUIRED','无法建立排查会话');
+    this.base='/api/v1/embed';this.embedToken=body.data.token;this.csrf=body.data.csrfToken;this.businessVerificationEnabled=false;resetUserStorage();
+    return body.data.expiresAt as number;
+  }
+  async closeEmbedded(){try{await this.request<void>('/session',{method:'DELETE'});}finally{this.clearEmbedded();}}
+  clearEmbedded(){this.embedToken='';this.csrf='';this.base='/api/v1';resetUserStorage();}
   async pair(pairingCode: string): Promise<Schema<'Bootstrap'>> {
     const response = await fetch('/api/v1/auth/session', {
       method: 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store',

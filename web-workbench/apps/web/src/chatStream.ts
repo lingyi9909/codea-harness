@@ -1,3 +1,4 @@
+import {api} from './api/client.ts';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import type {ChatFragment,ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';
 
@@ -59,7 +60,7 @@ export function useChatStream(session:string){
   const connect=useCallback((id:string)=>{
     if(connection.current?.session===id)return connection.current.ready;
     connection.current?.close();
-    const source=new EventSource('/api/v1/chat/sessions/'+encodeURIComponent(id)+'/activity');
+    const source=api.activity(id);
     const initial:Frame={session:id,parts:[],tools:[]};
     let current=initial,paint=0;
     const seen=new Set<string>();
