@@ -21,6 +21,8 @@ test('MySQL 8.4: migrations, concurrent unique identities, persisted auth and bi
     let cookie='';const reply={header:(_key:string,value:string)=>{cookie=value.split(';')[0];}} as FastifyReply;
     const auth=new MultiUserAuth(store,'https://workbench.example'),session=await auth.login(req,reply,{username:'Concurrent user',phone});
     const restoredReq={...req,headers:{...req.headers,cookie,'x-csrf-token':session.csrf}} as FastifyRequest;
+    const connections=await Promise.all(Array.from({length:4},()=>pool.getConnection()));
+    try{for(const connection of connections)await connection.query("SET SESSION time_zone = '+08:00'");}finally{for(const connection of connections)connection.release();}
     assert.equal((await new MultiUserAuth(new MysqlIdentityStore(pool),'https://workbench.example').session(restoredReq)).ownerId,owners[0].id);
     const binding={ownerId:owners[0].id,serviceIdentity:'mysql-fixture-'+suffix,id:randomUUID(),scenario:'direct-chat',directory:'/isolated/fixture'};
     await bindings.create(binding);assert.deepEqual(await bindings.get(binding.serviceIdentity,binding.id,binding.ownerId),binding);

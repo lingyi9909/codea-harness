@@ -43,7 +43,7 @@ export class MysqlIdentityStore implements IdentityStore {
   }
   async find(tokenDigest:string):Promise<StoredSession|undefined>{
     const [rows]=await this.pool.execute<RowDataPacket[]>(`SELECT p.owner_id,p.username,p.phone_normalized,p.status,s.csrf_digest,
-      UNIX_TIMESTAMP(s.expires_at)*1000 AS expires FROM wh_web_sessions s JOIN wh_user_profiles p ON p.owner_id=s.owner_id
+      TIMESTAMPDIFF(MICROSECOND,'1970-01-01 00:00:00',s.expires_at)/1000 AS expires FROM wh_web_sessions s JOIN wh_user_profiles p ON p.owner_id=s.owner_id
       WHERE s.token_digest=? AND s.revoked_at IS NULL AND s.expires_at>UTC_TIMESTAMP(3) AND p.status='ACTIVE'`,[tokenDigest]);
     return rows[0]?{owner:identity(rows[0]),csrfDigest:String(rows[0].csrf_digest),expires:Number(rows[0].expires)}:undefined;
   }

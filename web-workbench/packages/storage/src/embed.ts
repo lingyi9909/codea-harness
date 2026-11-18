@@ -32,7 +32,7 @@ export class MysqlEmbedStore implements EmbedStore {
     });
   }
   async find(digest:string){
-    const [rows]=await this.pool.execute<RowDataPacket[]>('SELECT id,owner_id,parent_origin,native_session_id,service_identity,state,UNIX_TIMESTAMP(expires_at)*1000 AS expires FROM wh_embed_sessions WHERE digest=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(3)',[digest]);
+    const [rows]=await this.pool.execute<RowDataPacket[]>(`SELECT id,owner_id,parent_origin,native_session_id,service_identity,state,TIMESTAMPDIFF(MICROSECOND,'1970-01-01 00:00:00',expires_at)/1000 AS expires FROM wh_embed_sessions WHERE digest=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(3)`,[digest]);
     const r=rows[0];return r?{id:String(r.id),digest,ownerId:String(r.owner_id),parentOrigin:String(r.parent_origin),nativeId:r.native_session_id?String(r.native_session_id):undefined,serviceIdentity:r.service_identity?String(r.service_identity):undefined,state:r.state as EmbedGrant['state'],expires:Number(r.expires)}:undefined;
   }
   async reserve(id:string){const [r]=await this.pool.execute<ResultSetHeader>("UPDATE wh_embed_sessions SET state='CREATING' WHERE id=? AND state='NEW' AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(3)",[id]);return r.affectedRows===1;}
@@ -40,7 +40,7 @@ export class MysqlEmbedStore implements EmbedStore {
   async fail(id:string){await this.pool.execute("UPDATE wh_embed_sessions SET state='FAILED' WHERE id=? AND state='CREATING'",[id]);}
   async revoke(id:string){await this.pool.execute('UPDATE wh_embed_sessions SET revoked_at=UTC_TIMESTAMP(3) WHERE id=? AND revoked_at IS NULL',[id]);}
   async cleanupCandidates(){
-    const [rows]=await this.pool.execute<RowDataPacket[]>('SELECT id,digest,owner_id,parent_origin,native_session_id,service_identity,state,UNIX_TIMESTAMP(expires_at)*1000 AS expires FROM wh_embed_sessions WHERE (expires_at<=UTC_TIMESTAMP(3) OR revoked_at IS NOT NULL) AND cleaned_at IS NULL LIMIT 100');
+    const [rows]=await this.pool.execute<RowDataPacket[]>(`SELECT id,digest,owner_id,parent_origin,native_session_id,service_identity,state,TIMESTAMPDIFF(MICROSECOND,'1970-01-01 00:00:00',expires_at)/1000 AS expires FROM wh_embed_sessions WHERE (expires_at<=UTC_TIMESTAMP(3) OR revoked_at IS NOT NULL) AND cleaned_at IS NULL LIMIT 100`);
     return rows.map(r=>({id:String(r.id),digest:String(r.digest),ownerId:String(r.owner_id),parentOrigin:String(r.parent_origin),nativeId:r.native_session_id?String(r.native_session_id):undefined,serviceIdentity:r.service_identity?String(r.service_identity):undefined,state:r.state as EmbedGrant['state'],expires:Number(r.expires)}));
   }
   async cleaned(id:string){await this.pool.execute('UPDATE wh_embed_sessions SET cleaned_at=UTC_TIMESTAMP(3) WHERE id=?',[id]);}

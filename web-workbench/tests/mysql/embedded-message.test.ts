@@ -19,7 +19,10 @@ test('MySQL 8.4: atomic ticket consumption, bound grant, revocation, cleanup and
     const grants=await Promise.all(rawTokens.map(raw=>store.exchange(digest(ticket),'https://host.example',{id:randomUUID(),digest:digest(raw),expires:Date.now()+60000})));
     assert.equal(grants.filter(Boolean).length,1);const grant=grants.find(Boolean)!;
     assert.deepEqual((await Promise.all([store.reserve(grant.id),store.reserve(grant.id)])).sort(),[false,true]);
-    await store.bind(grant.id,'native-ci','ci-service');assert.equal((await store.find(grant.digest))?.nativeId,'native-ci');
+    await store.bind(grant.id,'native-ci','ci-service');
+    const connections=await Promise.all(Array.from({length:4},()=>pool.getConnection()));
+    try{for(const connection of connections)await connection.query("SET SESSION time_zone = '+08:00'");}finally{for(const connection of connections)connection.release();}
+    const restored=await store.find(grant.digest);assert.equal(restored?.nativeId,'native-ci');assert.ok(Math.abs(restored!.expires-grant.expires)<2,'UTC expiry must be independent of the MySQL connection timezone');
     await assert.rejects(store.bind(grant.id,'other-native','ci-service'));
     await store.revoke(grant.id);assert.equal(await store.find(grant.digest),undefined);
     assert.ok((await store.cleanupCandidates()).some(g=>g.id===grant.id));await store.cleaned(grant.id);assert.ok(!(await store.cleanupCandidates()).some(g=>g.id===grant.id));
