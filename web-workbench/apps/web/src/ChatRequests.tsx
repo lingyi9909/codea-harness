@@ -4,14 +4,15 @@ import {activeFormFields,formDefaults,type ChatForm,type ChatFormField,type Chat
 import './chat-requests.css';
 
 type RequestAction=(kind:'permission'|'form',payload:Record<string,unknown>)=>Promise<boolean>;
-export function ChatRequests({state,busy,onAction}:{state:ChatStatus;busy:boolean;onAction:RequestAction}){
+export function ChatRequests({state,busy,onAction,allowPermissionGrant=true}:{state:ChatStatus;busy:boolean;onAction:RequestAction;allowPermissionGrant?:boolean}){
   const forms=state.forms??[];
   if(!forms.length&&!state.permissions.length)return null;
   return <section className="chat-requests" aria-label="待处理请求">
     <p role="status">OpenCode 正在等待你处理{forms.length+state.permissions.length}个请求</p>
     {state.permissions.map(p=><section key={p.id} className="request-item">
       <strong>OpenCode 请求授权 · {p.action}</strong>{p.message&&<p>{p.message}</p>}<pre>{p.resources.join('\n')}</pre>
-      <div className="request-actions">{(['once','reject'] as const).map(decision=>
+      {!allowPermissionGrant&&<p role="note">当前机构会话的工具权限由服务端统一控制，无法在匿名页面临时放行；请联系工作台管理员核实 Skill 授权。</p>}
+      <div className="request-actions">{(allowPermissionGrant?(['once','reject'] as const):(['reject'] as const)).map(decision=>
         <button type="button" disabled={busy} key={decision} onClick={()=>onAction('permission',{requestId:p.id,revision:p.revision,decision})}>
           {decision==='once'?'仅本次允许':'拒绝'}</button>)}</div></section>)}
     {forms.map(form=><RequestForm key={form.id+':'+form.revision} form={form} busy={busy} onAction={onAction}/>)}
