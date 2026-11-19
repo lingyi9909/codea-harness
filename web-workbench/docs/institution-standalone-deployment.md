@@ -65,7 +65,13 @@ $env:HARNESS_EMBED_PARENTS = "https://portal.example"
 
 **本轮恢复原生执行器绑定和分发，未放宽单服务工具权限。** Skill 从目录解析 ID 后通过 session.prompt 的 skills 字段传入；Command 调用 session.command；Subagent 通过 agents/@mention 传入。单服务 Session 仍强制 permissions 通配 deny，创建及后续请求均核验回显，权限回复不能扩大。Skill/命令需要 Shell、文件、MCP 或子任务时仍受此策略限制。绑定成功不等于任意业务工具已获准执行，协议桩不代表真实引擎工具验收。
 
-机构页只填写日期和 msgSn，不再收集账号、密码或验证码。日期仍转为当天起止边界，精度到秒，API 的 from/to 单位为毫秒，to 为次日零点（不含）。后端查询接口仅接收 day/from/to/msgSn；旧的账号、密码、验证码字段会被拒绝。查询继续通过 HARNESS_INSTITUTION_ADAPTER_URL / HARNESS_INSTITUTION_ADAPTER_AUTH 配置的接口取证，接口负责自身所需认证并仅返回可展示的 evidence。未配置接口明确拒绝，本轮未更换查询执行路径，也没有真实内网联调。升级后重新打开机构页建立新会话；之前使用账号参与指纹的查询缓存不自动迁移。
+机构页只填写日期和 msgSn，不收集账号、密码或验证码。页面直接把日历日、当天秒级起止时间、原始 msgSn 和毫秒时间戳范围（to 不含）交给所绑定的 Skill/Command/Subagent。首次提交包含条件，追问只发送问题、沿用同一 Session。**不再调用 /api/v1/embed/institution-query，也不需要配置 HARNESS_INSTITUTION_ADAPTER_URL/AUTH。** 旧适配接口仅保留后端兼容和独立测试，不再是页面前置步骤。
+
+默认从当前可用模型目录选择名称或 ID 含 Kimi 的模型（优先精确名 kimi）；保留真实 provider/variant，可手动切换。无 Kimi 且只有一个模型时自动使用唯一可用项，多个其他模型时提示选择，不虚构模型 ID。模型列表获取失败会提示。
+
+独立页覆盖主工作台固定宽度，开始排查后收起参数区，结果及追问框使用可用宽度；窄屏自动单列。样式只作用机构独立页。
+
+直接发送条件并不放宽前述原生工具权限，依赖 Shell/文件/MCP 的 Skill 仍受通配 deny 限制。真实业务查询和私有模型需内网验收，模型无法取证时必须说明缺口，不得把条件当作已查询证据。
 
 ## 持久化与验收
 

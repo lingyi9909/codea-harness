@@ -54,12 +54,13 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     return [{affectedRows:1}];
   }} as unknown as Pool;
   const nativeSessions=new Map<string,any>(),messages=new Map<string,any[]>(),forms=new Map<string,any[]>(),active:Record<string,boolean>={},calls:string[]=[];
+  const modelCatalog=[{id:'private',providerID:'company',name:'内网测试模型',enabled:true}],prompts:any[]=[];
   let serial=0;
   const execution=new ExecutionRegistry(records,async(url)=>{
     const index=records.findIndex(r=>r.url===url),prefix='user-'+index;
     return {
       skill:{list:async({location}:any)=>({location,data:[{id:'message-skill',name:'message-query'}]})},
-      model:{list:async()=>({data:[{id:'private',providerID:'company',name:'内网测试模型',enabled:true}]})},
+      model:{list:async()=>({data:modelCatalog})},
       message:{list:async({sessionID}:any)=>({data:messages.get(sessionID)??[]})},permission:{list:async()=>[]},
       event:{subscribe:async function*({signal}:any){await new Promise<void>(resolve=>signal.addEventListener('abort',()=>resolve(),{once:true}));}},
       session:{
@@ -67,7 +68,8 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
         get:async({sessionID}:any)=>nativeSessions.get(sessionID),list:async()=>({data:[...nativeSessions.values()]}),active:async()=>Object.fromEntries(Object.entries(active).filter(([id])=>id.startsWith(prefix+'-'))),
         inbox:{list:async()=>[]},form:{list:async({sessionID}:any)=>forms.get(sessionID)??[]},instructions:{entry:{put:async()=>{}}},
         switchModel:async({sessionID,model}:any)=>{nativeSessions.get(sessionID).model=model;},
-        prompt:async({sessionID,text}:any)=>{
+        prompt:async(input:any)=>{
+          const {sessionID,text}=input;prompts.push(structuredClone(input));
           calls.push(sessionID);active[sessionID]=hold;const now=Date.now();
           messages.set(sessionID,[{id:'input-'+serial,type:'user',text,time:{created:now}},{id:'answer-'+serial,type:'assistant',content:[{type:'text',text:'仅本会话结果：'+sessionID}],finish:'stop',time:{created:now,completed:now+1}}]);return {id:sessionID};
         },
@@ -89,5 +91,5 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     const t=await ticket(subject);const r=await app.inject({method:'POST',url:'/api/v1/embed/exchange',headers:headers(),payload:{ticket:t.ticket,parentOrigin}});
     if(r.statusCode!==200)throw Error(r.body);return r.json().data as {token:string;csrfToken:string;expiresAt:number};
   };
-  return {get app(){return app;},restart,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
+  return {get app(){return app;},restart,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,modelCatalog,prompts,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
 }

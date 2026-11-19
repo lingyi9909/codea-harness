@@ -11,3 +11,28 @@
 @media(max-width:620px){.embedded-message-header{padding:12px;flex-wrap:wrap}.embedded-message-shell>.log-investigation{padding:16px}}
 
 .anonymous-institution>.institution-message{flex:1;min-height:0;overflow:auto;padding:24px;box-sizing:border-box}.anonymous-institution .institution-result-panel>.log-investigation{width:100%;max-width:none;box-sizing:border-box;padding:16px;min-height:450px}.anonymous-institution .institution-result-panel .scene-title{display:none}.anonymous-institution .institution-result-panel .chat-feed{min-height:240px;max-height:58vh;overflow:auto}.anonymous-institution .institution-form-panel{align-self:start}
+
+/* Keep the main workbench's scene width cap out of the standalone document. */
+.embedded-message-shell.anonymous-institution > .scene-page.institution-message {
+  width:100%;max-width:none;min-width:0;margin:0;box-sizing:border-box;
+}
+.embedded-message-shell.anonymous-institution .institution-layout {
+  width:100%;min-width:0;grid-template-columns:minmax(240px,280px) minmax(0,1fr);
+}
+.embedded-message-shell.anonymous-institution .institution-layout-active {
+  grid-template-columns:minmax(0,1fr);
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel {min-width:0;}
+.embedded-message-shell.anonymous-institution .institution-result-panel > .scene-page.log-investigation:has(.chat-layout) {
+  width:100%;max-width:none;min-width:0;margin:0;padding:16px;align-self:stretch;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .conversation-transcript,
+.embedded-message-shell.anonymous-institution .institution-result-panel .chat-layout .composer {
+  width:100%;max-width:none;min-width:0;box-sizing:border-box;
+}
+@media(max-width:980px) {
+  .embedded-message-shell.anonymous-institution .institution-layout {grid-template-columns:minmax(0,1fr);}
+}
+@media(max-width:640px) {
+  .embedded-message-shell.anonymous-institution > .scene-page.institution-message {padding:16px;}
+}

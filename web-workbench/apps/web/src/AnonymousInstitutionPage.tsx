@@ -1,3 +1,4 @@
+import {institutionDefaultModel} from './institution-model.ts';
 import {useEffect,useRef,useState} from 'react';
 import {api,ApiError} from './api/client.ts';
 import {InstitutionMessageInvestigation} from './InstitutionMessageInvestigation.tsx';
@@ -17,7 +18,7 @@ export function AnonymousInstitutionPage(){
   },[]);
   useEffect(()=>{
     if(!ready)return;let live=true;
-    api.chatModels().then(models=>{if(live&&models.length===1)setModel(models[0]);}).catch(()=>{});
+    api.chatModels().then(models=>{if(live)setModel(current=>current??institutionDefaultModel(models));}).catch(()=>{if(live)setError('模型列表读取失败，请在右上角重试选择本次模型。');});
     let polling=false;
     const timer=setInterval(()=>{
       if(polling)return;polling=true;

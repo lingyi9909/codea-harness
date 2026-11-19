@@ -10,9 +10,9 @@ import {EmbeddedAuth} from '../../apps/server/src/embed-auth.ts';
 
 test('standalone config: no workbench mount, independent URL, same saved institution binding and anonymous page',{timeout:60000},async()=>{
   const port=4197,origin='http://127.0.0.1:'+port;
-  const f=await sqliteEmbedFixture(origin,origin,false,async()=>({evidence:'本会话日志证据'}));await f.app.close();
+  const f=await sqliteEmbedFixture(origin,origin,false);await f.app.close();
   const app=await createApp({localOnly:true,workspace:f.workspace,auth:new LocalAuth('unused',port),execution:f.execution,
-    embedded:new EmbeddedAuth(f.config,f.store),embeddedBindings:f.store.bindings,embeddedStorageCheck:()=>f.store.check(),institutionAdapter:async()=>({evidence:'本会话日志证据'})});
+    embedded:new EmbeddedAuth(f.config,f.store),embeddedBindings:f.store.bindings,embeddedStorageCheck:()=>f.store.check()});
   let browser:Awaited<ReturnType<typeof chromium.launch>>|undefined;
   try{
     await app.listen({host:'127.0.0.1',port});browser=await chromium.launch({headless:true});const page=await browser.newPage();
