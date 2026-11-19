@@ -52,6 +52,7 @@ type Investigation={
 };
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='institution-message'?'institution-message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
+type PendingExecution={id:string;baselineIdleIds:string[];observedActive:boolean};
 type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
 export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel,embedded=false}:{embedded?:boolean;investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){
   const [baseSettings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
@@ -117,6 +118,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const createdSession=useRef('');
   const [state,update]=useState<ChatStatus|null>(null),[draft,write]=useState(initialDraft.text),[refs,attach]=useState(initialDraft.files);
   const [showFiles,toggleFiles]=useState(Boolean(initialDraft.files)),[busy,wait]=useState(false),[error,fail]=useState(''),[refresh,bump]=useState(0);
+  // A queued OpenCode prompt can briefly appear idle in session.active().
+  // Keep its submission visible until a new native idle turn or a real active->idle transition.
+  const [pendingExecution,setPendingExecution]=useState<PendingExecution|null>(null);
   useEffect(()=>{window.dispatchEvent(new Event('harness:chat-history'));},[id,cachedTitle]);
   useEffect(()=>{
     if(draft||refs)sessionStorage.setItem(composerKey,JSON.stringify({text:draft,files:refs}));
@@ -127,7 +131,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     if(next===id)return;
     const saved=readDraft(draftKey(sessionKey,directory,next));
     setCachedTitle(readHistory(localStorage,sessionKey,directory).find(row=>row.id===next)?.title??'');
-    select(next);update(null);createdSession.current='';write(saved.text);attach(saved.files);toggleFiles(Boolean(saved.files));
+    select(next);update(null);setPendingExecution(null);createdSession.current='';write(saved.text);attach(saved.files);toggleFiles(Boolean(saved.files));
     fail('');migrating.current=false;restoreContext.current=true;
     activateChat(localStorage,sessionStorage,sessionKey,directory,next);
     window.dispatchEvent(new Event('harness:chat-history'));
@@ -166,6 +170,12 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       }
       if(embedded)fail('');
       update(value);stream.prune.current(value.messages);
+      if(embedded)setPendingExecution(previous=>{
+        if(!previous||previous.id!==value.id)return previous;
+        if(value.messages.some(message=>message.idleOutcome&&!previous.baselineIdleIds.includes(message.id))||
+          (previous.observedActive&&!value.active))return null;
+        return value.active&&!previous.observedActive?{...previous,observedActive:true}:previous;
+      });
     }catch(e){
       if(!live)return;
       if(migrating.current&&e instanceof ApiError&&e.code==='DIRECTORY_OUTSIDE_CHAT_ROOTS')switchTo('');
@@ -241,6 +251,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     }
     await stream.connect(session);
     await api.chatAction(session,'messages',{text,scenario,...(embedded?{}:{files:rerun?[]:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)})});
+    if(embedded)setPendingExecution({id:session,observedActive:false,
+      baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[]});
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
     rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);
@@ -253,7 +265,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const lastFeedHeight=useRef(0);
   const snapshot=state?.id===id?state:undefined;
   const streamAhead=stream.parts.some(part=>!snapshot?.messages.some(m=>m.id===part.message));
-  const active=Boolean(!pending&&(snapshot?.active||streamAhead));
+  const executionWaiting=Boolean(embedded&&pendingExecution?.id===id);
+  const active=Boolean(!pending&&(snapshot?.active||streamAhead||executionWaiting));
   const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts),[snapshot,stream.parts]);
   const messages=useProgressiveMessages(id,merged,snapshot?.messages,Boolean(snapshot?.active),createdSession.current===id);
   useLayoutEffect(()=>{
@@ -274,7 +287,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       bottom-node.scrollTop>1)node.scrollTop=bottom;
     lastFeedHeight.current=nextHeight;
   },[messages,stream.tools]);
-  const interrupt=state?.id===id&&state.active&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>正在执行 · 中断执行</button>;
+  const interrupt=id&&((state?.id===id&&state.active)||executionWaiting)&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>{state?.id===id&&state.active?'正在执行 · 中断执行':'已提交 · 中断执行'}</button>;
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
   return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
@@ -295,10 +308,15 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         if(removed===id)switchTo('',true);
       }}/>} 
     <div className="chat-layout"><div className="chat-box">
-      {(!investigation||messages.length>0||stream.tools.length>0||state?.active)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
+      {(!investigation||messages.length>0||stream.tools.length>0||state?.active||executionWaiting||streamAhead)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
         <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
+        {embedded&&(snapshot?.active||executionWaiting||streamAhead)&&<div className="embedded-execution-status" role="status">
+          <span className="embedded-execution-spinner" aria-hidden="true"/>
+          <span>{snapshot?.active?'正在执行，思考和工具进度会持续更新。':streamAhead?'正在接收模型输出。':'任务已受理，正在等待执行状态更新。'}</span>
+          {stream.connectionState==='disconnected'&&<small>实时输出连接中断，页面仍在轮询最新进度。</small>}
+        </div>}
       </div>}
       {modelCommand&&!id&&<p className="notice" role="status">默认入口 /models 用于选择本次排查使用的模型，
         不是报文排查执行命令。选择模型后可继续用 OpenCode 对话排查。</p>}
