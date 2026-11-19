@@ -368,7 +368,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         </div>}
         {!statusVisible&&missingTools&&<p className="embedded-execution-status" role="status">
           本轮原生执行已结束，但没有检测到可核验的工具调用记录；请确认业务 Skill 是否获得必要的只读查询权限。
-        </p>
+        </p>}
       </div>}
       {modelCommand&&!id&&<p className="notice" role="status">默认入口 /models 用于选择本次排查使用的模型，
         不是报文排查执行命令。选择模型后可继续用 OpenCode 对话排查。</p>}
