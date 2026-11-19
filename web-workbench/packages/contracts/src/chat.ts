@@ -11,7 +11,7 @@ export type ChatStep=({kind:'text';text:string}|{kind:'thinking';detailPart?:num
 export type ChatFooter={agent?:string;model?:string;durationMs?:number;tokensPerSecond?:number};
 export type ChatIdleOutcome='succeeded'|'failed'|'interrupted';
 export type ChatMessage={id:string;role:'user'|'assistant';footer?:ChatFooter;idleOutcome?:ChatIdleOutcome;toolCallTurn?:boolean;queued?:boolean;complete?:boolean;text:string;steps?:ChatStep[];tools:{name:string;status:string}[];files:string[]};
-export type ChatStatus={id:string;title?:string;model?:Pick<ChatModel,'id'|'providerID'|'variant'>;directory:string;active:boolean;outcome?:string;messages:ChatMessage[];
+export type ChatStatus={id:string;title?:string;model?:Pick<ChatModel,'id'|'providerID'|'variant'>;directory:string;active:boolean;outcome?:string;toolPolicy?:'deny-all';messages:ChatMessage[];
   forms?:ChatForm[];permissions:{id:string;action:string;resources:string[];message?:string;revision:string}[]};
 
 
