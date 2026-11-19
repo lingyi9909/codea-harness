@@ -10,7 +10,7 @@ if "%~1"=="" (
 )
 set "projectDir=%~f1"
 pushd "%~dp0" || exit /b 1
-node --experimental-strip-types apps/server/src/start.ts --local-only --workspace "%projectDir%\."
+node --experimental-strip-types scripts/launch-workbench.mjs "%projectDir%\."
 set "workbenchStatus=%errorlevel%"
 popd
 if not "%workbenchStatus%"=="0" pause
