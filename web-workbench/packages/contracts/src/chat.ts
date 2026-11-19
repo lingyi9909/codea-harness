@@ -18,6 +18,7 @@ export type ChatStatus={id:string;title?:string;model?:Pick<ChatModel,'id'|'prov
 export type ChatFragment={id:string;message:string;ordinal:number;kind:'thinking'|'text';
   phase:'started'|'delta'|'ended';at:number;text:string};
 export type ToolProgress={id:string;message:string;at:number;text:string};
+export type ChatLifecycle={id:string;status:'started'|'succeeded'|'failed'|'interrupted';at:number};
 
 export type FormValue=string|number|boolean|string[];
 export type FormAnswers=Record<string,FormValue>;
