@@ -1,9 +1,9 @@
 import {api} from './api/client.ts';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import type {ChatFragment,ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';
+import type {ChatFragment,ChatLifecycle,ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';
 
 type Part={message:string;ordinal:number;kind:'thinking'|'text';text:string;at:number;ended?:number;runs?:string[]};
-type Frame={session:string;parts:Part[];tools:ToolProgress[]};
+type Frame={session:string;parts:Part[];tools:ToolProgress[];lifecycle?:ChatLifecycle};
 type Connection={session:string;ready:Promise<void>;close:()=>void};
 export type StreamConnectionState='idle'|'connecting'|'connected'|'disconnected';
 
@@ -59,6 +59,7 @@ export function useChatStream(session:string){
   const connection=useRef<Connection|null>(null);
   const [frame,setFrame]=useState<Frame>({session:'',parts:[],tools:[]});
   const prune=useRef<(messages:ChatMessage[])=>void>(()=>{});
+  const clearLifecycle=useRef<()=>void>(()=>{});
   const connect=useCallback((id:string)=>{
     if(connection.current?.session===id)return connection.current.ready;
     connection.current?.close();
@@ -82,6 +83,12 @@ export function useChatStream(session:string){
     const connected=()=>{clearTimeout(timeout);release();};
     source.addEventListener('ready',()=>{connected();setConnectionState('connected');});
     source.addEventListener('requests',()=>refreshRequests(n=>n+1));
+    source.addEventListener('lifecycle',event=>{
+      let value:ChatLifecycle;
+      try{value=JSON.parse(event.data) as ChatLifecycle;}catch{return;}
+      if(!['started','succeeded','failed','interrupted'].includes(value.status))return;
+      current={...current,lifecycle:value};publish();
+    });
     source.onerror=()=>{
       connected();setConnectionState('disconnected');
       for(const part of current.parts)if(part.ended==null)interrupted.add(part);
@@ -109,6 +116,7 @@ export function useChatStream(session:string){
     connection.current={session:id,ready,close};
     setFrame(initial);
     // Reclaim buffered text once the authoritative assistant message is available.
+    clearLifecycle.current=()=>{current={...current,lifecycle:undefined};publish();};
     prune.current=(messages)=>{
       const completed=new Map(messages.filter(m=>m.complete).map(m=>[m.id,m]));
       const parts=current.parts.filter(p=>{
@@ -128,7 +136,8 @@ export function useChatStream(session:string){
     if(session)void connect(session);
     return ()=>{if(connection.current?.session===session){connection.current.close();connection.current=null;}};
   },[session,connect]);
-  return {connect,prune,requestsVersion,
+  return {connect,prune,clearLifecycle,requestsVersion,
+    lifecycle:frame.session===session?frame.lifecycle:undefined,
     connectionState:connection.current?.session===session?connectionState:'idle' as StreamConnectionState,
     parts:frame.session===session?frame.parts:emptyParts,tools:frame.session===session?frame.tools:emptyTools};
 }
