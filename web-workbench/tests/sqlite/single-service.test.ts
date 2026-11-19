@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {chatConnection} from '../../apps/server/src/modules/chat/connection.ts';
-import {ExecutionRegistry} from '../../apps/server/src/execution-registry.ts';
+import {ExecutionRegistry,singleServicePermissions} from '../../apps/server/src/execution-registry.ts';
 import {EmbeddedAuth} from '../../apps/server/src/embed-auth.ts';
 import {createEmbeddedApp} from '../../apps/server/src/embedded-app.ts';
 import {SqliteEmbedStore} from '../../packages/storage/src/sqlite-embed.ts';
@@ -41,7 +41,7 @@ test('one real HTTP service address: three Sessions run concurrently, remain own
   try{
     const visits=await Promise.all([0,1,2].map(async()=>{const r=await app.inject({method:'POST',url:'/api/v1/embed/anonymous',headers:headers(),payload:{}});assert.equal(r.statusCode,200,r.body);return r.json().data;}));
     const ids=await Promise.all(visits.map(async v=>{const r=await app.inject({method:'POST',url:'/api/v1/embed/chat/sessions',headers:headers(v),payload:{scenario:'message-inspection'}});assert.equal(r.statusCode,201,r.body);return r.json().data.id;}));
-    assert.equal(new Set(ids).size,3);for(const s of sessions.values()){assert.equal(s.location.directory,workspace);assert.deepEqual(s.permissions,[{action:'*',resource:'*',effect:'deny'}]);}
+    assert.equal(new Set(ids).size,3);for(const s of sessions.values()){assert.equal(s.location.directory,workspace);assert.deepEqual(s.permissions,singleServicePermissions);}
     await Promise.all(visits.map(async(v,i)=>{const r=await app.inject({method:'POST',url:'/api/v1/embed/chat/sessions/'+ids[i]+'/messages',headers:headers(v),payload:{text:'分析已查询证据-'+i}});assert.equal(r.statusCode,202,r.body);}));
     assert.equal(prompted.length,3);assert.ok(ids.every(id=>active[id]));
     const foreign=await app.inject({method:'POST',url:'/api/v1/embed/chat/sessions/'+ids[1]+'/interrupt',headers:headers(visits[0]),payload:{}});assert.equal(foreign.statusCode,404);
