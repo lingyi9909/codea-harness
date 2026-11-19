@@ -326,7 +326,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       bottom-node.scrollTop>1)node.scrollTop=bottom;
     lastFeedHeight.current=nextHeight;
   },[messages,stream.tools]);
-  const interrupt=id&&((state?.id===id&&state.active)||executionWaiting)&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');if(embedded)setPendingExecution(null);})}>{state?.id===id&&state.active?'正在执行 · 中断执行':'已提交 · 中断执行'}</button>;
+  const interrupt=id&&!lifecycleFinished&&((state?.id===id&&state.active)||executionWaiting||unconfirmed)&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');if(embedded)setPendingExecution(null);})}>{state?.id===id&&state.active?'正在执行 · 中断执行':unconfirmed&&!executionWaiting?'状态待确认 · 尝试中断':'已提交 · 中断执行'}</button>;
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
   return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
@@ -347,7 +347,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         if(removed===id)switchTo('',true);
       }}/>} 
     <div className="chat-layout"><div className="chat-box">
-      {(!investigation||messages.length>0||stream.tools.length>0||state?.active||executionWaiting||streamAhead)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
+      {(!investigation||messages.length>0||stream.tools.length>0||state?.active||executionWaiting||streamAhead||statusVisible)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
         <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
