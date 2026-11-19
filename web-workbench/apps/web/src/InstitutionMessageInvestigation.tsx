@@ -24,13 +24,15 @@ function localToday(){
 /** Institution investigation accepts only a calendar day and the original msgSn string. */
 export function InstitutionMessageInvestigation({embedded=false,globalModel}:{embedded?:boolean;globalModel?:ChatModel}={}){
   const [submitted,setSubmitted]=useState(false);
+  const [editing,setEditing]=useState(false);
+  const [applied,setApplied]=useState<{day:string;msgSn:string}|null>(null);
   const [day,setDay]=useState(localToday);
   const [msgSn,setMsgSn]=useState('');
   const [notice,setNotice]=useState('');
   const bounds=institutionDayBounds(day);
   const ready=Boolean((!embedded||globalModel)&&bounds&&msgSn.trim());
   function prompt(question:string){
-    if(submitted)return question;
+    if(submitted&&!editing)return question;
     if(!bounds||!msgSn.trim())throw Error('请填写有效日期和报文编号。');
     return ['机构报文排查：请使用本场景绑定的执行入口，按以下条件查询并分析报文。',
       '请遵守工具权限，以实际查询证据给出事实、异常原因、证据缺口及下一步；无法查询时明确说明，不要编造查询结果。',
@@ -45,6 +47,31 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
     if(!ready)return;
     setNotice('请在机构报文独立页面开始排查。');
   }
+
+  function onSent(){
+    setSubmitted(true);
+    setEditing(false);
+    setApplied({day,msgSn:msgSn.trim()});
+  }
+  function beginEdit(){
+    if(applied){setDay(applied.day);setMsgSn(applied.msgSn);}
+    setEditing(true);
+  }
+  function cancelEdit(){
+    if(applied){setDay(applied.day);setMsgSn(applied.msgSn);}
+    setEditing(false);
+  }
+  const controls=editing?<div className="institution-adjust-controls">
+    <label htmlFor="institution-adjust-date">日期
+      <input id="institution-adjust-date" type="date" aria-label="调整日期" required
+        value={day} aria-invalid={!bounds} onChange={e=>setDay(e.target.value)}/>
+    </label>
+    <label htmlFor="institution-adjust-msgsn">报文编号（msgSn）
+      <input id="institution-adjust-msgsn" type="text" aria-label="调整 msgSn" required
+        maxLength={256} autoComplete="off" spellCheck={false} value={msgSn} onChange={e=>setMsgSn(e.target.value)}/>
+    </label>
+    <p>系统按所选日期的 00:00:00—23:59:59 重新查询，原结果保留在当前会话中。</p>
+  </div>:null;
 
   return <section className="scene-page institution-message">
     <header className="institution-heading">
@@ -77,7 +104,7 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
       </form>}
       <section className="institution-result-panel" aria-labelledby="institution-result-title">
         <header><h2 id="institution-result-title">排查结果</h2></header>
-        {embedded?<DirectChat sceneId="institution-message" embedded globalModel={globalModel} investigation={{controls:null,initial:!submitted,ready,allowAdjustment:false,prompt,onSent:()=>setSubmitted(true),reset:()=>{},beginEdit:()=>{},cancel:()=>{},title:'机构报文排查',sessionKey:'harness.institution-message'}}/>:<div className="institution-result-empty">
+        {embedded?<DirectChat sceneId="institution-message" embedded globalModel={globalModel} investigation={{controls,initial:!submitted,ready,allowAdjustment:true,prompt,onSent,reset:()=>{},beginEdit,cancel:cancelEdit,title:'机构报文排查',sessionKey:'harness.institution-message'}}/>:<div className="institution-result-empty">
           <div className="institution-chat-icon" aria-hidden="true">•••</div>
           <h3>请填写查询参数并开始排查</h3>
           <p>填写日期与报文编号，排查结果将在此处展示。</p>
