@@ -114,7 +114,7 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     await drawer.getByRole('button',{name:'应用并重新排查'}).click();
     await expect.poll(()=>f.calls.length).toBe(5);
     assert.equal(f.calls.at(-1),thirdSession);
-    assert.equal(JSON.parse(f.prompts.at(-1).text.split('\\n').find((line:string)=>line.startsWith('{'))!).msgSn,'000099');
+    assert.equal(JSON.parse(f.prompts.at(-1).text.split('\n').find((line:string)=>line.startsWith('{'))!).msgSn,'000099');
     await expect(drawer).toHaveCount(0);
     for(const page of pages){const frame=page.frames().find(v=>v.url().startsWith(origin))!;assert.deepEqual(await frame.evaluate(()=>({local:Object.keys(localStorage),session:Object.keys(sessionStorage)})),{local:[],session:[]});}
     const captured=await Promise.all(requests);assert.ok(captured.every(r=>r.cookie===''));assert.ok(captured.every(r=>!r.url.includes('token=')&&!r.url.includes('ticket=')));assert.equal(captured.filter(r=>r.url.endsWith('/institution-query')).length,0);
