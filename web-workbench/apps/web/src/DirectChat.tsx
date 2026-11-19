@@ -385,7 +385,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       {id&&<BusinessVerification key={id} sessionId={id}/>}
       {error&&<p role="alert" className="notice">{error}</p>}
       {pending&&state?<div className="composer request-composer">
-        <ChatRequests key={id} state={state} busy={busy} allowPermissionGrant={!embedded||state.toolPolicy!=='deny-all'}
+        <ChatRequests key={id} state={state} busy={busy} allowPermissionGrant={!embedded}
           onAction={(action,payload)=>run(async()=>{await api.chatAction(id,action,payload);})}/>
         {interrupt&&<div className="composer-actions">{interrupt}</div>}
       </div>:<div className="composer">{investigation&&!id&&<fieldset disabled={busy} className="investigation-controls">{investigation.controls}</fieldset>}
