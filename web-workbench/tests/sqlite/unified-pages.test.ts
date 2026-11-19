@@ -21,7 +21,7 @@ test('one app: main and standalone pages share file-backed bindings; three visit
     const body=raw?JSON.parse(raw):{};calls.push({path,body});res.setHeader('Content-Type','application/json');
     const send=(data:unknown)=>res.end(JSON.stringify({data}));
     if(path==='/api/model')return send([{id:'private',providerID:'company',enabled:true}]);
-    if(path==='/api/skill')return res.end(JSON.stringify({location:{directory:workspace},data:[{id:'native-message-skill',name:'institution-query'}]}));
+    if(path==='/api/skill')return res.end(JSON.stringify({location:{directory:workspace},data:[{id:'native-message-skill',name:'institution-query'},{id:'native-public-skill',name:'brainstorming'}]}));
     if(path==='/api/session/active')return send(active);
     if(path==='/api/session'&&req.method==='POST'){const session={id:'session-'+(++serial),...body,time:{updated:Date.now()}};sessions.set(session.id,session);return send(session);}
     if(path.startsWith('/api/experimental/')){res.statusCode=204;return res.end();}
@@ -75,5 +75,31 @@ test('one app: main and standalone pages share file-backed bindings; three visit
     assert.equal(resumed.statusCode,202,resumed.body);assert.deepEqual(calls.filter(c=>c.path.endsWith('/prompt')).at(-1)!.body.skills,[{id:'native-message-skill'}]);
     assert.equal((await app.inject({method:'POST',url:'/api/v1/embed/chat/sessions/'+ids[1]+'/interrupt',headers:vh(visitors[0]),payload:{}})).statusCode,404);
     assert.equal((await app.inject({method:'DELETE',url:'/api/v1/embed/session',headers:vh(visitors[0])})).statusCode,204);assert.equal(active[ids[1]],true);assert.equal(active[ids[2]],true);
+    // Regression fence: existing public/message/data scenes use the same
+    // pre-embedding native transport and unchanged Workbench permissions.
+    // A shared anonymous deny/allow policy must NEVER affect signed-in scenes.
+    const ordinary=[{scenario:'log-inspection',skill:'native-public-skill'},
+      {scenario:'message-inspection',skill:null},
+      {scenario:'data-analysis',skill:null}] as const;
+    for(const {scenario,skill}of ordinary){
+      const created=await app.inject({method:'POST',url:'/api/v1/chat/sessions',
+        headers:admin,payload:{scenario}});
+      assert.equal(created.statusCode,201,scenario+': '+created.body);
+      const sceneId=created.json().data.id,native=sessions.get(sceneId);
+      assert.equal(native.metadata.harnessScenario,scenario);
+      assert.equal(native.location.directory,workspace);
+      assert.equal(native.permissions,undefined,scenario+' must retain normal Workbench tool permissions');
+      const request=await app.inject({method:'POST',url:'/api/v1/chat/sessions/'+sceneId+'/messages',
+        headers:admin,payload:{text:'原有场景继续使用相同执行能力',scenario}});
+      assert.equal(request.statusCode,202,scenario+': '+request.body);
+      const body=calls.filter(call=>call.path.endsWith('/prompt')).at(-1)!.body;
+      if(skill)assert.deepEqual(body.skills,[{id:skill}],scenario);
+      else assert.equal(body.skills,undefined,scenario+' default must remain unchanged');
+    }
+    const originalConfig=JSON.parse(await readFile(join(workspace,'.workbench','scenarios.json'),'utf8'));
+    assert.equal(originalConfig.scenes.logs.executor.name,'brainstorming');
+    assert.equal(originalConfig.scenes.message.executor.name,'models');
+    assert.equal(originalConfig.scenes.data.executor.name,'chat');
+
   }finally{await app.close();await store.close();peer.closeAllConnections();await new Promise<void>(done=>peer.close(()=>done()));if(before===undefined)delete process.env.HARNESS_OPENCODE_URL;else process.env.HARNESS_OPENCODE_URL=before;await rm(root,{recursive:true,force:true});}
 });
