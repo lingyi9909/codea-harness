@@ -48,7 +48,13 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     f.active[firstSession]=true;
     await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
     await expect(frames[0].getByText('正在执行，思考和工具进度会持续更新。')).toBeVisible();
-    f.active[firstSession]=false;
+    const otherResult=await frames[1].getByText(/仅本会话结果：/).innerText();
+    const otherSession=otherResult.split('仅本会话结果：').at(-1)!.trim();
+    f.active[otherSession]=true;
+    await frames[0].getByRole('button',{name:'正在执行 · 中断执行'}).click();
+    await expect.poll(()=>f.active[firstSession]).toBe(false);
+    assert.equal(f.active[otherSession],true,'interrupt must not affect another iframe');
+    f.active[otherSession]=false;
     // Main-workbench parity: real native reasoning and tool steps appear in the
     // same transcript, while tool payloads remain collapsed until requested.
     const answer=f.messages.get(firstSession)!.find(m=>m.type==='assistant')!;
@@ -80,7 +86,11 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     const originalGrants=grants();await f.restart();await new Promise(resolve=>setTimeout(resolve,3300));await f.app.listen({host:'127.0.0.1',port:4186});
     for(const frame of frames){await expect(frame.getByText(/仅本会话结果：/)).toBeVisible();await expect(frame.getByText('服务暂时不可用，正在重新连接当前会话，请勿重复提交。')).toHaveCount(0,{timeout:15000});}
     assert.deepEqual(grants(),originalGrants);assert.equal(f.calls.length,3);
-    await frames[1].getByLabel('对话内容').fill('继续解释原因');await frames[1].getByRole('button',{name:'发送 ↑',exact:true}).click();await expect.poll(()=>f.calls.length).toBe(4);assert.equal(f.prompts.at(-1).text,'继续解释原因');
+    // Model selection must apply to native follow-up, not only change the label.
+    await frames[1].getByRole('button',{name:'选择模型'}).click();
+    await frames[1].getByRole('dialog',{name:'选择模型'}).getByRole('option').filter({hasText:'Other'}).click();
+    await expect(frames[1].getByRole('button',{name:'选择模型'})).toContainText('Other');
+    await frames[1].getByLabel('对话内容').fill('继续解释原因');await frames[1].getByRole('button',{name:'发送 ↑',exact:true}).click();await expect.poll(()=>f.calls.length).toBe(4);assert.equal(f.prompts.at(-1).text,'继续解释原因');assert.equal(f.nativeSessions.get(otherSession).model.id,'other');
     // Safe native interaction forms remain available without any login fields.
     const secondResult=await frames[1].getByText(/仅本会话结果：/).innerText();
     const secondSession=secondResult.split('仅本会话结果：').at(-1)!.trim();
