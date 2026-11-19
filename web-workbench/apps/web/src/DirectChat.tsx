@@ -250,7 +250,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     await stream.connect(session);
     await api.chatAction(session,'messages',{text,scenario,...(embedded?{}:{files:rerun?[]:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)})});
     if(embedded)setPendingExecution({id:session,submittedAt:Date.now(),
-      baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[]});
+      baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[],
+      baselineMessageIds:state?.id===session?state.messages.map(message=>message.id):[]});
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
     rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);
