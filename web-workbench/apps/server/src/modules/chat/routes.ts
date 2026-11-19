@@ -593,8 +593,10 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     await owned(sessionID,ownerId);
     const pending=await (await client()).permission.list({sessionID});
     const request=pending.find(p=>p.sessionID===sessionID&&p.id===req.body.requestId);
-    if((options.execution?.singleService()&&
-       !['skill','dbhub_search_schema','dbhub_execute_sql'].includes(request?.action??'')||
+    // Anonymous visitor consent can never widen the server-owned tool policy.
+    // Fixed TeamAI / DBHub / execute permissions are granted in the native
+    // Session itself. Every other permission request is reject-only.
+    if((options.execution?.singleService()||
        options.execution?.sharedWorkspace()&&request?.action==='edit')&&req.body.decision!=='reject')
       throw new AuthProblem(403,'SHARED_WORKSPACE_READ_ONLY');
     if(!request||revision(request)!==req.body.revision)throw new AuthProblem(409,'PERMISSION_CHANGED');
