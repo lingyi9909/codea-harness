@@ -4,6 +4,7 @@ import {useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode} from '
 import {createPortal} from 'react-dom';
 import {streamingMessages,useChatStream} from './chatStream.ts';
 import {useProgressiveMessages} from './progressiveMessages.ts';
+import {completeOnNativeIdle,lacksTerminalEvidence,visibleToolEvidence,type PendingExecution} from './executionLifecycle.ts';
 import {ChatHistoryPanel} from './ChatHistoryPanel.tsx';
 import {activateChat,displayChatTitle,summarizeFirstInput,uniqueChatTitle,draftKey,readDraft,readHistory,rememberChat,savedChat,type SceneKey} from './chatHistory.ts';
 import {ChatRequests} from './ChatRequests.tsx';
@@ -52,7 +53,6 @@ type Investigation={
 };
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='institution-message'?'institution-message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
-type PendingExecution={id:string;baselineIdleIds:string[];baselineMessageIds:string[];observedActive:boolean};
 type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
 export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel,embedded=false}:{embedded?:boolean;investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){
   const [baseSettings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
@@ -170,14 +170,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       }
       if(embedded)fail('');
       update(value);stream.prune.current(value.messages);
-      if(embedded)setPendingExecution(previous=>{
-        if(!previous||previous.id!==value.id)return previous;
-        if(value.messages.some(message=>message.idleOutcome&&!previous.baselineIdleIds.includes(message.id))||
-          (previous.observedActive&&!value.active)||
-          (!value.active&&value.messages.some(message=>message.role==='assistant'&&message.complete&&!message.toolCallTurn&&
-            !previous.baselineMessageIds.includes(message.id))))return null;
-        return value.active&&!previous.observedActive?{...previous,observedActive:true}:previous;
-      });
+      if(embedded)setPendingExecution(previous=>completeOnNativeIdle(previous,value));
     }catch(e){
       if(!live)return;
       if(migrating.current&&e instanceof ApiError&&e.code==='DIRECTORY_OUTSIDE_CHAT_ROOTS')switchTo('');
@@ -256,9 +249,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     }
     await stream.connect(session);
     await api.chatAction(session,'messages',{text,scenario,...(embedded?{}:{files:rerun?[]:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)})});
-    if(embedded)setPendingExecution({id:session,observedActive:false,
-      baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[],
-      baselineMessageIds:state?.id===session?state.messages.map(message=>message.id):[]});
+    if(embedded)setPendingExecution({id:session,submittedAt:Date.now(),
+      baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[]});
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
     rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);
@@ -273,6 +265,37 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const streamAhead=stream.parts.some(part=>!snapshot?.messages.some(m=>m.id===part.message));
   const executionWaiting=Boolean(embedded&&pendingExecution?.id===id);
   const active=Boolean(!pending&&(snapshot?.active||streamAhead||executionWaiting));
+  const unconfirmed=Boolean(embedded&&snapshot&&lacksTerminalEvidence(snapshot)&&!pending);
+  // Keep the current turn's progress visible even when native active() briefly
+  // becomes empty between intermediate assistant/agent/tool steps.
+  const statusVisible=Boolean(embedded&&id&&(active||pending||unconfirmed));
+  const [clock,setClock]=useState(()=>Date.now());
+  const [lastProgressAt,setLastProgressAt]=useState(()=>Date.now());
+  const progressSignature=useMemo(()=>JSON.stringify([
+    id,
+    snapshot?.messages.map(m=>[m.id,m.idleOutcome,m.complete,m.text,
+      m.steps?.map(s=>[s.kind,s.ordinal,s.kind==='tool'?s.status:'text'in s?s.text:s.kind==='notice'?s.text:''])]),
+    stream.parts.map(p=>[p.message,p.ordinal,p.text,p.ended]),
+    stream.tools.map(t=>[t.id,t.text])
+  ]),[id,snapshot?.messages,stream.parts,stream.tools]);
+  useEffect(()=>{setLastProgressAt(Date.now());},[progressSignature]);
+  useEffect(()=>{
+    if(!statusVisible)return;
+    setClock(Date.now());
+    const timer=setInterval(()=>setClock(Date.now()),1000);
+    return()=>clearInterval(timer);
+  },[statusVisible]);
+  const idleFor=Math.max(0,Math.floor((clock-lastProgressAt)/1000));
+  const waitingFor=Math.max(0,Math.floor((clock-(pendingExecution?.submittedAt??lastProgressAt))/1000));
+  const stuck=idleFor>=15;
+  const runningStatus=pending?'OpenCode 正在等待处理交互请求。':
+    snapshot?.active?(stuck?'OpenCode 仍报告正在执行，但最近 '+idleFor+' 秒没有新输出；可能正在调用工具或等待下游。':'OpenCode 正在执行，后续阶段和工具进度会继续展示。'):
+    executionWaiting?(stuck?'执行状态尚未确认，最近 '+idleFor+' 秒没有新输出；不能据此判断任务已结束。':'任务已提交，等待 OpenCode 下一阶段或明确的完成事件。'):
+    streamAhead?'正在接收新的模型片段。':
+    '本轮未收到明确的完成事件，无法确认是否仍在执行；请查看工具权限或后台状态。';
+  const latestIdle=Boolean(snapshot?.messages.some(m=>m.idleOutcome==='succeeded'&&
+    m.id===snapshot.messages.filter(row=>row.idleOutcome).at(-1)?.id));
+  const missingTools=Boolean(embedded&&snapshot&&!unconfirmed&&!snapshot.active&&latestIdle&&!visibleToolEvidence(snapshot));
   const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts,stream.tools),[snapshot,stream.parts,stream.tools]);
   const messages=useProgressiveMessages(id,merged,snapshot?.messages,Boolean(snapshot?.active),createdSession.current===id);
   useLayoutEffect(()=>{
@@ -318,11 +341,16 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
         <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
-        {embedded&&(snapshot?.active||executionWaiting||streamAhead)&&<div className="embedded-execution-status" role="status">
+        {statusVisible&&<div className="embedded-execution-status" role="status">
           <span className="embedded-execution-spinner" aria-hidden="true"/>
-          <span>{snapshot?.active?'正在执行，思考和工具进度会持续更新。':streamAhead?'正在接收模型输出。':'任务已受理，正在等待执行状态更新。'}</span>
-          {stream.connectionState==='disconnected'&&<small>实时输出连接中断，页面仍在轮询最新进度。</small>}
+          <span>{runningStatus}</span>
+          {executionWaiting&&!snapshot?.active&&<small>已提交 {waitingFor} 秒；原生服务未确认执行结束。</small>}
+          {stream.connectionState==='disconnected'&&<small>实时事件连接中断，正在通过会话快照恢复进度。</small>}
+          {stuck&&<small>如果工具被拒绝或业务系统无响应，需查看执行过程中的错误；可使用“中断执行”，不建议重复提交。</small>}
         </div>}
+        {!statusVisible&&missingTools&&<p className="embedded-execution-status" role="status">
+          本轮原生执行已结束，但没有检测到可核验的工具调用记录；请确认业务 Skill 是否获得必要的只读查询权限。
+        </p>}
       </div>}
       {modelCommand&&!id&&<p className="notice" role="status">默认入口 /models 用于选择本次排查使用的模型，
         不是报文排查执行命令。选择模型后可继续用 OpenCode 对话排查。</p>}
