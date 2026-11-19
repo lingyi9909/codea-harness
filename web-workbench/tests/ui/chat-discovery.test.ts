@@ -244,7 +244,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
     await expect(page.locator('.sidebar .brand')).toContainText('智能工作台');
     // The browser must render the actual file-backed editor and respect ACL changes.
-    await expect(page.getByRole('button',{name:'场景配置'})).toHaveCount(0);
+    // Original Workbench navigation must remain available; embedding is additive.
+    await expect(page.getByRole('button',{name:'场景配置',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'场景配置',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await page.goto('http://127.0.0.1:'+port+'/config');
     await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await expect(page.getByLabel('公管问题排查工作目录')).toHaveValue(project);
