@@ -34,7 +34,7 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     const sessionFor=(index:number)=>{
       const expected='000'+index;
       const input=f.prompts.find(prompt=>{
-        const line=prompt.text.split('\\n').find((part:string)=>part.startsWith('{'));
+        const line=prompt.text.split('\n').find((part:string)=>part.startsWith('{'));
         if(!line)return false;
         try{return JSON.parse(line).msgSn===expected;}catch{return false;}
       });
