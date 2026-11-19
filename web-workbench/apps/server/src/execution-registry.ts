@@ -23,6 +23,7 @@ export class ExecutionRegistry {
   private readonly single?:{workspace:string;serviceIdentity:string};
   private readonly connect:(url:string,authorization:string)=>Promise<Client>;
   private readonly clients=new Map<string,Promise<Client>>();
+  private readonly trustedSceneDirectories=new Set<string>();
   constructor(entries:ExecutionRecord[],connect:(url:string,authorization:string)=>Promise<Client>,options?:{workspace:string;singleServiceIdentity?:string}){
     this.connect=connect;
     if(options?.singleServiceIdentity){
@@ -57,6 +58,12 @@ export class ExecutionRegistry {
   }
   private current(){const record=this.context.getStore();if(!record)throw new AuthProblem(403,'EXECUTION_CONTEXT_REQUIRED');return record;}
   singleService(){return Boolean(this.single);}
+  /** Only server-validated, administrator-owned scene bindings may extend the
+   * anonymous Session Location; never accept a browser path as authorization. */
+  trustSceneDirectory(path:string){
+    if(!this.single||!isAbsolute(path))throw new AuthProblem(403,'EMBED_DIRECTORY_FORBIDDEN');
+    this.trustedSceneDirectories.add(path);
+  }
   sharedWorkspace(){return this.current().workspaceAccess==='shared-readonly';}
   permissions(){return this.single?structuredClone(singleServicePermissions):this.sharedWorkspace()?structuredClone(sharedWorkspacePermissions):undefined;}
   assertPermissions(session:{permissions?:{action:string;resource:string;effect:string}[]}){
@@ -68,6 +75,7 @@ export class ExecutionRegistry {
   serviceIdentity(){return this.current().serviceIdentity;}
   directory(input:string){
     const directories=this.current().directories;
+    if(this.single&&this.trustedSceneDirectories.has(input))return input;
     if(Object.hasOwn(directories,input))return directories[input];
     if(Object.values(directories).includes(input))return input;
     throw new AuthProblem(403,'EXECUTION_DIRECTORY_FORBIDDEN');
