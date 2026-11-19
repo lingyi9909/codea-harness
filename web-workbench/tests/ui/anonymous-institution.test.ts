@@ -47,7 +47,23 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     assert.ok(f.nativeSessions.has(firstSession));
     f.active[firstSession]=true;
     await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
-    await expect(frames[0].getByText('正在执行，思考和工具进度会持续更新。')).toBeVisible();
+    await expect(frames[0].getByText('OpenCode 正在执行，后续阶段和工具进度会继续展示。')).toBeVisible();
+    // Stage 1 is a completed ASSISTANT message, not a completed user TURN.
+    // session.active() may be empty before later tool/agent stages arrive.
+    f.active[firstSession]=false;
+    await expect(frames[0].getByRole('button',{name:'已提交 · 中断执行'})).toBeVisible({timeout:10000});
+    await expect(frames[0].getByText('任务已提交，等待 OpenCode 下一阶段或明确的完成事件。')).toBeVisible();
+    const staged=f.messages.get(firstSession)!;
+    const now=Date.now();
+    staged.push({id:'stage-2-'+firstSession,type:'assistant',content:[{type:'text',text:'阶段 2：核查链路'}],
+      finish:'stop',time:{created:now,completed:now+1}});
+    await expect(frames[0].getByText('阶段 2：核查链路')).toBeVisible({timeout:10000});
+    await expect(frames[0].getByRole('button',{name:'已提交 · 中断执行'})).toBeVisible();
+    staged.push({id:'finished-'+firstSession,type:'idle',outcome:'succeeded',time:{created:now+2}});
+    await expect(frames[0].getByRole('button',{name:'已提交 · 中断执行'})).toHaveCount(0,{timeout:10000});
+    // A later native run still has a working interrupt action.
+    f.active[firstSession]=true;
+    await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
     const otherResult=await frames[1].getByText(/仅本会话结果：/).innerText();
     const otherSession=otherResult.split('仅本会话结果：').at(-1)!.trim();
     f.active[otherSession]=true;
