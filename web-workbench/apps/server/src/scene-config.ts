@@ -128,8 +128,18 @@ export class SceneConfigStore {
     }catch{return false;}
   }
   async binding(key:SceneKey):Promise<Binding>{
-    const row=this.read().config.scenes[key];
+    const scenes=this.read().config.scenes;
+    let row=scenes[key];
     if(!row)throw new AuthProblem(409,'SCENE_NOT_CONFIGURED');
+    // The embedded institution UI is another entry into the existing message
+    // investigation workflow. If no dedicated institution Skill was selected,
+    // reuse the already configured message Skill in the same workspace.
+    // Keep a dedicated institution binding authoritative when configured.
+    if(key==='institution-message'&&row.executor.type==='builtin'&&row.executor.name==='chat'){
+      const message=scenes.message;
+      if(message?.executor.type==='skill'&&message.directory===row.directory)
+        row={...row,executor:{...message.executor}};
+    }
     let path:string;
     try{path=realpathSync.native(row.directory);if(!statSync(path).isDirectory())throw new Error('NOT_DIRECTORY');}
     catch{throw new AuthProblem(409,'SCENE_DIRECTORY_INVALID');}
