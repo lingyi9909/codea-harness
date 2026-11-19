@@ -42,7 +42,9 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     });
     assert.deepEqual(toolDetails,{closed:'none',opened:'grid'});
     // Native active status must surface both a progress cue and an interrupt action.
-    const firstSession=[...f.nativeSessions.keys()][0];
+    const firstResult=await frames[0].getByText(/仅本会话结果：/).innerText();
+    const firstSession=firstResult.split('仅本会话结果：').at(-1)!.trim();
+    assert.ok(f.nativeSessions.has(firstSession));
     f.active[firstSession]=true;
     await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
     await expect(frames[0].getByText('正在执行，思考和工具进度会持续更新。')).toBeVisible();
