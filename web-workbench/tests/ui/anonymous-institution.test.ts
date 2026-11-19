@@ -53,6 +53,12 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     const firstResult=await frames[0].getByText(/仅本会话结果：/).innerText();
     const firstSession=firstResult.split('仅本会话结果：').at(-1)!.trim();
     assert.ok(f.nativeSessions.has(firstSession));
+    const firstAssistant=f.messages.get(firstSession)!.find(m=>m.type==='assistant')!;
+    f.emitNativeEvent({id:'event-phase-one',type:'session.step.started',created:Date.now(),
+      data:{sessionID:firstSession,assistantMessageID:firstAssistant.id}});
+    await expect(frames[0].locator('.turn-process summary')).toContainText('执行过程',{timeout:10000});
+    // A progress event for frame 0 must never reach the other anonymous session.
+    await expect(frames[1].locator('.turn-process')).toHaveCount(0);
     f.active[firstSession]=true;
     await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
     await expect(frames[0].getByText('OpenCode 正在执行，后续阶段和工具进度会继续展示。')).toBeVisible();
@@ -128,6 +134,11 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     assert.equal(f.formReplies[0].sessionID,secondSession);
     assert.deepEqual(f.formReplies[0].answer,{branch:'报文发送'});
     await expect(form).toHaveCount(0);
+    // Native execution completion, not an assistant step, ends the visible run.
+    f.emitNativeEvent({id:'event-finished-second',type:'session.execution.succeeded',created:Date.now(),
+      data:{sessionID:secondSession}});
+    await expect(frames[1].getByText('OpenCode 已确认本轮执行结束。')).toBeVisible({timeout:10000});
+    await expect(frames[0].getByText('OpenCode 已确认本轮执行结束。')).toHaveCount(0);
     // A completed investigation can adjust date/msgSn using the same native session.
     const thirdResult=await frames[2].getByText(/仅本会话结果：/).innerText();
     const thirdSession=thirdResult.split('仅本会话结果：').at(-1)!.trim();
