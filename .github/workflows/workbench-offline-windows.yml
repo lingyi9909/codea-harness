@@ -37,7 +37,7 @@ jobs:
         run: |
           npm run typecheck
           npm run web:typecheck
-          node --experimental-strip-types --test tests/api/institution-defaults.test.ts
+          node --experimental-strip-types --test tests/api/institution-defaults.test.ts tests/api/lan-access.test.ts
           npm run test:sqlite
           npm run smoke:local
       - name: Verify standalone configuration in Windows Chromium
