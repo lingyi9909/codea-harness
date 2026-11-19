@@ -41,7 +41,7 @@
     "test:embed": "node --experimental-strip-types --test tests/api/embedded-message.test.ts tests/ui/embedded-stream.test.ts",
     "test:embed:ui": "node --experimental-strip-types --test tests/ui/embedded-message.test.ts",
     "test:embed:mysql": "node --experimental-strip-types --test tests/mysql/embedded-message.test.ts",
-    "test:anonymous": "node --experimental-strip-types --test tests/api/anonymous-institution.test.ts tests/ui/execution-lifecycle.test.ts",
+    "test:anonymous": "node --experimental-strip-types --test tests/api/anonymous-institution.test.ts tests/api/embedded-isolated-runtime.test.ts tests/ui/execution-lifecycle.test.ts",
     "test:anonymous:mysql": "node --experimental-strip-types --test tests/mysql/anonymous-embed.test.ts",
     "test:anonymous:ui": "node --experimental-strip-types --test tests/ui/anonymous-institution.test.ts",
     "test:sqlite": "node --experimental-strip-types --test tests/sqlite/*.test.ts",
