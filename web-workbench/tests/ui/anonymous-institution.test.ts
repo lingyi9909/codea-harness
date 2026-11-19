@@ -47,7 +47,9 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
       const nativeId=sessionFor(index);
       f.messages.get(nativeId)!.push({id:'idle-initial-'+nativeId,type:'idle',outcome:'succeeded',time:{created:Date.now()}});
     }
-    await expect(frames[0].getByRole('alert').filter({hasText:'拒绝全部工具调用'})).toBeVisible({timeout:10000});
+    // Scoped native permissions now permit configured Skill and DBHub query tools,
+    // while the previous blanket-deny warning must no longer appear.
+    await expect(frames[0].getByRole('alert').filter({hasText:'拒绝全部工具调用'})).toHaveCount(0);
     // Closed process details must not leak raw tool input/output into the page.
     const toolDetails=await frames[0].locator('body').evaluate(body=>{
       const details=document.createElement('details');details.className='turn-process';
