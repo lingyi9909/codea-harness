@@ -248,6 +248,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       update(previous=>previous?.id===session?{...previous,model:globalModel}:previous);
     }
     await stream.connect(session);
+    stream.clearLifecycle.current(); // Old terminal event must not end a new turn.
     await api.chatAction(session,'messages',{text,scenario,...(embedded?{}:{files:rerun?[]:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)})});
     if(embedded)setPendingExecution({id:session,submittedAt:Date.now(),
       baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[],
@@ -265,11 +266,17 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const snapshot=state?.id===id?state:undefined;
   const streamAhead=stream.parts.some(part=>!snapshot?.messages.some(m=>m.id===part.message));
   const executionWaiting=Boolean(embedded&&pendingExecution?.id===id);
-  const active=Boolean(!pending&&(snapshot?.active||streamAhead||executionWaiting));
-  const unconfirmed=Boolean(embedded&&snapshot&&lacksTerminalEvidence(snapshot)&&!pending);
+  const lifecycle=stream.lifecycle;
+  const lifecycleFinished=Boolean(lifecycle&&lifecycle.status!=='started');
+  useEffect(()=>{
+    if(!embedded||!lifecycleFinished||!id)return;
+    setPendingExecution(previous=>previous?.id===id?null:previous);
+  },[embedded,id,lifecycle?.id,lifecycleFinished]);
+  const active=Boolean(!pending&&!lifecycleFinished&&(snapshot?.active||streamAhead||executionWaiting||lifecycle?.status==='started'));
+  const unconfirmed=Boolean(embedded&&snapshot&&lacksTerminalEvidence(snapshot)&&!pending&&!lifecycleFinished);
   // Keep the current turn's progress visible even when native active() briefly
   // becomes empty between intermediate assistant/agent/tool steps.
-  const statusVisible=Boolean(embedded&&id&&(active||pending||unconfirmed));
+  const statusVisible=Boolean(embedded&&id&&(active||pending||unconfirmed)&&!lifecycleFinished);
   const [clock,setClock]=useState(()=>Date.now());
   const [lastProgressAt,setLastProgressAt]=useState(()=>Date.now());
   const progressSignature=useMemo(()=>JSON.stringify([
@@ -277,8 +284,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     snapshot?.messages.map(m=>[m.id,m.idleOutcome,m.complete,m.text,
       m.steps?.map(s=>[s.kind,s.ordinal,s.kind==='tool'?s.status:'text'in s?s.text:s.kind==='notice'?s.text:''])]),
     stream.parts.map(p=>[p.message,p.ordinal,p.text,p.ended]),
-    stream.tools.map(t=>[t.id,t.text])
-  ]),[id,snapshot?.messages,stream.parts,stream.tools]);
+    stream.tools.map(t=>[t.id,t.text]),
+    lifecycle&&[lifecycle.id,lifecycle.status]
+  ]),[id,snapshot?.messages,stream.parts,stream.tools,lifecycle]);
   useEffect(()=>{setLastProgressAt(Date.now());},[progressSignature]);
   useEffect(()=>{
     if(!statusVisible)return;
@@ -290,13 +298,14 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const waitingFor=Math.max(0,Math.floor((clock-(pendingExecution?.submittedAt??lastProgressAt))/1000));
   const stuck=idleFor>=15;
   const runningStatus=pending?'OpenCode 正在等待处理交互请求。':
-    snapshot?.active?(stuck?'OpenCode 仍报告正在执行，但最近 '+idleFor+' 秒没有新输出；可能正在调用工具或等待下游。':'OpenCode 正在执行，后续阶段和工具进度会继续展示。'):
+    snapshot?.active||lifecycle?.status==='started'?(stuck?'OpenCode 仍报告正在执行，但最近 '+idleFor+' 秒没有新输出；可能正在调用工具或等待下游。':'OpenCode 正在执行，后续阶段和工具进度会继续展示。'):
     executionWaiting?(stuck?'执行状态尚未确认，最近 '+idleFor+' 秒没有新输出；不能据此判断任务已结束。':'任务已提交，等待 OpenCode 下一阶段或明确的完成事件。'):
     streamAhead?'正在接收新的模型片段。':
     '本轮未收到明确的完成事件，无法确认是否仍在执行；请查看工具权限或后台状态。';
   const latestIdle=Boolean(snapshot?.messages.some(m=>m.idleOutcome==='succeeded'&&
     m.id===snapshot.messages.filter(row=>row.idleOutcome).at(-1)?.id));
-  const missingTools=Boolean(embedded&&snapshot&&!unconfirmed&&!snapshot.active&&latestIdle&&!visibleToolEvidence(snapshot));
+  const missingTools=Boolean(embedded&&snapshot&&!unconfirmed&&!snapshot.active&&
+    (latestIdle||lifecycle?.status==='succeeded')&&!visibleToolEvidence(snapshot));
   const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts,stream.tools),[snapshot,stream.parts,stream.tools]);
   const messages=useProgressiveMessages(id,merged,snapshot?.messages,Boolean(snapshot?.active),createdSession.current===id);
   useLayoutEffect(()=>{
@@ -352,6 +361,11 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         {embedded&&snapshot?.toolPolicy==='deny-all'&&<p className="embedded-permission-warning" role="alert">
           当前共享执行会话的服务端策略拒绝全部工具调用。模型即使输出“阶段 1”等文字，也无法据此证明已完成机构业务查询；需要管理员核验并配置安全隔离的工具执行权限。
         </p>}
+        {embedded&&lifecycleFinished&&<div className="embedded-execution-status" role="status">
+          {lifecycle?.status==='succeeded'?'OpenCode 已确认本轮执行结束。':
+            lifecycle?.status==='failed'?'OpenCode 已报告本轮执行失败，请检查错误和工具调用记录。':
+            'OpenCode 已确认本轮执行中断。'}
+        </div>}
         {!statusVisible&&missingTools&&<p className="embedded-execution-status" role="status">
           本轮原生执行已结束，但没有检测到可核验的工具调用记录；请确认业务 Skill 是否获得必要的只读查询权限。
         </p>
