@@ -149,7 +149,7 @@ function Response({session,messages,progress,active,latest,preserveWorking}:{ses
   const working=active&&(preserveWorking||!answers.length);
   if(!answers.length&&!thinking.length&&!details.length&&!files.size&&!metrics.length&&!active)return null;
   return <article className="response-turn" aria-label="OpenCode 回答">
-    {thinking.length>0&&<Reasoning session={session} entries={thinking} expanded={latest}/>}
+    {thinking.length>0&&<Reasoning session={session} entries={thinking} expanded={latest&&!preserveWorking}/>}
     {!!details.length&&<details className="turn-process"><summary><span className="process-chevron" aria-hidden="true">›</span>
       <span>执行过程</span>{tools.length>0&&<small>{tools.length} 次工具调用</small>}
       {failedTools.length>0&&<small className="process-issue">{failedTools.length} 次异常</small>}
