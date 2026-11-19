@@ -7,25 +7,22 @@ import type {chatConnection} from './modules/chat/connection.ts';
 // broad Shell/file/network authority. OpenCode V2 uses last-matching-rule-wins.
 // The DBHub *service* must separately enforce readonly=true, source authorization,
 // timeouts and row limits: these rules restrict which tools may be invoked, not SQL.
+// OpenCode V2: execute enables Code Mode. Nested tools still enforce their
+// individual permissions. Never permit generic shell:*, file mutation, or
+// arbitrary process execution for a shared anonymous banking session.
+// The four exact TeamAI recall commands are copied from the existing,
+// approved database-assistant Agent; no runtime interpolation is allowed.
+// DBHub action names must match the configured MCP source exactly.
 export const singleServicePermissions=[
   {action:'*',resource:'*',effect:'deny' as const},
   {action:'skill',resource:'*',effect:'allow' as const},
-  // OpenCode V2 explicitly removes Code Mode / execution tools when
-  // `execute` is denied. Nested tools still enforce their own permission
-  // rules, so enabling this does not grant arbitrary Shell/edit access.
   {action:'execute',resource:'*',effect:'allow' as const},
-  {action:'dbhub_search_schema',resource:'*',effect:'allow' as const},
+  {action:'dbhub_search_objects',resource:'*',effect:'allow' as const},
   {action:'dbhub_execute_sql',resource:'*',effect:'allow' as const},
-  // The institution Skill may use OpenCode's native Shell for read-only
-  // knowledge discovery. Allow only concrete read-only CLI verbs, never
-  // shell:* / node / powershell / bash / curl / script execution. This is NOT
-  // sufficient for a Skill that depends on arbitrary executable scripts:
-  // those must run in a separately restricted executor.
-  {action:'shell',resource:'teamai recall *',effect:'allow' as const},
-  {action:'shell',resource:'teamai search *',effect:'allow' as const},
-  {action:'shell',resource:'git status *',effect:'allow' as const},
-  {action:'shell',resource:'git log *',effect:'allow' as const},
-  {action:'shell',resource:'git ls-files *',effect:'allow' as const},
+  {action:'shell',resource:'teamai recall "帮我查询数据库"',effect:'allow' as const},
+  {action:'shell',resource:'teamai recall "数据库数据字典和表关联"',effect:'allow' as const},
+  {action:'shell',resource:'teamai recall "数据库业务指标定义和统计口径"',effect:'allow' as const},
+  {action:'shell',resource:'teamai recall "数据库业务流程和历史异常案例"',effect:'allow' as const},
 ];
 export const sharedWorkspacePermissions=[{action:'edit',resource:'*',effect:'deny' as const}];
 type Client=Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
