@@ -12,8 +12,8 @@ import {LogInvestigation} from './LogInvestigation.tsx';
 import { FileScene } from './FileScenes.tsx';
 import { scenes, scenarioGroups, groupForScene, type Scene, type ScenarioGroup } from './ScenarioHome.tsx';
 import { SidebarChatHistory } from './SidebarChatHistory.tsx';
-import { SceneConfigPage } from './SceneConfigPage.tsx';
 import { SourceView } from './SourceView.tsx';
+import { SceneConfigPage } from './SceneConfigPage.tsx';
 import { InteractionPanel } from './InteractionPanel.tsx';
 
 type Repository=Schema<'Repository'>;
