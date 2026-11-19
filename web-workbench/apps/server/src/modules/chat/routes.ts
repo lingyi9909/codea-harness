@@ -454,6 +454,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     const result:ChatStatus={id:sessionID,title:session.title,forms:forms.map(visibleForm),directory:session.location.directory,messages,
       ...(session.model?{model:{id:session.model.id,providerID:session.model.providerID,variant:session.model.variant}}:{}),
       active:Boolean(running[sessionID])||inbox.length>0,outcome:session.outcome,
+      ...(options.execution?.singleService()?{toolPolicy:'deny-all' as const}:{}),
       permissions:permissions.filter(p=>p.sessionID===sessionID).map(p=>({id:p.id,action:p.action,resources:p.resources,message:p.message,revision:revision(p)}))};
     return wrap(result);
   });
