@@ -39,7 +39,7 @@ jobs:
       - run: node --test tests/mysql/multi-user.test.ts
 
       - run: npm run test:embed && npm run test:embed:mysql && npm run test:anonymous && npm run test:anonymous:mysql && npm run test:sqlite
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
       - run: npm run test:embed:ui && npm run test:anonymous:ui
       - uses: actions/upload-artifact@v4
         if: always()
