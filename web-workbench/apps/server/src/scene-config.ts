@@ -137,8 +137,7 @@ export class SceneConfigStore {
     // Keep a dedicated institution binding authoritative when configured.
     if(key==='institution-message'&&row.executor.type==='builtin'&&row.executor.name==='chat'){
       const message=scenes.message;
-      if(message?.executor.type==='skill'&&message.directory===row.directory)
-        row={...row,executor:{...message.executor}};
+      if(message?.executor.type==='skill')row={...message,executor:{...message.executor}};
     }
     let path:string;
     try{path=realpathSync.native(row.directory);if(!statSync(path).isDirectory())throw new Error('NOT_DIRECTORY');}
