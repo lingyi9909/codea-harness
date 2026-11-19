@@ -55,6 +55,8 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
   }} as unknown as Pool;
   const nativeSessions=new Map<string,any>(),messages=new Map<string,any[]>(),forms=new Map<string,any[]>(),active:Record<string,boolean>={},calls:string[]=[];
   const modelCatalog=[{id:'private',providerID:'company',name:'内网测试模型',enabled:true}],prompts:any[]=[],formReplies:any[]=[];
+  const nativeEventListeners=new Set<(event:any)=>void>();
+  const emitNativeEvent=(event:any)=>{for(const notify of nativeEventListeners)notify(event);};
   let serial=0;
   const execution=new ExecutionRegistry(records,async(url)=>{
     const index=records.findIndex(r=>r.url===url),prefix='user-'+index;
@@ -62,7 +64,22 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
       skill:{list:async({location}:any)=>({location,data:[{id:'message-skill',name:'message-query'}]})},
       model:{list:async()=>({data:modelCatalog})},
       message:{list:async({sessionID}:any)=>({data:messages.get(sessionID)??[]})},permission:{list:async()=>[]},
-      event:{subscribe:async function*({signal}:any){await new Promise<void>(resolve=>signal.addEventListener('abort',()=>resolve(),{once:true}));}},
+      event:{subscribe:async function*({signal,onActivity}:any){
+        const pending:any[]=[];
+        let wake:()=>void=()=>{};
+        const notify=(event:any)=>{pending.push(event);wake();};
+        nativeEventListeners.add(notify);
+        onActivity?.();
+        try{
+          while(!signal.aborted){
+            if(!pending.length)await new Promise<void>(resolve=>{
+              wake=resolve;
+              signal.addEventListener('abort',resolve,{once:true});
+            });
+            while(pending.length&&!signal.aborted)yield pending.shift();
+          }
+        }finally{nativeEventListeners.delete(notify);}
+      }},
       session:{
         create:async(input:any)=>{const session={id:prefix+'-'+(++serial),...input,time:{updated:Date.now()}};nativeSessions.set(session.id,session);return session;},
         get:async({sessionID}:any)=>nativeSessions.get(sessionID),list:async()=>({data:[...nativeSessions.values()]}),active:async()=>Object.fromEntries(Object.entries(active).filter(([id])=>id.startsWith(prefix+'-'))),
@@ -93,5 +110,5 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     const t=await ticket(subject);const r=await app.inject({method:'POST',url:'/api/v1/embed/exchange',headers:headers(),payload:{ticket:t.ticket,parentOrigin}});
     if(r.statusCode!==200)throw Error(r.body);return r.json().data as {token:string;csrfToken:string;expiresAt:number};
   };
-  return {get app(){return app;},restart,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,formReplies,modelCatalog,prompts,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
+  return {get app(){return app;},restart,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,formReplies,modelCatalog,prompts,emitNativeEvent,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
 }
