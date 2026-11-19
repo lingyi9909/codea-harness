@@ -35,7 +35,9 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
     if(submitted&&!editing)return question;
     if(!bounds||!msgSn.trim())throw Error('请填写有效日期和报文编号。');
     return ['机构报文排查：请使用本场景绑定的执行入口，按以下条件查询并分析报文。',
-      '请遵守工具权限，以实际查询证据给出事实、异常原因、证据缺口及下一步；无法查询时明确说明，不要编造查询结果。',
+      '请将本次请求视为一个完整的排查任务：连续执行定位业务、调用工具核验、分析证据和输出结论。中间阶段不得作为最终答复，不要停在“阶段1”并让用户另发“继续”。',
+      '只有确实缺少不可推断的必要输入且工具也无法补齐时才提出追问；查询遇到权限被拒、Skill 未加载或工具失败，须立即明确指出阻断原因和未完成步骤，不得声称已经完成排查。',
+      '请遵守工具权限，必须以实际查询证据给出事实、异常原因、证据缺口及下一步；无法查询时明确说明，不要编造查询结果。',
       '查询日期：'+day,'开始时间：'+day+' 00:00:00','结束时间：'+day+' 23:59:59',
       '查询条件 JSON（from/to 为毫秒时间戳，范围包含 from、不包含 to；msgSn 为字符串）：',
       JSON.stringify({day,from:bounds.start,to:bounds.endExclusive,msgSn:msgSn.trim()}),
