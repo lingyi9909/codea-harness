@@ -37,7 +37,7 @@ jobs:
         run: |
           npm run typecheck
           npm run web:typecheck
-          node --experimental-strip-types --test tests/api/institution-defaults.test.ts tests/api/lan-access.test.ts
+          node --experimental-strip-types --test tests/api/institution-defaults.test.ts tests/api/lan-access.test.ts tests/api/windows-launch-menu.test.mjs
           npm run test:sqlite
           npm run smoke:local
       - name: Verify standalone configuration in Windows Chromium
@@ -68,6 +68,7 @@ jobs:
             'packages/storage/src/sqlite-embed.ts',
             'packages/storage/migrations/sqlite/001_embedded.sql',
             'scripts/embedded-storage.ts',
+            'scripts/launch-workbench.mjs',
             '启动工作台.cmd',
             'start-chat.cmd',
             'apps/web/src/StandaloneConfigPage.tsx',
@@ -86,13 +87,15 @@ jobs:
           解压后进入 web-workbench，运行：
           .\启动工作台.cmd "D:\teamai"
           将 D:\teamai 替换为唯一业务工作目录。
+          交互式运行时直接选择本机/局域网、网卡 IP、机构 Shell 受限/开放。
+          同时选择局域网和高权限 Shell 时会要求额外确认。
           工作台：http://127.0.0.1:4176/
           场景配置：http://127.0.0.1:4176/config
           机构报文：http://127.0.0.1:4176/embed/institution-message
           三个地址来自同一个服务，共用工作目录中的 .workbench/scenarios.json。
           不需要 npm ci，不需要 npm run web:build，不需要安装 MySQL。
           Node 和一个现有 OpenCode 服务沿用已有环境，不包含在此 ZIP 中。
-          机构页直接提交绑定执行入口，不依赖单独业务查询适配接口；单服务工具权限仍受限制，真实业务查询需内网验证。
+          机构页直接提交绑定执行入口，不依赖单独业务查询适配接口；Shell 默认受限，可经启动菜单显式放行，MCP 规则不变。真实业务查询需内网验证。
           OFFLINE-MANIFEST.json 记录本包文件大小和 SHA256。
           "@ | Set-Content -LiteralPath (Join-Path $base '离线运行说明.txt') -Encoding utf8
           $entries=@(Get-ChildItem -LiteralPath $base -Recurse -File -Force | ForEach-Object {
