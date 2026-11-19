@@ -1,58 +1,35 @@
-# 机构报文独立页：真实业务执行需要隔离式 OpenCode
+# 机构报文嵌入页：直接复用工作台原有执行链路
 
-## 为什么“阶段 1”后停止
+## 默认部署（无需第二套 OpenCode）
 
-本地单服务匿名模式会在 Session 创建时强制下发 `permissions = [{action:'*',resource:'*',effect:'deny'}]`。
-模型可以生成“阶段 1”这类文字，但无法实际调用业务 Skill 所需的工具。继续发“继续”也不是可靠的执行方案。
-真正的机构业务查询必须使用彼此隔离的 OpenCode 执行服务，不能为了让工具运行就把单服务通配 deny 直接取消。
+直接使用原 `启动工作台.cmd` 启动的 OpenCode 服务和 `.workbench/scenarios.json`。
+公管问题排查、报文问题排查、机构报文排查走同一套 `registerChat`、原生 `session.prompt`、Skill/Command/Subagent 分发、SSE、停止与追问 API。
+独立机构页只在前端入口、访客会话和权限范围上与普通登录后的工作台不同。
 
-## 独立执行模式（支持 SQLite，无需 MySQL）
+### Skill 如何复用
 
-1. 管理员先准备多个独立的 OpenCode `serve --service` 进程：每个进程使用独立 OS 用户或容器、服务 URL、认证凭据、状态目录与私有工作目录。每个私有目录内预装相同机构报文 Skill 和受控 DBHub MCP，数据库使用只读账号、必要的库表授权、查询超时和行数限制。
-2. 准备 `HARNESS_EMBED_EXECUTION_REGISTRY` 指向的 JSON 数组，每项包含 `ownerId`（独立 UUID）、`serviceIdentity`、`url`、`authorization`、`isolation: 'os-user'` 或 `'container'`、`directories`（启动工作目录映射到该执行槽私有工作目录）。不同执行槽的 URL、凭据、目标目录不能相同或重叠。
-3. 准备 `HARNESS_EMBED_ISOLATED_CONFIG` 指向的 JSON 对象，包含 `publicOrigin`、空 `clients` 和 `anonymous: {parentOrigins: [...], executionOwners: [上面各 UUID]}`；不设置 `singleService`。父站点必须使用明确合法 Origin，不能用通配符。
-4. 设置 `HARNESS_SQLITE_PATH` 为共享工作目录外、与旧单服务模式不同的独立 SQLite 数据库路径。
-5. 启动工作台，仍使用原来的 `启动工作台.cmd` 和相同工作目录参数；三个环境变量必须在启动该进程前设置。
+- 如果 `institution-message` 显式配置了 Skill，就使用它。
+- 如果 `institution-message` 仍为默认 `builtin/chat`，而 `message` 已经配置为 Skill、且工作目录相同，自动继承已配置的报文排查 Skill；不用再手动配置一遍。
+- 如果上述两个场景都没有配置 Skill，页面会提示缺少业务执行器，不把普通 Chat 的“阶段 1”描述当作已执行查询。
+- 不在匿名共享服务内执行任意自定义命令或子 Agent：它们可能以另一套本机权限运行，绕过匿名 Session 的工具限制。如业务确实需要这些能力，须采用可信用户认证与独立执行服务的方案。
 
-示例 PowerShell 环境变量（路径需由管理员按真实部署修改）：
+### 多人并发
 
-```powershell
-$env:HARNESS_EMBED_EXECUTION_REGISTRY = 'D:\workbench-private\execution-registry.json'
-$env:HARNESS_EMBED_ISOLATED_CONFIG = 'D:\workbench-private\embed-isolated.json'
-$env:HARNESS_SQLITE_PATH = 'D:\workbench-private\isolated-embedded.sqlite'
-.\启动工作台.cmd 'D:\teamai'
-```
+每次页面访问创建随机访问令牌、独立用户归属和原生 Session。不同访客的消息、活动 SSE、模型状态、中断/结束操作互不混用；访问者不能查询其他人的 Session。服务重启后保存可恢复的绑定，但不能自动重复提交原任务。
 
-执行注册表示例（仅示意一个执行槽；实际必须为每个访问者配置独立环境）：
+### 匿名会话安全策略
 
-```json
-{
-  "ownerId": "11111111-1111-4111-8111-111111111111",
-  "serviceIdentity": "institution-worker-1",
-  "url": "http://127.0.0.1:53001",
-  "authorization": "Bearer <管理员提供的真实凭据>",
-  "isolation": "os-user",
-  "directories": {"D:\\teamai": "D:\\isolated\\institution-worker-1"}
-}
-```
+共享 OpenCode 服务不再一刀切全部工具拒绝，而是 OpenCode V2 的有序许可规则：默认拒绝、只允许读取 Skill 定义与 `dbhub_search_schema`、`dbhub_execute_sql` 两个已知 DBHub 工具；通用 Shell、文件读写、外部目录、子 Agent 等继续拒绝。
 
-以上对象应放进 JSON 数组。`directories` 的左侧必须等于工作台实际启动目录。工作台只验证目录/URL/凭据隔离的配置结构；管理员必须保证实际 OS 用户/容器确实隔离。
+**特别重要**：这些权限仅限定模型可用的工具名称，不能把任意 SQL 自动变成只读 SQL。实际数据库连接必须由公司管理员在既有 DBHub 配置中开启 `readonly=true`，使用数据库只读账号、限定可访问库表、查询超时与最大返回行数。若未验证这套真实限制，禁止在可处理银行业务数据的环境中对匿名访客开放 SQL 查询。
+匿名入口无登录信息并不等于具有任意数据库查询权限。跨用户的原始数据库数据访问边界取决于受控数据源和机构侧身份授权；前端 Session 隔离只解决会话串读。
 
-匿名服务配置示例（同样需增加相应执行槽）：
+## 可选：完全隔离的服务部署
 
-```json
-{
-  "publicOrigin": "http://127.0.0.1:4176",
-  "clients": [],
-  "anonymous": {
-    "parentOrigins": ["http://127.0.0.1:4176"],
-    "executionOwners": ["11111111-1111-4111-8111-111111111111"]
-  }
-}
-```
-
-如需重复分配已完成的执行槽，必须提供可信 resetCommand 并在回收前清理私有运行状态；未配置 resetCommand 的槽安全退役，不会无清理直接复用。
+如果原有报文查询 Skill 必须使用 Shell、浏览器自动化、带副作用的自定义命令或子 Agent，那么它超出了匿名共享服务的权限边界。此时可使用已提供的 `HARNESS_EMBED_EXECUTION_REGISTRY`、`HARNESS_EMBED_ISOLATED_CONFIG` 和独立 `HARNESS_SQLITE_PATH` 配置隔离工作进程。它不是默认必选，也不是普通 Skill 场景部署所必需的额外步骤。
 
 ## 验收
 
-首次提交日期与 msgSn 后，核对真正的 OpenCode Tool/Skill 活动、阶段1→阶段2→最终结果、失败错误、只读证据以及 A/B 不同访客隔离。没有原生工具执行证据，不能标记“已完成机构排查”。模型是否按完整 SOP 连续运行，还依赖真实 Kimi 和内网 Skill，模拟测试不能代替真实验收。
+使用一个真实报文编号：检查首次提交后是否出现真实 Skill 加载与 DBHub 工具调用、工具结果是否进入后续分析、任务是否通过原生 idle / lifecycle 结束，而不是要求用户反复输入“继续”。再同时打开三个嵌入页，验证 A/B/C 独立 msgSn、各自模型、日志与停止按钮。
+
+CI 能证明会话/权限配置、模拟原生调用与 Windows 页面行为；**真实内网 Kimi、TeamAI、DBHub 查询效果仍必须在有只读数据授权的环境中验证**。如果真实 Skill 使用的不是上述 DBHub 工具名，应根据工具真实名称做安全审查，不得直接放开 `*`。
