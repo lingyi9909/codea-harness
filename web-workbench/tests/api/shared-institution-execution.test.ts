@@ -2,6 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {singleServicePermissions} from '../../apps/server/src/execution-registry.ts';
 import {sqliteEmbedFixture} from '../support/sqlite-embed-fixture.ts';
+import {SceneConfigStore} from '../../apps/server/src/scene-config.ts';
+import {mkdir} from 'node:fs/promises';
+import {join} from 'node:path';
 
 /** The official V2 permission contract uses the LAST matching rule. */
 function allowed(action:string){
@@ -67,5 +70,36 @@ test('three anonymous institution pages run existing message Skill on ONE OpenCo
     assert.equal(f.active[ids[0]],false);
     assert.equal(f.active[ids[1]],true);
     assert.equal(f.active[ids[2]],true);
+  }finally{await f.close();}
+});
+
+test('the institution page inherits the existing message Skill directory, even if it differs from startup workspace',async()=>{
+  const f=await sqliteEmbedFixture(undefined,undefined,false);
+  try{
+    const messageDirectory=join(f.workspace,'message-toolkit');
+    await mkdir(messageDirectory);
+    const config=new SceneConfigStore(f.workspace),original=config.read();
+    const scenes={...original.config.scenes,message:{
+      directory:messageDirectory,executor:{type:'skill' as const,name:'message-query'}}};
+    await config.save({version:1,scenes},original.revision);
+    const visitor=(await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',
+      headers:f.headers(),payload:{}})).json().data;
+    const created=await f.app.inject({
+      method:'POST',url:'/api/v1/embed/chat/sessions',
+      headers:f.headers(visitor.token,visitor.csrfToken),
+      payload:{scenario:'institution-message-inspection'}});
+    assert.equal(created.statusCode,201,created.body);
+    const id=created.json().data.id;
+    assert.equal(f.nativeSessions.get(id).location.directory,messageDirectory);
+    const sent=await f.app.inject({method:'POST',
+      url:'/api/v1/embed/chat/sessions/'+id+'/messages',
+      headers:f.headers(visitor.token,visitor.csrfToken),
+      payload:{scenario:'institution-message-inspection',text:'查询机构报文'}});
+    assert.equal(sent.statusCode,202,sent.body);
+    assert.deepEqual(f.prompts.at(-1)?.skills,[{id:'message-skill'}]);
+    const forbidden=await f.app.inject({method:'POST',url:'/api/v1/embed/chat/models',
+      headers:f.headers(visitor.token,visitor.csrfToken),
+      payload:{directory:join(f.workspace,'not-authorized')}});
+    assert.equal(forbidden.statusCode,403,forbidden.body);
   }finally{await f.close();}
 });
