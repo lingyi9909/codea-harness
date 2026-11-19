@@ -95,11 +95,14 @@ export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,g
     sceneSettings.config.scenes.message.executor.name==='models';
   return <ChatWorkspace key={directory+'|'+(investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat'))}
     directory={directory} settings={settings} investigation={investigation} navigation={navigation} sceneId={sceneId}
-    modelCommand={modelCommand} globalModel={globalModel} embedded={embedded}/>;
+    modelCommand={modelCommand}
+    unconfiguredInstitution={sceneId==='institution-message'&&
+      sceneSettings?.config.scenes['institution-message']?.executor.type==='builtin'}
+    globalModel={globalModel} embedded={embedded}/>;
 }
-function ChatWorkspace({investigation,directory,settings,navigation,sceneId,modelCommand,globalModel,embedded=false}:{embedded?:boolean;
+function ChatWorkspace({investigation,directory,settings,navigation,sceneId,modelCommand,unconfiguredInstitution,globalModel,embedded=false}:{embedded?:boolean;
   investigation?:Investigation;navigation?:ChatNavigation;directory:string;settings:ChatSettings;sceneId?:SceneId;
-  modelCommand?:boolean;globalModel?:GlobalModel;
+  modelCommand?:boolean;unconfiguredInstitution?:boolean;globalModel?:GlobalModel;
 }){
   const scenario=scenarioFor(sceneId);
   const sessionKey:SceneKey=investigation?.sessionKey??(sceneId==='data'?'harness.data':'harness.chat');
@@ -359,6 +362,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
           {stream.connectionState==='disconnected'&&<small>实时事件连接中断，正在通过会话快照恢复进度。</small>}
           {stuck&&<small>如果工具被拒绝或业务系统无响应，需查看执行过程中的错误；可使用“中断执行”，不建议重复提交。</small>}
         </div>}
+        {embedded&&unconfiguredInstitution&&<p className="embedded-permission-warning" role="alert">
+          当前机构报文场景仍绑定默认聊天入口，尚未绑定具体的业务查询 Skill 或 Subagent。模型可以回答，但不代表已执行报文查询。
+        </p>}
         {embedded&&snapshot?.toolPolicy==='deny-all'&&<p className="embedded-permission-warning" role="alert">
           当前共享执行会话的服务端策略拒绝全部工具调用。模型即使输出“阶段 1”等文字，也无法据此证明已完成机构业务查询；需要管理员核验并配置安全隔离的工具执行权限。
         </p>}
