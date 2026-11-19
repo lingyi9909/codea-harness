@@ -228,7 +228,10 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       priorFocus?.focus();
     };
   },[adjustmentOpen]);
-  const maySend=Boolean((investigation?.initial?!id&&investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy);
+  const maySend=Boolean((investigation?.initial?!id&&investigation.ready:draft.trim())&&settings.configured&&(!id||state?.id===id)&&!pending&&!busy&&
+    (!embedded||!(state?.active||pendingExecution?.id===id)));
+  // Shared-session embedded pages cannot queue a second request while running;
+  // native multi-user concurrency restrictions still apply.
   const canRerun=Boolean(adjustmentOpen&&investigation?.ready&&settings.configured&&state?.id===id&&!state.active&&!pending&&!busy);
   const send=(rerun=false)=>run(async()=>{
     if(rerun?!canRerun:!maySend)return;
@@ -290,7 +293,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       bottom-node.scrollTop>1)node.scrollTop=bottom;
     lastFeedHeight.current=nextHeight;
   },[messages,stream.tools]);
-  const interrupt=id&&((state?.id===id&&state.active)||executionWaiting)&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');})}>{state?.id===id&&state.active?'正在执行 · 中断执行':'已提交 · 中断执行'}</button>;
+  const interrupt=id&&((state?.id===id&&state.active)||executionWaiting)&&<button className="running-action" disabled={busy} onClick={()=>run(async()=>{await api.chatAction(id,'interrupt');if(embedded)setPendingExecution(null);})}>{state?.id===id&&state.active?'正在执行 · 中断执行':'已提交 · 中断执行'}</button>;
   const homeEmpty=!investigation&&!id&&!messages.length&&!state?.active&&!pending;
   return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
