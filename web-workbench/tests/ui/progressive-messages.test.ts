@@ -101,3 +101,14 @@ it('keeps the native snapshot type and timing when live text reuses a reasoning 
     }
   }
 });
+
+it('anchors native tool progress even before an assistant snapshot or text fragment',()=>{
+  const question:ChatMessage={id:'question',role:'user',text:'排查报文',files:[],tools:[]};
+  const progress={id:'progress-1',message:'reply',at:1,text:'查询业务数据'};
+  const live=streamingMessages([question],[],[progress]);
+  assert.deepEqual(live.map(m=>m.id),['question','reply']);
+  assert.equal(live[1].role,'assistant');
+  const snapshot=assistant('reply','业务查询结果',true);
+  const resolved=streamingMessages([question,snapshot],[],[progress]);
+  assert.deepEqual(resolved.map(m=>m.id),['question','reply']);
+});
