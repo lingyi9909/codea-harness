@@ -22,7 +22,9 @@ test('standalone config: no workbench mount, independent URL, same saved institu
     await page.route('**/api/v1/chat/history',route=>route.fulfill({json:{data:{items:[]}}}));
     await page.goto(origin+'/');await page.getByLabel('姓名',{exact:true}).fill('zhangzhanhui');await page.getByLabel('手机号',{exact:true}).fill('13800000000');
     await page.getByRole('button',{name:'登录工作台'}).click();await expect(page.getByRole('navigation',{name:'场景导航'})).toBeVisible();
-    await expect(page.getByRole('button',{name:'场景配置'})).toHaveCount(0);await expect(page.getByRole('heading',{name:'场景配置'})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'场景配置',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'场景配置',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await page.goto(origin+'/config');await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();await expect(page.getByRole('navigation',{name:'场景导航'})).toHaveCount(0);
     await expect(page.getByLabel('机构报文排查工作目录')).toHaveValue(f.workspace);
     await page.getByLabel('机构报文排查执行类型').selectOption('skill');await page.getByLabel('机构报文排查入口名称').fill('message-query');
