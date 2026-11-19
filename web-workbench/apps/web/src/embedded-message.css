@@ -51,3 +51,6 @@
 .institution-adjust-controls input{width:100%;min-height:43px;min-width:0;box-sizing:border-box;padding:9px 11px;border:1px solid #cfd7e1;border-radius:7px;background:#fff;font:inherit;color:#28313f}
 .institution-adjust-controls input:focus-visible{outline:2px solid #a9bdd8;outline-offset:1px}
 .institution-adjust-controls p{margin:2px 0 0;color:#687480;font-size:12px;line-height:1.65}
+
+/* Explain a hard native permission block instead of making stage 1 look final. */
+.embedded-permission-warning{margin:10px 0 4px;padding:10px 12px;border:1px solid #ecc8a3;border-radius:7px;background:#fff9f1;color:#79501e;font-size:12px;line-height:1.65}
