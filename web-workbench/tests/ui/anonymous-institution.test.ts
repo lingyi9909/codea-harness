@@ -31,11 +31,20 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
       await frame.getByRole('button',{name:'开始排查',exact:true}).click();await expect(frame.getByText(/仅本会话结果：/)).toBeVisible({timeout:20000});
     }));
     assert.equal(f.calls.length,3);assert.equal(f.prompts.length,3);
+    const sessionFor=(index:number)=>{
+      const expected='000'+index;
+      const input=f.prompts.find(prompt=>{
+        const line=prompt.text.split('\\n').find((part:string)=>part.startsWith('{'));
+        if(!line)return false;
+        try{return JSON.parse(line).msgSn===expected;}catch{return false;}
+      });
+      assert.ok(input,'native call for frame '+index+' must be recorded');
+      return input.sessionID as string;
+    };
     // Two peers have received native turn-idle completion; page 0 intentionally
     // remains between stage 1 and the next phase for the regression below.
     for(const index of [1,2]){
-      const seen=await frames[index].getByText(/仅本会话结果：/).innerText();
-      const nativeId=seen.split('仅本会话结果：').at(-1)!.trim();
+      const nativeId=sessionFor(index);
       f.messages.get(nativeId)!.push({id:'idle-initial-'+nativeId,type:'idle',outcome:'succeeded',time:{created:Date.now()}});
     }
     await expect(frames[0].getByRole('alert').filter({hasText:'拒绝全部工具调用'})).toBeVisible({timeout:10000});
@@ -50,8 +59,7 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     });
     assert.deepEqual(toolDetails,{closed:'none',opened:'grid'});
     // Native active status must surface both a progress cue and an interrupt action.
-    const firstResult=await frames[0].getByText(/仅本会话结果：/).innerText();
-    const firstSession=firstResult.split('仅本会话结果：').at(-1)!.trim();
+    const firstSession=sessionFor(0);
     assert.ok(f.nativeSessions.has(firstSession));
     const firstAssistant=f.messages.get(firstSession)!.find(m=>m.type==='assistant')!;
     f.emitNativeEvent({id:'event-phase-one',type:'session.step.started',created:Date.now(),
@@ -78,8 +86,7 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     // A later native run still has a working interrupt action.
     f.active[firstSession]=true;
     await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
-    const otherResult=await frames[1].getByText(/仅本会话结果：/).innerText();
-    const otherSession=otherResult.split('仅本会话结果：').at(-1)!.trim();
+    const otherSession=sessionFor(1);
     f.active[otherSession]=true;
     await frames[0].getByRole('button',{name:'正在执行 · 中断执行'}).click();
     await expect.poll(()=>f.active[firstSession]).toBe(false);
@@ -122,8 +129,7 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     await expect(frames[1].getByRole('button',{name:'选择模型'})).toContainText('Other');
     await frames[1].getByLabel('对话内容').fill('继续解释原因');await frames[1].getByRole('button',{name:'发送 ↑',exact:true}).click();await expect.poll(()=>f.calls.length).toBe(4);assert.equal(f.prompts.at(-1).text,'继续解释原因');assert.equal(f.nativeSessions.get(otherSession).model.id,'other');
     // Safe native interaction forms remain available without any login fields.
-    const secondResult=await frames[1].getByText(/仅本会话结果：/).innerText();
-    const secondSession=secondResult.split('仅本会话结果：').at(-1)!.trim();
+    const secondSession=sessionFor(1);
     f.forms.set(secondSession,[{id:'safe-form',sessionID:secondSession,title:'确认排查方向',
       fields:[{key:'branch',title:'业务分支',type:'string',required:true,hidden:false,custom:true}]}]);
     const form=frames[1].getByRole('form',{name:'确认排查方向'});
@@ -140,8 +146,7 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     await expect(frames[1].getByText('OpenCode 已确认本轮执行结束。')).toBeVisible({timeout:10000});
     await expect(frames[0].getByText('OpenCode 已确认本轮执行结束。')).toHaveCount(0);
     // A completed investigation can adjust date/msgSn using the same native session.
-    const thirdResult=await frames[2].getByText(/仅本会话结果：/).innerText();
-    const thirdSession=thirdResult.split('仅本会话结果：').at(-1)!.trim();
+    const thirdSession=sessionFor(2);
     await frames[2].getByRole('button',{name:'调整排查条件'}).click();
     const drawer=frames[2].getByRole('dialog',{name:'调整排查条件'});
     await drawer.getByLabel('调整日期').fill('2026-11-18');
