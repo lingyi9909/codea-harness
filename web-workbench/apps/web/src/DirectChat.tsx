@@ -270,7 +270,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const streamAhead=stream.parts.some(part=>!snapshot?.messages.some(m=>m.id===part.message));
   const executionWaiting=Boolean(embedded&&pendingExecution?.id===id);
   const active=Boolean(!pending&&(snapshot?.active||streamAhead||executionWaiting));
-  const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts),[snapshot,stream.parts]);
+  const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts,stream.tools),[snapshot,stream.parts,stream.tools]);
   const messages=useProgressiveMessages(id,merged,snapshot?.messages,Boolean(snapshot?.active),createdSession.current===id);
   useLayoutEffect(()=>{
     follow.current=true;
