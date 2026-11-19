@@ -58,6 +58,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
   if(!localOnly&&!multiUser)printCode(pairingCode);
+  if(localEmbed)process.stdout.write('机构执行模式: '+(localEmbed.execution.singleService()?'共享服务（工具权限全拒绝，仅能演示对话）':'隔离执行槽（按各自原生权限运行 Skill/MCP）')+'\n');
   process.stdout.write('工作台: http://127.0.0.1:'+config.port+'/\n场景配置: http://127.0.0.1:'+config.port+'/config\n机构报文排查: '+(localEmbed?.publicOrigin??('http://127.0.0.1:'+config.port))+'/embed/institution-message\n');
   }catch(error){await app?.close().catch(()=>{});await embedLocks?.end().catch(()=>{});await pool?.end().catch(()=>{});await localEmbed?.store.close().catch(()=>{});throw error;}
 }
