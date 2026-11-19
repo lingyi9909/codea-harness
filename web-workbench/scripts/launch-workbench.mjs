@@ -57,9 +57,9 @@ async function select(rl,heading,items,defaultChoice=1){
   }
 }
 
-export async function chooseEnvironment(env,{input=process.stdin,output=process.stdout,interfaces=networkInterfaces()}={}){
-  if(!input.isTTY)return {...env}; // CI and scripted startup preserve caller-supplied values.
-  const rl=createInterface({input,output});
+export async function chooseEnvironment(env,{input=process.stdin,output=process.stdout,interfaces=networkInterfaces(),questions}={}){
+  if(!input.isTTY&&!questions)return {...env}; // CI and scripted startup preserve caller-supplied values.
+  const rl=questions?{question:async()=>questions.shift()??'',close(){}}:createInterface({input,output});
   try{
     const scopeChoice=await select(rl,'一、访问方式',[
       '只允许本机访问（默认）',
