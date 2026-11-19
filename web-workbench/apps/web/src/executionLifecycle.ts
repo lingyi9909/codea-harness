@@ -1,4 +1,9 @@
-import type {ChatStatus} from '../../../packages/contracts/src/chat.ts';
+import type {ChatMessage,ChatStatus} from '../../../packages/contracts/src/chat.ts';
+
+const lastIndex=(messages:ChatMessage[],matches:(message:ChatMessage)=>boolean)=>{
+  for(let index=messages.length-1;index>=0;index--)if(matches(messages[index]))return index;
+  return -1;
+};
 
 /**
  * Native assistant messages may complete at intermediate stages. Only an idle
@@ -16,14 +21,14 @@ export function completeOnNativeIdle(pending:PendingExecution|null,status:ChatSt
   if(!pending||pending.id!==status.id)return pending;
   const baseline=new Set(pending.baselineIdleIds);
   const previous=new Set(pending.baselineMessageIds);
-  const latestUser=status.messages.findLastIndex(m=>m.role==='user'&&!previous.has(m.id));
+  const latestUser=lastIndex(status.messages,m=>m.role==='user'&&!previous.has(m.id));
   if(latestUser<0)return pending; // The queued user prompt may not be materialized yet.
   return status.messages.slice(latestUser+1).some(m=>m.idleOutcome!==undefined&&!baseline.has(m.id))?null:pending;
 }
 
 /** Last user turn, ignoring older completed turns in the same Session. */
 export function lastTurn(status:ChatStatus){
-  const from=status.messages.findLastIndex(m=>m.role==='user');
+  const from=lastIndex(status.messages,m=>m.role==='user');
   return from<0?[]:status.messages.slice(from+1);
 }
 
@@ -33,7 +38,7 @@ export function lastTurn(status:ChatStatus){
  * Flag the state as unconfirmed instead of silently removing the running cue.
  */
 export function lacksTerminalEvidence(status:ChatStatus){
-  const from=status.messages.findLastIndex(m=>m.role==='user');
+  const from=lastIndex(status.messages,m=>m.role==='user');
   return from>=0&&!status.messages.slice(from+1).some(m=>m.idleOutcome!==undefined);
 }
 
