@@ -52,7 +52,7 @@ type Investigation={
 };
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='institution-message'?'institution-message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
-type PendingExecution={id:string;baselineIdleIds:string[];observedActive:boolean};
+type PendingExecution={id:string;baselineIdleIds:string[];baselineMessageIds:string[];observedActive:boolean};
 type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
 export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel,embedded=false}:{embedded?:boolean;investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){
   const [baseSettings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
@@ -173,7 +173,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       if(embedded)setPendingExecution(previous=>{
         if(!previous||previous.id!==value.id)return previous;
         if(value.messages.some(message=>message.idleOutcome&&!previous.baselineIdleIds.includes(message.id))||
-          (previous.observedActive&&!value.active))return null;
+          (previous.observedActive&&!value.active)||
+          (!value.active&&value.messages.some(message=>message.role==='assistant'&&message.complete&&!message.toolCallTurn&&
+            !previous.baselineMessageIds.includes(message.id))))return null;
         return value.active&&!previous.observedActive?{...previous,observedActive:true}:previous;
       });
     }catch(e){
@@ -252,7 +254,8 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     await stream.connect(session);
     await api.chatAction(session,'messages',{text,scenario,...(embedded?{}:{files:rerun?[]:refs.split(/\r?\n/).map(v=>v.trim()).filter(Boolean)})});
     if(embedded)setPendingExecution({id:session,observedActive:false,
-      baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[]});
+      baselineIdleIds:state?.id===session?state.messages.filter(message=>message.idleOutcome).map(message=>message.id):[],
+      baselineMessageIds:state?.id===session?state.messages.map(message=>message.id):[]});
     const prior=readHistory(localStorage,sessionKey,directory).find(row=>row.id===session);
     rememberChat(localStorage,sessionKey,directory,{id:session,title:currentTitle||prior?.title||'',updated:Date.now()});
     investigation?.onSent(session);
