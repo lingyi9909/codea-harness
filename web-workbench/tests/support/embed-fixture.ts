@@ -63,7 +63,7 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     return {
       skill:{list:async({location}:any)=>({location,data:[{id:'message-skill',name:'message-query'}]})},
       model:{list:async()=>({data:modelCatalog})},
-      message:{list:async({sessionID}:any)=>({data:messages.get(sessionID)??[]})},permission:{list:async()=>[]},
+      message:{list:async({sessionID,order}:any)=>({data:order==='desc'?[...(messages.get(sessionID)??[])].reverse():messages.get(sessionID)??[]})},permission:{list:async()=>[]},
       event:{subscribe:async function*({signal,onActivity}:any){
         const pending:any[]=[];
         let wake:()=>void=()=>{};
