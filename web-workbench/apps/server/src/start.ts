@@ -1,4 +1,5 @@
 import {httpInstitutionAdapter} from './institution-query.ts';
+import {resolveListenHost} from './lan-access.ts';
 import {EmbeddedAuth,type EmbedConfig} from './embed-auth.ts';
 import {MysqlEmbedStore} from '../../../packages/storage/src/embed.ts';
 import {readFile} from 'node:fs/promises';
@@ -27,6 +28,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
     throw new Error('FRONTEND_BUILD_MISSING: run npm run web:build from web-workbench before starting the local app.');
   const config=localOnly?{port:Number(process.env.HARNESS_HTTP_PORT??4176),mysql:null}:runtimeConfig();
   if(!Number.isInteger(config.port)||config.port<1024||config.port>65535)throw new Error('INVALID_LOOPBACK_PORT');
+  const listenHost=resolveListenHost(config.port);
   const pool=config.mysql?await createPool(config.mysql):undefined;
   let app:Awaited<ReturnType<typeof createApp>>|undefined;
   let embedLocks:Awaited<ReturnType<typeof createPool>>|undefined;
@@ -54,7 +56,8 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   app=await createApp({pool,auth,native,nativeConnection:localEmbed?.connection,execution,embedded,embeddedBindings:localEmbed?.store.bindings,embeddedStorageCheck:localEmbed?()=>localEmbed!.store.check():undefined,institutionAdapter:process.env.HARNESS_INSTITUTION_ADAPTER_URL?httpInstitutionAdapter(process.env.HARNESS_INSTITUTION_ADAPTER_URL,process.env.HARNESS_INSTITUTION_ADAPTER_AUTH??''):undefined,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly});
   if(localEmbed)app.addHook('onClose',async()=>{await localEmbed!.store.close();});
   const shutdown=async()=>{await app?.close();await pool?.end();await embedLocks?.end();};
-  await app.listen({host:'127.0.0.1',port:config.port});
+  await app.listen({host:listenHost,port:config.port});
+  if(listenHost!=='127.0.0.1')process.stdout.write('LAN 测试访问已开启：请限制 Windows 防火墙来源 IP；机构页使用 HARNESS_PUBLIC_ORIGIN。\n');
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
   if(!localOnly&&!multiUser)printCode(pairingCode);
