@@ -133,8 +133,8 @@ export function useChatStream(session:string){
     parts:frame.session===session?frame.parts:emptyParts,tools:frame.session===session?frame.tools:emptyTools};
 }
 
-export function streamingMessages(history:ChatMessage[],parts:Part[]):ChatMessage[]{
-  if(!parts.length)return history;
+export function streamingMessages(history:ChatMessage[],parts:Part[],progress:ToolProgress[]=[]):ChatMessage[]{
+  if(!parts.length&&!progress.length)return history;
   const messages=[...history];
   const snapshots=new Map(history.map(m=>[m.id,m]));
   for(const part of parts){
@@ -165,6 +165,15 @@ export function streamingMessages(history:ChatMessage[],parts:Part[]):ChatMessag
       steps.splice(after<0?steps.length:after,0,step);
     }
     messages[index]={...message,steps};
+  }
+  // Tool progress can arrive before the native assistant message snapshot or
+  // before the first reasoning/text fragment. Preserve its message anchor so
+  // the transcript shows an execution-process summary rather than going blank.
+  for(const event of progress){
+    if(messages.some(m=>m.id===event.message))continue;
+    const queued=messages.findIndex(m=>m.queued);
+    const index=queued>0?queued:messages.length;
+    messages.splice(index,0,{id:event.message,role:'assistant',text:'',files:[],tools:[]});
   }
   return messages;
 }
