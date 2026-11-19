@@ -33,7 +33,7 @@ export function AnonymousInstitutionPage(){
   },[ready,expires]);
   if(!ready)return <main className="embedded-message-state"><h1>机构报文排查</h1><p role={ended?'status':error?'alert':'status'}>{error||'正在建立独立排查会话…'}</p></main>;
   return <main className="embedded-message-shell anonymous-institution">
-    <header className="embedded-message-header"><strong>机构报文排查</strong><div><span>本次模型</span><ModelPicker value={model} loadModels={async()=>api.chatModels()} onSelect={setModel}/><button onClick={()=>{void api.closeEmbedded().then(()=>{setEnded(true);setReady(false);setError('本次会话已结束。');}).catch(()=>{setReady(false);setError('结束请求结果不明，请稍后重新打开页面。');});}}>结束会话</button></div></header>
+    <header className="embedded-message-header"><strong>机构报文排查</strong><div><span>本次模型</span><ModelPicker value={model} allowDefault={false} loadModels={async()=>api.chatModels()} onSelect={setModel}/><button onClick={()=>{void api.closeEmbedded().then(()=>{setEnded(true);setReady(false);setError('本次会话已结束。');}).catch(()=>{setReady(false);setError('结束请求结果不明，请稍后重新打开页面。');});}}>结束会话</button></div></header>
     {offline&&<p role="status" className="embedded-model-hint">服务暂时不可用，正在重新连接当前会话，请勿重复提交。</p>}
     {error&&<p role="alert">{error}</p>}
     {!model&&<p className="embedded-model-hint">请先选择本次使用的内网模型。</p>}
