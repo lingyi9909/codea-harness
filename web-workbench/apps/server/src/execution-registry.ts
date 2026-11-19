@@ -30,7 +30,11 @@ export const singleServicePermissions=[
 ];
 export const unrestrictedInstitutionShellPermissions=[
   ...singleServicePermissions,
-  {action:'shell',resource:'*',effect:'allow' as const},
+  // Allow institution Skills to execute workspace scripts and read/write files
+  // through native tools as well as Shell. Arbitrary Shell commands can touch
+  // paths outside the workspace: these rules are NOT an OS-level sandbox.
+  ...(['shell','read','write','edit','glob','grep','list','external_directory'] as const)
+    .map(action=>({action,resource:'*',effect:'allow' as const})),
 ];
 export const sharedWorkspacePermissions=[{action:'edit',resource:'*',effect:'deny' as const}];
 type Client=Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
