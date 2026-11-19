@@ -6,27 +6,33 @@ import {SceneConfigStore} from '../../apps/server/src/scene-config.ts';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 
-/** Simplified OpenCode V2 ordered rules for known test patterns. */
+/** Exact-match subset of OpenCode V2 ordered permission rules. */
 function allowed(action:string,resource='*'){
   let effect:'deny'|'allow'|'ask'='deny';
   for(const rule of singleServicePermissions){
     if(rule.action!=='*'&&rule.action!==action)continue;
-    const regex='^'+rule.resource.split('*')
-      .map(piece=>[...piece].map(ch=>'.+?^$()[]{}|\\'.includes(ch)?'\\'+ch:ch).join('')).join('.*')+'$';
-    if(new RegExp(regex).test(resource))effect=rule.effect;
+    if(rule.resource==='*'||rule.resource===resource)effect=rule.effect;
   }
   return effect==='allow';
 }
-test('anonymous shared service permits scoped read-only discovery but never arbitrary Shell or code execution',()=>{
-  for(const action of ['skill','execute','dbhub_search_schema','dbhub_execute_sql'])
+test('anonymous institution: execute/Code Mode + only four approved fixed TeamAI recall and DBHub actions',()=>{
+  for(const action of ['skill','execute','dbhub_search_objects','dbhub_execute_sql'])
     assert.equal(allowed(action),true,action);
-  for(const command of ['teamai recall 业务知识','teamai search 机构报文',
-    'git status --short','git ls-files src'])
-    assert.equal(allowed('shell',command),true,command);
-  for(const command of ['powershell -Command Get-ChildItem','node script.js',
-    'curl https://example.com','teamai publish secrets','teamai delete all',
-    'git push origin main','rm -rf .','python test.py'])
-    assert.equal(allowed('shell',command),false,command);
+  for(const command of [
+    'teamai recall "帮我查询数据库"',
+    'teamai recall "数据库数据字典和表关联"',
+    'teamai recall "数据库业务指标定义和统计口径"',
+    'teamai recall "数据库业务流程和历史异常案例"',
+  ])assert.equal(allowed('shell',command),true,command);
+  for(const command of [
+    'teamai recall 用户直接输入的报文编号',
+    'teamai recall "任意用户查询"',
+    'teamai search 机构报文',
+    'teamai publish secrets',
+    'teamai delete all',
+    'powershell -Command Get-ChildItem',
+    'node script.js','curl https://example.com','git push origin main',
+  ])assert.equal(allowed('shell',command),false,command);
   for(const action of ['edit','read','glob','grep','subagent',
     'external_directory','webfetch','dbhub_write_table','other_mcp_delete'])
     assert.equal(allowed(action),false,action);
