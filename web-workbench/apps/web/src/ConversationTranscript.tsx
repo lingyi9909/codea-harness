@@ -110,7 +110,7 @@ function Reasoning({session,entries,expanded}:{session:string;entries:ReasoningE
   </details>;
 }
 
-function Response({session,messages,progress,active,latest}:{session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean;latest:boolean}){
+function Response({session,messages,progress,active,latest,preserveWorking}:{session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean;latest:boolean;preserveWorking:boolean}){
   const entries:Entry[]=[];
   const files=new Set<string>();
   let lastTool=-1;
@@ -146,7 +146,7 @@ function Response({session,messages,progress,active,latest}:{session:string;mess
   const runningTool=tools.find(e=>e.step.kind==='tool'&&['running','streaming'].includes(e.step.status))?.step;
   const status=problem?.step.kind==='notice'?problem.step.text:undefined;
   // An early acknowledgement (e.g. 请稍等) is not proof that a turn finished.
-  const working=active;
+  const working=active&&(preserveWorking||!answers.length);
   if(!answers.length&&!thinking.length&&!details.length&&!files.size&&!metrics.length&&!active)return null;
   return <article className="response-turn" aria-label="OpenCode 回答">
     {thinking.length>0&&<Reasoning session={session} entries={thinking} expanded={latest}/>}
@@ -170,8 +170,8 @@ function Response({session,messages,progress,active,latest}:{session:string;mess
   </article>;
 }
 
-export function ConversationTranscript({session,messages,progress,active}:{
-  session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean;
+export function ConversationTranscript({session,messages,progress,active,preserveWorking=false}:{
+  session:string;messages:ChatMessage[];progress:ToolProgress[];active:boolean;preserveWorking?:boolean;
 }){
   const turns=groupMessages(messages);
   let activeIndex=turns.length-1;
@@ -179,6 +179,6 @@ export function ConversationTranscript({session,messages,progress,active}:{
   return <div className="conversation-transcript">{turns.map((turn,i)=><section className="conversation-exchange" key={turn.id}>
     {turn.question&&<div className="user-question" aria-label="你的消息"><p>{turn.question.text}</p>
       {turn.question.files.length>0&&<small>引用文件 · {turn.question.files.join('、')}</small>}</div>}
-    <Response session={session} messages={turn.response} progress={progress} active={active&&i===activeIndex} latest={i===activeIndex}/>
+    <Response session={session} messages={turn.response} progress={progress} active={active&&i===activeIndex} latest={i===activeIndex} preserveWorking={preserveWorking}/>
   </section>)}{active&&!turns.length&&<p className="process-note" role="status">正在处理…</p>}</div>;
 }
