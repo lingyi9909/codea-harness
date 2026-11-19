@@ -349,6 +349,9 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       onDeleted={removed=>{
         if(removed===id)switchTo('',true);
       }}/>} 
+    {embedded&&unconfiguredInstitution&&<p className="embedded-permission-warning" role="alert">
+      当前机构报文场景仍绑定默认聊天入口，尚未绑定具体的业务查询 Skill 或 Subagent。模型可以回答，但不代表已执行报文查询。
+    </p>}
     <div className="chat-layout"><div className="chat-box">
       {(!investigation||messages.length>0||stream.tools.length>0||state?.active||executionWaiting||streamAhead||statusVisible)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
@@ -362,9 +365,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
           {stream.connectionState==='disconnected'&&<small>实时事件连接中断，正在通过会话快照恢复进度。</small>}
           {stuck&&<small>如果工具被拒绝或业务系统无响应，需查看执行过程中的错误；可使用“中断执行”，不建议重复提交。</small>}
         </div>}
-        {embedded&&unconfiguredInstitution&&<p className="embedded-permission-warning" role="alert">
-          当前机构报文场景仍绑定默认聊天入口，尚未绑定具体的业务查询 Skill 或 Subagent。模型可以回答，但不代表已执行报文查询。
-        </p>}
+
         {embedded&&snapshot?.toolPolicy==='deny-all'&&<p className="embedded-permission-warning" role="alert">
           当前共享执行会话的服务端策略拒绝全部工具调用。模型即使输出“阶段 1”等文字，也无法据此证明已完成机构业务查询；需要管理员核验并配置安全隔离的工具执行权限。
         </p>}
