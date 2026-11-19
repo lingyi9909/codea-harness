@@ -61,6 +61,30 @@ $env:HARNESS_EMBED_PARENTS = "https://portal.example"
 
 允许的宿主 Origin 用逗号分隔。机构页使用内存 Bearer 凭据，不依赖第三方 Cookie。配置页设置 frame-ancestors 'none'，配置管理保持本机地址访问限制。
 
+## 同事通过本机局域网访问机构页（显式开启）
+
+**正式使用推荐内网 HTTPS 网关 + 身份认证/访问控制**：网关代理到原来的 `127.0.0.1:4176`，保留 Host、Origin、Authorization，关闭 SSE 缓冲；仍然一个启动命令。机构页可能处理敏感银行业务数据，不能把内网等同于可信身份。
+
+如果只是受控内网**测试**，需要同事直接通过 Windows 电脑 IP 访问，可显式启用 LAN HTTP。此模式无传输加密，**不得用于生产银行数据或未认证的高权限 Shell 执行**。先运行 `ipconfig` 查询本机私有 IPv4（以下 `10.20.30.40` 为示例），在同一个 CMD 窗口运行：
+
+```cmd
+set "HARNESS_ENABLE_LAN=1"
+set "HARNESS_HTTP_BIND=0.0.0.0"
+set "HARNESS_PUBLIC_ORIGIN=http://10.20.30.40:4176"
+set "HARNESS_EMBED_PARENTS=http://10.20.30.40:4176"
+.\启动工作台.cmd "D:\teamai"
+```
+
+同事通过 `http://10.20.30.40:4176/embed/institution-message` 访问。如果需嵌入其他内网站点，将精确宿主 Origin 加入 `HARNESS_EMBED_PARENTS`。HTTPS 宿主页通常阻止 HTTP iframe 混合内容，建议改用 HTTPS 网关。
+
+Windows 防火墙只对允许的同事 IP 开放 TCP 4176，禁止公网映射端口。以下为管理员 PowerShell 示例（替换实际 IP）：
+
+```powershell
+New-NetFirewallRule -DisplayName "机构报文工作台测试" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 4176 -RemoteAddress 10.20.30.51,10.20.30.52 -Profile Domain
+```
+
+LAN 监听默认关闭。启用时同时要求 `HARNESS_ENABLE_LAN=1`，`HARNESS_HTTP_BIND` 为 `0.0.0.0` 或私有 IPv4，`HARNESS_PUBLIC_ORIGIN` 是端口一致的私有 HTTP IPv4 地址；公网 IP、缺少开关或地址不匹配拒绝启动。主工作台和 `/config` 继续执行本机登录校验，**同事直连只用于机构嵌入页，不开放本机管理员工作台**。
+
 ## 执行与凭据边界
 
 **本轮恢复原生执行器绑定和分发，未放宽单服务工具权限。** Skill 从目录解析 ID 后通过 session.prompt 的 skills 字段传入；Command 调用 session.command；Subagent 通过 agents/@mention 传入。单服务 Session 仍强制 permissions 通配 deny，创建及后续请求均核验回显，权限回复不能扩大。Skill/命令需要 Shell、文件、MCP 或子任务时仍受此策略限制。绑定成功不等于任意业务工具已获准执行，协议桩不代表真实引擎工具验收。
