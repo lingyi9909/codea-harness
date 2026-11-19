@@ -5,9 +5,17 @@ import type {EmbedStore,EmbedGrant} from '../../../packages/storage/src/embed.ts
 export type EmbedClient={id:string;secret:string;parentOrigin:string;principals:Record<string,string>};
 export type EmbedConfig={publicOrigin:string;clients:EmbedClient[];sessionTTLSeconds?:number;anonymous?:{parentOrigins:string[];executionOwners:string[];singleService?:{identity:string;maxPages?:number};resetCommand?:string[];resetPrivateCommand?:string[]}};
 export const embedDigest=(s:string)=>createHash('sha256').update(s).digest('hex');
+import {isPrivateLanIPv4} from './lan-access.ts';
+
 export function trustedOrigin(origin:string){
   const url=new URL(origin);
-  if(url.origin!==origin||url.username||url.password||!(url.protocol==='https:'||url.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(url.hostname)))throw new Error('EMBED_HTTPS_ORIGIN_REQUIRED');
+  const loopback=['127.0.0.1','localhost','[::1]'].includes(url.hostname);
+  // Private LAN HTTP is opt-in and limited to RFC1918 literal IPv4 origins.
+  // The LAN port must also be explicitly enabled at startup; HTTPS is preferred.
+  const privateLanHTTP=process.env.HARNESS_ENABLE_LAN==='1'&&isPrivateLanIPv4(url.hostname);
+  if(url.origin!==origin||url.username||url.password||
+    !(url.protocol==='https:'||url.protocol==='http:'&&(loopback||privateLanHTTP)))
+    throw new Error('EMBED_HTTPS_ORIGIN_REQUIRED');
   return url;
 }
 export class EmbeddedAuth implements RequestAuth {
