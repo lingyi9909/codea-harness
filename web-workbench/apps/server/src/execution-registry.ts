@@ -3,15 +3,18 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {isAbsolute,relative,sep} from 'node:path';
 import {AuthProblem} from './auth.ts';
 import type {chatConnection} from './modules/chat/connection.ts';
-// Anonymous sessions share one service but never inherit the logged-in Workbench's
-// broad Shell/file/network authority. OpenCode V2 uses last-matching-rule-wins.
+// Anonymous sessions use a restrictive policy by default. A separate, explicit
+// operator opt-in permits unrestricted Shell in the institution scene only.
+// WARNING: unrestricted Shell inherits the service process OS privileges and
+// is NOT confined by the session's working directory. OpenCode V2 rules use
+// last-matching-rule-wins.
 // The DBHub *service* must separately enforce readonly=true, source authorization,
 // timeouts and row limits: these rules restrict which tools may be invoked, not SQL.
-// OpenCode V2: execute enables Code Mode. Nested tools still enforce their
-// individual permissions. Never permit generic shell:*, file mutation, or
-// arbitrary process execution for a shared anonymous banking session.
-// The four exact TeamAI recall commands are copied from the existing,
-// approved database-assistant Agent; no runtime interpolation is allowed.
+// OpenCode V2: execute enables Code Mode; nested tools still check their
+// individual permissions. The optional Shell override is deliberately
+// separate from the default policy and NEVER changes MCP grants.
+// The default four TeamAI recall commands come from the approved Agent.
+// Opt-in Shell override additionally permits arbitrary commands and arguments.
 // DBHub action names must match the configured MCP source exactly.
 export const singleServicePermissions=[
   {action:'*',resource:'*',effect:'deny' as const},
@@ -23,6 +26,11 @@ export const singleServicePermissions=[
   {action:'shell',resource:'teamai recall "数据库数据字典和表关联"',effect:'allow' as const},
   {action:'shell',resource:'teamai recall "数据库业务指标定义和统计口径"',effect:'allow' as const},
   {action:'shell',resource:'teamai recall "数据库业务流程和历史异常案例"',effect:'allow' as const},
+  // The base policy remains the safe default in the absence of explicit opt-in.
+];
+export const unrestrictedInstitutionShellPermissions=[
+  ...singleServicePermissions,
+  {action:'shell',resource:'*',effect:'allow' as const},
 ];
 export const sharedWorkspacePermissions=[{action:'edit',resource:'*',effect:'deny' as const}];
 type Client=Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
@@ -32,11 +40,13 @@ export class ExecutionRegistry {
   private readonly records=new Map<string,ExecutionRecord>();
   private readonly context=new AsyncLocalStorage<Omit<ExecutionRecord,'isolation'>&{isolation:ExecutionRecord['isolation']|'session'}>();
   private readonly single?:{workspace:string;serviceIdentity:string};
+  private readonly allowInstitutionShell:boolean;
   private readonly connect:(url:string,authorization:string)=>Promise<Client>;
   private readonly clients=new Map<string,Promise<Client>>();
   private readonly trustedSceneDirectories=new Set<string>();
-  constructor(entries:ExecutionRecord[],connect:(url:string,authorization:string)=>Promise<Client>,options?:{workspace:string;singleServiceIdentity?:string}){
+  constructor(entries:ExecutionRecord[],connect:(url:string,authorization:string)=>Promise<Client>,options?:{workspace:string;singleServiceIdentity?:string;allowInstitutionShell?:boolean}){
     this.connect=connect;
+    this.allowInstitutionShell=Boolean(options?.singleServiceIdentity&&options.allowInstitutionShell);
     if(options?.singleServiceIdentity){
       if(entries.length||!isAbsolute(options.workspace)||!options.singleServiceIdentity.startsWith('single:'))throw new Error('SINGLE_SERVICE_CONFIG_INVALID');
       this.single={workspace:options.workspace,serviceIdentity:options.singleServiceIdentity};
@@ -76,11 +86,12 @@ export class ExecutionRegistry {
     this.trustedSceneDirectories.add(path);
   }
   sharedWorkspace(){return this.current().workspaceAccess==='shared-readonly';}
-  permissions(){return this.single?structuredClone(singleServicePermissions):this.sharedWorkspace()?structuredClone(sharedWorkspacePermissions):undefined;}
+  institutionShellEnabled(){return Boolean(this.single&&this.allowInstitutionShell);}
+  permissions(){return this.single?structuredClone(this.allowInstitutionShell?unrestrictedInstitutionShellPermissions:singleServicePermissions):this.sharedWorkspace()?structuredClone(sharedWorkspacePermissions):undefined;}
   assertPermissions(session:{permissions?:{action:string;resource:string;effect:string}[]}){
     if(!this.sharedWorkspace())return;
     // Fail closed if the installed native API drops or mutates the deny rules.
-    const rules=session.permissions,expected=this.single?singleServicePermissions:sharedWorkspacePermissions;
+    const rules=session.permissions,expected=this.single?(this.allowInstitutionShell?unrestrictedInstitutionShellPermissions:singleServicePermissions):sharedWorkspacePermissions;
     if(!Array.isArray(rules)||rules.length!==expected.length||expected.some((rule,i)=>rules[i].action!==rule.action||rules[i].resource!==rule.resource||rules[i].effect!==rule.effect))throw new AuthProblem(409,'SHARED_WORKSPACE_PERMISSION_MISMATCH');
   }
   serviceIdentity(){return this.current().serviceIdentity;}
