@@ -66,7 +66,7 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     await frames[1].getByLabel('对话内容').fill('继续解释原因');await frames[1].getByRole('button',{name:'发送 ↑',exact:true}).click();await expect.poll(()=>f.calls.length).toBe(4);assert.equal(f.prompts.at(-1).text,'继续解释原因');
     for(const page of pages){const frame=page.frames().find(v=>v.url().startsWith(origin))!;assert.deepEqual(await frame.evaluate(()=>({local:Object.keys(localStorage),session:Object.keys(sessionStorage)})),{local:[],session:[]});}
     const captured=await Promise.all(requests);assert.ok(captured.every(r=>r.cookie===''));assert.ok(captured.every(r=>!r.url.includes('token=')&&!r.url.includes('ticket=')));assert.equal(captured.filter(r=>r.url.endsWith('/institution-query')).length,0);
-    await frames[0].getByRole('button',{name:'结束会话',exact:true}).click();await expect(frames[0].getByRole('status')).toContainText('本次会话已结束');assert.equal(f.nativeSessions.size,2);
+    await frames[0].getByRole('button',{name:'结束会话',exact:true}).click();await expect(frames[0].getByRole('status').filter({hasText:'本次会话已结束'})).toBeVisible();assert.equal(f.nativeSessions.size,2);
     await pages[0].reload();await expect(frames[0].getByLabel('msgSn',{exact:true})).toHaveValue('');await expect(frames[0].getByText(/仅本会话结果：/)).toHaveCount(0);assert.equal(f.calls.length,4);await expect(frames[1].getByText(/仅本会话结果：/)).toBeVisible();await context.close();
   }finally{await browser?.close();host.closeAllConnections();await new Promise<void>(resolve=>host.close(()=>resolve()));await f.close();}
 });
