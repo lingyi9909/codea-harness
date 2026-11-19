@@ -54,7 +54,7 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     return [{affectedRows:1}];
   }} as unknown as Pool;
   const nativeSessions=new Map<string,any>(),messages=new Map<string,any[]>(),forms=new Map<string,any[]>(),active:Record<string,boolean>={},calls:string[]=[];
-  const modelCatalog=[{id:'private',providerID:'company',name:'内网测试模型',enabled:true}],prompts:any[]=[];
+  const modelCatalog=[{id:'private',providerID:'company',name:'内网测试模型',enabled:true}],prompts:any[]=[],formReplies:any[]=[];
   let serial=0;
   const execution=new ExecutionRegistry(records,async(url)=>{
     const index=records.findIndex(r=>r.url===url),prefix='user-'+index;
@@ -66,7 +66,9 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
       session:{
         create:async(input:any)=>{const session={id:prefix+'-'+(++serial),...input,time:{updated:Date.now()}};nativeSessions.set(session.id,session);return session;},
         get:async({sessionID}:any)=>nativeSessions.get(sessionID),list:async()=>({data:[...nativeSessions.values()]}),active:async()=>Object.fromEntries(Object.entries(active).filter(([id])=>id.startsWith(prefix+'-'))),
-        inbox:{list:async()=>[]},form:{list:async({sessionID}:any)=>forms.get(sessionID)??[]},instructions:{entry:{put:async()=>{}}},
+        inbox:{list:async()=>[]},form:{list:async({sessionID}:any)=>forms.get(sessionID)??[],
+          reply:async(input:any)=>{formReplies.push(structuredClone(input));forms.set(input.sessionID,[]);},
+          cancel:async(input:any)=>{forms.set(input.sessionID,[]);}},instructions:{entry:{put:async()=>{}}},
         switchModel:async({sessionID,model}:any)=>{nativeSessions.get(sessionID).model=model;},
         prompt:async(input:any)=>{
           const {sessionID,text}=input;prompts.push(structuredClone(input));
@@ -91,5 +93,5 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
     const t=await ticket(subject);const r=await app.inject({method:'POST',url:'/api/v1/embed/exchange',headers:headers(),payload:{ticket:t.ticket,parentOrigin}});
     if(r.statusCode!==200)throw Error(r.body);return r.json().data as {token:string;csrfToken:string;expiresAt:number};
   };
-  return {get app(){return app;},restart,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,modelCatalog,prompts,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
+  return {get app(){return app;},restart,store,config,owners,workspace,records,execution,embedded,nativeSessions,active,calls,messages,forms,formReplies,modelCatalog,prompts,headers,ticket,visit,close:async()=>{await app.close();await rm(base,{recursive:true,force:true});}};
 }
