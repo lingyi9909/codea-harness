@@ -6,24 +6,31 @@ import {SceneConfigStore} from '../../apps/server/src/scene-config.ts';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 
-/** Model the documented OpenCode V2 ordered permission + glob semantics. */
+/** Simplified OpenCode V2 ordered rules for known test patterns. */
 function allowed(action:string,resource='*'){
   let effect:'deny'|'allow'|'ask'='deny';
   for(const rule of singleServicePermissions){
     if(rule.action!=='*'&&rule.action!==action)continue;
-    const pattern=rule.resource.replace(/[.+^$|()[\]{}]/g,'\\/** The official V2 permission contract uses the LAST matching rule. */
-function allowed(action:string){
-  const matching=singleServicePermissions.filter(rule=>
-    rule.action==='*'||rule.action===action);
-  return matching.at(-1)?.effect==='allow';
+    const regex='^'+rule.resource.split('*')
+      .map(piece=>[...piece].map(ch=>'.+?^$()[]{}|\\'.includes(ch)?'\\'+ch:ch).join('')).join('.*')+'$';
+    if(new RegExp(regex).test(resource))effect=rule.effect;
+  }
+  return effect==='allow';
 }
-test('anonymous shared service grants only the existing Skill and scoped DBHub query tools',()=>{
-  for(const action of ['skill','dbhub_search_schema','dbhub_execute_sql'])assert.equal(allowed(action),true,action);
-  for(const action of ['shell','edit','read','glob','grep','subagent','execute',
+test('anonymous shared service permits scoped read-only discovery but never arbitrary Shell or code execution',()=>{
+  for(const action of ['skill','dbhub_search_schema','dbhub_execute_sql'])
+    assert.equal(allowed(action),true,action);
+  for(const command of ['teamai recall 业务知识','teamai search 机构报文',
+    'git status --short','git ls-files src'])
+    assert.equal(allowed('shell',command),true,command);
+  for(const command of ['powershell -Command Get-ChildItem','node script.js',
+    'curl https://example.com','teamai publish secrets','teamai delete all',
+    'git push origin main','rm -rf .','python test.py'])
+    assert.equal(allowed('shell',command),false,command);
+  for(const action of ['edit','read','glob','grep','subagent','execute',
     'external_directory','webfetch','dbhub_write_table','other_mcp_delete'])
     assert.equal(allowed(action),false,action);
-});').replace(/\*/g,'.*');
-    if(new RegExp('^'+pattern+'
+});
 
 test('three anonymous institution pages run existing message Skill on ONE OpenCode service with independent sessions',async()=>{
   const f=await sqliteEmbedFixture(undefined,undefined,true);
