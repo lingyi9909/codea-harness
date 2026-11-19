@@ -9,7 +9,7 @@
 ### Skill 如何复用
 
 - 如果 `institution-message` 显式配置了 Skill，就使用它。
-- 如果 `institution-message` 仍为默认 `builtin/chat`，而 `message` 已经配置为 Skill、且工作目录相同，自动继承已配置的报文排查 Skill；不用再手动配置一遍。
+- 如果 `institution-message` 仍为默认 `builtin/chat`，而 `message` 已经配置为 Skill，则自动继承原报文排查 Skill 和其工作目录；不用再手动配置一遍。
 - 如果上述两个场景都没有配置 Skill，页面会提示缺少业务执行器，不把普通 Chat 的“阶段 1”描述当作已执行查询。
 - 不在匿名共享服务内执行任意自定义命令或子 Agent：它们可能以另一套本机权限运行，绕过匿名 Session 的工具限制。如业务确实需要这些能力，须采用可信用户认证与独立执行服务的方案。
 
