@@ -31,6 +31,23 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
       await frame.getByRole('button',{name:'开始排查',exact:true}).click();await expect(frame.getByText(/仅本会话结果：/)).toBeVisible({timeout:20000});
     }));
     assert.equal(f.calls.length,3);assert.equal(f.prompts.length,3);
+    // Closed process details must not leak raw tool input/output into the page.
+    const toolDetails=await frames[0].locator('body').evaluate(body=>{
+      const details=document.createElement('details');details.className='turn-process';
+      details.innerHTML='<summary>执行过程</summary><div class="process-list">原生工具输入输出</div>';
+      body.appendChild(details);const content=details.querySelector('.process-list')!;
+      const closed=getComputedStyle(content).display;
+      details.open=true;const opened=getComputedStyle(content).display;details.remove();
+      return {closed,opened};
+    });
+    assert.deepEqual(toolDetails,{closed:'none',opened:'grid'});
+    // Native active status must surface both a progress cue and an interrupt action.
+    const firstSession=[...f.nativeSessions.keys()][0];
+    f.active[firstSession]=true;
+    await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
+    await expect(frames[0].getByText('正在执行，思考和工具进度会持续更新。')).toBeVisible();
+    f.active[firstSession]=false;
+
     for(const input of f.prompts){assert.deepEqual(input.skills,[{id:'message-skill'}]);const conditions=JSON.parse(input.text.split('\n').find((line:string)=>line.startsWith('{'))!);assert.equal(conditions.day,'2026-11-19');assert.match(conditions.msgSn,/^000[0-2]$/);assert.equal(conditions.from,Date.UTC(2026,10,18,16));assert.equal(conditions.to,Date.UTC(2026,10,19,16));assert.equal(input.text.includes('已查询证据'),false);}
     assert.ok([...f.nativeSessions.values()].every(s=>s.model.id==='kimi-k2'&&s.location.directory===f.workspace));assert.ok([...f.nativeSessions.values()].every(s=>s.permissions?.some((r:{action:string;effect:string})=>r.action==='*'&&r.effect==='deny')));
     for(const width of [1920,1440,768,390]){
