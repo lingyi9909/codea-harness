@@ -43,3 +43,10 @@
 .embedded-execution-spinner{width:10px;height:10px;border-radius:50%;border:2px solid #cad7e5;border-top-color:#486c9c;animation:embedded-execution-spin .9s linear infinite;flex:none}
 @keyframes embedded-execution-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.embedded-execution-spinner{animation:none;border-color:#486c9c}}
+
+/* The institution filter editor reuses the main workbench's drawer mechanics. */
+.institution-adjust-controls{display:grid;gap:16px;min-width:0;padding:4px 0}
+.institution-adjust-controls label{display:grid;gap:7px;color:#414c5a;font-size:13px;font-weight:600}
+.institution-adjust-controls input{width:100%;min-height:43px;min-width:0;box-sizing:border-box;padding:9px 11px;border:1px solid #cfd7e1;border-radius:7px;background:#fff;font:inherit;color:#28313f}
+.institution-adjust-controls input:focus-visible{outline:2px solid #a9bdd8;outline-offset:1px}
+.institution-adjust-controls p{margin:2px 0 0;color:#687480;font-size:12px;line-height:1.65}
