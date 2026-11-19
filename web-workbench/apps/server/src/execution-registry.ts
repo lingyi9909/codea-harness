@@ -3,7 +3,16 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {isAbsolute,relative,sep} from 'node:path';
 import {AuthProblem} from './auth.ts';
 import type {chatConnection} from './modules/chat/connection.ts';
-export const singleServicePermissions=[{action:'*',resource:'*',effect:'deny' as const}];
+// Anonymous sessions share one service but never inherit the logged-in Workbench's
+// broad Shell/file/network authority. OpenCode V2 uses last-matching-rule-wins.
+// The DBHub *service* must separately enforce readonly=true, source authorization,
+// timeouts and row limits: these rules restrict which tools may be invoked, not SQL.
+export const singleServicePermissions=[
+  {action:'*',resource:'*',effect:'deny' as const},
+  {action:'skill',resource:'*',effect:'allow' as const},
+  {action:'dbhub_search_schema',resource:'*',effect:'allow' as const},
+  {action:'dbhub_execute_sql',resource:'*',effect:'allow' as const},
+];
 export const sharedWorkspacePermissions=[{action:'edit',resource:'*',effect:'deny' as const}];
 type Client=Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
 export type ExecutionRecord={ownerId:string;serviceIdentity:string;url:string;authorization:string;isolation:'os-user'|'container';workspaceAccess?:'shared-readonly';directories:Record<string,string>};
