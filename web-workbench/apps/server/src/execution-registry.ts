@@ -10,6 +10,10 @@ import type {chatConnection} from './modules/chat/connection.ts';
 export const singleServicePermissions=[
   {action:'*',resource:'*',effect:'deny' as const},
   {action:'skill',resource:'*',effect:'allow' as const},
+  // OpenCode V2 explicitly removes Code Mode / execution tools when
+  // `execute` is denied. Nested tools still enforce their own permission
+  // rules, so enabling this does not grant arbitrary Shell/edit access.
+  {action:'execute',resource:'*',effect:'allow' as const},
   {action:'dbhub_search_schema',resource:'*',effect:'allow' as const},
   {action:'dbhub_execute_sql',resource:'*',effect:'allow' as const},
   // The institution Skill may use OpenCode's native Shell for read-only
