@@ -282,7 +282,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const progressSignature=useMemo(()=>JSON.stringify([
     id,
     snapshot?.messages.map(m=>[m.id,m.idleOutcome,m.complete,m.text,
-      m.steps?.map(s=>[s.kind,s.ordinal,s.kind==='tool'?s.status:'text'in s?s.text:s.kind==='notice'?s.text:''])]),
+      m.steps?.map(s=>[s.kind,s.ordinal,s.kind==='tool'?s.status:s.text])]),
     stream.parts.map(p=>[p.message,p.ordinal,p.text,p.ended]),
     stream.tools.map(t=>[t.id,t.text]),
     lifecycle&&[lifecycle.id,lifecycle.status]
