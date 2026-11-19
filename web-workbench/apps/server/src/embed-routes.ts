@@ -92,7 +92,10 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
   });
   const binding=async(institution=false)=>{
     const value=await sceneConfig.binding(institution?'institution-message':'message');
-    if(execution.singleService()&&value.directory!==workspace)throw new AuthProblem(403,'EMBED_DIRECTORY_FORBIDDEN');
+    // Directory comes from the administrator-maintained scene configuration,
+    // not from the embedding browser. Reuse existing message Skill location
+    // without a duplicate per-page directory setting.
+    if(execution.singleService())execution.trustSceneDirectory(value.directory);
     if(!institution&&(value.executor.type==='builtin'||value.executor.type==='command'&&value.executor.name==='models'))throw new AuthProblem(503,'EMBED_EXECUTOR_NOT_CONFIGURED');
     return value;
   };
