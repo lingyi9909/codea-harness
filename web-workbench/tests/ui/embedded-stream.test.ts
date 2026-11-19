@@ -27,3 +27,18 @@ test('an ended embedded API cannot fall back to the workbench cookie APIs',async
   globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({data:{token:'temporary',csrfToken:'csrf',expiresAt:Date.now()+60000}}),{headers:{'content-type':'application/json'}});};
   try{const api=new HarnessApi();await api.openAnonymousEmbedded();api.clearEmbedded();await assert.rejects(api.chatModels(),/本次排查会话已结束/);assert.throws(()=>api.activity('own'),/本次排查会话已结束/);assert.equal(calls,1);}finally{globalThis.fetch=original;}
 });
+
+test('embedded SSE parses authoritative native lifecycle without exposing it as chat text',async()=>{
+  const original=globalThis.fetch;
+  const encoded=new TextEncoder().encode('event: lifecycle\ndata: {"id":"native-finished","status":"succeeded","at":123}\n\n');
+  globalThis.fetch=async()=>new Response(new ReadableStream<Uint8Array>({start(c){c.enqueue(encoded);}}),
+    {headers:{'content-type':'text/event-stream'}});
+  const source=new BearerEventSource('/api/v1/embed/chat/sessions/one/activity',{Authorization:'Bearer capability'});
+  try{
+    const value=await new Promise<{status:string;id:string;at:number}>((resolve,reject)=>{
+      const timeout=setTimeout(()=>reject(new Error('LIFECYCLE_TIMEOUT')),2000);
+      source.addEventListener('lifecycle',event=>{clearTimeout(timeout);resolve(JSON.parse(event.data));});
+    });
+    assert.deepEqual(value,{id:'native-finished',status:'succeeded',at:123});
+  }finally{source.close();globalThis.fetch=original;}
+});
