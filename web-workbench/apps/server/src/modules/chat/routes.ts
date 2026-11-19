@@ -1,0 +1,610 @@
+import type {BusinessVerificationBridge} from '../../business-verification.ts';
+import type {UserContextResolver} from '../../user-context.ts';
+import type {ExecutionRegistry} from '../../execution-registry.ts';
+import {MultiUserAuth} from '../../multi-user-auth.ts';
+import {requireChatBinding,matchNativeBinding} from '../../owned-chat.ts';
+import type {ChatBindingStore} from '../../../../../packages/storage/src/chat-bindings.ts';
+import {activity,activityPreview,assistantFooters} from './activity.ts';
+import {chatConnection} from './connection.ts';
+import { mkdir,realpath,stat } from 'node:fs/promises';
+import {once} from 'node:events';
+import { createHash,randomUUID } from 'node:crypto';
+import { delimiter,isAbsolute,relative,resolve,sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import type {FormInfo,FormField} from '@opencode/client';
+import {activeFormFields,matchesFormCondition,formDefaults,type ChatForm,type ChatFormField,type FormAnswers,type FormValue} from '../../../../../packages/contracts/src/chat.ts';
+import type { FastifyInstance,FastifyRequest } from 'fastify';
+import type { ChatMessage,ChatStatus,ChatModel,ChatFragment,ChatHistoryPage,ChatScenario } from '../../../../../packages/contracts/src/chat.ts';
+import { AuthProblem,type RequestAuth } from '../../auth.ts';
+import { SceneConfigStore,type SceneKey,type Binding } from '../../scene-config.ts';
+
+const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
+const within=(root:string,target:string)=>{
+  const part=relative(root,target);
+  return part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);
+};
+const revision=(p:{id:string;action:string;resources:string[];message?:string})=>
+  createHash('sha256').update(JSON.stringify([p.id,p.action,p.resources,p.message])).digest('hex');
+type Params={id:string};
+const property=(maxLength:number)=>({type:'string',minLength:1,maxLength});
+const body=(properties:Record<string,unknown>,required=Object.keys(properties))=>({
+  body:{type:'object',additionalProperties:false,required,properties},
+});
+
+const finite=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)?value:undefined;
+function formField(field:FormField):ChatFormField{
+  const common={key:field.key,title:field.title,description:field.description};
+  if(field.type==='external'){
+    let url:URL|undefined;
+    try{url=new URL(field.url);}catch{}
+    return {...common,type:field.type,url:url&&['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:undefined};
+  }
+  const base={...common,required:field.required,hidden:field.hidden,when:field.when?.map(({key,op,value})=>({key,op,value}))};
+  switch(field.type){
+    case 'boolean':return {...base,type:field.type,default:field.default};
+    case 'integer':case 'number':return {...base,type:field.type,default:finite(field.default),minimum:finite(field.minimum),maximum:finite(field.maximum)};
+    case 'multiselect':return {...base,type:field.type,default:field.default,custom:field.custom,minItems:field.minItems,maxItems:field.maxItems,
+      options:field.options.map(({value,label,description})=>({value,label,description}))};
+    case 'string':return {...base,type:field.type,default:field.default,custom:field.custom,minLength:field.minLength,maxLength:field.maxLength,
+      pattern:field.pattern,placeholder:field.placeholder,format:field.format,options:field.options?.map(({value,label,description})=>({value,label,description}))};
+    default:throw new AuthProblem(502,'FORM_SERVICE_UNAVAILABLE');
+  }
+}
+function nativeForm(native:FormInfo):ChatForm{
+  const form={id:native.id,title:native.title,fields:native.fields.map(formField)};
+  return {...form,revision:createHash('sha256').update(JSON.stringify(form)).digest('hex')};
+}
+// Resolve dependencies on server-held defaults before exposing fields to the browser.
+function visibleForm(form:ChatForm):ChatForm{
+  type Conditions=NonNullable<ChatFormField['when']>;
+  const hidden=new Map<string,{defaultValue?:FormValue;when:Conditions}>();
+  const excluded=new Set<string>(),fields:ChatFormField[]=[];
+  for(const field of form.fields){
+    const when:Conditions=[];
+    const available=(field.when??[]).every(condition=>{
+      if(excluded.has(condition.key))return false;
+      const dependency=hidden.get(condition.key);
+      if(!dependency){when.push(condition);return true;}
+      if(!matchesFormCondition(dependency.defaultValue,condition))return false;
+      for(const prerequisite of dependency.when)if(!when.includes(prerequisite))when.push(prerequisite);
+      return true;
+    });
+    if(!available){excluded.add(field.key);continue;}
+    if(field.hidden){
+      hidden.set(field.key,{defaultValue:'default' in field?field.default:undefined,when});
+      continue;
+    }
+    fields.push({...field,when:when.length?when:undefined});
+  }
+  return {...form,fields};
+}
+function validateValue(field:ChatFormField,value:FormValue){
+  switch(field.type){
+    case 'external':return value===true;
+    case 'boolean':return typeof value==='boolean';
+    case 'integer':case 'number':return typeof value==='number'&&Number.isFinite(value)&&(field.type!=='integer'||Number.isInteger(value))
+      &&value>=(field.minimum??-Infinity)&&value<=(field.maximum??Infinity);
+    case 'multiselect':return Array.isArray(value)&&value.length>=Math.max(field.minItems??0,field.required?1:0)&&value.length<=(field.maxItems??Infinity)
+      &&value.every(v=>typeof v==='string'&&(field.custom||field.options.some(o=>o.value===v)));
+    case 'string':return typeof value==='string'&&value.length>=Math.max(field.minLength??0,field.required?1:0)&&value.length<=(field.maxLength??Infinity)
+      &&(!field.options?.length||field.custom||field.options.some(o=>o.value===value));
+  }
+}
+function checkedAnswers(form:ChatForm,submitted:FormAnswers|undefined){
+  if(!submitted)throw new AuthProblem(400,'FORM_ANSWER_INVALID');
+  const defaults=formDefaults({...form,fields:form.fields.filter(f=>f.hidden)}),answers={...defaults,...submitted};
+  const active=activeFormFields(form,answers);
+  const editable=new Set(active.filter(f=>!f.hidden).map(f=>f.key));
+  if(Object.keys(submitted).some(key=>!editable.has(key)))throw new AuthProblem(400,'FORM_ANSWER_INVALID');
+  const result:FormAnswers=Object.create(null);
+  for(const field of active){
+    const value=Object.hasOwn(answers,field.key)?answers[field.key]:undefined;
+    if(value===undefined){
+      if(field.required||field.type==='external')throw new AuthProblem(400,'FORM_ANSWER_INVALID');
+    }else{
+      if(!validateValue(field,value))throw new AuthProblem(400,'FORM_ANSWER_INVALID');
+      result[field.key]=value;
+    }
+  }
+  return result;
+}
+function upstreamProblem(error:unknown){
+  return error instanceof Error&&error.cause instanceof AuthProblem?error.cause:error;
+}
+
+const languagePreference='请使用简体中文撰写面向用户的思考摘要和进度说明。代码、命令、文件路径、标识符及日志引文保留原文。';
+const languageSuffix='\n\n[工作台显示偏好] '+languagePreference;
+function displayedUserText(message:{text:string;metadata?:Record<string,unknown>}){
+  return message.metadata?.workbenchLanguageSuffix===1&&message.text.endsWith(languageSuffix)
+    ?message.text.slice(0,-languageSuffix.length):message.text;
+}
+function unsupportedEndpoint(error:unknown){
+  const problem=upstreamProblem(error);
+  return problem instanceof AuthProblem&&['OPENCODE_HTTP_404','OPENCODE_HTTP_405','OPENCODE_HTTP_501'].includes(problem.code);
+}
+
+const configuredRoots=()=>(process.env.HARNESS_CHAT_ROOTS??process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean);
+const defaultDirectory=resolve('chat-files');
+export async function resolveLocalWorkspace(input?:string){
+  const configured=configuredRoots();
+  const selected=input??configured[0]??defaultDirectory;
+  if(input===undefined&&!configured.length)await mkdir(defaultDirectory,{recursive:true});
+  const workspace=await realpath(selected).catch(()=>undefined);
+  if(!workspace||!(await stat(workspace)).isDirectory())
+    throw new Error('Workspace directory does not exist or is not a directory: '+selected);
+  return workspace;
+}
+const configuredSceneKey=(s:ChatScenario):SceneKey|undefined=>s==='log-inspection'?'logs':s==='message-inspection'?'message':s==='institution-message-inspection'?'institution-message':s==='data-analysis'?'data':undefined;
+export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:{nativeConnection?:ReturnType<typeof chatConnection>;sessionMetadata?:(req:FastifyRequest)=>Record<string,string>;blockSensitiveForms?:boolean;prefix?:string;onSessionCreated?:(req:FastifyRequest,id:string)=>Promise<void>;mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore;bindings?:ChatBindingStore;execution?:ExecutionRegistry;multiUser?:boolean;business?:{resolver:UserContextResolver;bridge:BusinessVerificationBridge}}){
+  // Grants created before the institution binding was split used message-inspection.
+  // Preserve those native/store bindings while resolving the same new configuration.
+  const sceneKey=(s:ChatScenario)=>options.execution?.singleService()&&s==='message-inspection'?'institution-message':configuredSceneKey(s);
+  const apiPrefix=options.prefix??'/api/v1/chat';
+  const localClient=options.nativeConnection??chatConnection(options.mayStart??false);
+  const client=()=>options.multiUser?options.execution!.client():localClient();
+  const serviceIdentity=()=>options.execution?.serviceIdentity()??'local';
+  const configured=configuredRoots(),workspace=options.workspace,sceneConfig=options.sceneConfig;
+  const effective=(path:string)=>options.execution?.directory(path)??path;
+  const currentWorkspace=()=>workspace?effective(workspace):undefined;
+  const roots=workspace?[workspace]:configured.length?configured:[defaultDirectory];
+  async function directory(input:string){
+    if(!isAbsolute(input))throw new AuthProblem(400,'ABSOLUTE_DIRECTORY_REQUIRED');
+    const path=await realpath(effective(input)).catch(()=>null);
+    if(!path||!(await stat(path)).isDirectory())throw new AuthProblem(400,'DIRECTORY_NOT_FOUND');
+    if(workspace){
+      if(relative(currentWorkspace()!,path)==='')return currentWorkspace()!;
+      // Only a directory explicitly bound by startup-workspace configuration is available.
+      const bindings=sceneConfig?.read().config.scenes??{};
+      for(const binding of Object.values(bindings)){
+        if(!binding)continue;
+        const permitted=await realpath(effective(binding.directory)).catch(()=>null);
+        if(permitted===path)return path;
+      }
+      throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
+    }
+    if(!configured.length&&options.mayStart)return path;
+    for(const root of roots){
+      const canonical=await realpath(effective(root)).catch(()=>null);
+      if(canonical&&within(canonical,path))return path;
+    }
+    throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
+  }
+  async function owned(id:string,owner:string){
+    if(!/^[\w-]{1,128}$/.test(id))throw new AuthProblem(400,'INVALID_SESSION');
+    const binding=options.bindings?await requireChatBinding(options.bindings,serviceIdentity(),id,owner):undefined;
+    const session=await (await client()).session.get({sessionID:id}).catch((error:unknown)=>{
+      const problem=upstreamProblem(error);
+      if(problem instanceof AuthProblem&&problem.code==='OPENCODE_HTTP_404')throw new AuthProblem(404,'CHAT_NOT_FOUND');
+      throw error;
+    });
+    if(binding)matchNativeBinding(binding,session);
+    options.execution?.assertPermissions(session);
+    const kind=session.metadata?.harnessScenario as ChatScenario|undefined;
+    if(session.id!==id||!kind||!['direct-chat','log-inspection','message-inspection','institution-message-inspection','data-analysis'].includes(kind)||session.metadata?.harnessOwner!==owner)
+      throw new AuthProblem(404,'CHAT_NOT_FOUND');
+    const activeDirectory=await directory(session.location.directory);
+    if(kind==='direct-chat'&&workspace&&activeDirectory!==currentWorkspace())
+      throw new AuthProblem(404,'CHAT_NOT_FOUND');
+    if(sceneConfig&&sceneKey(kind)){
+      const binding=await sceneConfig.binding(sceneKey(kind)!);
+      if(effective(binding.directory)!==session.location.directory)throw new AuthProblem(409,'SCENE_DIRECTORY_CHANGED');
+    }
+    return session;
+  }
+  if(options.business&&options.bindings){
+    const {resolver,bridge}=options.business;
+    const scope=async(req:FastifyRequest,id:string)=>{
+      const session=await auth.session(req);
+      await owned(id,session.ownerId);
+      const binding=await requireChatBinding(options.bindings!,serviceIdentity(),id,session.ownerId);
+      return resolver.bind(session.ownerId,binding,'mock-logs');
+    };
+    const base=apiPrefix+'/sessions/:id/business-verification';
+    app.get<{Params:Params}>(base,async req=>wrap(bridge.status(await scope(req,req.params.id))));
+    app.post<{Params:Params}>(base,async req=>{await auth.mutation(req);return wrap(await bridge.send(await scope(req,req.params.id)));});
+    app.post<{Params:Params&{challenge:string};Body:{code:string}}>(base+'/:challenge/code',{schema:body({code:property(32)})},async req=>{
+      await auth.mutation(req);const context=await scope(req,req.params.id);
+      return wrap(await bridge.submit(context,req.params.challenge,req.body.code));
+    });
+    app.delete<{Params:Params&{challenge:string}}>(base+'/:challenge',async req=>{await auth.mutation(req);return wrap(bridge.cancel(await scope(req,req.params.id),req.params.challenge));});
+  }
+  async function pendingForms(sessionID:string){
+    try{
+      const native=await (await client()).session.form.list({sessionID});
+      const forms=native.filter(form=>form.sessionID===sessionID);
+      if(options.blockSensitiveForms&&forms.some(form=>form.fields.some(field=>/password|passwd|secret|token|credential|otp|verification.?code|sms.?code|one.?time|验证码|校验码|动态码|密码|口令/i.test([form.title,field.key,field.title,field.description,'format' in field?field.format:''].join(' ')))))throw new AuthProblem(409,'EMBED_BUSINESS_AUTH_REQUIRED');
+      return forms.map(nativeForm);
+    }catch(error){
+      const problem=upstreamProblem(error);
+      if(problem instanceof AuthProblem&&problem.code==='EMBED_BUSINESS_AUTH_REQUIRED')throw problem;
+      if(problem instanceof AuthProblem&&['OPENCODE_HTTP_404','OPENCODE_HTTP_405','OPENCODE_HTTP_501'].includes(problem.code))return [];
+      if(problem instanceof AuthProblem)throw problem;
+      throw new AuthProblem(502,'FORM_SERVICE_UNAVAILABLE');
+    }
+  }
+  app.get(apiPrefix+'/settings',async(req)=>{
+    await auth.session(req);return wrap({configured:true,directories:roots.map(effective)});
+  });
+  async function project(input?:string){
+    if(!workspace&&!configured.length&&(!input||input===roots[0]))await mkdir(roots[0],{recursive:true});
+    return directory(input??roots[0]);
+  }
+  async function sceneDirectory(kind:ChatScenario,input?:string){
+    const key=sceneKey(kind);
+    if(key&&sceneConfig){
+      const binding=await sceneConfig.binding(key);
+      if(input&&await directory(input)!==effective(binding.directory))throw new AuthProblem(403,'SCENE_DIRECTORY_MISMATCH');
+      return directory(binding.directory);
+    }
+    const resolved=await project(input);
+    if(kind==='direct-chat'&&workspace&&resolved!==currentWorkspace())
+      throw new AuthProblem(403,'DIRECTORY_OUTSIDE_CHAT_ROOTS');
+    return resolved;
+  }
+  type Execution={kind:'skill';skills:{id:string}[]}|{kind:'command';name:string}|{kind:'subagent';agents:{name:string}[]}|{kind:'direct'};
+  async function execution(dir:string,binding:Binding):Promise<Execution>{
+    // These are native Workbench actions, not custom commands or Skills.
+    // /models only opens the interactive selector; it must never be passed
+    // to session.command() as an executable diagnosis workflow.
+    if(binding.executor.type==='builtin'&&binding.executor.name==='chat')return {kind:'direct'};
+    if(binding.executor.type==='command'&&binding.executor.name==='models')return {kind:'direct'};
+    const native=await client();
+    if(binding.executor.type==='skill'){
+      const catalog=await native.skill.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
+      if(catalog.location?.directory!==dir||!Array.isArray(catalog.data))throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');
+      const candidates=catalog.data.filter(item=>item.name===binding.executor.name);
+      if(candidates.length!==1||!candidates[0].id)throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
+      return {kind:'skill',skills:[{id:candidates[0].id}]};
+    }
+    if(binding.executor.type==='command'){
+      const catalog=await native.command.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
+      if(!catalog.data?.some(item=>item.name===binding.executor.name))throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
+      return {kind:'command',name:binding.executor.name};
+    }
+    const catalog=await native.agent.list({location:{directory:dir}}).catch(()=>{throw new AuthProblem(502,'SCENE_EXECUTOR_CATALOG_UNAVAILABLE');});
+    const agent=catalog.data?.find(item=>item.name===binding.executor.name||item.id===binding.executor.name);
+    if(!agent||!['subagent','all'].includes(String(agent.mode)))throw new AuthProblem(409,'SCENE_EXECUTOR_NOT_FOUND');
+    return {kind:'subagent',agents:[{name:binding.executor.name}]};
+  }
+  async function models(dir:string):Promise<ChatModel[]>{
+    const result=await (await client()).model.list({location:{directory:dir}});
+    return result.data.filter(m=>m.enabled).map(({id,providerID,name,variants,limit})=>({id,providerID,name,
+      ...(variants?.length?{variants:variants.map(v=>v.id)}:{}),...(limit?.context?{context:limit.context}:{})}));
+  }
+  async function logQuerySkill(dir:string){
+    const native=await client();
+    const catalog=await native.skill.list({location:{directory:dir}}).catch(()=>{
+      throw new AuthProblem(502,'LOG_QUERY_CATALOG_UNAVAILABLE');
+    });
+    if(!Array.isArray(catalog?.data)||typeof catalog.location?.directory!=='string'||
+      relative(dir,catalog.location.directory)!=='')throw new AuthProblem(502,'LOG_QUERY_CATALOG_UNAVAILABLE');
+    const matches=catalog.data.filter(skill=>skill.name==='log-query');
+    if(!matches.length)throw new AuthProblem(409,'LOG_QUERY_SKILL_MISSING');
+    if(matches.length>1)throw new AuthProblem(409,'LOG_QUERY_SKILL_AMBIGUOUS');
+    if(!matches[0].id)throw new AuthProblem(502,'LOG_QUERY_CATALOG_UNAVAILABLE');
+    return {id:matches[0].id};
+  }
+  type ProjectInput={Body:{directory?:string}};
+  if(!workspace)app.post<ProjectInput>(apiPrefix+'/project',{schema:body({directory:property(4096)})},async req=>{
+    await auth.mutation(req);return wrap({directory:await project(req.body.directory)});
+  });
+  app.post<{Body:{directory?:string;scenario:ChatScenario;cursor?:string}}>(apiPrefix+'/history',{schema:body({
+    directory:property(4096),scenario:{enum:['log-inspection','message-inspection','institution-message-inspection','data-analysis','direct-chat']},cursor:property(4096),
+  },['scenario'])},async(req,reply)=>{
+    const {ownerId}=await auth.mutation(req);
+    const {directory:input,scenario,cursor}=req.body;
+    const dir=await sceneDirectory(scenario,input);
+    const page=await (await client()).session.list({directory:dir,order:'desc',limit:50,cursor});
+    const items:ChatHistoryPage['items']=[];
+    for(const session of page.data){
+      if(session.parentID||session.metadata?.harnessOwner!==ownerId||session.metadata.harnessScenario!==scenario)continue;
+      const location=session.location?.directory;
+      if(!location||!isAbsolute(location)||relative(dir,location)!==''||!session.id)continue;
+      if(options.bindings){const binding=await options.bindings.get(serviceIdentity(),session.id,ownerId);if(!binding)continue;try{matchNativeBinding(binding,session);}catch{continue;}}
+      items.push({id:session.id,title:session.title??'',updated:session.time.updated});
+    }
+    return reply.header('Cache-Control','no-store').send(wrap({items,next:page.cursor?.next??undefined}));
+  });
+  // Manage the actual OpenCode session, not merely a browser-local history entry.
+  // owned() enforces the authenticated user, scenario and bound directory.
+  app.patch<{Params:Params;Body:{title:string}}>(apiPrefix+'/sessions/:id',{schema:body({
+    title:{type:'string',minLength:1,maxLength:120},
+  })},async(req,reply)=>{
+    const {ownerId}=await auth.mutation(req),id=req.params.id;
+    await owned(id,ownerId);
+    const title=req.body.title.trim();
+    if(!title||Array.from(title).length>120)throw new AuthProblem(400,'CHAT_TITLE_INVALID');
+    await (await client()).session.update({sessionID:id,title});
+    return reply.header('Cache-Control','no-store').send(wrap({id,title}));
+  });
+  app.delete<{Params:Params}>(apiPrefix+'/sessions/:id',async(req,reply)=>{
+    const {ownerId}=await auth.mutation(req),id=req.params.id;
+    await owned(id,ownerId);
+    const running=await (await client()).session.active();
+    if(running[id])throw new AuthProblem(409,'CHAT_SESSION_ACTIVE');
+    await (await client()).session.remove({sessionID:id});
+    await options.bindings?.remove(serviceIdentity(),id,ownerId);
+    return reply.header('Cache-Control','no-store').send(wrap({id,deleted:true}));
+  });
+  app.post<ProjectInput>(apiPrefix+'/models',async req=>{
+    await auth.mutation(req);
+    const input=req.body?.directory;
+    if(input!==undefined&&(typeof input!=='string'||input.length>4096))throw new AuthProblem(400,'INVALID_DIRECTORY');
+    return wrap(await models(await project(input)));
+  });
+  type Selection=Pick<ChatModel,'providerID'|'id'|'variant'>;
+  const modelFields={providerID:property(256),id:property(512),variant:property(256)};
+  async function validateModel(dir:string,model:Selection){
+    const match=(await models(dir)).find(m=>m.providerID===model.providerID&&m.id===model.id);
+    if(!match||(model.variant!==undefined&&!match.variants?.includes(model.variant)))
+      throw new AuthProblem(409,'CHAT_MODEL_UNAVAILABLE');
+  }
+  app.post<{Body:{directory?:string;model?:Selection;title?:string;scenario?:ChatScenario}}>(apiPrefix+'/sessions',{schema:body({
+    directory:property(4096),title:property(120),scenario:{enum:['log-inspection','message-inspection','institution-message-inspection','data-analysis','direct-chat']},model:{type:'object',additionalProperties:false,required:['providerID','id'],
+      properties:modelFields}},[])},async(req,reply)=>{
+    const {ownerId}=await auth.mutation(req);
+    const scenario=req.body?.scenario??'direct-chat';
+    const dir=await sceneDirectory(scenario,req.body?.directory),model=req.body?.model;
+    if(model)await validateModel(dir,model);
+    if(sceneConfig&&sceneKey(scenario)){
+      const action=await execution(dir,await sceneConfig.binding(sceneKey(scenario)!));
+      // Child agents use their OWN permission rules; custom Commands may
+      // perform shell work. Neither can inherit an anonymous session sandbox.
+      if(options.execution?.singleService()&&(action.kind==='subagent'||action.kind==='command'))
+        throw new AuthProblem(403,'EMBED_EXECUTOR_REQUIRES_ISOLATION');
+    }else if(scenario==='log-inspection')await logQuerySkill(dir);
+    const title=req.body?.title?.trim()||(scenario==='direct-chat'?'智能工作台 · 直接对话':'智能工作台 · 专项场景');
+    const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title,
+      metadata:{...options.sessionMetadata?.(req),harnessScenario:scenario,harnessOwner:ownerId},...(options.execution?.permissions()?{permissions:options.execution.permissions()}:{} )}).catch((error:unknown)=>{
+        if(error instanceof Error&&error.cause instanceof AuthProblem)throw error.cause;
+        if(error instanceof Error&&'reason' in error&&error.reason==='Transport'){
+          const timedOut=error.cause instanceof Error&&error.cause.name==='TimeoutError';
+          throw new AuthProblem(timedOut?504:502,timedOut?'OPENCODE_TIMEOUT':'OPENCODE_CONNECTION_FAILED');
+        }
+        throw new AuthProblem(502,'OPENCODE_SESSION_RESPONSE');
+      });
+    if(!session?.id||typeof session.location?.directory!=='string')throw new AuthProblem(502,'OPENCODE_SESSION_RESPONSE');
+    if(resolve(session.location.directory)!==dir)throw new AuthProblem(409,'SESSION_DIRECTORY_CHANGED');
+    try{options.execution?.assertPermissions(session);}catch(error){await (await client()).session.remove({sessionID:session.id}).catch(()=>{});throw error;}
+    if(options.bindings){
+      try{await options.bindings.create({serviceIdentity:serviceIdentity(),id:session.id,ownerId,scenario,directory:dir});}
+      catch(error){await (await client()).session.remove({sessionID:session.id}).catch(()=>{});throw error;}
+    }
+    try{await options.onSessionCreated?.(req,session.id);}
+    catch(error){await (await client()).session.remove({sessionID:session.id}).catch(()=>{});await options.bindings?.remove(serviceIdentity(),session.id,ownerId).catch(()=>{});throw error;}
+    return reply.code(201).send(wrap({id:session.id,directory:dir,title:session.title||title}));
+  });
+  const streams=new Set<AbortController>();
+  app.addHook('preClose',async()=>{for(const stop of streams)stop.abort();});
+  app.get<{Params:Params}>(apiPrefix+'/sessions/:id/activity',async(req,reply)=>{
+    const session=await auth.session(req),sessionID=req.params.id;
+    await owned(sessionID,session.ownerId);
+    const native=await client();
+    const stop=new AbortController(),raw=reply.raw;
+    reply.hijack();
+    raw.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store','x-accel-buffering':'no'});
+    raw.write('retry: 5000\n\n');
+    streams.add(stop);raw.once('close',()=>stop.abort());
+    const expiry=setTimeout(()=>stop.abort(),Math.max(1,session.expires-Date.now()));
+    const unsubscribe='onRevoke' in auth&&typeof auth.onRevoke==='function'?auth.onRevoke(req,()=>stop.abort()):()=>{};
+    const heartbeat=setInterval(()=>{void Promise.resolve().then(()=>auth.session(req)).then(()=>{if(!raw.write(': heartbeat\n\n'))stop.abort();},()=>stop.abort());},15000);
+    try{
+      let ready=false;
+      const signalReady=()=>{
+        if(ready||stop.signal.aborted)return;
+        ready=true;
+        raw.write('event: ready\ndata: {}\n\n');
+      };
+      // A quiet session can send only keepalives. The shared client also replays its connected event.
+      for await(const event of native.event.subscribe({signal:stop.signal,onActivity:signalReady})){
+        if(stop.signal.aborted)break;
+        signalReady();
+        const eventSession=event.type==='form.created'?event.data.form.sessionID:
+          'sessionID' in event.data?event.data.sessionID:undefined;
+        if(eventSession!==sessionID)continue;
+        if((await auth.session(req)).csrf!==session.csrf)break;
+        let frame:string;
+        switch(event.type){
+          case 'session.text.started':case 'session.text.delta':case 'session.text.ended':
+          case 'session.reasoning.started':case 'session.reasoning.delta':case 'session.reasoning.ended':{
+            const data=event.data;
+            const fragment:ChatFragment={id:event.id,message:data.assistantMessageID,ordinal:data.ordinal,
+              kind:event.type.startsWith('session.text.')?'text':'thinking',at:event.created,
+              phase:event.type.endsWith('.delta')?'delta':event.type.endsWith('.ended')?'ended':'started',
+              text:'delta' in data&&typeof data.delta==='string'?data.delta:'text' in data&&typeof data.text==='string'?data.text:''};
+            frame='event: fragment\ndata: '+JSON.stringify(fragment);
+            break;
+          }
+          case 'form.created':case 'form.cancelled':case 'form.replied':
+          case 'permission.asked':case 'permission.replied':
+            frame='event: requests\ndata: {}';
+            break;
+          case 'session.execution.started':
+          case 'session.execution.succeeded':
+          case 'session.execution.failed':
+          case 'session.execution.interrupted':{
+            const status=event.type.slice('session.execution.'.length);
+            frame='event: lifecycle\ndata: '+JSON.stringify({id:event.id,status,at:event.created});
+            break;
+          }
+          case 'session.step.started':
+          case 'session.step.ended':
+          case 'session.tool.called':
+          case 'session.tool.success':
+          case 'session.tool.failed':{
+            const data=event.data as unknown as Record<string,unknown>;
+            const assistantMessageID=data.assistantMessageID;
+            if(typeof assistantMessageID!=='string'||!assistantMessageID)continue;
+            const label=typeof data.name==='string'?activityPreview(data.name,100):'当前步骤';
+            const descriptions:Record<string,string>={
+              'session.step.started':'开始执行下一阶段',
+              'session.step.ended':'当前阶段处理完毕，等待整轮执行结束',
+              'session.tool.called':'开始调用工具 · '+label,
+              'session.tool.success':'工具执行完成 · '+label,
+              'session.tool.failed':'工具执行失败 · '+label,
+            };
+            frame='data: '+JSON.stringify({id:event.id,message:assistantMessageID,
+              at:event.created,text:descriptions[event.type]});
+            break;
+          }
+          case 'session.tool.progress':{
+            const meta=event.data.metadata;
+            const label=[meta.title,meta.message,meta.status].find((v):v is string=>typeof v==='string'&&v.length>0);
+            if(!label||!event.data.assistantMessageID)continue;
+            frame='data: '+JSON.stringify({id:event.id,message:event.data.assistantMessageID,at:event.created,text:activityPreview(label,300)});
+            break;
+          }
+          default:continue;
+        }
+        if(!raw.write(frame+'\n\n'))await once(raw,'drain',{signal:stop.signal});
+      }
+    }catch{/* The message snapshot remains available if native event streaming is unavailable. */}
+    finally{unsubscribe();streams.delete(stop);stop.abort();clearInterval(heartbeat);clearTimeout(expiry);if(!raw.destroyed)raw.end();}
+  });
+  app.get<{Params:Params;Querystring:{message?:string;part?:number}}>(apiPrefix+'/sessions/:id',{
+    schema:{querystring:{type:'object',additionalProperties:false,properties:{
+      message:property(160),part:{type:'integer',minimum:0}}}}
+  },async(req,reply)=>{
+    reply.header('Cache-Control','no-store');
+    const {ownerId}=await auth.session(req),sessionID=req.params.id;
+    const session=await owned(sessionID,ownerId);
+    const [page,permissions,running,inbox,forms]=await Promise.all([(await client()).message.list({sessionID,order:'desc',limit:100}),
+      (await client()).permission.list({sessionID}),(await client()).session.active(),(await client()).session.inbox.list({sessionID}),pendingForms(sessionID)]);
+    const messages:ChatMessage[]=[];
+    const records=page.data.slice().reverse();
+    const footers=assistantFooters(records,Boolean(page.cursor?.next));
+    for(const m of records){
+      if(m.type==='user')messages.push({id:m.id,role:'user',text:displayedUserText(m),files:m.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
+      const steps=activity(m);
+      if(m.type!=='assistant'&&steps.length)messages.push({id:m.id,role:'assistant',idleOutcome:m.type==='idle'?m.outcome:undefined,text:'',files:[],tools:[],steps});
+      if(m.type==='assistant'&&(steps.length||m.snapshot?.files?.length||footers.has(m.id)))messages.push({id:m.id,role:'assistant',footer:footers.get(m.id),
+        toolCallTurn:m.finish==='tool-calls',complete:Boolean(m.time?.completed||m.finish||m.error),steps,text:m.content.flatMap(p=>p.type==='text'?[p.text]:[]).join('\n')||m.error?.message||'',
+        tools:m.content.flatMap(p=>p.type==='tool'?[{name:p.name,status:p.state.status}]:[]),
+        files:m.snapshot?.files??[]});
+    }
+    for(const item of inbox)if(item.type==='user'&&!messages.some(m=>m.id===item.id))
+      messages.push({id:item.id,role:'user',queued:true,text:displayedUserText(item.payload),files:item.payload.files?.map(f=>f.name??(f.source.type==='uri'?f.source.uri:'附件'))??[],tools:[]});
+    const result:ChatStatus={id:sessionID,title:session.title,forms:forms.map(visibleForm),directory:session.location.directory,messages,
+      ...(session.model?{model:{id:session.model.id,providerID:session.model.providerID,variant:session.model.variant}}:{}),
+      active:Boolean(running[sessionID])||inbox.length>0,outcome:session.outcome,
+      ...(options.execution?.singleService()?{toolPolicy:'institution-readonly' as const}:{}),
+      permissions:permissions.filter(p=>p.sessionID===sessionID).map(p=>({id:p.id,action:p.action,resources:p.resources,message:p.message,revision:revision(p)}))};
+    return wrap(result);
+  });
+  app.post<{Params:Params;Body:Selection}>(apiPrefix+'/sessions/:id/model',{
+    schema:body(modelFields,['providerID','id'])},async(req)=>{
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
+    const session=await owned(sessionID,ownerId),model=req.body;
+    await validateModel(session.location.directory,model);
+    await (await client()).session.switchModel({sessionID,model});
+    return wrap({model});
+  });
+  app.post<{Params:Params;Body:{text:string;files?:string[];scenario?:ChatScenario}}>(apiPrefix+'/sessions/:id/messages',{
+    bodyLimit:128*1024,schema:body({text:property(16000),scenario:{enum:['direct-chat','log-inspection','message-inspection','institution-message-inspection','data-analysis']},files:{type:'array',maxItems:8,uniqueItems:true,items:property(1024)}},['text'])},async(req,reply)=>{
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
+    const session=await owned(sessionID,ownerId);
+    const scenario=session.metadata?.harnessScenario;
+    if(req.body.scenario&&req.body.scenario!==scenario&&!(options.execution?.singleService()&&sceneKey(req.body.scenario)===sceneKey(scenario as ChatScenario)))throw new AuthProblem(409,'CHAT_SCENARIO_MISMATCH');
+    const text=req.body.text.trim();
+    if(!text)throw new AuthProblem(400,'EMPTY_MESSAGE');
+    const root=await directory(session.location.directory);
+    const files=await Promise.all((req.body.files??[]).map(async name=>{
+      if(isAbsolute(name))throw new AuthProblem(400,'RELATIVE_FILE_REQUIRED');
+      const target=await realpath(resolve(root,name)).catch(()=>null);
+      if(!target||!within(root,target)||!(await stat(target)).isFile())throw new AuthProblem(400,'FILE_OUTSIDE_WORKSPACE_OR_MISSING');
+      return {uri:pathToFileURL(target).href,name};
+    }));
+    const binding=sceneConfig&&sceneKey(scenario as ChatScenario)?await sceneConfig.binding(sceneKey(scenario as ChatScenario)!):undefined;
+    const action:Execution=binding?await execution(root,binding):scenario==='log-inspection'?{kind:'skill',skills:[await logQuerySkill(root)]}:{kind:'direct'};
+    if(options.execution?.singleService()&&(action.kind==='subagent'||action.kind==='command'))
+      throw new AuthProblem(403,'EMBED_EXECUTOR_REQUIRES_ISOLATION');
+    const native=await client();
+    let prompt:{text:string;metadata?:{workbenchLanguageSuffix:1}}={text};
+    try{
+      await native.session.instructions.entry.put({sessionID,key:'workbench-language',value:languagePreference});
+    }catch(error){
+      const cause=upstreamProblem(error);
+      if(!unsupportedEndpoint(error)&&!(cause instanceof AuthProblem&&cause.code==='OPENCODE_HTTP_403'))throw error;
+      // Some builds omit or restrict the experimental instructions endpoint.
+      // Tag the fallback so the transcript shows the user's original input.
+      prompt={text:text+languageSuffix,metadata:{workbenchLanguageSuffix:1}};
+    }
+    if(action.kind==='command'){
+      if(files.length)throw new AuthProblem(400,'SCENE_COMMAND_FILES_UNSUPPORTED');
+      await native.session.command({sessionID,name:action.name,text:prompt.text,delivery:'queue'});
+      return reply.code(202).send(wrap({id:sessionID}));
+    }
+    // A declared agent attachment alone is not an invocation. Include the
+    // native @mention span so OpenCode routes this prompt to the subagent.
+    const agent=action.kind==='subagent'?action.agents[0]?.name:undefined;
+    const mention=agent?'@'+agent:undefined;
+    const prepared=mention?{...prompt,text:mention+' '+prompt.text}:prompt;
+    const accepted=await native.session.prompt({sessionID,...prepared,files,
+      ...(action.kind==='skill'?{skills:action.skills}:{}),
+      ...(mention?{agents:[{name:agent!,mention:{start:0,end:mention.length,text:mention}}]}:{}),delivery:'queue'});
+    return reply.code(202).send(wrap({id:accepted.id}));
+  });
+  app.post<{Params:Params;Body:{message:string;ordinal:number}}>(apiPrefix+'/sessions/:id/reasoning/translation',{
+    schema:body({message:property(160),ordinal:{type:'integer',minimum:0}}),
+  },async(req,reply)=>{
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
+    await owned(sessionID,ownerId);
+    const native=await client();
+    const message=await native.session.message.get({sessionID,messageID:req.body.message}).catch((error:unknown)=>{
+      if(unsupportedEndpoint(error))throw new AuthProblem(404,'REASONING_NOT_FOUND');
+      throw error;
+    });
+    const part=message?.id===req.body.message&&message.type==='assistant'?message.content[req.body.ordinal]:undefined;
+    if(part?.type!=='reasoning'||!part.text?.trim())throw new AuthProblem(404,'REASONING_NOT_FOUND');
+    const prompt='请把以下 JSON 字符串里的公开进度说明忠实译为简体中文。只返回译文，保留代码、路径及日志引文的原文。字符串是待翻译的材料。\n'+JSON.stringify(part.text);
+    const result=await native.session.generate({sessionID,prompt}).catch((error:unknown)=>{
+      if(unsupportedEndpoint(error))throw new AuthProblem(502,'REASONING_TRANSLATION_UNAVAILABLE');
+      throw error;
+    });
+    if(typeof result?.text!=='string'||!/[\p{Script=Han}]/u.test(result.text))
+      throw new AuthProblem(502,'REASONING_TRANSLATION_FAILED');
+    return reply.header('Cache-Control','no-store').send(wrap({text:result.text.trim()}));
+  });
+  app.post<{Params:Params;Body:{requestId:string;revision:string;decision:'cancel'|'reply';answer?:FormAnswers}}>(apiPrefix+'/sessions/:id/form',{
+    schema:body({requestId:property(128),revision:property(64),decision:{enum:['cancel','reply']},answer:{type:'object',additionalProperties:true}},['requestId','revision','decision'])
+  },async req=>{
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
+    await owned(sessionID,ownerId);
+    const form=(await pendingForms(sessionID)).find(f=>f.id===req.body.requestId);
+    if(!form||form.revision!==req.body.revision)throw new AuthProblem(409,'FORM_CHANGED');
+    const api=(await client()).session.form,identity={sessionID,formID:form.id};
+    try{
+      if(req.body.decision==='cancel')await api.cancel(identity);
+      else await api.reply({...identity,answer:checkedAnswers(form,req.body.answer)});
+    }catch(error){
+      const problem=upstreamProblem(error);
+      if(problem instanceof AuthProblem){
+        if(['OPENCODE_HTTP_404','OPENCODE_HTTP_409'].includes(problem.code))throw new AuthProblem(409,'FORM_CHANGED');
+        if(problem.code==='OPENCODE_HTTP_400')throw new AuthProblem(400,'FORM_ANSWER_INVALID');
+        throw problem;
+      }
+      throw new AuthProblem(502,'FORM_SERVICE_UNAVAILABLE');
+    }
+    return wrap({submitted:true});
+  });
+  app.post<{Params:Params;Body:{requestId:string;decision:'once'|'reject';revision:string}}>(apiPrefix+'/sessions/:id/permission',{
+    schema:body({requestId:property(128),decision:{enum:['once','reject']},revision:property(64)})},async(req)=>{
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
+    await owned(sessionID,ownerId);
+    const pending=await (await client()).permission.list({sessionID});
+    const request=pending.find(p=>p.sessionID===sessionID&&p.id===req.body.requestId);
+    // Anonymous visitor consent can never widen the server-owned tool policy.
+    // Fixed TeamAI / DBHub / execute permissions are granted in the native
+    // Session itself. Every other permission request is reject-only.
+    if((options.execution?.singleService()||
+       options.execution?.sharedWorkspace()&&request?.action==='edit')&&req.body.decision!=='reject')
+      throw new AuthProblem(403,'SHARED_WORKSPACE_READ_ONLY');
+    if(!request||revision(request)!==req.body.revision)throw new AuthProblem(409,'PERMISSION_CHANGED');
+    await (await client()).permission.reply({sessionID,requestID:request.id,decision:req.body.decision});
+    return wrap({submitted:true});
+  });
+  app.post<{Params:Params}>(apiPrefix+'/sessions/:id/interrupt',async(req)=>{
+    const {ownerId}=await auth.mutation(req),sessionID=req.params.id;
+    await owned(sessionID,ownerId);return wrap(await (await client()).session.interrupt({sessionID}));
+  });
+}

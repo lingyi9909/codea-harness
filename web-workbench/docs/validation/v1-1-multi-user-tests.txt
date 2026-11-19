@@ -1,0 +1,22 @@
+
+> @codea/web-workbench@0.1.0 test:multi-user
+> node --experimental-strip-types --test tests/api/multi-user-auth.test.ts tests/api/multi-user-isolation.test.ts tests/api/execution-isolation.test.ts tests/api/multi-user-routes.test.ts tests/api/user-context.test.ts tests/api/business-verification.test.ts
+
+✔ T4/T5: A/B/C phones and tokens stay scoped; correct, wrong, replay, expiry and cancel (3.3525ms)
+✔ T5: cancellation during target verification cannot authorize; concurrent/repeated submits rejected (0.271041ms)
+✔ T3: three interleaved execution scopes retain service, directory and credential ownership (5.159625ms)
+✔ T3: shared endpoints, credentials and overlapping writable roots are rejected (0.345ms)
+✔ T1: three simultaneous users, stable identities, restart, CSRF and independent logout (2.917583ms)
+✔ T1: validation, host/origin restrictions, disabled identities and expiry (1.185542ms)
+✔ T2: unbound, foreign, deleted and metadata-inconsistent chats fail closed (1.263583ms)
+✔ T2: browser switches A/B/C without reading legacy or foreign drafts/history/preferences (0.366625ms)
+✔ T2/T3 HTTP injection: three users execute independently and all foreign session operations are denied (75.602125ms)
+✔ T4: caller binding is mandatory and ordinary tool output only exposes a masked phone (2.204042ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 370.203667

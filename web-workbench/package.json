@@ -1,0 +1,55 @@
+{
+  "name": "@codea/web-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.16.0 || ^24.0.0 || ^26.0.0",
+    "npm": ">=10 <12"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "gen:api": "node scripts/generate-dto.mjs",
+    "typecheck": "tsc --noEmit --project tsconfig.base.json",
+    "test": "node --experimental-strip-types --test tests/capabilities/probe.test.ts tests/capabilities/adapter.test.ts",
+    "probe": "node --experimental-strip-types scripts/probe.ts",
+    "test:mysql": "node --experimental-strip-types --test tests/mysql/native-events.test.ts",
+    "test:e2e": "node --experimental-strip-types --test tests/ui/workbench.test.ts",
+    "test:windows-smoke": "node --experimental-strip-types scripts/probe.ts --windows-smoke",
+    "server:start": "node --experimental-strip-types apps/server/src/start.ts",
+    "migrate": "node --experimental-strip-types scripts/migrate.ts",
+    "test:schema-static": "node --experimental-strip-types --test tests/mysql/migration.test.ts",
+    "test:git": "node --experimental-strip-types --test tests/git/provider.test.ts",
+    "test:snapshot": "node --experimental-strip-types --test tests/git/snapshot.test.ts tests/api/files.test.ts",
+    "test:tasks": "node --experimental-strip-types --test tests/api/tasks.test.ts",
+    "test:events": "node --experimental-strip-types --test tests/events/replay.test.ts",
+    "test:lease": "node --experimental-strip-types --test tests/workers/lease.test.ts",
+    "web:dev": "npm run dev --workspace @codea/web",
+    "web:build": "npm run build --workspace @codea/web",
+    "smoke:local": "node scripts/smoke-local.mjs",
+    "web:typecheck": "tsc --project apps/web/tsconfig.json --noEmit",
+    "test:chat": "node --experimental-strip-types --test tests/api/direct-chat.test.ts tests/api/local-session.test.ts tests/api/scene-config.test.ts tests/api/scene-execution.test.ts tests/ui/chat-history-storage.test.ts tests/ui/progressive-messages.test.ts",
+    "test:interactions": "node --experimental-strip-types --test tests/api/interactions.test.ts",
+    "test:continuations": "node --experimental-strip-types --test tests/api/continuations.test.ts",
+    "test:reports": "node --experimental-strip-types --test tests/reports/collect.test.ts",
+    "test:dispatch-continue": "node --experimental-strip-types --test tests/workers/continuation-dispatch.test.ts",
+    "test:multi-user": "node --experimental-strip-types --test tests/api/multi-user-auth.test.ts tests/api/multi-user-isolation.test.ts tests/api/execution-isolation.test.ts tests/api/multi-user-routes.test.ts tests/api/user-context.test.ts tests/api/business-verification.test.ts tests/ui/user-storage-auth.test.ts",
+    "test:mysql:multi-user": "node --experimental-strip-types --test tests/mysql/multi-user.test.ts",
+    "test:embed": "node --experimental-strip-types --test tests/api/embedded-message.test.ts tests/ui/embedded-stream.test.ts",
+    "test:embed:ui": "node --experimental-strip-types --test tests/ui/embedded-message.test.ts",
+    "test:embed:mysql": "node --experimental-strip-types --test tests/mysql/embedded-message.test.ts",
+    "test:anonymous": "node --experimental-strip-types --test tests/api/anonymous-institution.test.ts tests/api/embedded-isolated-runtime.test.ts tests/api/shared-institution-execution.test.ts tests/api/lan-access.test.ts tests/api/windows-launch-menu.test.mjs tests/ui/execution-lifecycle.test.ts",
+    "test:anonymous:mysql": "node --experimental-strip-types --test tests/mysql/anonymous-embed.test.ts",
+    "test:anonymous:ui": "node --experimental-strip-types --test tests/ui/anonymous-institution.test.ts",
+    "test:sqlite": "node --experimental-strip-types --test tests/sqlite/*.test.ts",
+    "embedded:storage": "node --experimental-strip-types scripts/embedded-storage.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.18.6",
+    "typescript": "5.9.3"
+  }
+}

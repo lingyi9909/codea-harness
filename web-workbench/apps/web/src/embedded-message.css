@@ -1,0 +1,126 @@
+.embedded-message-shell{height:100dvh;display:flex;flex-direction:column;background:#fff;color:#242830;overflow:hidden}
+.embedded-message-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 24px;border-bottom:1px solid #eceef1;flex-shrink:0}
+.embedded-message-header>div{display:flex;align-items:center;gap:12px;font-size:13px;color:#69717d}
+.embedded-message-header button{border:1px solid #dde2e7;border-radius:7px;background:#fff;color:#434b56;padding:8px 12px;font:inherit;line-height:1.3}
+.embedded-message-header button:hover{background:#f4f5f7}
+.embedded-message-shell .scene-title h1{font-size:22px;font-weight:600}
+.embedded-message-shell>.log-investigation{flex:1;min-height:0;overflow:auto;margin:0;width:100%;max-width:none;padding:24px}
+.embedded-message-state{padding:40px;font-size:14px;color:#69717d}.embedded-message-state h1{font-size:22px;color:#242830}
+.embedded-model-hint{margin:12px 24px 0;color:#69717d;font-size:13px}
+.embedded-message-shell .chat-history-actions{gap:8px}
+@media(max-width:620px){.embedded-message-header{padding:12px;flex-wrap:wrap}.embedded-message-shell>.log-investigation{padding:16px}}
+
+.anonymous-institution>.institution-message{flex:1;min-height:0;overflow:auto;padding:24px;box-sizing:border-box}.anonymous-institution .institution-result-panel>.log-investigation{width:100%;max-width:none;box-sizing:border-box;padding:16px;min-height:450px}.anonymous-institution .institution-result-panel .scene-title{display:flex;justify-content:flex-end;min-height:0;margin:0;padding:0 0 4px;border:0}
+.anonymous-institution .institution-result-panel .scene-title .thread-heading{display:none}.anonymous-institution .institution-result-panel .chat-feed{min-height:240px;max-height:58vh;overflow:auto}.anonymous-institution .institution-form-panel{align-self:start}
+
+/* Keep the main workbench's scene width cap out of the standalone document. */
+.embedded-message-shell.anonymous-institution > .scene-page.institution-message {
+  width:100%;max-width:none;min-width:0;margin:0;box-sizing:border-box;
+}
+.embedded-message-shell.anonymous-institution .institution-layout {
+  width:100%;min-width:0;grid-template-columns:minmax(240px,280px) minmax(0,1fr);
+}
+.embedded-message-shell.anonymous-institution .institution-layout-active {
+  grid-template-columns:minmax(0,1fr);
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel {min-width:0;}
+.embedded-message-shell.anonymous-institution .institution-result-panel > .scene-page.log-investigation:has(.chat-layout) {
+  width:100%;max-width:none;min-width:0;margin:0;padding:16px;align-self:stretch;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .conversation-transcript,
+.embedded-message-shell.anonymous-institution .institution-result-panel .chat-layout .composer {
+  width:100%;max-width:none;min-width:0;box-sizing:border-box;
+}
+@media(max-width:980px) {
+  .embedded-message-shell.anonymous-institution .institution-layout {grid-template-columns:minmax(0,1fr);}
+}
+@media(max-width:640px) {
+  .embedded-message-shell.anonymous-institution > .scene-page.institution-message {padding:16px;}
+}
+
+/* Keep execution state visible even before the native session reports active. */
+.embedded-execution-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 2px;padding:8px 10px;border:1px solid #dbe5ef;border-radius:7px;background:#f5f8fb;color:#465a70;font-size:12px;line-height:1.5}
+.embedded-execution-status small{flex-basis:100%;margin-left:19px;color:#7a5c29}
+.embedded-execution-spinner{width:10px;height:10px;border-radius:50%;border:2px solid #cad7e5;border-top-color:#486c9c;animation:embedded-execution-spin .9s linear infinite;flex:none}
+@keyframes embedded-execution-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.embedded-execution-spinner{animation:none;border-color:#486c9c}}
+
+/* The institution filter editor reuses the main workbench's drawer mechanics. */
+.institution-adjust-controls{display:grid;gap:16px;min-width:0;padding:4px 0}
+.institution-adjust-controls label{display:grid;gap:7px;color:#414c5a;font-size:13px;font-weight:600}
+.institution-adjust-controls input{width:100%;min-height:43px;min-width:0;box-sizing:border-box;padding:9px 11px;border:1px solid #cfd7e1;border-radius:7px;background:#fff;font:inherit;color:#28313f}
+.institution-adjust-controls input:focus-visible{outline:2px solid #a9bdd8;outline-offset:1px}
+.institution-adjust-controls p{margin:2px 0 0;color:#687480;font-size:12px;line-height:1.65}
+
+/* Explain a hard native permission block instead of making stage 1 look final. */
+.embedded-permission-warning{margin:10px 0 4px;padding:10px 12px;border:1px solid #ecc8a3;border-radius:7px;background:#fff9f1;color:#79501e;font-size:12px;line-height:1.65}
+
+
+/* Institution-only compact viewport: one stable transcript scroller, composer always visible. */
+.embedded-message-shell.anonymous-institution .embedded-message-header {
+  min-height:46px;padding:9px 18px;box-sizing:border-box;
+}
+.embedded-message-shell.anonymous-institution > .scene-page.institution-message {
+  display:flex;flex:1;flex-direction:column;min-height:0;
+  padding:12px 18px 16px;overflow:hidden;
+}
+.embedded-message-shell.anonymous-institution .institution-heading {
+  flex:none;align-items:center;gap:10px;margin:0 0 10px;
+}
+.embedded-message-shell.anonymous-institution .institution-heading h1 {
+  font-size:19px;line-height:1.3;margin:0 0 2px;
+}
+.embedded-message-shell.anonymous-institution .institution-heading p {line-height:1.4;}
+.embedded-message-shell.anonymous-institution .institution-symbol {
+  width:32px;height:32px;font-size:18px;border-radius:8px;
+}
+.embedded-message-shell.anonymous-institution .institution-layout {
+  flex:1;min-height:0;grid-template-rows:minmax(0,1fr);align-items:stretch;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel {
+  min-height:0;overflow:hidden;display:flex;flex-direction:column;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel > header {
+  min-height:40px;padding:0 14px;flex:none;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel > .scene-page.log-investigation:has(.chat-layout) {
+  display:flex;flex:1;flex-direction:column;min-height:0;
+  padding:9px 14px 12px;overflow:hidden;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .scene-title {
+  flex:none;padding:0 0 5px;margin:0;min-height:0;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .chat-layout {
+  display:flex;flex:1;min-height:0;flex-direction:column;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .chat-box {
+  display:flex;flex:1;min-height:0;flex-direction:column;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .chat-feed {
+  flex:1;min-height:0;max-height:none;overflow-y:auto;overflow-x:hidden;
+  padding:9px 10px 14px;scrollbar-gutter:stable;
+  overflow-anchor:none;overscroll-behavior:contain;scroll-behavior:auto;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .chat-layout .composer {
+  flex:none;width:100%;max-width:none;margin:8px 0 12px;
+  box-sizing:border-box;position:relative;
+}
+.embedded-message-shell.anonymous-institution .institution-result-panel .conversation-transcript {
+  overflow-anchor:none;
+}
+@media(max-width:980px) {
+  .embedded-message-shell.anonymous-institution > .scene-page.institution-message {overflow-y:auto;}
+  .embedded-message-shell.anonymous-institution .institution-layout:not(.institution-layout-active) {
+    flex:none;grid-template-rows:auto minmax(420px,60dvh);
+  }
+  .embedded-message-shell.anonymous-institution .institution-layout-active {
+    flex:1;min-height:0;grid-template-rows:minmax(0,1fr);
+  }
+}
+@media(max-width:640px) {
+  .embedded-message-shell.anonymous-institution > .scene-page.institution-message {padding:10px 10px 12px;}
+  .embedded-message-shell.anonymous-institution .institution-result-panel > .scene-page.log-investigation:has(.chat-layout) {
+    padding:8px 9px 10px;
+  }
+  .embedded-message-shell.anonymous-institution .institution-result-panel .chat-layout .composer {margin-bottom:8px;}
+}

@@ -1,0 +1,61 @@
+name: Workbench storage and Fastify contract
+on:
+  pull_request:
+    paths: ['web-workbench/**', '.github/workflows/workbench-storage.yml']
+permissions: { contents: read }
+jobs:
+  backend:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: web-workbench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Install exact lock
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Static DDL contract test
+        run: npm run test:schema-static
+      - name: Git committed-scope tests
+        run: npm run test:git
+      - name: Immutable Git snapshots and API ownership
+        run: npm run test:snapshot
+      - name: Task idempotency and validation contract
+        run: npm run test:tasks
+      - name: Persisted event sequence and replay contract
+        run: npm run test:events
+      - name: T06 lease and stop regression
+        run: npm run test:lease
+      - name: T09 native interaction authorization regression
+        run: npm run test:interactions
+      - name: T08 scoped continuation tests
+        run: npm run test:continuations
+      - name: T10 artifact scope and integrity tests
+        run: npm run test:reports
+      - name: Native continuation routing and safety
+        run: npm run test:dispatch-continue
+      - name: OpenCode direct chat HTTP contract (scripted peer)
+        run: npm run test:chat
+      - name: T01 regression
+        run: npm test
+      - name: Build direct chat and install browser
+        run: |
+          npm run web:build
+          npx playwright install chromium
+      - name: Windows browser and installed CLI discovery (offline fixture)
+        run: node --experimental-strip-types --test tests/ui/chat-discovery.test.ts
+      - name: Upload real browser screenshots (scripted chat fixture)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: silver-precision-chat-${{ github.run_id }}
+          path: web-workbench/screenshots/*.png
+          retention-days: 14
+          if-no-files-found: ignore
+

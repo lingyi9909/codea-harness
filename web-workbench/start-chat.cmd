@@ -1,0 +1,17 @@
+@echo off
+setlocal DisableDelayedExpansion
+if not "%~2"=="" (
+  echo Usage: start-chat.cmd "project directory"
+  exit /b 2
+)
+if "%~1"=="" (
+  echo Please specify the existing startup workspace: start-chat.cmd "D:\projects\workspace"
+  exit /b 2
+)
+set "projectDir=%~f1"
+pushd "%~dp0" || exit /b 1
+node --experimental-strip-types scripts/launch-workbench.mjs "%projectDir%\."
+set "workbenchStatus=%errorlevel%"
+popd
+if not "%workbenchStatus%"=="0" pause
+exit /b %workbenchStatus%

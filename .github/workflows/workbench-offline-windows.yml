@@ -1,0 +1,186 @@
+name: Workbench Windows Offline Download
+
+on:
+  push:
+    branches:
+      - feature/smart-workbench-scenario-groups-20261115
+      - feature/workbench-embedded-message-v1
+    paths:
+      - 'web-workbench/**'
+      - '.github/workflows/workbench-offline-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v4
+      - name: Setup Windows Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web-workbench/package-lock.json
+      - name: Install locked Windows dependencies
+        working-directory: web-workbench
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build frontend
+        working-directory: web-workbench
+        run: npm run web:build
+      - name: Verify source and standalone contracts
+        working-directory: web-workbench
+        run: |
+          npm run typecheck
+          npm run web:typecheck
+          node --experimental-strip-types --test tests/api/institution-defaults.test.ts tests/api/lan-access.test.ts tests/api/windows-launch-menu.test.mjs
+          npm run test:sqlite
+          npm run smoke:local
+      - name: Verify standalone configuration in Windows Chromium
+        working-directory: web-workbench
+        run: |
+          npx playwright install chromium
+          if($LASTEXITCODE -ne 0) { throw 'Windows Chromium install failed' }
+          node --experimental-strip-types --test tests/ui/anonymous-institution.test.ts tests/ui/unified-config.test.ts
+          if($LASTEXITCODE -ne 0) { throw 'Standalone configuration browser test failed' }
+      - name: Keep only runtime dependencies
+        working-directory: web-workbench
+        run: npm prune --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Verify pruned runtime without reinstalling
+        working-directory: web-workbench
+        run: |
+          npm run test:sqlite
+          npm run smoke:local
+      - name: Package and verify every extracted file
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $base=(Resolve-Path 'web-workbench').Path
+          $required=@(
+            'apps/web/dist/index.html',
+            'apps/server/src/start.ts',
+            'apps/server/src/embedded-start.ts',
+            'apps/server/src/embedded-app.ts',
+            'packages/storage/src/sqlite-embed.ts',
+            'packages/storage/migrations/sqlite/001_embedded.sql',
+            'scripts/embedded-storage.ts',
+            'scripts/launch-workbench.mjs',
+            '启动工作台.cmd',
+            'start-chat.cmd',
+            'apps/web/src/StandaloneConfigPage.tsx',
+            'node_modules/fastify/package.json',
+            'node_modules/@fastify/static/package.json',
+            'node_modules/@opencode/client/package.json',
+            'node_modules/mysql2/package.json'
+          )
+          foreach($relative in $required) {
+            if(-not (Test-Path -LiteralPath (Join-Path $base $relative))) { throw "Required offline runtime file missing: $relative" }
+          }
+          @"
+          智能工作台：Windows 离线运行包
+          版本：$env:GITHUB_SHA
+          已包含 Windows 运行依赖 node_modules 和前端 apps/web/dist。
+          解压后进入 web-workbench，运行：
+          .\启动工作台.cmd "D:\teamai"
+          将 D:\teamai 替换为唯一业务工作目录。
+          交互式运行时直接选择本机/局域网、网卡 IP、机构 Shell 受限/开放。
+          同时选择局域网和高权限 Shell 时会要求额外确认。
+          工作台：http://127.0.0.1:4176/
+          场景配置：http://127.0.0.1:4176/config
+          机构报文：http://127.0.0.1:4176/embed/institution-message
+          三个地址来自同一个服务，共用工作目录中的 .workbench/scenarios.json。
+          不需要 npm ci，不需要 npm run web:build，不需要安装 MySQL。
+          Node 和一个现有 OpenCode 服务沿用已有环境，不包含在此 ZIP 中。
+          机构页直接提交绑定执行入口，不依赖单独业务查询适配接口；Shell 默认受限，可经启动菜单显式放行，MCP 规则不变。真实业务查询需内网验证。
+          OFFLINE-MANIFEST.json 记录本包文件大小和 SHA256。
+          "@ | Set-Content -LiteralPath (Join-Path $base '离线运行说明.txt') -Encoding utf8
+          $entries=@(Get-ChildItem -LiteralPath $base -Recurse -File -Force | ForEach-Object {
+            $relative=[IO.Path]::GetRelativePath($base,$_.FullName).Replace('\','/')
+            if($relative -ne 'OFFLINE-MANIFEST.json') {
+              [ordered]@{path=$relative;bytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
+            }
+          })
+          $manifest=[ordered]@{commit=$env:GITHUB_SHA;platform='windows-x64';node=(node --version);frontendBuilt=$true;runtimeDependenciesIncluded=$true;fileCount=$entries.Count;requiredFiles=$required;files=$entries}
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $base 'OFFLINE-MANIFEST.json') -Encoding utf8
+          $out=Join-Path $env:RUNNER_TEMP 'codea-workbench-windows-offline.zip'
+          Compress-Archive -Path 'web-workbench' -DestinationPath $out -CompressionLevel Optimal -Force
+          $unpack=Join-Path $env:RUNNER_TEMP 'workbench offline validation'
+          Expand-Archive -LiteralPath $out -DestinationPath $unpack -Force
+          $bundle=Join-Path $unpack 'web-workbench'
+          $read=Get-Content -LiteralPath (Join-Path $bundle 'OFFLINE-MANIFEST.json') -Raw | ConvertFrom-Json
+          foreach($entry in $read.files) {
+            $file=Join-Path $bundle $entry.path
+            if(-not (Test-Path -LiteralPath $file)) { throw "ZIP omitted file: $($entry.path)" }
+            if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) { throw "ZIP hash mismatch: $($entry.path)" }
+          }
+          Push-Location $bundle
+          try {
+            npm run test:sqlite
+            if($LASTEXITCODE -ne 0) { throw 'Extracted offline SQLite/runtime tests failed' }
+            npm run smoke:local
+            if($LASTEXITCODE -ne 0) { throw 'Extracted original local entry failed' }
+          } finally { Pop-Location }
+          "OFFLINE_PACKAGE_DIR=$unpack" >> $env:GITHUB_ENV
+          Write-Output ("OFFLINE_ZIP_READY sizeMB={0} files={1} commit={2}" -f [math]::Round((Get-Item $out).Length/1MB,2),$entries.Count,$env:GITHUB_SHA)
+      - name: Smoke actual CMD launcher from extracted offline ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $script=Join-Path $env:RUNNER_TEMP 'offline-launcher-smoke.mjs'
+          @'
+          import {spawn,execFileSync} from 'node:child_process';
+          import {createServer} from 'node:net';
+          import {mkdtemp,rm,stat} from 'node:fs/promises';
+          import {tmpdir} from 'node:os';
+          import {join,resolve} from 'node:path';
+          import {setTimeout as sleep} from 'node:timers/promises';
+          const bundle=resolve(process.argv[2]),listener=createServer();
+          await new Promise(r=>listener.listen(0,'127.0.0.1',r));
+          const port=listener.address().port;await new Promise(r=>listener.close(r));
+          const workspace=await mkdtemp(join(tmpdir(),'offline shared workspace ')),privateData=await mkdtemp(join(tmpdir(),'offline-private-'));
+          const origin='http://127.0.0.1:'+port,launcher=join(bundle,'启动工作台.cmd');
+          const child=spawn(process.env.ComSpec??'cmd.exe',['/d','/s','/c','""'+launcher+'" "'+workspace+'""'],{
+            cwd:bundle,windowsVerbatimArguments:true,windowsHide:true,stdio:['ignore','pipe','pipe'],
+            env:{...process.env,HARNESS_HTTP_PORT:String(port),HARNESS_PUBLIC_ORIGIN:origin,HARNESS_EMBED_PARENTS:origin,HARNESS_SQLITE_PATH:join(privateData,'embedded.sqlite'),HARNESS_EXECUTION_REGISTRY:'',HARNESS_EMBED_CONFIG:'',HARNESS_MYSQL_DATABASE:'',HARNESS_INSTITUTION_ADAPTER_URL:''}
+          });
+          let output='',spawnError;child.on('error',e=>{spawnError=e;});
+          for(const stream of [child.stdout,child.stderr])stream.on('data',c=>{output+=String(c);});
+          try{
+            let ready=false;
+            for(let i=0;i<150;i++){
+              if(spawnError)throw spawnError;if(child.exitCode!==null)throw Error(output);
+              try{
+                const health=await fetch(origin+'/api/v1/health',{signal:AbortSignal.timeout(1000)});
+                if(health.ok&&(await health.json()).data.storage==='sqlite'){ready=true;break;}
+              }catch{}
+              await sleep(100);
+            }
+            if(!ready)throw Error('Offline launcher failed: '+output);
+            for(const path of ['/','/config','/embed/institution-message'])if(!(await fetch(origin+path)).ok)throw Error('Offline page missing: '+path);
+            const page=await fetch(origin+'/embed/institution-message');if(!page.ok)throw Error('Offline institution page missing');
+            const html=await page.text(),asset=html.match(/src="(\/assets\/[^"]+\.js)"/);
+            if(!asset||!(await fetch(origin+asset[1])).ok)throw Error('Offline frontend asset missing');
+            if(!(await stat(join(privateData,'embedded.sqlite'))).size)throw Error('SQLite file missing');
+            console.log('OFFLINE_LAUNCHER_SMOKE_OK: one CMD, three pages, spaces in paths, HTML/JS, SQLite, no npm install/build/MySQL');
+          }finally{
+            if(child.pid&&child.exitCode===null){try{execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});}catch{}}
+            await sleep(250);
+            await rm(workspace,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+            await rm(privateData,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+          }
+          '@ | Set-Content -LiteralPath $script -Encoding utf8
+          node $script (Join-Path $env:OFFLINE_PACKAGE_DIR 'web-workbench')
+          if($LASTEXITCODE -ne 0) { throw 'Actual CMD launcher smoke failed' }
+      - name: Upload ready-to-run offline ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: codea-workbench-windows-offline
+          path: ${{ env.OFFLINE_PACKAGE_DIR }}
+          include-hidden-files: true
+          compression-level: 6
+          if-no-files-found: error
+          retention-days: 14

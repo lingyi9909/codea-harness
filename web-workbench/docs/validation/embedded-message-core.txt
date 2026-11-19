@@ -1,0 +1,17 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> @codea/web-workbench@0.1.0 test:embed
+> node --experimental-strip-types --test tests/api/embedded-message.test.ts tests/ui/embedded-stream.test.ts
+
+✔ embedded: three users execute concurrently; all cross-grant operations fail, including a second window of the same user (254.634581ms)
+✔ embedded: expired grant cleanup stops only its native session (15113.959213ms)
+✔ embedded: one-use expiring host tickets, no browser secrets, bound scenario and directory, no history or duplicate creation (86.956877ms)
+✔ embedded streaming uses an Authorization header, parses chunked SSE, and never puts credentials in the URL (6.399445ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16081.642969

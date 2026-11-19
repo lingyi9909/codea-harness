@@ -1,0 +1,14 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> @codea/web-workbench@0.1.0 test:embed:ui
+> node --experimental-strip-types --test tests/ui/embedded-message.test.ts
+
+✔ iframe: three simultaneous visitors need no login/cookies, get independent results, and refresh starts fresh (4521.676424ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5674.376896
