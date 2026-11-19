@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {createApp} from '../../apps/server/src/app.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
-import {ExecutionRegistry} from '../../apps/server/src/execution-registry.ts';
+import {ExecutionRegistry,singleServicePermissions} from '../../apps/server/src/execution-registry.ts';
 import {EmbeddedAuth} from '../../apps/server/src/embed-auth.ts';
 import {chatConnection} from '../../apps/server/src/modules/chat/connection.ts';
 import {SqliteEmbedStore} from '../../packages/storage/src/sqlite-embed.ts';
@@ -62,7 +62,7 @@ test('one app: main and standalone pages share file-backed bindings; three visit
     assert.equal((await app.inject({method:'PUT',url:'/api/v1/scene-config',headers:vh(visitors[0]),payload:{config:updated,revision:saved.json().data.revision}})).statusCode,401);
     const ids=await Promise.all(visitors.map(async v=>{const r=await app.inject({method:'POST',url:'/api/v1/embed/chat/sessions',headers:vh(v),payload:{scenario:'institution-message-inspection'}});assert.equal(r.statusCode,201,r.body);return r.json().data.id;}));
     await Promise.all(ids.map(async(id,i)=>{const r=await app.inject({method:'POST',url:'/api/v1/embed/chat/sessions/'+id+'/messages',headers:vh(visitors[i]),payload:{text:'分析本会话已获取证据',scenario:'institution-message-inspection'}});assert.equal(r.statusCode,202,r.body);}));
-    for(const id of ids){assert.deepEqual(sessions.get(id).permissions,[{action:'*',resource:'*',effect:'deny'}]);assert.equal(sessions.get(id).metadata.harnessScenario,'institution-message-inspection');}
+    for(const id of ids){assert.deepEqual(sessions.get(id).permissions,singleServicePermissions);assert.equal(sessions.get(id).metadata.harnessScenario,'institution-message-inspection');}
     const main=await app.inject({method:'POST',url:'/api/v1/chat/sessions',headers:admin,payload:{scenario:'institution-message-inspection'}});assert.equal(main.statusCode,201,main.body);
     assert.equal((await app.inject({method:'POST',url:'/api/v1/chat/sessions/'+main.json().data.id+'/messages',headers:admin,payload:{text:'同一绑定',scenario:'institution-message-inspection'}})).statusCode,202);
     const prompts=calls.filter(c=>c.path.endsWith('/prompt'));assert.equal(prompts.length,4);assert.ok(prompts.every(c=>JSON.stringify(c.body.skills)==='[{"id":"native-message-skill"}]'));
