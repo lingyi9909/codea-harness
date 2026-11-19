@@ -90,6 +90,9 @@
 .process-chevron { font: 18px/1 system-ui, sans-serif; }
 :is(.turn-process, .turn-reasoning)[open] > summary .process-chevron { transform: rotate(90deg); }
 .process-list { display: grid; gap: 8px; margin: 5px 0 6px 9px; padding-left: 12px; border-left: 2px solid #b9d4ee; }
+/* Author display rules must not override the UA <details> closed state. */
+.turn-process:not([open]) > .process-list { display: none; }
+.turn-reasoning:not([open]) > .reasoning-body { display: none; }
 .process-list > * { min-width: 0; }
 .process-list .execution-tool {
   margin: 0;
