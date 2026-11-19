@@ -61,7 +61,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
   if(!localOnly&&!multiUser)printCode(pairingCode);
-  if(localEmbed)process.stdout.write('机构执行模式: '+(localEmbed.execution.singleService()?'共享服务（保留 Code Mode、精确 TeamAI recall 命令与 DBHub 工具；Shell 默认拒绝，SQL 只读由数据库保证）':'隔离执行槽（按各自原生权限运行 Skill/MCP）')+'\n');
+  if(localEmbed)process.stdout.write('机构执行模式: '+(localEmbed.execution.institutionShellEnabled()?'共享服务（机构页 Shell 全放行；具有工作台进程操作系统权限，非工作目录沙箱；请保护访问入口）':localEmbed.execution.singleService()?'共享服务（Code Mode + 固定 TeamAI recall + DBHub 白名单；Shell 默认拒绝）':'隔离执行槽（按各自原生权限运行 Skill/MCP）')+'\n');
   process.stdout.write('工作台: http://127.0.0.1:'+config.port+'/\n场景配置: http://127.0.0.1:'+config.port+'/config\n机构报文排查: '+(localEmbed?.publicOrigin??('http://127.0.0.1:'+config.port))+'/embed/institution-message\n');
   }catch(error){await app?.close().catch(()=>{});await embedLocks?.end().catch(()=>{});await pool?.end().catch(()=>{});await localEmbed?.store.close().catch(()=>{});throw error;}
 }
