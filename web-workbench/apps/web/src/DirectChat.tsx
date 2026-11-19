@@ -354,6 +354,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
         {statusVisible&&<div className="embedded-execution-status" role="status">
           <span className="embedded-execution-spinner" aria-hidden="true"/>
           <span>{runningStatus}</span>
+          {stream.tools.length>0&&<small>最近执行步骤：{stream.tools.at(-1)?.text}</small>}
           {executionWaiting&&!snapshot?.active&&<small>已提交 {waitingFor} 秒；原生服务未确认执行结束。</small>}
           {stream.connectionState==='disconnected'&&<small>实时事件连接中断，正在通过会话快照恢复进度。</small>}
           {stuck&&<small>如果工具被拒绝或业务系统无响应，需查看执行过程中的错误；可使用“中断执行”，不建议重复提交。</small>}
