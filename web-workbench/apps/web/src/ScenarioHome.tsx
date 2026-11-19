@@ -6,6 +6,7 @@ export const scenes={
   logs:'公管问题排查',
   message:'报文问题排查',
   data:'公管数据分析',
+  settings:'场景配置',
 } as const;
 export type Scene=keyof typeof scenes;
 
