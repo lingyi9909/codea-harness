@@ -269,8 +269,10 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const snapshot=state?.id===id?state:undefined;
   const streamAhead=stream.parts.some(part=>!snapshot?.messages.some(m=>m.id===part.message));
   const executionWaiting=Boolean(embedded&&pendingExecution?.id===id);
-  const lifecycle=stream.lifecycle;
-  const lifecycleFinished=Boolean(lifecycle&&lifecycle.status!=='started');
+  // Native lifecycle authority applies only to embedded pages. Existing
+  // public/message/data scenes keep their original active() semantics.
+  const lifecycle=embedded?stream.lifecycle:undefined;
+  const lifecycleFinished=Boolean(embedded&&lifecycle&&lifecycle.status!=='started');
   useEffect(()=>{
     if(!embedded||!lifecycleFinished||!id)return;
     setPendingExecution(previous=>previous?.id===id?null:previous);
@@ -309,7 +311,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     m.id===snapshot.messages.filter(row=>row.idleOutcome).at(-1)?.id));
   const missingTools=Boolean(embedded&&snapshot&&!unconfirmed&&!snapshot.active&&
     (latestIdle||lifecycle?.status==='succeeded')&&!visibleToolEvidence(snapshot));
-  const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts,stream.tools),[snapshot,stream.parts,stream.tools]);
+  const merged=useMemo(()=>streamingMessages(snapshot?.messages??[],stream.parts,embedded?stream.tools:[]),[snapshot,stream.parts,stream.tools,embedded]);
   const messages=useProgressiveMessages(id,merged,snapshot?.messages,Boolean(snapshot?.active),createdSession.current===id);
   useLayoutEffect(()=>{
     follow.current=true;
@@ -356,7 +358,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
       {(!investigation||messages.length>0||stream.tools.length>0||state?.active||executionWaiting||streamAhead||statusVisible)&&<div className="chat-feed" ref={feed} aria-live="polite" onScroll={e=>{
         const el=e.currentTarget;follow.current=el.scrollHeight-el.clientHeight-el.scrollTop<48;
       }}>{!investigation&&!id&&!messages.length&&!state?.active&&<div className="chat-empty"><h2>{sceneId==='data'?'公管数据分析':'直接开始你的工作'}</h2><p>{sceneId==='data'?'输入分析需求，在当前绑定目录中通过配置的执行入口进行分析。':'描述问题，OpenCode 将在当前项目中处理。'}</p></div>}
-        <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active}/>
+        <ConversationTranscript key={id} session={id} messages={messages} progress={stream.tools} active={active} preserveWorking={embedded}/>
         {statusVisible&&<div className="embedded-execution-status" role="status">
           <span className="embedded-execution-spinner" aria-hidden="true"/>
           <span>{runningStatus}</span>
