@@ -8,13 +8,17 @@ import type {ChatStatus} from '../../../packages/contracts/src/chat.ts';
 export type PendingExecution={
   id:string;
   baselineIdleIds:string[];
+  baselineMessageIds:string[];
   submittedAt:number;
 };
 
 export function completeOnNativeIdle(pending:PendingExecution|null,status:ChatStatus):PendingExecution|null{
   if(!pending||pending.id!==status.id)return pending;
   const baseline=new Set(pending.baselineIdleIds);
-  return status.messages.some(m=>m.idleOutcome!==undefined&&!baseline.has(m.id))?null:pending;
+  const previous=new Set(pending.baselineMessageIds);
+  const latestUser=status.messages.findLastIndex(m=>m.role==='user'&&!previous.has(m.id));
+  if(latestUser<0)return pending; // The queued user prompt may not be materialized yet.
+  return status.messages.slice(latestUser+1).some(m=>m.idleOutcome!==undefined&&!baseline.has(m.id))?null:pending;
 }
 
 /** Last user turn, ignoring older completed turns in the same Session. */
