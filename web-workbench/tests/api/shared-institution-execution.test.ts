@@ -1,15 +1,15 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {singleServicePermissions} from '../../apps/server/src/execution-registry.ts';
+import {singleServicePermissions,unrestrictedInstitutionShellPermissions} from '../../apps/server/src/execution-registry.ts';
 import {sqliteEmbedFixture} from '../support/sqlite-embed-fixture.ts';
 import {SceneConfigStore} from '../../apps/server/src/scene-config.ts';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 
 /** Exact-match subset of OpenCode V2 ordered permission rules. */
-function allowed(action:string,resource='*'){
+function allowed(action:string,resource='*',rules:ReadonlyArray<{action:string;resource:string;effect:'deny'|'allow'|'ask'}>=singleServicePermissions){
   let effect:'deny'|'allow'|'ask'='deny';
-  for(const rule of singleServicePermissions){
+  for(const rule of rules){
     if(rule.action!=='*'&&rule.action!==action)continue;
     if(rule.resource==='*'||rule.resource===resource)effect=rule.effect;
   }
@@ -120,5 +120,26 @@ test('the institution page inherits the existing message Skill directory, even i
       headers:f.headers(visitor.token,visitor.csrfToken),
       payload:{directory:join(f.workspace,'not-authorized')}});
     assert.equal(forbidden.statusCode,403,forbidden.body);
+  }finally{await f.close();}
+});
+
+test('explicit institution Shell opt-in allows scripts and file writes but does not expand MCP grants',async()=>{
+  const unrestricted=unrestrictedInstitutionShellPermissions;
+  for(const command of ['powershell -File .\\scripts\\run.ps1','node scripts/update.js','cmd /c echo data > out.txt','teamai recall "任意业务"','git status','git push origin main'])
+    assert.equal(allowed('shell',command,unrestricted),true,command);
+  for(const action of ['read','write','edit','glob','grep','list','external_directory'])
+    assert.equal(allowed(action,'*',unrestricted),true,action);
+  for(const action of ['dbhub_write_table','other_mcp_delete','subagent','webfetch'])
+    assert.equal(allowed(action,'*',unrestricted),false,action);
+  const f=await sqliteEmbedFixture(undefined,undefined,true,undefined,true);
+  try{
+    const visitor=(await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',
+      headers:f.headers(),payload:{}})).json().data;
+    const created=await f.app.inject({method:'POST',url:'/api/v1/embed/chat/sessions',
+      headers:f.headers(visitor.token,visitor.csrfToken),
+      payload:{scenario:'institution-message-inspection'}});
+    assert.equal(created.statusCode,201,created.body);
+    const native=f.nativeSessions.get(created.json().data.id);
+    assert.deepEqual(native.permissions,unrestrictedInstitutionShellPermissions);
   }finally{await f.close();}
 });
