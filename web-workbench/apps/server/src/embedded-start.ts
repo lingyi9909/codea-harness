@@ -24,6 +24,8 @@ export async function createEmbeddedRuntime(workspace?:string){
   const configFile=process.env.HARNESS_EMBED_ISOLATED_CONFIG;
   if(Boolean(registryFile)!==Boolean(configFile))
     throw Error('EMBED_ISOLATED_REQUIRES_BOTH_REGISTRY_AND_CONFIG');
+  if(registryFile&&!process.env.HARNESS_SQLITE_PATH)
+    throw Error('EMBED_ISOLATED_REQUIRES_OWN_SQLITE_PATH');
   const connection=chatConnection(true);
   let execution:ExecutionRegistry;
   let config:EmbedConfig;
