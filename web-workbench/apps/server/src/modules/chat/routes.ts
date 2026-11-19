@@ -414,6 +414,34 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
           case 'permission.asked':case 'permission.replied':
             frame='event: requests\ndata: {}';
             break;
+          case 'session.execution.started':
+          case 'session.execution.succeeded':
+          case 'session.execution.failed':
+          case 'session.execution.interrupted':{
+            const status=event.type.slice('session.execution.'.length);
+            frame='event: lifecycle\\ndata: '+JSON.stringify({id:event.id,status,at:event.created});
+            break;
+          }
+          case 'session.step.started':
+          case 'session.step.ended':
+          case 'session.tool.called':
+          case 'session.tool.success':
+          case 'session.tool.failed':{
+            const data=event.data as unknown as Record<string,unknown>;
+            const assistantMessageID=data.assistantMessageID;
+            if(typeof assistantMessageID!=='string'||!assistantMessageID)continue;
+            const label=typeof data.name==='string'?activityPreview(data.name,100):'当前步骤';
+            const descriptions:Record<string,string>={
+              'session.step.started':'开始执行下一阶段',
+              'session.step.ended':'当前阶段处理完毕，等待整轮执行结束',
+              'session.tool.called':'开始调用工具 · '+label,
+              'session.tool.success':'工具执行完成 · '+label,
+              'session.tool.failed':'工具执行失败 · '+label,
+            };
+            frame='data: '+JSON.stringify({id:event.id,message:assistantMessageID,
+              at:event.created,text:descriptions[event.type]});
+            break;
+          }
           case 'session.tool.progress':{
             const meta=event.data.metadata;
             const label=[meta.title,meta.message,meta.status].find((v):v is string=>typeof v==='string'&&v.length>0);
