@@ -64,14 +64,14 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
       {type:'text',text:'仅本会话结果：'+firstSession}
     ];
     await expect(frames[0].locator('.turn-reasoning summary')).toBeVisible({timeout:10000});
-    const process=frames[0].locator('.turn-process');
-    await expect(process.locator('.process-list')).toBeHidden();
-    await process.locator('summary').first().click();
-    await expect(process.getByText('dbhub')).toBeVisible();
-    await expect(process.getByText('调用参数')).toBeVisible();
-    await expect(process.getByText('select verification')).toBeHidden();
-    await process.getByText('调用参数').click();
-    await expect(process.getByText('select verification')).toBeVisible();
+    const processDetails=frames[0].locator('.turn-process');
+    await expect(processDetails.locator('.process-list')).toBeHidden();
+    await processDetails.locator('summary').first().click();
+    await expect(processDetails.getByText('dbhub')).toBeVisible();
+    await expect(processDetails.getByText('调用参数')).toBeVisible();
+    await expect(processDetails.getByText('select verification')).toBeHidden();
+    await processDetails.getByText('调用参数').click();
+    await expect(processDetails.getByText('select verification')).toBeVisible();
 
     for(const input of f.prompts){assert.deepEqual(input.skills,[{id:'message-skill'}]);const conditions=JSON.parse(input.text.split('\n').find((line:string)=>line.startsWith('{'))!);assert.equal(conditions.day,'2026-11-19');assert.match(conditions.msgSn,/^000[0-2]$/);assert.equal(conditions.from,Date.UTC(2026,10,18,16));assert.equal(conditions.to,Date.UTC(2026,10,19,16));assert.equal(input.text.includes('已查询证据'),false);}
     assert.ok([...f.nativeSessions.values()].every(s=>s.model.id==='kimi-k2'&&s.location.directory===f.workspace));assert.ok([...f.nativeSessions.values()].every(s=>s.permissions?.some((r:{action:string;effect:string})=>r.action==='*'&&r.effect==='deny')));
