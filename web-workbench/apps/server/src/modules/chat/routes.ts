@@ -346,8 +346,13 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     const scenario=req.body?.scenario??'direct-chat';
     const dir=await sceneDirectory(scenario,req.body?.directory),model=req.body?.model;
     if(model)await validateModel(dir,model);
-    if(sceneConfig&&sceneKey(scenario))await execution(dir,await sceneConfig.binding(sceneKey(scenario)!));
-    else if(scenario==='log-inspection')await logQuerySkill(dir);
+    if(sceneConfig&&sceneKey(scenario)){
+      const action=await execution(dir,await sceneConfig.binding(sceneKey(scenario)!));
+      // Child agents use their OWN permission rules; custom Commands may
+      // perform shell work. Neither can inherit an anonymous session sandbox.
+      if(options.execution?.singleService()&&(action.kind==='subagent'||action.kind==='command'))
+        throw new AuthProblem(403,'EMBED_EXECUTOR_REQUIRES_ISOLATION');
+    }else if(scenario==='log-inspection')await logQuerySkill(dir);
     const title=req.body?.title?.trim()||(scenario==='direct-chat'?'智能工作台 · 直接对话':'智能工作台 · 专项场景');
     const session=await (await client()).session.create({location:{directory:dir},...(model?{model}:{}),title,
       metadata:{...options.sessionMetadata?.(req),harnessScenario:scenario,harnessOwner:ownerId},...(options.execution?.permissions()?{permissions:options.execution.permissions()}:{} )}).catch((error:unknown)=>{
@@ -511,6 +516,8 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     }));
     const binding=sceneConfig&&sceneKey(scenario as ChatScenario)?await sceneConfig.binding(sceneKey(scenario as ChatScenario)!):undefined;
     const action:Execution=binding?await execution(root,binding):scenario==='log-inspection'?{kind:'skill',skills:[await logQuerySkill(root)]}:{kind:'direct'};
+    if(options.execution?.singleService()&&(action.kind==='subagent'||action.kind==='command'))
+      throw new AuthProblem(403,'EMBED_EXECUTOR_REQUIRES_ISOLATION');
     const native=await client();
     let prompt:{text:string;metadata?:{workbenchLanguageSuffix:1}}={text};
     try{
@@ -586,7 +593,10 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
     await owned(sessionID,ownerId);
     const pending=await (await client()).permission.list({sessionID});
     const request=pending.find(p=>p.sessionID===sessionID&&p.id===req.body.requestId);
-    if((options.execution?.singleService()||options.execution?.sharedWorkspace()&&request?.action==='edit')&&req.body.decision!=='reject')throw new AuthProblem(403,'SHARED_WORKSPACE_READ_ONLY');
+    if((options.execution?.singleService()&&
+       !['skill','dbhub_search_schema','dbhub_execute_sql'].includes(request?.action??'')||
+       options.execution?.sharedWorkspace()&&request?.action==='edit')&&req.body.decision!=='reject')
+      throw new AuthProblem(403,'SHARED_WORKSPACE_READ_ONLY');
     if(!request||revision(request)!==req.body.revision)throw new AuthProblem(409,'PERMISSION_CHANGED');
     await (await client()).permission.reply({sessionID,requestID:request.id,decision:req.body.decision});
     return wrap({submitted:true});
