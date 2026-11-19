@@ -156,20 +156,23 @@ it('binds packaged operations to the one existing project selected at startup',a
 it('Windows launcher resolves quoted project paths before changing into the bundle',{skip:process.platform!=='win32'},async t=>{
   const dir=await mkdtemp(join(tmpdir(),'workbench-launch-'));
   t.after(()=>rm(dir,{recursive:true,force:true}));
-  const bundle=join(dir,'bundle'),entry=join(bundle,'apps','server','src');
+  const bundle=join(dir,'bundle'),entry=join(bundle,'scripts');
   await mkdir(entry,{recursive:true});
   await mkdir(join(dir,'project with spaces'));
   await copyFile(new URL('../../start-chat.cmd',import.meta.url),join(bundle,'start-chat.cmd'));
-  await writeFile(join(entry,'start.ts'),"require('node:fs').writeFileSync('argv.json',JSON.stringify(process.argv.slice(2)))");
+  // The real CMD now delegates to the interactive/non-interactive Node menu.
+  // Stub only that entrypoint to verify quoting, resolved workspace and cwd.
+  await writeFile(join(entry,'launch-workbench.mjs'),
+    "import {writeFileSync} from 'node:fs';writeFileSync('argv.json',JSON.stringify({cwd:process.cwd(),args:process.argv.slice(2)}))");
   for(const arg of [' "project with spaces"','']){
     const result=spawnSync('cmd.exe',['/d','/c','bundle\\start-chat.cmd'+arg],{
       cwd:dir,encoding:'utf8',windowsVerbatimArguments:true,timeout:15000,
     });
     if(!arg){assert.equal(result.status,2,result.stderr+result.stdout);continue;}
     assert.equal(result.status,0,result.stderr+result.stdout);
-    const argv=JSON.parse(await readFile(join(bundle,'argv.json'),'utf8'));
-    assert.equal(argv[0],'--local-only');
-    assert.equal(argv[1],'--workspace');
-    assert.equal(resolve(argv[2]),join(dir,'project with spaces'));
+    const data=JSON.parse(await readFile(join(bundle,'argv.json'),'utf8'));
+    assert.equal(resolve(data.cwd),bundle);
+    assert.equal(data.args.length,1);
+    assert.equal(resolve(data.args[0]),join(dir,'project with spaces'));
   }
 });
