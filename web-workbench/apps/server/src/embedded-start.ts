@@ -1,9 +1,9 @@
-import {realpath,mkdir} from 'node:fs/promises';
+import {realpath,mkdir,readFile} from 'node:fs/promises';
 import {dirname,isAbsolute,relative,join,sep,resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {EmbeddedAuth,type EmbedConfig} from './embed-auth.ts';
-import {ExecutionRegistry} from './execution-registry.ts';
+import {ExecutionRegistry,loadExecutionRegistry} from './execution-registry.ts';
 import {chatConnection} from './modules/chat/connection.ts';
 import {SqliteEmbedStore} from '../../../packages/storage/src/sqlite-embed.ts';
 
@@ -20,10 +20,37 @@ export async function createEmbeddedRuntime(workspace?:string){
   const identity='single:'+createHash('sha256').update(JSON.stringify([locator,root])).digest('hex');
   const publicOrigin=process.env.HARNESS_PUBLIC_ORIGIN??'http://127.0.0.1:'+port;
   const parents=process.env.HARNESS_EMBED_PARENTS?.split(',').map(s=>s.trim()).filter(Boolean)??[publicOrigin];
-  const config:EmbedConfig={publicOrigin,clients:[],anonymous:{parentOrigins:parents,executionOwners:[],singleService:{identity,maxPages:Number(process.env.HARNESS_EMBED_MAX_PAGES??100)}}};
+  const registryFile=process.env.HARNESS_EMBED_EXECUTION_REGISTRY;
+  const configFile=process.env.HARNESS_EMBED_ISOLATED_CONFIG;
+  if(Boolean(registryFile)!==Boolean(configFile))
+    throw Error('EMBED_ISOLATED_REQUIRES_BOTH_REGISTRY_AND_CONFIG');
   const connection=chatConnection(true);
-  const execution=new ExecutionRegistry([],async()=>connection(),{workspace:root,singleServiceIdentity:identity});
-  const store=new SqliteEmbedStore(path,identity);
+  let execution:ExecutionRegistry;
+  let config:EmbedConfig;
+  if(registryFile&&configFile){
+    // Each anonymous visitor gets a separately provisioned OpenCode service,
+    // OS/container identity and private execution directory. This is the only
+    // mode in which ordinary Skill/MCP tools can retain native permissions.
+    config=JSON.parse(await readFile(configFile,'utf8')) as EmbedConfig;
+    if(config.publicOrigin!==publicOrigin||config.clients?.length||
+      !config.anonymous?.executionOwners?.length||config.anonymous.singleService)
+      throw Error('EMBED_ISOLATED_CONFIG_INVALID');
+    execution=await loadExecutionRegistry(registryFile,root,
+      (url,authorization)=>chatConnection(false,{url,authorization})());
+    for(const owner of config.anonymous.executionOwners){
+      if(!execution.has(owner))throw Error('EMBED_ISOLATED_OWNER_MISSING');
+      await execution.run(owner,async()=>{
+        if(execution.sharedWorkspace()||execution.singleService())
+          throw Error('EMBED_ISOLATED_SHARED_WORKSPACE_FORBIDDEN');
+        // Also verifies that the configured source directory is explicitly mapped.
+        execution.directory(root);
+      });
+    }
+  }else{
+    config={publicOrigin,clients:[],anonymous:{parentOrigins:parents,executionOwners:[],singleService:{identity,maxPages:Number(process.env.HARNESS_EMBED_MAX_PAGES??100)}}};
+    execution=new ExecutionRegistry([],async()=>connection(),{workspace:root,singleServiceIdentity:identity});
+  }
+  const store=new SqliteEmbedStore(path,registryFile?undefined:identity);
   try{return {auth:new EmbeddedAuth(config,store),execution,connection,store,workspace:root,publicOrigin,port};}
   catch(error){await store.close();throw error;}
 }
