@@ -22,6 +22,17 @@ test('standalone config: no workbench mount, independent URL, same saved institu
     await page.route('**/api/v1/chat/history',route=>route.fulfill({json:{data:{items:[]}}}));
     await page.goto(origin+'/');await page.getByLabel('姓名',{exact:true}).fill('zhangzhanhui');await page.getByLabel('手机号',{exact:true}).fill('13800000000');
     await page.getByRole('button',{name:'登录工作台'}).click();await expect(page.getByRole('navigation',{name:'场景导航'})).toBeVisible();
+    // Existing public/message entrypoints must keep their original forms and
+    // navigation after adding the independent institution iframe.
+    const navigation=page.getByRole('navigation',{name:'场景导航'});
+    await navigation.getByRole('button',{name:/问题排查/}).click();
+    for(const scene of ['公管问题排查','报文问题排查']){
+      await navigation.getByRole('button',{name:scene,exact:true}).click();
+      await expect(page.getByRole('heading',{name:scene})).toBeVisible();
+      for(const field of ['Trace ID','msgSn','关键词'])
+        await expect(page.getByLabel(field,{exact:true})).toBeVisible();
+      await expect(page.getByRole('button',{name:'调整排查条件'})).toHaveCount(0);
+    }
     await expect(page.getByRole('button',{name:'场景配置',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'场景配置',exact:true}).click();
     await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
