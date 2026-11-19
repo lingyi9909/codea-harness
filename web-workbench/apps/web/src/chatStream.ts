@@ -5,6 +5,7 @@ import type {ChatFragment,ChatMessage,ChatStep,ToolProgress} from '../../../pack
 type Part={message:string;ordinal:number;kind:'thinking'|'text';text:string;at:number;ended?:number;runs?:string[]};
 type Frame={session:string;parts:Part[];tools:ToolProgress[]};
 type Connection={session:string;ready:Promise<void>;close:()=>void};
+export type StreamConnectionState='idle'|'connecting'|'connected'|'disconnected';
 
 const emptyParts:Part[]=[];
 const emptyTools:ToolProgress[]=[];
@@ -54,12 +55,14 @@ function mergedText(part:Part,snapshot:string,complete:boolean){
 
 export function useChatStream(session:string){
   const [requestsVersion,refreshRequests]=useState(0);
+  const [connectionState,setConnectionState]=useState<StreamConnectionState>('idle');
   const connection=useRef<Connection|null>(null);
   const [frame,setFrame]=useState<Frame>({session:'',parts:[],tools:[]});
   const prune=useRef<(messages:ChatMessage[])=>void>(()=>{});
   const connect=useCallback((id:string)=>{
     if(connection.current?.session===id)return connection.current.ready;
     connection.current?.close();
+    setConnectionState('connecting');
     const source=api.activity(id);
     const initial:Frame={session:id,parts:[],tools:[]};
     let current=initial,paint=0;
@@ -77,10 +80,10 @@ export function useChatStream(session:string){
     const ready=new Promise<void>(resolve=>{release=resolve;});
     const timeout=setTimeout(release,2000);
     const connected=()=>{clearTimeout(timeout);release();};
-    source.addEventListener('ready',connected);
+    source.addEventListener('ready',()=>{connected();setConnectionState('connected');});
     source.addEventListener('requests',()=>refreshRequests(n=>n+1));
     source.onerror=()=>{
-      connected();
+      connected();setConnectionState('disconnected');
       for(const part of current.parts)if(part.ended==null)interrupted.add(part);
     };
     source.onmessage=e=>{
@@ -125,7 +128,9 @@ export function useChatStream(session:string){
     if(session)void connect(session);
     return ()=>{if(connection.current?.session===session){connection.current.close();connection.current=null;}};
   },[session,connect]);
-  return {connect,prune,requestsVersion,parts:frame.session===session?frame.parts:emptyParts,tools:frame.session===session?frame.tools:emptyTools};
+  return {connect,prune,requestsVersion,
+    connectionState:connection.current?.session===session?connectionState:'idle' as StreamConnectionState,
+    parts:frame.session===session?frame.parts:emptyParts,tools:frame.session===session?frame.tools:emptyTools};
 }
 
 export function streamingMessages(history:ChatMessage[],parts:Part[]):ChatMessage[]{
