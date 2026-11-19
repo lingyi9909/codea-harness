@@ -200,7 +200,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   const cancelAdjustment=()=>{setEditorOpen(false);investigationRef.current?.cancel();};
   const openAdjustment=()=>{
     // Wait for the native session and saved filters to finish restoring.
-    if(!investigation||!id||busy||pending||state?.id!==id||state.active||restoreContext.current)return;
+    if(!investigation||!id||busy||pending||state?.id!==id||state.active||(embedded&&pendingExecution?.id===id)||restoreContext.current)return;
     investigationRef.current?.beginEdit();
     setEditorOpen(true);
   };
@@ -232,7 +232,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
     (!embedded||!(state?.active||pendingExecution?.id===id)));
   // Shared-session embedded pages cannot queue a second request while running;
   // native multi-user concurrency restrictions still apply.
-  const canRerun=Boolean(adjustmentOpen&&investigation?.ready&&settings.configured&&state?.id===id&&!state.active&&!pending&&!busy);
+  const canRerun=Boolean(adjustmentOpen&&investigation?.ready&&settings.configured&&state?.id===id&&!state.active&&!pending&&!busy&&(!embedded||pendingExecution?.id!==id));
   const send=(rerun=false)=>run(async()=>{
     if(rerun?!canRerun:!maySend)return;
     const text=investigation?await investigation.prompt(rerun?'':draft.trim()):draft.trim();
@@ -298,7 +298,7 @@ function ChatWorkspace({investigation,directory,settings,navigation,sceneId,mode
   return <section className={investigation?"scene-page log-investigation "+(id?"log-investigation-active":"log-investigation-setup"):"scene-page silver-chat-home "+(homeEmpty?"silver-chat-empty":"silver-chat-active")}><div className="scene-title"><div className="thread-heading"><h1>{investigation?.title??(sceneId==='data'?'公管数据分析':'直接对话')}</h1>
       {currentTitle&&<h2 className="conversation-title" title={currentTitle}>{currentTitle}</h2>}</div>
     <div className="chat-history-actions">{investigation&&investigation.allowAdjustment!==false&&id&&<button type="button" className="secondary log-adjust-button"
-      aria-expanded={adjustmentOpen} disabled={busy||pending||state?.id!==id||Boolean(state?.active)||restoreContext.current}
+      aria-expanded={adjustmentOpen} disabled={busy||pending||state?.id!==id||Boolean(state?.active)||(embedded&&pendingExecution?.id===id)||restoreContext.current}
       onClick={openAdjustment}>调整排查条件</button>}
       {!embedded&&<button className="secondary" aria-expanded={history} aria-controls="conversation-history" disabled={busy} onClick={()=>showHistory(!history)}>历史对话</button>}
       {!embedded&&id&&<button className="secondary new-conversation" disabled={busy} onClick={()=>switchTo('')}><span aria-hidden="true">＋</span> 新建对话</button>}</div></div>
