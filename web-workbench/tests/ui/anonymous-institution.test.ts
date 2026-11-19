@@ -31,6 +31,14 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
       await frame.getByRole('button',{name:'开始排查',exact:true}).click();await expect(frame.getByText(/仅本会话结果：/)).toBeVisible({timeout:20000});
     }));
     assert.equal(f.calls.length,3);assert.equal(f.prompts.length,3);
+    // Two peers have received native turn-idle completion; page 0 intentionally
+    // remains between stage 1 and the next phase for the regression below.
+    for(const index of [1,2]){
+      const seen=await frames[index].getByText(/仅本会话结果：/).innerText();
+      const nativeId=seen.split('仅本会话结果：').at(-1)!.trim();
+      f.messages.get(nativeId)!.push({id:'idle-initial-'+nativeId,type:'idle',outcome:'succeeded',time:{created:Date.now()}});
+    }
+    await expect(frames[0].getByRole('alert').filter({hasText:'拒绝全部工具调用'})).toBeVisible({timeout:10000});
     // Closed process details must not leak raw tool input/output into the page.
     const toolDetails=await frames[0].locator('body').evaluate(body=>{
       const details=document.createElement('details');details.className='turn-process';
