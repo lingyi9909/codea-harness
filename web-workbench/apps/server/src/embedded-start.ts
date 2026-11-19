@@ -50,7 +50,10 @@ export async function createEmbeddedRuntime(workspace?:string){
     }
   }else{
     config={publicOrigin,clients:[],anonymous:{parentOrigins:parents,executionOwners:[],singleService:{identity,maxPages:Number(process.env.HARNESS_EMBED_MAX_PAGES??100)}}};
-    execution=new ExecutionRegistry([],async()=>connection(),{workspace:root,singleServiceIdentity:identity});
+    execution=new ExecutionRegistry([],async()=>connection(),{
+      workspace:root,singleServiceIdentity:identity,
+      allowInstitutionShell:process.env.HARNESS_INSTITUTION_ALLOW_SHELL==='1',
+    });
   }
   const store=new SqliteEmbedStore(path,registryFile?undefined:identity);
   try{return {auth:new EmbeddedAuth(config,store),execution,connection,store,workspace:root,publicOrigin,port};}
