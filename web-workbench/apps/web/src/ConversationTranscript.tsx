@@ -145,7 +145,8 @@ function Response({session,messages,progress,active,latest}:{session:string;mess
   const problem=details.slice().reverse().find(e=>e.step.kind==='notice'&&e.step.problem);
   const runningTool=tools.find(e=>e.step.kind==='tool'&&['running','streaming'].includes(e.step.status))?.step;
   const status=problem?.step.kind==='notice'?problem.step.text:undefined;
-  const working=active&&!answers.length;
+  // An early acknowledgement (e.g. 请稍等) is not proof that a turn finished.
+  const working=active;
   if(!answers.length&&!thinking.length&&!details.length&&!files.size&&!metrics.length&&!active)return null;
   return <article className="response-turn" aria-label="OpenCode 回答">
     {thinking.length>0&&<Reasoning session={session} entries={thinking} expanded={latest}/>}
