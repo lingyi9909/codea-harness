@@ -12,6 +12,16 @@ export const singleServicePermissions=[
   {action:'skill',resource:'*',effect:'allow' as const},
   {action:'dbhub_search_schema',resource:'*',effect:'allow' as const},
   {action:'dbhub_execute_sql',resource:'*',effect:'allow' as const},
+  // The institution Skill may use OpenCode's native Shell for read-only
+  // knowledge discovery. Allow only concrete read-only CLI verbs, never
+  // shell:* / node / powershell / bash / curl / script execution. This is NOT
+  // sufficient for a Skill that depends on arbitrary executable scripts:
+  // those must run in a separately restricted executor.
+  {action:'shell',resource:'teamai recall *',effect:'allow' as const},
+  {action:'shell',resource:'teamai search *',effect:'allow' as const},
+  {action:'shell',resource:'git status *',effect:'allow' as const},
+  {action:'shell',resource:'git log *',effect:'allow' as const},
+  {action:'shell',resource:'git ls-files *',effect:'allow' as const},
 ];
 export const sharedWorkspacePermissions=[{action:'edit',resource:'*',effect:'deny' as const}];
 type Client=Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
