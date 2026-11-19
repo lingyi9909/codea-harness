@@ -49,6 +49,23 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     await expect(frames[0].getByRole('button',{name:'正在执行 · 中断执行'})).toBeVisible({timeout:10000});
     await expect(frames[0].getByText('正在执行，思考和工具进度会持续更新。')).toBeVisible();
     f.active[firstSession]=false;
+    // Main-workbench parity: real native reasoning and tool steps appear in the
+    // same transcript, while tool payloads remain collapsed until requested.
+    const answer=f.messages.get(firstSession)!.find(m=>m.type==='assistant')!;
+    answer.content=[
+      {type:'reasoning',text:'先核对报文关联信息。',time:{created:1000,completed:2000}},
+      {type:'tool',name:'dbhub',state:{status:'completed',input:{query:'select verification'},content:[{type:'text',text:'已返回关联记录'}]}},
+      {type:'text',text:'仅本会话结果：'+firstSession}
+    ];
+    await expect(frames[0].locator('.turn-reasoning summary')).toBeVisible({timeout:10000});
+    const process=frames[0].locator('.turn-process');
+    await expect(process.locator('.process-list')).toBeHidden();
+    await process.locator('summary').first().click();
+    await expect(process.getByText('dbhub')).toBeVisible();
+    await expect(process.getByText('调用参数')).toBeVisible();
+    await expect(process.getByText('select verification')).toBeHidden();
+    await process.getByText('调用参数').click();
+    await expect(process.getByText('select verification')).toBeVisible();
 
     for(const input of f.prompts){assert.deepEqual(input.skills,[{id:'message-skill'}]);const conditions=JSON.parse(input.text.split('\n').find((line:string)=>line.startsWith('{'))!);assert.equal(conditions.day,'2026-11-19');assert.match(conditions.msgSn,/^000[0-2]$/);assert.equal(conditions.from,Date.UTC(2026,10,18,16));assert.equal(conditions.to,Date.UTC(2026,10,19,16));assert.equal(input.text.includes('已查询证据'),false);}
     assert.ok([...f.nativeSessions.values()].every(s=>s.model.id==='kimi-k2'&&s.location.directory===f.workspace));assert.ok([...f.nativeSessions.values()].every(s=>s.permissions?.some((r:{action:string;effect:string})=>r.action==='*'&&r.effect==='deny')));
@@ -64,9 +81,34 @@ test('anonymous institution: Kimi default, direct bound Skill without adapter, t
     for(const frame of frames){await expect(frame.getByText(/仅本会话结果：/)).toBeVisible();await expect(frame.getByText('服务暂时不可用，正在重新连接当前会话，请勿重复提交。')).toHaveCount(0,{timeout:15000});}
     assert.deepEqual(grants(),originalGrants);assert.equal(f.calls.length,3);
     await frames[1].getByLabel('对话内容').fill('继续解释原因');await frames[1].getByRole('button',{name:'发送 ↑',exact:true}).click();await expect.poll(()=>f.calls.length).toBe(4);assert.equal(f.prompts.at(-1).text,'继续解释原因');
+    // Safe native interaction forms remain available without any login fields.
+    const secondResult=await frames[1].getByText(/仅本会话结果：/).innerText();
+    const secondSession=secondResult.split('仅本会话结果：').at(-1)!.trim();
+    f.forms.set(secondSession,[{id:'safe-form',sessionID:secondSession,title:'确认排查方向',
+      fields:[{key:'branch',title:'业务分支',type:'string',required:true,hidden:false,custom:true}]}]);
+    const form=frames[1].getByRole('form',{name:'确认排查方向'});
+    await expect(form).toBeVisible({timeout:10000});
+    await form.getByRole('textbox',{name:'业务分支 *'}).fill('报文发送');
+    await form.getByRole('button',{name:'提交回答'}).click();
+    await expect.poll(()=>f.formReplies.length).toBe(1);
+    assert.equal(f.formReplies[0].sessionID,secondSession);
+    assert.deepEqual(f.formReplies[0].answer,{branch:'报文发送'});
+    await expect(form).toHaveCount(0);
+    // A completed investigation can adjust date/msgSn using the same native session.
+    const thirdResult=await frames[2].getByText(/仅本会话结果：/).innerText();
+    const thirdSession=thirdResult.split('仅本会话结果：').at(-1)!.trim();
+    await frames[2].getByRole('button',{name:'调整排查条件'}).click();
+    const drawer=frames[2].getByRole('dialog',{name:'调整排查条件'});
+    await drawer.getByLabel('调整日期').fill('2026-11-18');
+    await drawer.getByLabel('调整 msgSn').fill('000099');
+    await drawer.getByRole('button',{name:'应用并重新排查'}).click();
+    await expect.poll(()=>f.calls.length).toBe(5);
+    assert.equal(f.calls.at(-1),thirdSession);
+    assert.equal(JSON.parse(f.prompts.at(-1).text.split('\\n').find((line:string)=>line.startsWith('{'))!).msgSn,'000099');
+    await expect(drawer).toHaveCount(0);
     for(const page of pages){const frame=page.frames().find(v=>v.url().startsWith(origin))!;assert.deepEqual(await frame.evaluate(()=>({local:Object.keys(localStorage),session:Object.keys(sessionStorage)})),{local:[],session:[]});}
     const captured=await Promise.all(requests);assert.ok(captured.every(r=>r.cookie===''));assert.ok(captured.every(r=>!r.url.includes('token=')&&!r.url.includes('ticket=')));assert.equal(captured.filter(r=>r.url.endsWith('/institution-query')).length,0);
     await frames[0].getByRole('button',{name:'结束会话',exact:true}).click();await expect(frames[0].getByRole('status').filter({hasText:'本次会话已结束'})).toBeVisible();assert.equal(f.nativeSessions.size,2);
-    await pages[0].reload();await expect(frames[0].getByLabel('msgSn',{exact:true})).toHaveValue('');await expect(frames[0].getByText(/仅本会话结果：/)).toHaveCount(0);assert.equal(f.calls.length,4);await expect(frames[1].getByText(/仅本会话结果：/)).toBeVisible();await context.close();
+    await pages[0].reload();await expect(frames[0].getByLabel('msgSn',{exact:true})).toHaveValue('');await expect(frames[0].getByText(/仅本会话结果：/)).toHaveCount(0);assert.equal(f.calls.length,5);await expect(frames[1].getByText(/仅本会话结果：/)).toBeVisible();await context.close();
   }finally{await browser?.close();host.closeAllConnections();await new Promise<void>(resolve=>host.close(()=>resolve()));await f.close();}
 });
