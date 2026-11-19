@@ -419,7 +419,7 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
           case 'session.execution.failed':
           case 'session.execution.interrupted':{
             const status=event.type.slice('session.execution.'.length);
-            frame='event: lifecycle\\ndata: '+JSON.stringify({id:event.id,status,at:event.created});
+            frame='event: lifecycle\ndata: '+JSON.stringify({id:event.id,status,at:event.created});
             break;
           }
           case 'session.step.started':
