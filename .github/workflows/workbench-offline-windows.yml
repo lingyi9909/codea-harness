@@ -44,7 +44,7 @@ jobs:
         run: |
           npx playwright install chromium
           if($LASTEXITCODE -ne 0) { throw 'Windows Chromium install failed' }
-          node --experimental-strip-types --test tests/ui/unified-config.test.ts
+          node --experimental-strip-types --test tests/ui/anonymous-institution.test.ts tests/ui/unified-config.test.ts
           if($LASTEXITCODE -ne 0) { throw 'Standalone configuration browser test failed' }
       - name: Keep only runtime dependencies
         working-directory: web-workbench

@@ -65,7 +65,7 @@ $env:HARNESS_EMBED_PARENTS = "https://portal.example"
 
 **本轮恢复原生执行器绑定和分发，未放宽单服务工具权限。** Skill 从目录解析 ID 后通过 session.prompt 的 skills 字段传入；Command 调用 session.command；Subagent 通过 agents/@mention 传入。单服务 Session 仍强制 permissions 通配 deny，创建及后续请求均核验回显，权限回复不能扩大。Skill/命令需要 Shell、文件、MCP 或子任务时仍受此策略限制。绑定成功不等于任意业务工具已获准执行，协议桩不代表真实引擎工具验收。
 
-机构页继续通过专用安全接口完成目标系统认证/取证，再把安全证据交给选定执行器。真实接口需配置 HARNESS_INSTITUTION_ADAPTER_URL / HARNESS_INSTITUTION_ADAPTER_AUTH，接收 day/from/to/msgSn/account/password/verificationCode，仅返回可展示的 evidence。密码/验证码不进入普通对话、模型上下文或日志。未配置接口明确拒绝。本轮没有真实内网联调。
+机构页只填写日期和 msgSn，不再收集账号、密码或验证码。日期仍转为当天起止边界，精度到秒，API 的 from/to 单位为毫秒，to 为次日零点（不含）。后端查询接口仅接收 day/from/to/msgSn；旧的账号、密码、验证码字段会被拒绝。查询继续通过 HARNESS_INSTITUTION_ADAPTER_URL / HARNESS_INSTITUTION_ADAPTER_AUTH 配置的接口取证，接口负责自身所需认证并仅返回可展示的 evidence。未配置接口明确拒绝，本轮未更换查询执行路径，也没有真实内网联调。升级后重新打开机构页建立新会话；之前使用账号参与指纹的查询缓存不自动迁移。
 
 ## 持久化与验收
 
@@ -73,4 +73,4 @@ SQLite 首次按版本化迁移建库，默认当前账户私有 `.smart-workben
 
 每个机构页面有独立凭据与原生 Session，A 结束只中断/删除 A，不停止 OpenCode、不清公共目录、不影响 B/C。默认100个未过期页面，可用 HARNESS_EMBED_MAX_PAGES 调整。备份使用 `npm run embedded:storage -- --backup "D:\workbench-backup\embedded.sqlite"`，不要只复制运行中的主文件而遗漏 WAL。旧多槽位/MySQL 数据不自动迁入。本轮只新增配置键，不改变数据库结构。
 
-验收：一次启动访问三个地址；工作台无配置菜单；独立配置页保存/刷新一致；机构与普通报文绑定独立；三人并发原生 Skill 调用和跨会话操作拒绝；重启恢复；匿名凭据不能写配置；密码/验证码不进入模型输入。真实 Skill 工具权限、业务接口及私有模型仍需内网验证。
+验收：一次启动访问三个地址；工作台无配置菜单；独立配置页保存/刷新一致；机构与普通报文绑定独立；三人并发原生 Skill 调用和跨会话操作拒绝；重启恢复；匿名凭据不能写配置；表单和查询请求仅有日期范围与 msgSn。真实 Skill 工具权限、业务接口及私有模型仍需内网验证。

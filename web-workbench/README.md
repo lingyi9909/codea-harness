@@ -1,3 +1,5 @@
+> **机构报文参数更新（2026-11-19）：** 页面仅保留日期和 msgSn；前后端移除账号、密码、验证码字段，保留同一启动命令与共享 Skill 配置。业务查询适配接口仍需按部署说明配置。
+
 > **当前部署：一个启动命令、一个服务、三处入口。** Windows 离线包解压后执行 `启动工作台.cmd "D:\teamai"`；工作台 `/`、独立机构报文页 `/embed/institution-message`、独立配置页 `/config` 同时提供。共同读取唯一启动目录的 `.workbench/scenarios.json`；配置页已从工作台导航和组件树移除。机构报文使用独立的 `institution-message` 绑定。详见 [统一部署与 Skill 配置](docs/institution-standalone-deployment.md)。
 >
 > 机构页无需工作台登录；主工作台与配置编辑继续使用原有本机资料/编辑权限校验。SQLite 保存机构页归属及会话，原 MySQL Review/任务模块保持原部署方式。机构认证适配器和单服务工具权限边界仍须按部署文档验收。

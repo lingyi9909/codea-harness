@@ -1,3 +1,5 @@
+> **参数更新：** 2026-11-19 起机构页面只保留日期和 msgSn；本文中旧账号/密码/验证码流程为历史记录，当前参数合同以 [统一部署说明](institution-standalone-deployment.md) 为准。
+
 > 本文为旧多服务部署记录。当前机构入口只用一个 OpenCode 服务，请按 [三步部署](institution-standalone-deployment.md) 启动，不要创建本文中的多服务/槽位配置。
 
 > 最新单工作目录、免 MySQL 的机构入口请使用 [SQLite 独立部署说明](institution-standalone-deployment.md)。本文保留早期接口契约及旧 MySQL/独立目录部署记录；其中多套业务目录及 resetCommand 配置不适用于新的共享目录模式。

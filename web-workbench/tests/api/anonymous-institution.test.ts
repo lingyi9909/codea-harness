@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {embedFixture} from '../support/embed-fixture.ts';
 import {embedDigest} from '../../apps/server/src/embed-auth.ts';
-const query={day:'2026-11-18',from:Date.UTC(2026,10,17,16),to:Date.UTC(2026,10,18,16),msgSn:'000123',account:'business-account',password:'private-password',verificationCode:'001234'};
+const query={day:'2026-11-18',from:Date.UTC(2026,10,17,16),to:Date.UTC(2026,10,18,16),msgSn:'000123'};
 test('anonymous: three visitors, no host integration, persistent restart, cross-session rejection and independent stop',async()=>{
   const f=await embedFixture(undefined,undefined,true,{anonymous:true,resetSlot:async()=>{}});
   try{
@@ -43,7 +43,7 @@ test('anonymous: execution slots are not reused before a trusted reset; expired 
     assert.equal((await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',headers:f.headers(),payload:{}})).statusCode,503);
   }finally{await f.close();}
 });
-test('institution: credentials go only to the adapter; persisted evidence is reused after restart without reauthentication',async()=>{
+test('institution: day and msgSn alone query once and reuse evidence across restart',async()=>{
   let calls=0;const f=await embedFixture(undefined,undefined,false,{anonymous:true,institutionAdapter:async(input,scope)=>{calls++;assert.deepEqual(input,query);assert.ok(scope.grantId);return {evidence:'已找到指定报文，其应答状态为失败。'};}});
   try{
     const v=(await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',headers:f.headers(),payload:{}})).json().data;
@@ -52,14 +52,24 @@ test('institution: credentials go only to the adapter; persisted evidence is reu
     await f.restart();assert.equal((await request()).statusCode,200);assert.equal(calls,1);
     assert.equal((await f.app.inject({method:'POST',url:'/api/v1/embed/institution-query',headers:f.headers(v.token,v.csrfToken),payload:{...query,msgSn:'different'}})).statusCode,409);
     assert.equal((await f.app.inject({method:'POST',url:'/api/v1/embed/institution-query',headers:f.headers(v.token,'wrong'),payload:query})).statusCode,403);
-    const serialized=JSON.stringify([...f.store.grants.values(),...f.store.queries.values(),...f.messages.values(),...results.map(r=>r.json())]);
-    for(const secret of [query.password,query.verificationCode])assert.equal(serialized.includes(secret),false);
+    assert.deepEqual(Object.keys(query).sort(),['day','from','msgSn','to']);
     assert.equal(f.calls.length,0,'querying evidence must not invoke the model');
   }finally{await f.close();}
 });
-test('institution: missing adapters, secret echoes and ambiguous/restarted attempts fail closed',async()=>{
+test('institution: rejects removed fields and malformed conditions before querying; preserves leading zeros',async()=>{
+  let calls=0;const f=await embedFixture(undefined,undefined,false,{anonymous:true,institutionAdapter:async input=>{calls++;assert.deepEqual(input,query);assert.equal(input.msgSn,'000123');return {evidence:'报文查询成功'};}});
+  try{
+    const v=(await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',headers:f.headers(),payload:{}})).json().data;
+    const send=(payload:Record<string,unknown>)=>f.app.inject({method:'POST',url:'/api/v1/embed/institution-query',headers:f.headers(v.token,v.csrfToken),payload});
+    for(const payload of [{...query,account:'legacy-user'},{...query,password:'removed-secret'},{...query,verificationCode:'001234'},{...query,msgSn:''},{...query,msgSn:'   '},{...query,msgSn:123},{...query,msgSn:'x'.repeat(257)},{...query,day:123},{...query,from:query.from/1000,to:query.to/1000},{day:query.day,msgSn:query.msgSn}]){
+      const result=await send(payload);assert.equal(result.statusCode,400,result.body);assert.equal(result.json().error.code,'INSTITUTION_INPUT_INVALID');assert.equal(result.body.includes('removed-secret'),false);
+    }
+    assert.equal(calls,0);assert.equal((await send(query)).statusCode,200);assert.equal(calls,1);
+  }finally{await f.close();}
+});
+test('institution: missing adapters, token echoes and ambiguous/restarted attempts fail closed',async()=>{
   for(const mode of ['missing','echo','interrupted']as const){
-    let calls=0;const f=await embedFixture(undefined,undefined,false,{anonymous:true,...(mode==='missing'?{}:{institutionAdapter:async()=>{calls++;return {evidence:'password='+query.password};}})});
+    let calls=0;const f=await embedFixture(undefined,undefined,false,{anonymous:true,...(mode==='missing'?{}:{institutionAdapter:async()=>{calls++;return {evidence:'access_token=private-upstream-token'};}})});
     try{
       const v=(await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',headers:f.headers(),payload:{}})).json().data;
       if(mode==='interrupted'){
@@ -67,7 +77,7 @@ test('institution: missing adapters, secret echoes and ambiguous/restarted attem
         f.store.queries.set(grant.id,{state:'RUNNING',fingerprint:'unknown'});await f.restart();
       }
       const r=await f.app.inject({method:'POST',url:'/api/v1/embed/institution-query',headers:f.headers(v.token,v.csrfToken),payload:query});assert.equal(r.statusCode,mode==='missing'?503:mode==='echo'?502:409);
-      assert.equal(r.body.includes(query.password),false);assert.equal(f.calls.length,0);assert.equal(calls,mode==='echo'?1:0);
+      assert.equal(r.body.includes('private-upstream-token'),false);assert.equal(f.calls.length,0);assert.equal(calls,mode==='echo'?1:0);
     }finally{await f.close();}
   }
 });

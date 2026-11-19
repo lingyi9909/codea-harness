@@ -53,14 +53,14 @@ test('SQLite standalone HTTP: three pages share one workspace, survive database 
     const visits=await Promise.all([0,1,2].map(async()=>{const r=await f.app.inject({method:'POST',url:'/api/v1/embed/anonymous',headers:f.headers(),payload:{}});assert.equal(r.statusCode,200,r.body);return r.json().data;}));
     const ids=await Promise.all(visits.map(async v=>{const r=await f.app.inject({method:'POST',url:'/api/v1/embed/chat/sessions',headers:f.headers(v.token,v.csrfToken),payload:{scenario:'message-inspection'}});assert.equal(r.statusCode,201,r.body);return r.json().data.id;}));
     await Promise.all(visits.map(async(v,i)=>assert.equal((await f.app.inject({method:'POST',url:'/api/v1/embed/chat/sessions/'+ids[i]+'/messages',headers:f.headers(v.token,v.csrfToken),payload:{text:'visitor-'+i}})).statusCode,202)));
-    const query={day:'2026-11-18',from:Date.UTC(2026,10,17,16),to:Date.UTC(2026,10,18,16),msgSn:'0001',account:'private-account',password:'private-password',verificationCode:'001234'};
+    const query={day:'2026-11-18',from:Date.UTC(2026,10,17,16),to:Date.UTC(2026,10,18,16),msgSn:'0001'};
     const evidence=()=>f.app.inject({method:'POST',url:'/api/v1/embed/institution-query',headers:f.headers(visits[0].token,visits[0].csrfToken),payload:query});assert.equal((await evidence()).statusCode,200);
     await f.restart();assert.equal((await evidence()).statusCode,200);assert.equal(authCalls,1);assert.equal(f.calls.length,3);
     for(let i=0;i<3;i++){const r=await f.app.inject({url:'/api/v1/embed/chat/sessions/'+ids[i],headers:f.headers(visits[i].token)});assert.equal(r.statusCode,200,r.body);}
     for(const [method,suffix,payload]of [['GET','',undefined],['DELETE','',undefined],['PATCH','',{title:'foreign'}],['POST','/messages',{text:'foreign'}],['POST','/interrupt',{}],['GET','/activity',undefined],['POST','/permission',{requestId:'p',revision:'a'.repeat(64),decision:'once'}],['POST','/form',{requestId:'f',revision:'a'.repeat(64),decision:'reply',answer:{}}]]as const)assert.equal((await f.app.inject({method,url:'/api/v1/embed/chat/sessions/'+ids[1]+suffix,headers:f.headers(visits[0].token,visits[0].csrfToken),payload})).statusCode,404);
     assert.equal((await f.app.inject({method:'DELETE',url:'/api/v1/embed/session',headers:f.headers(visits[0].token,visits[0].csrfToken)})).statusCode,204);assert.equal(f.active[ids[1]],true);assert.equal(f.active[ids[2]],true);
     assert.ok([...f.nativeSessions.values()].every(s=>s.location.directory===f.workspace));
-    const db=new DatabaseSync(f.path,{readOnly:true}),content=JSON.stringify(db.prepare('SELECT * FROM wh_embed_sessions').all());db.close();for(const secret of [query.account,query.password,query.verificationCode])assert.equal(content.includes(secret),false);
+    const db=new DatabaseSync(f.path,{readOnly:true}),content=JSON.stringify(db.prepare('SELECT * FROM wh_embed_sessions').all());db.close();for(const removed of ['account','password','verificationCode'])assert.equal(content.includes(removed),false);
   }finally{await f.close();}
 });
 test('SQLite CLI: embedded-only starts without MySQL settings and restores its grant after process restart',{timeout:30000},async()=>{

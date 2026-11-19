@@ -64,7 +64,7 @@ export class HarnessApi {
     this.base='/api/v1/embed';this.embedToken=body.data.token;this.csrf=body.data.csrfToken;this.businessVerificationEnabled=false;resetUserStorage();return body.data.expiresAt as number;
   }
   embeddedSession(){return this.request<{sessionId:string|null;state:string;expiresAt:number}>('/session');}
-  institutionEvidence(input:{day:string;from:number;to:number;msgSn:string;account:string;password:string;verificationCode:string}){return this.request<{evidence:string}>('/institution-query',{method:'POST',body:JSON.stringify(input)});}
+  institutionEvidence(input:{day:string;from:number;to:number;msgSn:string}){return this.request<{evidence:string}>('/institution-query',{method:'POST',body:JSON.stringify(input)});}
   async openEmbedded(ticket:string,parentOrigin:string){
     const response=await fetch('/api/v1/embed/exchange',{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket,parentOrigin})});
     const body=await response.json();if(!response.ok||!body.data?.token||!body.data?.csrfToken)throw new ApiError(response.status,'EMBED_SESSION_REQUIRED','无法建立排查会话');

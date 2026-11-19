@@ -38,8 +38,9 @@ test('standalone config: no workbench mount, independent URL, same saved institu
       // rather than passing administrative cookies to the embedded page.
       const response=await fetch('/api/v1/scene-config',{credentials:'omit'});return response.status;
     });assert.equal(effective,401);
-    await visit.getByLabel('msgSn',{exact:true}).fill('MSG-001');await visit.getByLabel('账号',{exact:true}).fill('business-user');
-    await visit.getByLabel('密码',{exact:true}).fill('private-password');await visit.getByLabel('验证码',{exact:true}).fill('001234');
+    await expect(visit.getByRole('button',{name:'开始排查',exact:true})).toBeDisabled();
+    await visit.getByLabel('日期',{exact:true}).fill('2026-11-19');await visit.getByLabel('msgSn',{exact:true}).fill('MSG-001');
+    for(const label of ['账号','密码','验证码'])await expect(visit.getByLabel(label,{exact:true})).toHaveCount(0);
     await visit.getByRole('button',{name:'开始排查',exact:true}).click();await expect(visit.getByText(/仅本会话结果：/)).toBeVisible();
     assert.equal(f.calls.length,1);assert.equal([...f.nativeSessions.values()][0].metadata.harnessScenario,'institution-message-inspection');
     assert.equal(await readFile(file,'utf8'),JSON.stringify(saved,null,2)+'\n');
