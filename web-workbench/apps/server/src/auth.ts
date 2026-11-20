@@ -49,7 +49,7 @@ export class LocalAuth implements RequestAuth {
   }
   isLocal(req:FastifyRequest){
     const host=req.headers.host??'';
-    return /^(127\\.0\\.0\\.1|localhost|\\[::1\\]):\\d+$/.test(host)&&
+    return /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host)&&
       ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip);
   }
   isLan(req:FastifyRequest){
@@ -59,7 +59,10 @@ export class LocalAuth implements RequestAuth {
   origin(req:FastifyRequest):boolean{
     const host=req.headers.host??'';
     if(this.isLan(req))return true;
-    if(!this.isLocal(req)||!new RegExp('^(127\\\\.0\\\\.0\\\\.1|localhost|\\\\[::1\\\\]):'+this.port+'
+    if(!this.isLocal(req)||!new RegExp('^(127\\.0\\.0\\.1|localhost|\\[::1\\]):'+this.port+'$').test(host))return false;
+    const origin=req.headers.origin;
+    return origin===undefined||origin==='http://'+host||origin===this.devOrigin;
+  }
   pair(req:FastifyRequest,reply:FastifyReply,provided:unknown,ownerId:string):Session{
     if(!this.origin(req))throw new AuthProblem(403,'ORIGIN_INVALID');
     this.refreshPairing();
