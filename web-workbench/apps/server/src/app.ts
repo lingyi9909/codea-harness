@@ -162,6 +162,12 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
   if(sceneConfig){
+    app.get('/api/v1/scene-runtime',async req=>{
+      await opts.auth.session(req);
+      return result({workspace,configPath:'',accessPath:'',...sceneConfig.read(),canEdit:false,username:null});
+    });
+  }
+  if(sceneConfig){
     // Only a named local login can match the configured editor usernames.
     // Pairing-code sessions have no verified username and remain read-only.
     const editorUsername=(session:{profile?:{name:string}})=>session.profile?.name??null;
