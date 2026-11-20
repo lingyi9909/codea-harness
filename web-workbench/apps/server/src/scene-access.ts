@@ -22,7 +22,7 @@ const object=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='ob
 export function defaultAccess():SceneAccessConfig{
   return {version:2,scenes:Object.fromEntries(ACCESS_SCENES.map(key=>[
     key,{lan:true,tools:Object.fromEntries(accessToolActions.map(action=>[action,'inherit'])) as SceneAccessPolicy['tools'],custom:[]},
-  ])) as SceneAccessConfig['scenes']};
+  ])) as unknown as SceneAccessConfig['scenes']};
 }
 export function accessForChat(scenario:string):AccessScene{
   return scenario==='log-inspection'?'logs':scenario==='message-inspection'?'message':
@@ -42,8 +42,8 @@ export function applyToolPolicy(base:NativeRule[]|undefined,policy:SceneAccessPo
 function migrateV1(value:Record<string,unknown>):SceneAccessConfig{
   if(value.version!==1||!object(value.scenes)||Object.keys(value).some(k=>!['version','scenes'].includes(k)))throw invalid();
   const old=value.scenes;
-  const expected=ACCESS_SCENES.filter(k=>k!=='analytics');
-  if(Object.keys(old).length!==expected.length||Object.keys(old).some(k=>!expected.includes(k as AccessScene)))throw invalid();
+  const expected=new Set<string>(ACCESS_SCENES.filter(k=>k!=='analytics'));
+  if(Object.keys(old).length!==expected.size||Object.keys(old).some(k=>!expected.has(k)))throw invalid();
   const config=defaultAccess();
   for(const id of expected){
     const row=old[id];
