@@ -37,6 +37,9 @@ test('standalone config: no workbench mount, independent URL, same saved institu
     await page.getByRole('button',{name:'场景配置',exact:true}).click();
     await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await page.goto(origin+'/config');await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();await expect(page.getByRole('navigation',{name:'场景导航'})).toHaveCount(0);
+    await expect(page.getByRole('heading',{name:'各页面权限管理'})).toBeVisible();
+    await expect(page.getByText('Shell / PowerShell / CMD',{exact:true})).toBeVisible();
+    await expect(page.getByText('Subagent 调用',{exact:true})).toBeVisible();
     await expect(page.getByLabel('机构报文排查工作目录')).toHaveValue(f.workspace);
     await page.getByLabel('机构报文排查执行类型').selectOption('skill');await page.getByLabel('机构报文排查入口名称').fill('message-query');
     await page.getByRole('button',{name:'保存场景配置'}).click();await expect(page.getByRole('status').last()).toContainText('配置已写入');
@@ -44,6 +47,11 @@ test('standalone config: no workbench mount, independent URL, same saved institu
     assert.equal(saved.scenes['institution-message'].executor.name,'message-query');assert.equal(saved.scenes.message.executor.name,'message-query');
     await page.reload();await expect(page.getByLabel('机构报文排查入口名称')).toHaveValue('message-query');
     await mkdir('screenshots',{recursive:true});await page.screenshot({path:'screenshots/unified-standalone-config.png',fullPage:true});
+    await page.goto(origin+'/analytics');
+    await expect(page.getByRole('heading',{name:'页面访问统计'})).toBeVisible();
+    await expect(page.getByRole('button',{name:'最近 30 天'})).toBeVisible();
+    await page.getByRole('button',{name:'最近 30 天'}).click();
+    await expect(page.getByRole('button',{name:'最近 30 天'})).toHaveAttribute('aria-pressed','true');
     const visit=await browser.newPage();await visit.goto(origin+'/embed/institution-message');
     await expect(visit.getByRole('button',{name:'结束会话'})).toBeVisible();await expect(visit.getByLabel('姓名',{exact:true})).toHaveCount(0);
     const effective=await visit.evaluate(async()=>{
