@@ -3,10 +3,18 @@ export type ChatScenario='direct-chat'|'log-inspection'|'message-inspection'|'in
 export type SceneId='logs'|'message'|'institution-message'|'data';
 export type SceneBinding={directory:string;executor:{type:'skill'|'subagent'|'command'|'builtin';name:string}};
 export type SceneConfigValue={version:1;scenes:Partial<Record<SceneId,SceneBinding>>};
-export type AccessScene='home'|'review'|'logs'|'message'|'institution-message'|'data'|'component-lab';
-export type AccessToolChoice='inherit'|'allow'|'deny';
-export type SceneAccessPolicy={lan:boolean;shell:AccessToolChoice;fileWrite:AccessToolChoice;dbhub:'inherit'|'deny'};
-export type SceneAccessConfig={version:1;scenes:Record<AccessScene,SceneAccessPolicy>};
+export const accessToolActions=[
+  'shell','execute','skill','subagent',
+  'read','write','edit','glob','grep','list','external_directory',
+  'webfetch','websearch',
+  'dbhub_search_objects','dbhub_execute_sql',
+] as const;
+export type AccessToolAction=typeof accessToolActions[number];
+export type AccessScene='home'|'review'|'logs'|'message'|'institution-message'|'data'|'component-lab'|'analytics';
+export type AccessToolChoice='inherit'|'allow'|'ask'|'deny';
+export type CustomToolRule={action:string;resource:string;effect:'allow'|'ask'|'deny'};
+export type SceneAccessPolicy={lan:boolean;tools:Record<AccessToolAction,AccessToolChoice>;custom:CustomToolRule[]};
+export type SceneAccessConfig={version:2;scenes:Record<AccessScene,SceneAccessPolicy>};
 export type SceneConfigResponse={workspace:string;configPath:string;accessPath:string;config:SceneConfigValue;revision:string;canEdit:boolean;username:string|null};
 export type ChatHistoryPage={items:{id:string;title:string;updated:number}[];next?:string};
 export type ChatSettings={configured:boolean;directories:string[]};
