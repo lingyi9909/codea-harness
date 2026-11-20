@@ -98,7 +98,7 @@ export class HarnessApi {
   saveAccessSettings(config:SceneAccessConfig,revision:string){
     return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
   }
-  pageStats(){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>('/page-visits');}
+  pageStats(days:7|30=7){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]>}>(`/page-visits?days=${days}`);}
   private pageVisitorId?:string;
   recordPageVisit(page:string){
     // Keep tracking identity in memory. Anonymous iframes must not write to
