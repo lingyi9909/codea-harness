@@ -44,13 +44,17 @@ export function SceneAccessManagement(){
         <div className="scene-access-item-title"><strong>{names[id]}</strong>
           <label><input type="checkbox" checked={config.scenes[id].lan} onChange={e=>patch(id,{lan:e.target.checked})}/> 允许局域网</label>
         </div>
-        <div className="scene-access-controls">
+        {id==='review'||id==='component-lab'
+          ?<p className="muted">{id==='review'
+            ?'此处仅控制代码审查页面的局域网入口；Review 任务执行器使用独立权限策略，不受下面的聊天工具权限控制。'
+            :'组件测试页仅运行前端交互，不执行 Shell、文件写入或 MCP。'}</p>
+          :<div className="scene-access-controls">
           <label>Shell {select(config.scenes[id].shell,value=>patch(id,{shell:value}))}</label>
           <label>文件写入 {select(config.scenes[id].fileWrite,value=>patch(id,{fileWrite:value}))}</label>
           <label>DBHub MCP <select value={config.scenes[id].dbhub} onChange={e=>patch(id,{dbhub:e.target.value as 'inherit'|'deny'})}>
             <option value="inherit">沿用原生配置</option><option value="deny">拒绝 DBHub</option>
           </select></label>
-        </div>
+        </div>}
       </div>)}
     </div>
     <p className="muted">说明：文件写入选项仅控制原生编辑工具；已开放的 Shell 本身仍可能写入文件。DBHub 设置仅覆盖已接入的 DBHub 工具，其他 MCP 权限继续遵循 OpenCode 配置。机构匿名页的基础安全权限与环境开关仍独立生效。</p>
