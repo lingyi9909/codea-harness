@@ -1,5 +1,6 @@
 import {spawn} from 'node:child_process';
 import {stat} from 'node:fs/promises';
+import {createServer} from 'node:net';
 import {networkInterfaces} from 'node:os';
 import {resolve} from 'node:path';
 import {createInterface} from 'node:readline/promises';
@@ -21,13 +22,21 @@ export function privateLanInterfaces(interfaces=networkInterfaces()){
   return [...found.values()].sort((a,b)=>priority(a.adapter)-priority(b.adapter)||a.adapter.localeCompare(b.adapter));
 }
 
-export function launchEnvironment(env,{scope='local',address,allowShell=false}={}){
+export function parsePort(value){
+  const portText=String(value).trim();
+  if(!/^\d{4,5}$/.test(portText))return null;
+  const port=Number(portText);
+  return port>=1024&&port<=65535?port:null;
+}
+
+export function launchEnvironment(env,{scope='local',address,allowShell=false,port}={}){
   const result={...env};
   if(scope==='local'||scope==='lan'){
-    const port=Number(env.HARNESS_HTTP_PORT??4176);
-    if(!Number.isInteger(port)||port<1024||port>65535)throw Error('无效端口 HARNESS_HTTP_PORT');
-    const origin=scope==='local'?'http://127.0.0.1:'+port:'http://'+address+':'+port;
+    const selectedPort=parsePort(port??env.HARNESS_HTTP_PORT??4176);
+    if(selectedPort===null)throw Error('无效端口 HARNESS_HTTP_PORT，允许范围：1024–65535');
+    const origin=scope==='local'?'http://127.0.0.1:'+selectedPort:'http://'+address+':'+selectedPort;
     if(scope==='lan'&&!isPrivateLanIPv4(address??''))throw Error('局域网 IP 必须是实际的私有 IPv4 地址');
+    result.HARNESS_HTTP_PORT=String(selectedPort);
     result.HARNESS_ENABLE_LAN=scope==='lan'?'1':'0';
     result.HARNESS_HTTP_BIND=scope==='lan'?'0.0.0.0':'127.0.0.1';
     result.HARNESS_PUBLIC_ORIGIN=origin;
@@ -74,7 +83,26 @@ export async function chooseEnvironment(env,{input=process.stdin,output=process.
       const ipChoice=await select(rl,'二、选择你电脑的局域网 IP',interfacesFound.map(i=>i.address+'  ('+i.adapter+')'));
       address=interfacesFound[ipChoice-1].address;
     }
-    let allowShell=(await select(rl,(scope==='lan'?'三':'二')+'、机构报文排查执行权限',[
+    let selectedPort;
+    if(scope!=='existing'){
+      const currentPort=parsePort(env.HARNESS_HTTP_PORT??4176);
+      if(currentPort===null)throw Error('当前 HARNESS_HTTP_PORT 无效，允许范围：1024–65535');
+      const portChoice=await select(rl,'选择服务监听端口',[
+        '使用默认/当前端口 '+currentPort+'（推荐）',
+        '使用端口 4177',
+        '使用端口 8080',
+        '输入自定义端口',
+      ]);
+      if(portChoice===4){
+        while(true){
+          const value=await rl.question('请输入端口（1024–65535）：');
+          const port=parsePort(value);
+          if(port!==null){selectedPort=port;break;}
+          process.stdout.write('端口无效，请输入 1024–65535 范围内的整数。\n');
+        }
+      }else selectedPort=[currentPort,4177,8080][portChoice-1];
+    }
+    let allowShell=(await select(rl,'机构报文排查执行权限',[
       '受限 Shell（默认，保留原来的安全白名单）',
       '开放 Shell 和常用文件读写工具（运行脚本、写数据）',
     ]))===2;
@@ -85,8 +113,36 @@ export async function chooseEnvironment(env,{input=process.stdin,output=process.
       ]);
       if(confirmation!==2)allowShell=false;
     }
-    return launchEnvironment(env,{scope,address,allowShell});
+    return launchEnvironment(env,{scope,address,allowShell,port:selectedPort});
   }finally{rl.close();}
+}
+
+async function ensurePortAvailable(port,host){
+  await new Promise((resolveCheck,reject)=>{
+    const server=createServer();
+    server.once('error',error=>reject(new Error('端口 '+port+' 不可用：'+error.message)));
+    server.listen({host,port},()=>server.close(error=>error?reject(error):resolveCheck()));
+  });
+}
+
+function openBrowserOnMac(port){
+  if(process.platform!=='darwin'||!process.stdin.isTTY||process.env.HARNESS_SKIP_BROWSER==='1')return ()=>{};
+  const url='http://127.0.0.1:'+port+'/';
+  let busy=false,attempt=0;
+  const timer=setInterval(async()=>{
+    if(busy)return;
+    if(++attempt>50){clearInterval(timer);return;}
+    busy=true;
+    try{
+      const response=await fetch(url,{signal:AbortSignal.timeout(700)});
+      if(response.ok){
+        clearInterval(timer);
+        const opener=spawn('open',[url],{stdio:'ignore'});
+        opener.on('error',()=>{});
+      }
+    }catch{}finally{busy=false;}
+  },200);
+  return ()=>clearInterval(timer);
 }
 
 async function main(){
@@ -95,21 +151,28 @@ async function main(){
   if(!(await stat(workspace).catch(()=>null))?.isDirectory())throw Error('工作目录不存在：'+workspace);
   process.stdout.write('\n========== 智能工作台 =========='+'\n工作目录：'+workspace+'\n');
   const env=await chooseEnvironment(process.env);
-  const origin=env.HARNESS_PUBLIC_ORIGIN??'http://127.0.0.1:'+(env.HARNESS_HTTP_PORT??4176);
-  process.stdout.write('\n启动配置：'+(env.HARNESS_HTTP_BIND==='0.0.0.0'?'局域网访问':'本机访问')+
+  const port=parsePort(env.HARNESS_HTTP_PORT??4176);
+  if(port===null)throw Error('无效端口 HARNESS_HTTP_PORT');
+  await ensurePortAvailable(port,env.HARNESS_HTTP_BIND??'127.0.0.1');
+  const origin=env.HARNESS_PUBLIC_ORIGIN??'http://127.0.0.1:'+port;
+  process.stdout.write('\n启动配置：端口 '+port+'；'+(env.HARNESS_HTTP_BIND==='0.0.0.0'?'局域网访问':'本机访问')+
     '；机构 Shell：'+(env.HARNESS_INSTITUTION_ALLOW_SHELL==='1'?'开放':'受限')+'\n');
+  process.stdout.write('本机访问：http://127.0.0.1:'+port+'/\n');
   if(env.HARNESS_HTTP_BIND==='0.0.0.0'){
     process.stdout.write('同事访问：'+origin+'/embed/institution-message\n');
     process.stdout.write('提示：Windows 防火墙需仅允许授权同事的 IP 访问服务端口。\n');
   }
   const root=fileURLToPath(new URL('../',import.meta.url));
+  const stopBrowser=openBrowserOnMac(port);
   const child=spawn(process.execPath,['--experimental-strip-types','apps/server/src/start.ts','--local-only','--workspace',workspace],{
     cwd:root,stdio:'inherit',env,windowsHide:false,
   });
-  await new Promise((done,reject)=>{
-    child.once('error',reject);
-    child.once('exit',(code,signal)=>{process.exitCode=code??(signal?1:0);done();});
-  });
+  try{
+    await new Promise((done,reject)=>{
+      child.once('error',reject);
+      child.once('exit',(code,signal)=>{process.exitCode=code??(signal?1:0);done();});
+    });
+  }finally{stopBrowser();}
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
