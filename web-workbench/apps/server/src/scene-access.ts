@@ -10,6 +10,11 @@ import {
 export type {SceneAccessConfig,SceneAccessPolicy,AccessScene,AccessToolAction,AccessToolChoice,CustomToolRule} from '../../../packages/contracts/src/chat.ts';
 
 export const ACCESS_SCENES=['home','review','logs','message','institution-message','data','component-lab','analytics'] as const;
+/** These pages contain administrative or testing information and are never exposed on LAN. */
+export const LOOPBACK_ONLY_SCENES=['component-lab','analytics'] as const;
+export function isLoopbackOnlyScene(scene:AccessScene):boolean {
+  return (LOOPBACK_ONLY_SCENES as readonly string[]).includes(scene);
+}
 export type NativeRule={action:string;resource:string;effect:'allow'|'deny'|'ask'};
 export const ACCESS_FILE='.workbench/scene-access.json';
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -21,7 +26,7 @@ const object=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='ob
 
 export function defaultAccess():SceneAccessConfig{
   return {version:2,scenes:Object.fromEntries(ACCESS_SCENES.map(key=>[
-    key,{lan:true,tools:Object.fromEntries(accessToolActions.map(action=>[action,'inherit'])) as SceneAccessPolicy['tools'],custom:[]},
+    key,{lan:!isLoopbackOnlyScene(key),tools:Object.fromEntries(accessToolActions.map(action=>[action,'inherit'])) as SceneAccessPolicy['tools'],custom:[]},
   ])) as unknown as SceneAccessConfig['scenes']};
 }
 export function accessForChat(scenario:string):AccessScene{
@@ -52,7 +57,7 @@ function migrateV1(value:Record<string,unknown>):SceneAccessConfig{
       !['inherit','allow','deny'].includes(String(row.fileWrite))||
       !['inherit','deny'].includes(String(row.dbhub)))throw invalid();
     const value=config.scenes[id as AccessScene];
-    value.lan=row.lan;
+    value.lan=isLoopbackOnlyScene(id as AccessScene)?false:row.lan;
     value.tools.shell=row.shell as AccessToolChoice;
     value.tools.write=row.fileWrite as AccessToolChoice;
     value.tools.edit=row.fileWrite as AccessToolChoice;
@@ -87,7 +92,8 @@ export function validateAccess(value:unknown):SceneAccessConfig{
     const rules=row.custom.map(validRule);
     const unique=new Set(rules.map(r=>JSON.stringify([r.action,r.resource])));
     if(unique.size!==rules.length)throw invalid();
-    config.scenes[key]={lan:row.lan,tools:{...row.tools} as SceneAccessPolicy['tools'],custom:rules};
+    // Upgrade older saved policies permissively, but never allow LAN for utility/admin pages.
+    config.scenes[key]={lan:isLoopbackOnlyScene(key)?false:row.lan,tools:{...row.tools} as SceneAccessPolicy['tools'],custom:rules};
   }
   return config;
 }
