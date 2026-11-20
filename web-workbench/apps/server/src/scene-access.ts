@@ -2,12 +2,13 @@ import {closeSync,constants,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,o
 import {createHash,randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {AuthProblem} from './auth.ts';
+import type {SceneAccessConfig,SceneAccessPolicy,AccessScene,AccessToolChoice} from '../../../packages/contracts/src/chat.ts';
+export type {SceneAccessConfig,SceneAccessPolicy,AccessScene,AccessToolChoice} from '../../../packages/contracts/src/chat.ts';
 
 export const ACCESS_SCENES=['home','review','logs','message','institution-message','data','component-lab'] as const;
-export type AccessScene=typeof ACCESS_SCENES[number];
-export type ToolChoice='inherit'|'allow'|'deny';
-export type AccessPolicy={lan:boolean;shell:ToolChoice;fileWrite:ToolChoice;dbhub:'inherit'|'deny'};
-export type AccessConfig={version:1;scenes:Record<AccessScene,AccessPolicy>};
+type ToolChoice=AccessToolChoice;
+type AccessPolicy=SceneAccessPolicy;
+type AccessConfig=SceneAccessConfig;
 export type NativeRule={action:string;resource:string;effect:'allow'|'deny'|'ask'};
 export const ACCESS_FILE='.workbench/scene-access.json';
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
