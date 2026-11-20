@@ -1,4 +1,5 @@
 import {httpInstitutionAdapter} from './institution-query.ts';
+import {PageVisitStore} from './page-visits.ts';
 import {resolveListenHost} from './lan-access.ts';
 import {EmbeddedAuth,type EmbedConfig} from './embed-auth.ts';
 import {MysqlEmbedStore} from '../../../packages/storage/src/embed.ts';
@@ -30,13 +31,17 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   if(!Number.isInteger(config.port)||config.port<1024||config.port>65535)throw new Error('INVALID_LOOPBACK_PORT');
   const listenHost=resolveListenHost(config.port);
   const pool=config.mysql?await createPool(config.mysql):undefined;
+  const pageVisits=localOnly?new PageVisitStore():undefined;
   let app:Awaited<ReturnType<typeof createApp>>|undefined;
   let embedLocks:Awaited<ReturnType<typeof createPool>>|undefined;
   let localEmbed:Awaited<ReturnType<typeof import('./embedded-start.ts').createEmbeddedRuntime>>|undefined;
   try{
   const pairingCode=randomBytes(32).toString('base64url');
   const printCode=(code:string)=>process.stdout.write('智能工作台本地配对码（5 分钟内有效，仅可使用一次）：'+code+'\n');
-  const auth=multiUser?new MultiUserAuth(new MysqlIdentityStore(pool!),process.env.HARNESS_PUBLIC_ORIGIN??''):new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode);
+  const lanOrigin=localOnly&&listenHost!=='127.0.0.1'?process.env.HARNESS_PUBLIC_ORIGIN:undefined;
+  const lanCode=lanOrigin?(process.env.HARNESS_LAN_ACCESS_CODE?.trim()||randomBytes(16).toString('base64url')):undefined;
+  const auth=multiUser?new MultiUserAuth(new MysqlIdentityStore(pool!),process.env.HARNESS_PUBLIC_ORIGIN??''):new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode,
+    lanOrigin&&lanCode?{origin:lanOrigin,code:lanCode}:undefined);
   let execution:ExecutionRegistry|undefined;
   if(multiUser&&process.env.HARNESS_EXECUTION_REGISTRY){
     execution=await loadExecutionRegistry(process.env.HARNESS_EXECUTION_REGISTRY,workspace,(url,authorization)=>chatConnection(false,{url,authorization})());
@@ -53,17 +58,17 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
     embedLocks=await createPool(config.mysql!);
     embedded=new EmbeddedAuth(embedConfig,new MysqlEmbedStore(pool,embedLocks));
   }
-  app=await createApp({pool,auth,native,nativeConnection:localEmbed?.connection,execution,embedded,embeddedBindings:localEmbed?.store.bindings,embeddedStorageCheck:localEmbed?()=>localEmbed!.store.check():undefined,institutionAdapter:process.env.HARNESS_INSTITUTION_ADAPTER_URL?httpInstitutionAdapter(process.env.HARNESS_INSTITUTION_ADAPTER_URL,process.env.HARNESS_INSTITUTION_ADAPTER_AUTH??''):undefined,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly});
+  app=await createApp({pool,auth,native,nativeConnection:localEmbed?.connection,execution,embedded,embeddedBindings:localEmbed?.store.bindings,embeddedStorageCheck:localEmbed?()=>localEmbed!.store.check():undefined,institutionAdapter:process.env.HARNESS_INSTITUTION_ADAPTER_URL?httpInstitutionAdapter(process.env.HARNESS_INSTITUTION_ADAPTER_URL,process.env.HARNESS_INSTITUTION_ADAPTER_AUTH??''):undefined,mockBusiness:process.env.HARNESS_ENABLE_MOCK_BUSINESS==='1',localOnly,workspace,autoOpenCode:localOnly,pageVisits});
   if(localEmbed)app.addHook('onClose',async()=>{await localEmbed!.store.close();});
-  const shutdown=async()=>{await app?.close();await pool?.end();await embedLocks?.end();};
+  const shutdown=async()=>{await app?.close();await pool?.end();await embedLocks?.end();pageVisits?.close();};
   await app.listen({host:listenHost,port:config.port});
-  if(listenHost!=='127.0.0.1')process.stdout.write('LAN 测试访问已开启：请限制 Windows 防火墙来源 IP；机构页使用 HARNESS_PUBLIC_ORIGIN。\n');
+  if(listenHost!=='127.0.0.1')process.stdout.write('LAN 同事访问已开启：请限制 Windows 防火墙来源 IP。登录访问码（仅授权同事使用）：'+lanCode+'\n');
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
   if(!localOnly&&!multiUser)printCode(pairingCode);
   if(localEmbed)process.stdout.write('机构执行模式: '+(localEmbed.execution.institutionShellEnabled()?'共享服务（机构页 Shell 全放行；具有工作台进程操作系统权限，非工作目录沙箱；请保护访问入口）':localEmbed.execution.singleService()?'共享服务（Code Mode + 固定 TeamAI recall + DBHub 白名单；Shell 默认拒绝）':'隔离执行槽（按各自原生权限运行 Skill/MCP）')+'\n');
   process.stdout.write('工作台: http://127.0.0.1:'+config.port+'/\n场景配置: http://127.0.0.1:'+config.port+'/config\n机构报文排查: '+(localEmbed?.publicOrigin??('http://127.0.0.1:'+config.port))+'/embed/institution-message\n');
-  }catch(error){await app?.close().catch(()=>{});await embedLocks?.end().catch(()=>{});await pool?.end().catch(()=>{});await localEmbed?.store.close().catch(()=>{});throw error;}
+  }catch(error){await app?.close().catch(()=>{});await embedLocks?.end().catch(()=>{});await pool?.end().catch(()=>{});await localEmbed?.store.close().catch(()=>{});pageVisits?.close();throw error;}
 }
 async function main(){
   const {values}=parseArgs({options:{'local-only':{type:'boolean'},'multi-user':{type:'boolean'},'embedded-only':{type:'boolean'},workspace:{type:'string'}}});
