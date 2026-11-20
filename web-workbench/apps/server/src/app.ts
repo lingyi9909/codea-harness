@@ -45,6 +45,10 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const capability={ready:enabled,capabilities};
   const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
   if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false});
+  app.get('/component-lab',async(_req,reply)=>{
+    if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
+    return reply.header('Cache-Control','no-store').sendFile('index.html');
+  });
   app.get('/config',async(req,reply)=>{
     if(opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
