@@ -92,6 +92,18 @@ export class HarnessApi {
   cancelBusinessCode(id:string,challenge:string){return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification/'+encodeURIComponent(challenge),{method:'DELETE'});}
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
   sceneConfig(){return this.request<SceneConfigResponse>('/scene-config');}
+  sceneRuntime(){return this.request<SceneConfigResponse>('/scene-runtime');}
+  accessConfig(){return this.request<import('../../../../apps/server/src/scene-access.ts').AccessConfig & {revision?:string}>('/scene-access');}
+  accessSettings(){return this.request<{config:import('../../../../apps/server/src/scene-access.ts').AccessConfig;revision:string}>('/scene-access');}
+  saveAccessSettings(config:import('../../../../apps/server/src/scene-access.ts').AccessConfig,revision:string){
+    return this.request<{config:import('../../../../apps/server/src/scene-access.ts').AccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
+  }
+  pageStats(){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>('/page-visits');}
+  recordPageVisit(page:string){
+    let visitorId=sessionStorage.getItem('harness.visitor-id');
+    if(!visitorId){visitorId=crypto.randomUUID();sessionStorage.setItem('harness.visitor-id',visitorId);}
+    void fetch('/api/v1/page-visits',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({page,visitorId}),keepalive:true}).catch(()=>{});
+  }
   saveSceneConfig(config:SceneConfigValue,revision:string){return this.request<SceneConfigResponse>('/scene-config',{method:'PUT',body:JSON.stringify({config,revision})});}
   chatHistory(directory:string|undefined,scenario:ChatScenario,cursor?:string){
     return this.request<ChatHistoryPage>('/chat/history',{method:'POST',body:JSON.stringify({directory,scenario,cursor})});
@@ -121,9 +133,9 @@ export class HarnessApi {
     this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
-  async login(name:string,phone:string) {
+  async login(name:string,phone:string,lanCode?:string) {
     const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
-      method:'POST',body:JSON.stringify({name,phone}),
+      method:'POST',body:JSON.stringify({name,phone,...(lanCode?{lanCode}:{})}),
     });
     this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
