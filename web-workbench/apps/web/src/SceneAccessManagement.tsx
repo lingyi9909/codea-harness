@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';
-import type {SceneSceneAccessConfig,AccessScene,AccessAccessToolChoice} from '../../../packages/contracts/src/chat.ts';
+import type {SceneAccessConfig,AccessScene,AccessToolChoice} from '../../../packages/contracts/src/chat.ts';
 import './scene-access-management.css';
 const names:Record<AccessScene,string>={
   home:'对话首页',review:'代码审查',logs:'公管问题排查',message:'报文问题排查',
