@@ -1,5 +1,6 @@
 import {sessionStorage} from './userStorage.ts';
 import {useState} from 'react';
+import {CalendarDate,SecondClock} from './TimeFields.tsx';
 import {DirectChat} from './DirectChat.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
 
@@ -210,7 +211,7 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
           onClick={beginCustomMode}>自定义范围</button>
       </div>
       {range.preset==='day'?<div className="range-day-mode">
-        <label>查询日期<input aria-label="查询日期" type="date" value={day} onChange={e=>selectDay(e.target.value)}/></label>
+        <CalendarDate label="查询日期" value={day} onChange={selectDay}/>
         <div className="range-day-summary" role="status">
           <strong>{day?day.replaceAll('-','/')+' · 全天':'请选择查询日期'}</strong>
           <span>00:00:00 — 23:59:59</span>
@@ -220,22 +221,16 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
         <div className="range-bound">
           <span className="range-bound-title">开始时间</span>
           <div className="range-split-inputs">
-            <label>日期<input required aria-label="开始日期" type="date" value={start.split('T')[0]||''}
-              onChange={e=>editDate('start',e.target.value)} aria-invalid={!Number.isFinite(from)} aria-describedby="log-range-feedback"/></label>
-            <label>时刻<input required aria-label="开始时刻" type="text" inputMode="numeric" maxLength={8}
-              placeholder="HH:mm:ss" autoComplete="off" value={start.split('T')[1]||''}
-              onChange={e=>editClock('start',e.target.value)} aria-invalid={!Number.isFinite(from)} aria-describedby="log-range-feedback"/></label>
+            <CalendarDate label="开始日期" value={start.split('T')[0]||''} onChange={value=>editDate('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
+            <SecondClock label="开始时刻" value={start.split('T')[1]||''} onChange={value=>editClock('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
           </div>
         </div>
         <span className="range-direction" aria-hidden="true">→</span>
         <div className="range-bound">
           <span className="range-bound-title">结束时间</span>
           <div className="range-split-inputs">
-            <label>日期<input required aria-label="结束日期" type="date" value={end.split('T')[0]||''}
-              onChange={e=>editDate('end',e.target.value)} aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
-            <label>时刻<input required aria-label="结束时刻" type="text" inputMode="numeric" maxLength={8}
-              placeholder="HH:mm:ss" autoComplete="off" value={end.split('T')[1]||''}
-              onChange={e=>editClock('end',e.target.value)} aria-invalid={!Number.isFinite(to)||to<=from} aria-describedby="log-range-feedback"/></label>
+            <CalendarDate label="结束日期" value={end.split('T')[0]||''} onChange={value=>editDate('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
+            <SecondClock label="结束时刻" value={end.split('T')[1]||''} onChange={value=>editClock('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
           </div>
         </div>
       </div>}
