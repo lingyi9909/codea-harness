@@ -68,8 +68,8 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     });
     app.addHook('onClose',async()=>{stop.abort();await worker;});
   }
-  const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>&{identityMode:'local'|'multi-user';businessVerification:boolean}>=>({
-    owner,csrfToken:csrf,businessVerification:opts.auth instanceof MultiUserAuth&&opts.mockBusiness===true,identityMode:opts.auth instanceof MultiUserAuth?'multi-user':'local',
+  const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>&{identityMode:'local'|'multi-user'|'lan';businessVerification:boolean}>=>({
+    owner,csrfToken:csrf,businessVerification:opts.auth instanceof MultiUserAuth&&opts.mockBusiness===true,identityMode:opts.auth instanceof MultiUserAuth?'multi-user':owner.id.startsWith('lan:')?'lan':'local',
     scenarios:[{id:'direct-chat',name:'直接对话',enabled:true,reason:null},{id:'log-inspection',name:'问题排查',enabled:true,reason:null},
       {id:'data-analysis',name:'数据分析',enabled:true,reason:null},{id:'code-review',name:'Codea Review',enabled:capability.ready,
       reason:capability.ready?null:'OpenCode native capabilities require target-environment validation'}],
