@@ -99,7 +99,7 @@ export function SceneConfigPage(){
       {loaded.canEdit&&<div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>
         {busy?'保存中…':'保存场景配置'}</button></div>}
       <p className="muted">执行入口必须已经由对应目录的 OpenCode 配置加载。绑定修改后，已有会话将保持原目录，不会静默切换。</p>
-      <SceneAccessManagement/>
+      {loaded.canEdit&&<SceneAccessManagement/>}
     </>}
   </section>;
 }
