@@ -140,11 +140,13 @@ export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:
   // Grants created before the institution binding was split used message-inspection.
   // Preserve those native/store bindings while resolving the same new configuration.
   const sceneKey=(s:ChatScenario)=>options.execution?.singleService()&&s==='message-inspection'?'institution-message':configuredSceneKey(s);
+  const policyKey=(scenario:ChatScenario)=>options.execution?.singleService()&&
+    scenario==='message-inspection'?'institution-message':accessForChat(scenario);
   const policyRules=(scenario:ChatScenario)=>options.sceneAccess
-    ?applyToolPolicy(options.execution?.permissions(),options.sceneAccess.policy(accessForChat(scenario)))
+    ?applyToolPolicy(options.execution?.permissions(),options.sceneAccess.policy(policyKey(scenario)))
     :options.execution?.permissions();
   const checkLanScene=(ownerId:string,scenario:ChatScenario)=>{
-    if(ownerId.startsWith('lan:')&&options.sceneAccess&&!options.sceneAccess.policy(accessForChat(scenario)).lan)
+    if(ownerId.startsWith('lan:')&&options.sceneAccess&&!options.sceneAccess.policy(policyKey(scenario)).lan)
       throw new AuthProblem(403,'SCENE_LAN_DISABLED');
   };
   const apiPrefix=options.prefix??'/api/v1/chat';
