@@ -5,12 +5,12 @@ import {dirname,isAbsolute,join} from 'node:path';
 import {homedir} from 'node:os';
 import {AuthProblem} from './auth.ts';
 
-export const PAGE_IDS=['home','review','logs','message','data','institution-message','embedded-message','component-lab','config'] as const;
+export const PAGE_IDS=['home','review','logs','message','data','institution-message','embedded-message','component-lab','config','analytics'] as const;
 export type PageId=typeof PAGE_IDS[number];
 export const pageNames:Record<PageId,string>={
   home:'对话首页',review:'代码审查',logs:'公管问题排查',message:'报文问题排查',
   data:'公管数据分析','institution-message':'机构报文排查',
-  'embedded-message':'外部嵌入报文排查','component-lab':'组件测试',config:'场景配置',
+  'embedded-message':'外部嵌入报文排查','component-lab':'组件测试',config:'场景配置',analytics:'页面访问统计',
 };
 export function defaultPageVisitPath(){
   return join(process.env.LOCALAPPDATA??homedir(),'.smart-workbench','state','page-visits.sqlite');
