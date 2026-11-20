@@ -91,11 +91,12 @@ jobs:
           解压后进入 web-workbench，运行：
           .\启动工作台.cmd "D:\teamai"
           将 D:\teamai 替换为唯一业务工作目录。
-          交互式运行时直接选择本机/局域网、网卡 IP、机构 Shell 受限/开放。
+          交互式运行时直接选择本机/局域网、网卡 IP、服务端口（4176/4177/8080/自定义）、机构 Shell 受限/开放。
           同时选择局域网和高权限 Shell 时会要求额外确认。
-          工作台：http://127.0.0.1:4176/
-          场景配置：http://127.0.0.1:4176/config
-          机构报文：http://127.0.0.1:4176/embed/institution-message
+          默认工作台：http://127.0.0.1:4176/
+          默认场景配置：http://127.0.0.1:4176/config
+          默认机构报文：http://127.0.0.1:4176/embed/institution-message
+          自定义端口时按启动终端输出的地址访问。
           三个地址来自同一个服务，共用工作目录中的 .workbench/scenarios.json。
           不需要 npm ci，不需要 npm run web:build，不需要安装 MySQL。
           Node 和一个现有 OpenCode 服务沿用已有环境，不包含在此 ZIP 中。
