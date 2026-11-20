@@ -50,14 +50,12 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
   if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false});
   app.get('/analytics',async(req,reply)=>{
-    if(sceneAccess&&opts.auth instanceof LocalAuth&&!localRequest(req)&&!sceneAccess.policy('analytics').lan)
-      throw new AuthProblem(403,'SCENE_LAN_DISABLED');
+    if(!localRequest(req))throw new AuthProblem(403,'PAGE_LOCAL_ONLY');
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
     return reply.header('Cache-Control','no-store').sendFile('index.html');
   });
   app.get('/component-lab',async(req,reply)=>{
-    if(sceneAccess&&opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req)&&!sceneAccess.policy('component-lab').lan)
-      throw new AuthProblem(403,'SCENE_LAN_DISABLED');
+    if(!localRequest(req))throw new AuthProblem(403,'PAGE_LOCAL_ONLY');
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
     return reply.header('Cache-Control','no-store').sendFile('index.html');
   });
@@ -227,10 +225,11 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     });
   }
   app.get<{Querystring:{days?:string}}>('/api/v1/page-visits',async req=>{
+    // Metrics are administrative data: never expose the read endpoint over LAN.
+    // POST /page-visits stays available to count visits from authorized LAN business pages.
+    if(!localRequest(req))throw new AuthProblem(403,'PAGE_LOCAL_ONLY');
     const session=await opts.auth.session(req);
     if(localSession&&!session.profile)throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
-    if(sceneAccess&&opts.auth instanceof LocalAuth&&!localRequest(req)&&!sceneAccess.policy('analytics').lan)
-      throw new AuthProblem(403,'SCENE_LAN_DISABLED');
     const days=req.query.days===undefined?7:Number(req.query.days);
     if(days!==7&&days!==30)throw new AuthProblem(400,'ANALYTICS_RANGE_INVALID');
     return result(opts.pageVisits?.summary(days)??{days,rows:[],daily:[]});
