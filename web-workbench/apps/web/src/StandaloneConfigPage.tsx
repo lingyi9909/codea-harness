@@ -6,6 +6,7 @@ import './standalone-config.css';
 
 /** A separate document; the workbench shell never mounts the configuration editor. */
 export function StandaloneConfigPage(){
+  useEffect(()=>{api.recordPageVisit('config');},[]);
   const [mode,setMode]=useState<'loading'|'profile'|'pair'|'ready'|'error'>('loading');
   const [error,setError]=useState(''),[code,setCode]=useState(''),[busy,setBusy]=useState(false);
   useEffect(()=>{
