@@ -6,6 +6,7 @@ import {ModelPicker} from './ModelPicker.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
 import './embedded-message.css';
 export function AnonymousInstitutionPage(){
+  useEffect(()=>{api.recordPageVisit('institution-message');},[]);
   const opening=useRef<Promise<number>|undefined>(undefined);
   const [ended,setEnded]=useState(false);
   const [ready,setReady]=useState(false),[error,setError]=useState(''),[expires,setExpires]=useState(0),[offline,setOffline]=useState(false);
