@@ -5,6 +5,7 @@ on:
     branches:
       - feature/smart-workbench-scenario-groups-20261115
       - feature/workbench-embedded-message-v1
+      - feature/workbench-analytics-lan-permissions-component-lab
     paths:
       - 'web-workbench/**'
       - '.github/workflows/workbench-offline-windows.yml'
@@ -64,6 +65,9 @@ jobs:
             'apps/web/dist/index.html',
             'apps/server/src/start.ts',
             'apps/server/src/embedded-start.ts',
+            'apps/server/src/page-visits.ts',
+            'apps/server/src/scene-access.ts',
+            'apps/web/src/ComponentLabPage.tsx',
             'apps/server/src/embedded-app.ts',
             'packages/storage/src/sqlite-embed.ts',
             'packages/storage/migrations/sqlite/001_embedded.sql',
