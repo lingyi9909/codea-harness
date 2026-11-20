@@ -36,6 +36,10 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
+const localRequest=(req:{ip:string;headers:{host?:string}})=>
+  ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip)&&
+  /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(req.headers.host??'');
+
 export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatConnection>;localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;embeddedBindings?:ChatBindingStore;embeddedStorageCheck?:()=>void;native?:Omit<SchedulerConfig,'pool'|'signal'>;pageVisits?:PageVisitStore}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
@@ -52,7 +56,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     return reply.header('Cache-Control','no-store').sendFile('index.html');
   });
   app.get('/config',async(req,reply)=>{
-    if(opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+    if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
     return reply.header('Cache-Control','no-store').header('Content-Security-Policy',"frame-ancestors 'none'").sendFile('index.html');
   });
@@ -180,7 +184,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     // Pairing-code sessions have no verified username and remain read-only.
     const editorUsername=(session:{profile?:{name:string}})=>session.profile?.name??null;
     app.get('/api/v1/scene-config',async(req,reply)=>{
-      if(opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+      if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
       const session=await opts.auth.session(req),username=editorUsername(session);
       return reply.header('Cache-Control','no-store').send(result({
         workspace,configPath:join(workspace!,SCENE_CONFIG_PATH),accessPath:join(workspace!,SCENE_ACCESS_PATH),
@@ -192,7 +196,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       schema:{body:{type:'object',additionalProperties:false,required:['config','revision'],properties:{
         config:{type:'object'},revision:{type:'string',minLength:64,maxLength:64}}}},
     },async(req,reply)=>{
-      if(opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+      if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
       const session=await opts.auth.mutation(req);
       if(multi||!sceneConfig.canEdit(editorUsername(session)??undefined))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
       const saved=await sceneConfig.save(req.body.config,req.body.revision);
@@ -201,7 +205,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   }
   if(sceneConfig&&sceneAccess){
     const editor=async(req:import('fastify').FastifyRequest,write=false)=>{
-      if(opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+      if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
       const session=write?await opts.auth.mutation(req):await opts.auth.session(req);
       if(multi||!sceneConfig.canEdit(session.profile?.name))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
       return session;
