@@ -82,7 +82,7 @@ export class HarnessApi {
     const body = await response.json() as { data?: Schema<'Bootstrap'>; error?: { message?: string } };
     if (!response.ok || !body.data) throw new ApiError(response.status, 'PAIRING_FAILED',
       body.error?.message ?? '配对失败，请检查一次性配对码');
-    configureUserStorage(body.data.owner.id,(body.data as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
+    configureUserStorage(body.data.owner.id,(body.data as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');
     this.businessVerificationEnabled=(body.data as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     this.setCsrf(body.data.csrfToken);
     return body.data;
@@ -130,7 +130,7 @@ export class HarnessApi {
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() {
-    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');return boot;}).finally(()=>{this.connecting=undefined;});
+    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
   async login(name:string,phone:string,lanCode?:string) {
@@ -138,7 +138,7 @@ export class HarnessApi {
       method:'POST',body:JSON.stringify({name,phone,...(lanCode?{lanCode}:{})}),
     });
     this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
-    configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
+    configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');
     this.setCsrf(session.csrfToken);
     window.localStorage.setItem('harness.account-change',crypto.randomUUID());
     return session;
