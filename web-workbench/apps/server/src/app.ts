@@ -143,6 +143,8 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     });
     app.post('/api/v1/auth/local-session',async(req,reply)=>{
       const localAuth=opts.auth as LocalAuth;
+      if(!localAuth.origin(req)||req.headers.origin!=='http://'+req.headers.host)
+        throw new AuthProblem(403,'ORIGIN_INVALID');
       const fields=req.body as {name?:unknown;phone?:unknown;lanCode?:unknown}|undefined;
       const profile=parseProfile({name:fields?.name,phone:fields?.phone});
       const session=localAuth.isLan(req)
