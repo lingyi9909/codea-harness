@@ -1,6 +1,6 @@
 import {BearerEventSource,type ChatEventSource} from './activity-source.ts';
 import {configureUserStorage,resetUserStorage} from '../userStorage.ts';
-import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue } from '../../../../packages/contracts/src/chat.ts';
+import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue,SceneAccessConfig } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
@@ -93,10 +93,10 @@ export class HarnessApi {
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
   sceneConfig(){return this.request<SceneConfigResponse>('/scene-config');}
   sceneRuntime(){return this.request<SceneConfigResponse>('/scene-runtime');}
-  accessConfig(){return this.request<import('../../../../apps/server/src/scene-access.ts').AccessConfig & {revision?:string}>('/scene-access');}
-  accessSettings(){return this.request<{config:import('../../../../apps/server/src/scene-access.ts').AccessConfig;revision:string}>('/scene-access');}
-  saveAccessSettings(config:import('../../../../apps/server/src/scene-access.ts').AccessConfig,revision:string){
-    return this.request<{config:import('../../../../apps/server/src/scene-access.ts').AccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
+  accessConfig(){return this.request<SceneAccessConfig & {revision?:string}>('/scene-access');}
+  accessSettings(){return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access');}
+  saveAccessSettings(config:SceneAccessConfig,revision:string){
+    return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
   }
   pageStats(){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>('/page-visits');}
   recordPageVisit(page:string){
