@@ -99,9 +99,19 @@ export class HarnessApi {
     return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
   }
   pageStats(){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>('/page-visits');}
+  private pageVisitorId?:string;
   recordPageVisit(page:string){
-    let visitorId=sessionStorage.getItem('harness.visitor-id');
-    if(!visitorId){visitorId=crypto.randomUUID();sessionStorage.setItem('harness.visitor-id',visitorId);}
+    // Keep tracking identity in memory. Anonymous iframes must not write to
+    // browser storage; an HTTP LAN origin may also lack crypto.randomUUID.
+    if(!this.pageVisitorId){
+      const bytes=new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      bytes[6]=(bytes[6]&15)|64;
+      bytes[8]=(bytes[8]&63)|128;
+      const hex=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+      this.pageVisitorId=[hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+    }
+    const visitorId=this.pageVisitorId;
     void fetch('/api/v1/page-visits',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({page,visitorId}),keepalive:true}).catch(()=>{});
   }
   saveSceneConfig(config:SceneConfigValue,revision:string){return this.request<SceneConfigResponse>('/scene-config',{method:'PUT',body:JSON.stringify({config,revision})});}
