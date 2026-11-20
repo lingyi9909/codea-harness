@@ -40,6 +40,13 @@ test('scene policy defaults preserve native rules; a saved revocation prevents w
   try{
     const store=new SceneAccessStore(root),initial=store.read();
     assert.equal(initial.config.scenes.logs.lan,true);
+    assert.equal(initial.config.scenes.home.lan,true);
+    assert.equal(initial.config.scenes.review.lan,true);
+    assert.equal(initial.config.scenes.message.lan,true);
+    assert.equal(initial.config.scenes['institution-message'].lan,true);
+    assert.equal(initial.config.scenes.data.lan,true);
+    assert.equal(initial.config.scenes.analytics.lan,false);
+    assert.equal(initial.config.scenes['component-lab'].lan,false);
     assert.equal(applyToolPolicy(undefined,initial.config.scenes.logs),undefined);
     const updated=defaultAccess();
     updated.scenes.logs.lan=false;
@@ -118,18 +125,24 @@ test('LAN colleague can bootstrap workbench without being able to read or edit l
     const view=await app.inject({method:'POST',url:'/api/v1/page-visits',remoteAddress:'192.168.1.18',
       headers:remote,payload:{page:'logs',visitorId:randomUUID()}});
     assert.equal(view.statusCode,200,view.body);
-    const remoteStats=await app.inject({url:'/api/v1/page-visits?days=30',remoteAddress:'192.168.1.18',
-      headers:{...remote,cookie:remoteCookie}});
-    assert.equal(remoteStats.statusCode,200,remoteStats.body);
-    assert.equal(remoteStats.json().data.days,30);
+    // These pages and analytics reads are localhost-only even if old policies
+    // previously allowed them, while traffic from LAN business pages is recorded.
+    for(const url of ['/analytics','/component-lab','/api/v1/page-visits','/api/v1/page-visits?days=30']){
+      const blocked=await app.inject({url,remoteAddress:'192.168.1.18',
+        headers:{...remote,cookie:remoteCookie}});
+      assert.equal(blocked.statusCode,403,url+':'+blocked.body);
+    }
     const editor=new SceneAccessStore(root),before=editor.read(),next=before.config;
-    next.scenes.analytics.lan=false;
+    next.scenes.analytics.lan=true;
+    next.scenes['component-lab'].lan=true;
     editor.save(next,before.revision);
-    const denied=await app.inject({url:'/api/v1/page-visits',remoteAddress:'192.168.1.18',
-      headers:{...remote,cookie:remoteCookie}});
-    assert.equal(denied.statusCode,403,denied.body);
-    const remotePage=await app.inject({url:'/analytics',remoteAddress:'192.168.1.18',headers:remote});
-    assert.equal(remotePage.statusCode,403,remotePage.body);
+    assert.equal(editor.read().config.scenes.analytics.lan,false);
+    assert.equal(editor.read().config.scenes['component-lab'].lan,false);
+    for(const url of ['/analytics','/component-lab','/api/v1/page-visits']){
+      const blocked=await app.inject({url,remoteAddress:'192.168.1.18',
+        headers:{...remote,cookie:remoteCookie}});
+      assert.equal(blocked.statusCode,403,url+':'+blocked.body);
+    }
     const localLogin=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
       remoteAddress:'127.0.0.1',headers:localhost,payload:{name:'zhangzhanhui',phone:'13800000000'}});
     assert.equal(localLogin.statusCode,200,localLogin.body);
@@ -159,12 +172,35 @@ test('version 1 page permissions migrate on read without overwriting the old fil
     assert.equal(loaded.config.scenes.message.tools.edit,'deny');
     assert.equal(loaded.config.scenes.message.tools.write,'deny');
     assert.equal(loaded.config.scenes.message.tools.dbhub_execute_sql,'deny');
-    assert.equal(loaded.config.scenes.analytics.lan,true);
+    assert.equal(loaded.config.scenes.analytics.lan,false);
+    assert.equal(loaded.config.scenes['component-lab'].lan,false);
+    for(const id of ['home','review','logs','message','institution-message','data'] as const)
+      assert.equal(loaded.config.scenes[id].lan,true,id);
     assert.equal(JSON.parse(await (await import('node:fs/promises')).readFile(file,'utf8')).version,1);
     const saved=store.save(loaded.config,loaded.revision);
     assert.equal(saved.config.version,2);
     assert.throws(()=>validateAccess({...loaded.config,scenes:{...loaded.config.scenes,message:{
       ...loaded.config.scenes.message,custom:[{action:'*',resource:'*',effect:'allow'}]
     }}}),/SCENE_ACCESS_INVALID/);
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('pre-existing v2 policies that enabled utility pages cannot override localhost restriction',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'workbench-old-lan-policy-'));
+  try{
+    const directory=join(root,'.workbench');
+    await mkdir(directory);
+    const old=defaultAccess();
+    old.scenes.analytics.lan=true;
+    old.scenes['component-lab'].lan=true;
+    await writeFile(join(directory,'scene-access.json'),JSON.stringify(old));
+    const store=new SceneAccessStore(root),read=store.read();
+    assert.equal(read.config.scenes.analytics.lan,false);
+    assert.equal(read.config.scenes['component-lab'].lan,false);
+    assert.equal(read.config.scenes.message.lan,true);
+    assert.equal(read.config.scenes.review.lan,true);
+    const saved=store.save(read.config,read.revision);
+    assert.equal(saved.config.scenes.analytics.lan,false);
+    assert.equal(saved.config.scenes['component-lab'].lan,false);
   }finally{await rm(root,{recursive:true,force:true});}
 });
