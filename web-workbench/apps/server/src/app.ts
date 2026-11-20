@@ -45,7 +45,9 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const capability={ready:enabled,capabilities};
   const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
   if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false});
-  app.get('/component-lab',async(_req,reply)=>{
+  app.get('/component-lab',async(req,reply)=>{
+    if(sceneAccess&&opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req)&&!sceneAccess.policy('component-lab').lan)
+      throw new AuthProblem(403,'SCENE_LAN_DISABLED');
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
     return reply.header('Cache-Control','no-store').sendFile('index.html');
   });
@@ -233,6 +235,9 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   if(opts.embedded){
     if((!multi&&!localSession)||(!opts.pool&&!opts.embeddedBindings)||!opts.execution||!workspace||!sceneConfig)throw new Error('EMBED_REQUIRES_MULTI_USER_EXECUTION');
     for(const path of ['/embed/message','/embed/institution-message'])app.get(path,async(req,reply)=>{
+      const id=path==='/embed/institution-message'?'institution-message':'message';
+      if(sceneAccess&&opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req)&&!sceneAccess.policy(id).lan)
+        throw new AuthProblem(403,'SCENE_LAN_DISABLED');
       if(!opts.embedded!.origin(req))throw new AuthProblem(403,'ORIGIN_INVALID');
       if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
       reply.header('Content-Security-Policy',"frame-ancestors 'self' "+[...new Set([...opts.embedded!.config.clients.map(c=>c.parentOrigin),...(opts.embedded!.config.anonymous?.parentOrigins??[])])].join(' '));
@@ -240,6 +245,13 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     });
     await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,sceneAccess,pool:opts.pool,bindings:opts.embeddedBindings,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
   }
+  // Review task pages stay reachable on LAN; their APIs honour the per-page LAN setting.
+  app.addHook('preHandler',async req=>{
+    if(!sceneAccess||!req.url.startsWith('/api/v1/')||!opts.auth||!(opts.auth instanceof LocalAuth)||opts.auth.isLocal(req))return;
+    if((req.url.startsWith('/api/v1/tasks')||req.url.startsWith('/api/v1/repositories')||
+      req.url.startsWith('/api/v1/review-previews')||req.url.startsWith('/api/v1/runs'))&&
+      !sceneAccess.policy('review').lan)throw new AuthProblem(403,'SCENE_LAN_DISABLED');
+  });
   await registerChat(app,opts.auth,{nativeConnection:opts.nativeConnection,mayStart:opts.autoOpenCode,workspace,sceneConfig,sceneAccess,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
