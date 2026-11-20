@@ -2,36 +2,94 @@ import {closeSync,constants,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,o
 import {createHash,randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {AuthProblem} from './auth.ts';
-import type {SceneAccessConfig,SceneAccessPolicy,AccessScene,AccessToolChoice} from '../../../packages/contracts/src/chat.ts';
-export type {SceneAccessConfig,SceneAccessPolicy,AccessScene,AccessToolChoice} from '../../../packages/contracts/src/chat.ts';
+import {
+  accessToolActions,
+  type SceneAccessConfig,type SceneAccessPolicy,type AccessScene,
+  type AccessToolAction,type AccessToolChoice,type CustomToolRule,
+} from '../../../packages/contracts/src/chat.ts';
+export type {SceneAccessConfig,SceneAccessPolicy,AccessScene,AccessToolAction,AccessToolChoice,CustomToolRule} from '../../../packages/contracts/src/chat.ts';
 
-export const ACCESS_SCENES=['home','review','logs','message','institution-message','data','component-lab'] as const;
-type ToolChoice=AccessToolChoice;
-type AccessPolicy=SceneAccessPolicy;
-type AccessConfig=SceneAccessConfig;
+export const ACCESS_SCENES=['home','review','logs','message','institution-message','data','component-lab','analytics'] as const;
 export type NativeRule={action:string;resource:string;effect:'allow'|'deny'|'ask'};
 export const ACCESS_FILE='.workbench/scene-access.json';
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 const invalid=()=>new AuthProblem(400,'SCENE_ACCESS_INVALID');
-export function defaultAccess():AccessConfig{
-  return {version:1,scenes:Object.fromEntries(ACCESS_SCENES.map(key=>[
-    key,{lan:true,shell:'inherit',fileWrite:'inherit',dbhub:'inherit'},
-  ])) as AccessConfig['scenes']};
+const choices=['inherit','allow','ask','deny'] as const;
+const actions=new Set<string>(accessToolActions);
+const scenes=new Set<string>(ACCESS_SCENES);
+const object=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v);
+
+export function defaultAccess():SceneAccessConfig{
+  return {version:2,scenes:Object.fromEntries(ACCESS_SCENES.map(key=>[
+    key,{lan:true,tools:Object.fromEntries(accessToolActions.map(action=>[action,'inherit'])) as SceneAccessPolicy['tools'],custom:[]},
+  ])) as SceneAccessConfig['scenes']};
 }
 export function accessForChat(scenario:string):AccessScene{
   return scenario==='log-inspection'?'logs':scenario==='message-inspection'?'message':
     scenario==='institution-message-inspection'?'institution-message':
     scenario==='data-analysis'?'data':'home';
 }
-export function applyToolPolicy(base:NativeRule[]|undefined,policy:AccessPolicy):NativeRule[]|undefined{
+export function applyToolPolicy(base:NativeRule[]|undefined,policy:SceneAccessPolicy):NativeRule[]|undefined{
   const rules:NativeRule[]=[...(base??[])];
-  if(policy.shell!=='inherit')rules.push({action:'shell',resource:'*',effect:policy.shell});
-  if(policy.fileWrite!=='inherit')
-    for(const action of ['edit','write'])rules.push({action,resource:'*',effect:policy.fileWrite});
-  if(policy.dbhub==='deny')
-    for(const action of ['dbhub_search_objects','dbhub_execute_sql'])
-      rules.push({action,resource:'*',effect:'deny'});
+  for(const action of accessToolActions){
+    const effect=policy.tools[action];
+    if(effect!=='inherit')rules.push({action,resource:'*',effect});
+  }
+  for(const rule of policy.custom)rules.push({...rule});
   return rules.length?rules:undefined;
+}
+/** Retain the original v1 config and its revision; migrate in memory until first save. */
+function migrateV1(value:Record<string,unknown>):SceneAccessConfig{
+  if(value.version!==1||!object(value.scenes)||Object.keys(value).some(k=>!['version','scenes'].includes(k)))throw invalid();
+  const old=value.scenes;
+  const expected=ACCESS_SCENES.filter(k=>k!=='analytics');
+  if(Object.keys(old).length!==expected.length||Object.keys(old).some(k=>!expected.includes(k as AccessScene)))throw invalid();
+  const config=defaultAccess();
+  for(const id of expected){
+    const row=old[id];
+    if(!object(row)||Object.keys(row).length!==4||Object.keys(row).some(k=>!['lan','shell','fileWrite','dbhub'].includes(k))||
+      typeof row.lan!=='boolean'||!['inherit','allow','deny'].includes(String(row.shell))||
+      !['inherit','allow','deny'].includes(String(row.fileWrite))||
+      !['inherit','deny'].includes(String(row.dbhub)))throw invalid();
+    const value=config.scenes[id as AccessScene];
+    value.lan=row.lan;
+    value.tools.shell=row.shell as AccessToolChoice;
+    value.tools.write=row.fileWrite as AccessToolChoice;
+    value.tools.edit=row.fileWrite as AccessToolChoice;
+    if(row.dbhub==='deny'){
+      value.tools.dbhub_search_objects='deny';
+      value.tools.dbhub_execute_sql='deny';
+    }
+  }
+  return config;
+}
+function validRule(raw:unknown):CustomToolRule{
+  if(!object(raw)||Object.keys(raw).length!==3||Object.keys(raw).some(k=>!['action','resource','effect'].includes(k)))throw invalid();
+  if(typeof raw.action!=='string'||!/^[a-z][a-z0-9_.:-]{0,79}$/.test(raw.action)||
+    typeof raw.resource!=='string'||raw.resource.length<1||raw.resource.length>512||
+    /[\x00-\x1f\x7f]/.test(raw.resource)||!['allow','ask','deny'].includes(String(raw.effect)))throw invalid();
+  return {action:raw.action,resource:raw.resource,effect:raw.effect as CustomToolRule['effect']};
+}
+export function validateAccess(value:unknown):SceneAccessConfig{
+  if(!object(value))throw invalid();
+  if(value.version===1)return migrateV1(value);
+  if(value.version!==2||!object(value.scenes)||Object.keys(value).length!==2||Object.keys(value).some(k=>!['version','scenes'].includes(k)))throw invalid();
+  const entries=value.scenes;
+  if(Object.keys(entries).length!==ACCESS_SCENES.length||Object.keys(entries).some(k=>!scenes.has(k)))throw invalid();
+  const config=defaultAccess();
+  for(const key of ACCESS_SCENES){
+    const row=entries[key];
+    if(!object(row)||Object.keys(row).length!==3||Object.keys(row).some(k=>!['lan','tools','custom'].includes(k))||
+       typeof row.lan!=='boolean'||!object(row.tools)||!Array.isArray(row.custom))throw invalid();
+    if(Object.keys(row.tools).length!==accessToolActions.length||Object.keys(row.tools).some(k=>!actions.has(k))||
+      Object.values(row.tools).some(v=>!choices.includes(v as AccessToolChoice)))throw invalid();
+    if(row.custom.length>16)throw invalid();
+    const rules=row.custom.map(validRule);
+    const unique=new Set(rules.map(r=>JSON.stringify([r.action,r.resource])));
+    if(unique.size!==rules.length)throw invalid();
+    config.scenes[key]={lan:row.lan,tools:{...row.tools} as SceneAccessPolicy['tools'],custom:rules};
+  }
+  return config;
 }
 export class SceneAccessStore{
   readonly file:string;
@@ -50,44 +108,28 @@ export class SceneAccessStore{
     this.directory();
     const info=lstatSync(this.file,{throwIfNoEntry:false});
     if(!info)return null;
-    if(!info.isFile()||info.isSymbolicLink()||info.size>32768)throw invalid();
+    if(!info.isFile()||info.isSymbolicLink()||info.size>65536)throw invalid();
     const fd=openSync(this.file,constants.O_RDONLY|(constants.O_NOFOLLOW??0));
     try{if(!fstatSync(fd).isFile())throw invalid();return readFileSync(fd,'utf8');}
     finally{closeSync(fd);}
   }
-  private validate(value:unknown):AccessConfig{
-    if(!value||typeof value!=='object'||Array.isArray(value))throw invalid();
-    const v=value as Record<string,unknown>;
-    if(v.version!==1||!v.scenes||typeof v.scenes!=='object'||Array.isArray(v.scenes)||
-      Object.keys(v).some(k=>!['version','scenes'].includes(k)))throw invalid();
-    const scenes=v.scenes as Record<string,unknown>;
-    if(Object.keys(scenes).length!==ACCESS_SCENES.length||Object.keys(scenes).some(k=>!ACCESS_SCENES.includes(k as AccessScene)))throw invalid();
-    const config=defaultAccess();
-    for(const key of ACCESS_SCENES){
-      const p=scenes[key];
-      if(!p||typeof p!=='object'||Array.isArray(p))throw invalid();
-      const row=p as Record<string,unknown>;
-      if(Object.keys(row).length!==4||typeof row.lan!=='boolean'||!['inherit','allow','deny'].includes(String(row.shell))||
-        !['inherit','allow','deny'].includes(String(row.fileWrite))||!['inherit','deny'].includes(String(row.dbhub))||
-        Object.keys(row).some(k=>!['lan','shell','fileWrite','dbhub'].includes(k)))throw invalid();
-      config.scenes[key]={lan:row.lan,shell:row.shell as ToolChoice,fileWrite:row.fileWrite as ToolChoice,dbhub:row.dbhub as 'inherit'|'deny'};
-    }
-    return config;
-  }
-  read():{config:AccessConfig;revision:string}{
+  read():{config:SceneAccessConfig;revision:string}{
     const raw=this.raw();
     if(raw===null)return {config:defaultAccess(),revision:sha('')};
-    return {config:this.validate(JSON.parse(raw) as unknown),revision:sha(raw)};
+    return {config:validateAccess(JSON.parse(raw) as unknown),revision:sha(raw)};
   }
   policy(scene:AccessScene){return this.read().config.scenes[scene];}
   save(value:unknown,revision:string){
-    const config=this.validate(value);
+    const config=validateAccess(value);
+    if(config.version!==2||!object(value)||(value as Record<string,unknown>).version!==2)throw invalid();
     if(!/^[a-f0-9]{64}$/.test(revision)||this.read().revision!==revision)throw new AuthProblem(409,'SCENE_ACCESS_STALE');
+    const serialized=JSON.stringify(config,null,2)+'\n';
+    if(serialized.length>65536)throw invalid();
     this.directory();
     const tmp=join(this.folder,'.access-'+randomUUID()+'.tmp');
     try{
       const fd=openSync(tmp,'wx',0o600);
-      try{writeFileSync(fd,JSON.stringify(config,null,2)+'\n','utf8');fsyncSync(fd);}finally{closeSync(fd);}
+      try{writeFileSync(fd,serialized,'utf8');fsyncSync(fd);}finally{closeSync(fd);}
       if(this.read().revision!==revision)throw new AuthProblem(409,'SCENE_ACCESS_STALE');
       renameSync(tmp,this.file);
       return this.read();
