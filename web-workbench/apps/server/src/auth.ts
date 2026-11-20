@@ -101,9 +101,14 @@ export class LocalAuth implements RequestAuth {
     if(this.lanAttempts.length>=20)throw new AuthProblem(429,'LAN_LOGIN_RATE_LIMIT');
     this.lanAttempts.push(now);
     if(typeof code!=='string'||code.length>128||!safeEqual(hash(code),this.lanKey))throw new AuthProblem(401,'LAN_CODE_INVALID');
-    const ownerId='lan:'+createHash('sha256').update(profile.key).digest('hex').slice(0,48);
-    try{const existing=this.session(req);if(existing.ownerId===ownerId)return existing;}catch{}
-    return this.issue(reply,ownerId,profile,'lan');
+    // Never derive a security identity from self-entered names or phone numbers.
+    // Every new browser login owns its own native sessions, even if another
+    // visitor chooses the same self-reported profile.
+    try{
+      const existing=this.session(req);
+      if(existing.scope==='lan'&&existing.profile?.key===profile.key)return existing;
+    }catch{}
+    return this.issue(reply,'lan:'+randomUUID(),profile,'lan');
   }
   private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local'):Session{
     const token=randomBytes(32).toString('base64url');
