@@ -29,6 +29,7 @@ const text=(error:unknown)=>error instanceof Error?error.message:'请求失败';
 const short=(s:string)=>s.length>12?s.slice(0,10)+'…':s;
 const operationId=()=>crypto.randomUUID();
 const globalModelKey='harness.global.model';
+const onLan=()=>!['localhost','127.0.0.1','::1','[::1]'].includes(window.location.hostname);
 type SelectedModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
 function savedGlobalModel():SelectedModel|undefined{
   try{
@@ -54,7 +55,7 @@ export function WorkbenchApp() {
   const [selected,setSelected]=useState(()=>sessionStorage.getItem('harness.task')??'');
   const [scene,setScene]=useState<Scene>(()=>{
     const saved=sessionStorage.getItem('harness.scene')??'home';
-    return Object.hasOwn(scenes,saved)?saved as Scene:'home';
+    return Object.hasOwn(scenes,saved)&&(!onLan()||saved!=='settings')?saved as Scene:'home';
   });
   const [expandedGroup,setExpandedGroup]=useState<ScenarioGroup|null>(()=>groupForScene(scene));
   const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
@@ -71,9 +72,15 @@ export function WorkbenchApp() {
   useEffect(()=>{
     if(!bootstrap)return;
     let live=true;setSceneModelConfig(null);
-    api.sceneConfig().then(value=>{if(live)setSceneModelConfig(value);}).catch(()=>{});
+    api.sceneRuntime().then(value=>{if(live)setSceneModelConfig(value);}).catch(()=>{});
     return()=>{live=false;};
   },[bootstrap,scene]);
+  useEffect(()=>{
+    if(!bootstrap)return;
+    api.recordPageVisit(selected||scene==='review'?'review':
+      scene==='logs'?'logs':scene==='message'?'message':scene==='data'?'data':
+      scene==='settings'?'config':'home');
+  },[bootstrap,scene,selected]);
   const sceneDirectory=scene==='logs'?sceneModelConfig?.config.scenes.logs?.directory:
     scene==='message'?sceneModelConfig?.config.scenes.message?.directory:
     scene==='data'?sceneModelConfig?.config.scenes.data?.directory:undefined;
@@ -153,7 +160,7 @@ export function WorkbenchApp() {
         const boot=await api.bootstrap();
         if(cancelled)return;
         const savedScene=sessionStorage.getItem('harness.scene')??'home';
-        const restoredScene=Object.hasOwn(scenes,savedScene)?savedScene as Scene:'home';
+        const restoredScene=Object.hasOwn(scenes,savedScene)&&(!onLan()||savedScene!=='settings')?savedScene as Scene:'home';
         api.setCsrf(boot.csrfToken);
         setScene(restoredScene);setExpandedGroup(groupForScene(restoredScene));
         setGlobalModel(savedGlobalModel());setSelected(sessionStorage.getItem('harness.task')??'');
@@ -277,8 +284,8 @@ export function WorkbenchApp() {
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
-  if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    await api.login(name,phone);
+  if(!bootstrap&&loginMode==='profile')return <ProfileLogin lan={onLan()} onLogin={async(name,phone,lanCode)=>{
+    await api.login(name,phone,lanCode);
     window.location.reload();
   }}/>;
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">
@@ -343,7 +350,8 @@ export function WorkbenchApp() {
         <div className="side-section task-history-heading">Review 任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
         <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
       </>}
-      <button className={"side-link sidebar-settings "+(scene==="settings"?"selected":"")} aria-current={scene==="settings"?"page":undefined} onClick={()=>navigate("settings")}><span aria-hidden="true">⚙</span> 场景配置</button>
+      <a className="side-link" href="/component-lab"><span aria-hidden="true">◇</span> 组件测试</a>
+      {!onLan()&&<a className="side-link sidebar-settings" href="/config"><span aria-hidden="true">⚙</span> 场景配置</a>}
       <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
         <button aria-label="退出登录" disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
       </div>
@@ -369,7 +377,7 @@ export function WorkbenchApp() {
       {pendingOperation&&<div className="notice">操作编号 {short(pendingOperation)}。请求结果不明时请查询，勿重复提交。
         <button disabled={busy} onClick={checkOperation}>查询操作结果</button></div>}
       {!selected&&(scene==='home'||scene==='chat')?<DirectChat navigation={chatNavigation} onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:
-       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'} globalModel={globalModel}/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:!selected&&scene==='settings'?<SceneConfigPage/>:!selected?<section className="workbench">
+       !selected&&(scene==='logs'||scene==='message')?<LogInvestigation key={scene} mode={scene==='message'?'message':'public'} globalModel={globalModel}/>:!selected&&scene==='data'?<DirectChat sceneId="data" onDirectoryChange={setChatDirectory} globalModel={globalModel}/>:!selected&&scene==='settings'&&!onLan()?<SceneConfigPage/>:!selected?<section className="workbench">
         <div className="eyebrow">CODE REVIEW / 固定版本审查</div>
         <h1>代码审查</h1>
         <p className="intro">选择本地仓库和 Git 基线，基于已提交变更运行原生 Codea Review。</p>
