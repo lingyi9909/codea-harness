@@ -81,7 +81,7 @@ export function SceneAccessManagement(){
     </select>;
   return <section className="scene-access-manage" aria-labelledby="access-manage-heading">
     <header className="scene-access-heading"><div><h2 id="access-manage-heading">各页面权限管理</h2>
-      <p>选择页面后配置局域网访问和具体工具权限。除配置页以外，各页面默认允许局域网访问。</p></div>
+      <p>业务页面默认支持局域网访问，可按场景管理工具权限；配置、组件测试、访问统计三个管理/测试页面始终仅本机访问。</p></div>
       <span className="scene-access-hint">OpenCode 原生权限 · 按场景生效</span>
     </header>
     {config&&policy?<div className="scene-access-workspace">
@@ -96,8 +96,10 @@ export function SceneAccessManagement(){
       <div className="access-detail">
         <div className="access-detail-top">
           <h3>{scenes.find(s=>s.id===selected)?.name}</h3>
-          <label className="access-lan"><input type="checkbox" checked={policy.lan}
-            onChange={e=>update({lan:e.target.checked})}/> 允许局域网访问</label>
+          {selected==='analytics'||selected==='component-lab'
+            ?<span className="access-lan" title="固定安全策略，不可通过配置更改">仅本机访问（固定）</span>
+            :<label className="access-lan"><input type="checkbox" checked={policy.lan}
+              onChange={e=>update({lan:e.target.checked})}/> 允许局域网访问</label>}
         </div>
         {scenes.find(s=>s.id===selected)?.kind==='page'
           ?<div className="access-explainer">{selected==='review'
