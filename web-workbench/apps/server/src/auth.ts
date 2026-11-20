@@ -85,7 +85,7 @@ export class LocalAuth implements RequestAuth {
     const now=Date.now();
     for(const [key,session] of this.sessions){
       if(session.expires<=now)this.sessions.delete(key);
-      else if(session.profile?.key!==profile.key)throw new AuthProblem(409,'PROFILE_IN_USE');
+      else if(session.scope!=='lan'&&session.profile?.key!==profile.key)throw new AuthProblem(409,'PROFILE_IN_USE');
     }
     // Saving and issuing are synchronous so overlapping logins cannot interleave.
     save();
