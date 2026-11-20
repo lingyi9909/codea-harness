@@ -1,4 +1,6 @@
 import type {chatConnection} from './modules/chat/connection.ts';
+import {PageVisitStore,validPageId} from './page-visits.ts';
+import {SceneAccessStore} from './scene-access.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 import type {InstitutionQueryAdapter} from './institution-query.ts';
 import {registerEmbedded} from './embed-routes.ts';
@@ -34,7 +36,11 @@ import { evaluateCapabilities } from '../../../packages/opencode-adapter/src/pro
 import type { DTO } from '../../../packages/contracts/src/domain.ts';
 
 const result=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatConnection>;localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;embeddedBindings?:ChatBindingStore;embeddedStorageCheck?:()=>void;native?:Omit<SchedulerConfig,'pool'|'signal'>}){
+const localRequest=(req:{ip:string;headers:{host?:string}})=>
+  ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip)&&
+  /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(req.headers.host??'');
+
+export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatConnection>;localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;embeddedBindings?:ChatBindingStore;embeddedStorageCheck?:()=>void;native?:Omit<SchedulerConfig,'pool'|'signal'>;pageVisits?:PageVisitStore}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
   const enabled=!(opts.auth instanceof MultiUserAuth)&&Boolean(opts.native&&opts.native.nativeVersion.trim()&&opts.native.nativeVersion!=='UNVERIFIED'&&
@@ -43,7 +49,18 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const capability={ready:enabled,capabilities};
   const frontend=fileURLToPath(new URL('../../web/dist/',import.meta.url));
   if(existsSync(frontend))await app.register(serveStatic,{root:frontend,wildcard:false});
-  app.get('/config',async(_req,reply)=>{
+  app.get('/analytics',async(req,reply)=>{
+    if(!localRequest(req))throw new AuthProblem(403,'PAGE_LOCAL_ONLY');
+    if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
+    return reply.header('Cache-Control','no-store').sendFile('index.html');
+  });
+  app.get('/component-lab',async(req,reply)=>{
+    if(!localRequest(req))throw new AuthProblem(403,'PAGE_LOCAL_ONLY');
+    if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
+    return reply.header('Cache-Control','no-store').sendFile('index.html');
+  });
+  app.get('/config',async(req,reply)=>{
+    if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
     return reply.header('Cache-Control','no-store').header('Content-Security-Policy',"frame-ancestors 'none'").sendFile('index.html');
   });
@@ -61,8 +78,8 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     });
     app.addHook('onClose',async()=>{stop.abort();await worker;});
   }
-  const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>&{identityMode:'local'|'multi-user';businessVerification:boolean}>=>({
-    owner,csrfToken:csrf,businessVerification:opts.auth instanceof MultiUserAuth&&opts.mockBusiness===true,identityMode:opts.auth instanceof MultiUserAuth?'multi-user':'local',
+  const makeBootstrap=async(csrf:string,owner:{id:string;name:string}):Promise<DTO<'Bootstrap'>&{identityMode:'local'|'multi-user'|'lan';businessVerification:boolean}>=>({
+    owner,csrfToken:csrf,businessVerification:opts.auth instanceof MultiUserAuth&&opts.mockBusiness===true,identityMode:opts.auth instanceof MultiUserAuth?'multi-user':owner.id.startsWith('lan:')?'lan':'local',
     scenarios:[{id:'direct-chat',name:'直接对话',enabled:true,reason:null},{id:'log-inspection',name:'问题排查',enabled:true,reason:null},
       {id:'data-analysis',name:'数据分析',enabled:true,reason:null},{id:'code-review',name:'Codea Review',enabled:capability.ready,
       reason:capability.ready?null:'OpenCode native capabilities require target-environment validation'}],
@@ -92,9 +109,20 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const multi=opts.auth instanceof MultiUserAuth;
   if(multi&&!opts.pool)throw new Error('MULTI_USER_MYSQL_REQUIRED');
   app.addHook('onRequest',async(req,reply)=>{if(req.url.startsWith('/api/'))reply.header('Cache-Control','no-store');});
+  app.post<{Body:{page:unknown;visitorId:unknown}}>('/api/v1/page-visits',{
+    schema:{body:{type:'object',additionalProperties:false,required:['page','visitorId'],
+      properties:{page:{type:'string',maxLength:48},visitorId:{type:'string',maxLength:36}}}},
+  },async(req,reply)=>{
+    const origin=req.headers.origin,host=req.headers.host;
+    if(!host||origin!=='http://'+host&&origin!=='https://'+host)throw new AuthProblem(403,'VISIT_ORIGIN_INVALID');
+    if(!validPageId(req.body.page)||typeof req.body.visitorId!=='string')throw new AuthProblem(400,'PAGE_INVALID');
+    opts.pageVisits?.record(req.body.page,req.body.visitorId);
+    return reply.send(result({recorded:true}));
+  });
   const localSession=opts.localOnly===true&&!opts.pool;
   const workspace=opts.workspace?await resolveLocalWorkspace(opts.workspace):localSession?await resolveLocalWorkspace():undefined;
   const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
+  const sceneAccess=workspace?new SceneAccessStore(workspace):undefined;
   await sceneConfig?.initialize();
   if(multi){
     const auth=opts.auth as MultiUserAuth;
@@ -112,19 +140,24 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     const store=new WorkspaceProfile(workspace);
     app.addHook('onRequest',async(req,reply)=>{
       const route=req.routeOptions.url;
-      if(!route?.startsWith('/api/v1/')||route.startsWith('/api/v1/embed/')||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
+      if(!route?.startsWith('/api/v1/')||route.startsWith('/api/v1/embed/')||route==='/api/v1/page-visits'||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
         (route==='/api/v1/auth/session'&&req.method==='DELETE'))return;
       let session;
       try{session=await opts.auth.session(req);}catch(e){
         if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
       }
-      if(!session?.profile||!store.matches(session.profile.key))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+      if(!session?.profile||(session.scope==='lan'? !session.ownerId.startsWith('lan:'): !store.matches(session.profile.key)))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
       reply.header('Cache-Control','no-store');
     });
     app.post('/api/v1/auth/local-session',async(req,reply)=>{
-      (opts.auth as LocalAuth).requireLocalOrigin(req);
-      const profile=parseProfile(req.body);
-      const session=(opts.auth as LocalAuth).openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
+      const localAuth=opts.auth as LocalAuth;
+      if(!localAuth.origin(req)||req.headers.origin!=='http://'+req.headers.host)
+        throw new AuthProblem(403,'ORIGIN_INVALID');
+      const fields=req.body as {name?:unknown;phone?:unknown;lanCode?:unknown}|undefined;
+      const profile=parseProfile({name:fields?.name,phone:fields?.phone});
+      const session=localAuth.isLan(req)
+        ?localAuth.openLan(req,reply,{name:profile.name,key:profileKey(profile)},fields?.lanCode)
+        :localAuth.openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
       return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,{id:session.ownerId,name:profile.name})));
     });
   }else app.post<{Body:{pairingCode:string}}>('/api/v1/auth/session',{schema:{
@@ -140,15 +173,22 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   });
   app.get('/api/v1/bootstrap',async(req,reply)=>{
     const session=await Promise.resolve().then(()=>opts.auth.session(req)).catch(error=>{if(multi&&error instanceof AuthProblem&&error.code==='AUTH_REQUIRED')throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');throw error;});
-    const owner=multi?{id:session.ownerId,name:session.profile!.name}:opts.pool?await ensureLocalOwner(opts.pool):{id:'local-workbench',name:session.profile?.name??'Local Developer'};
+    const owner=multi?{id:session.ownerId,name:session.profile!.name}:opts.pool?await ensureLocalOwner(opts.pool):{id:session.ownerId,name:session.profile?.name??'Local Developer'};
     if(owner.id!==session.ownerId)throw new AuthProblem(401,'OWNER_MISMATCH');
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
+  if(sceneConfig){
+    app.get('/api/v1/scene-runtime',async req=>{
+      await opts.auth.session(req);
+      return result({workspace,configPath:'',accessPath:'',...sceneConfig.read(),canEdit:false,username:null});
+    });
+  }
   if(sceneConfig){
     // Only a named local login can match the configured editor usernames.
     // Pairing-code sessions have no verified username and remain read-only.
     const editorUsername=(session:{profile?:{name:string}})=>session.profile?.name??null;
     app.get('/api/v1/scene-config',async(req,reply)=>{
+      if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
       const session=await opts.auth.session(req),username=editorUsername(session);
       return reply.header('Cache-Control','no-store').send(result({
         workspace,configPath:join(workspace!,SCENE_CONFIG_PATH),accessPath:join(workspace!,SCENE_ACCESS_PATH),
@@ -160,12 +200,40 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       schema:{body:{type:'object',additionalProperties:false,required:['config','revision'],properties:{
         config:{type:'object'},revision:{type:'string',minLength:64,maxLength:64}}}},
     },async(req,reply)=>{
+      if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
       const session=await opts.auth.mutation(req);
       if(multi||!sceneConfig.canEdit(editorUsername(session)??undefined))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
       const saved=await sceneConfig.save(req.body.config,req.body.revision);
       return reply.header('Cache-Control','no-store').send(result({...saved,canEdit:true}));
     });
   }
+  if(sceneConfig&&sceneAccess){
+    const editor=async(req:import('fastify').FastifyRequest,write=false)=>{
+      if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+      const session=write?await opts.auth.mutation(req):await opts.auth.session(req);
+      if(multi||!sceneConfig.canEdit(session.profile?.name))throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
+      return session;
+    };
+    app.get('/api/v1/scene-access',async req=>{
+      await editor(req);return result(sceneAccess.read());
+    });
+    app.put<{Body:{config:unknown;revision:string}}>('/api/v1/scene-access',{
+      schema:{body:{type:'object',additionalProperties:false,required:['config','revision'],properties:{
+        config:{type:'object'},revision:{type:'string',minLength:64,maxLength:64}}}},
+    },async req=>{
+      await editor(req,true);return result(sceneAccess.save(req.body.config,req.body.revision));
+    });
+  }
+  app.get<{Querystring:{days?:string}}>('/api/v1/page-visits',async req=>{
+    // Metrics are administrative data: never expose the read endpoint over LAN.
+    // POST /page-visits stays available to count visits from authorized LAN business pages.
+    if(!localRequest(req))throw new AuthProblem(403,'PAGE_LOCAL_ONLY');
+    const session=await opts.auth.session(req);
+    if(localSession&&!session.profile)throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+    const days=req.query.days===undefined?7:Number(req.query.days);
+    if(days!==7&&days!==30)throw new AuthProblem(400,'ANALYTICS_RANGE_INVALID');
+    return result(opts.pageVisits?.summary(days)??{days,rows:[],daily:[]});
+  });
   if(multi)app.addHook('onRoute',route=>{
     if(!String(route.url).startsWith('/api/v1/chat/'))return;
     const handler=route.handler;
@@ -184,14 +252,24 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   if(opts.embedded){
     if((!multi&&!localSession)||(!opts.pool&&!opts.embeddedBindings)||!opts.execution||!workspace||!sceneConfig)throw new Error('EMBED_REQUIRES_MULTI_USER_EXECUTION');
     for(const path of ['/embed/message','/embed/institution-message'])app.get(path,async(req,reply)=>{
+      const id=path==='/embed/institution-message'?'institution-message':'message';
+      if(sceneAccess&&opts.auth instanceof LocalAuth&&!opts.auth.isLocal(req)&&!sceneAccess.policy(id).lan)
+        throw new AuthProblem(403,'SCENE_LAN_DISABLED');
       if(!opts.embedded!.origin(req))throw new AuthProblem(403,'ORIGIN_INVALID');
       if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
       reply.header('Content-Security-Policy',"frame-ancestors 'self' "+[...new Set([...opts.embedded!.config.clients.map(c=>c.parentOrigin),...(opts.embedded!.config.anonymous?.parentOrigins??[])])].join(' '));
       return reply.header('Referrer-Policy','no-referrer').header('Cache-Control','no-store').sendFile('index.html');
     });
-    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,pool:opts.pool,bindings:opts.embeddedBindings,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
+    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,sceneAccess,pool:opts.pool,bindings:opts.embeddedBindings,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
   }
-  await registerChat(app,opts.auth,{nativeConnection:opts.nativeConnection,mayStart:opts.autoOpenCode,workspace,sceneConfig,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
+  // Review task pages stay reachable on LAN; their APIs honour the per-page LAN setting.
+  app.addHook('preHandler',async req=>{
+    if(!sceneAccess||!req.url.startsWith('/api/v1/')||!opts.auth||!(opts.auth instanceof LocalAuth)||opts.auth.isLocal(req))return;
+    if((req.url.startsWith('/api/v1/tasks')||req.url.startsWith('/api/v1/repositories')||
+      req.url.startsWith('/api/v1/review-previews')||req.url.startsWith('/api/v1/runs'))&&
+      !sceneAccess.policy('review').lan)throw new AuthProblem(403,'SCENE_LAN_DISABLED');
+  });
+  await registerChat(app,opts.auth,{nativeConnection:opts.nativeConnection,mayStart:opts.autoOpenCode,workspace,sceneConfig,sceneAccess,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
   if(!opts.pool){
     for(const path of ['/api/v1/tasks','/api/v1/repositories'])app.get(path,async(req)=>{
       await opts.auth.session(req);return result({items:[],nextCursor:null});

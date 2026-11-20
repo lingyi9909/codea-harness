@@ -92,10 +92,10 @@ export class ExecutionRegistry {
   sharedWorkspace(){return this.current().workspaceAccess==='shared-readonly';}
   institutionShellEnabled(){return Boolean(this.single&&this.allowInstitutionShell);}
   permissions(){return this.single?structuredClone(this.allowInstitutionShell?unrestrictedInstitutionShellPermissions:singleServicePermissions):this.sharedWorkspace()?structuredClone(sharedWorkspacePermissions):undefined;}
-  assertPermissions(session:{permissions?:{action:string;resource:string;effect:string}[]}){
+  assertPermissions(session:{permissions?:{action:string;resource:string;effect:string}[]},override?:{action:string;resource:string;effect:string}[]){
     if(!this.sharedWorkspace())return;
     // Fail closed if the installed native API drops or mutates the deny rules.
-    const rules=session.permissions,expected=this.single?(this.allowInstitutionShell?unrestrictedInstitutionShellPermissions:singleServicePermissions):sharedWorkspacePermissions;
+    const rules=session.permissions,expected=override??(this.single?(this.allowInstitutionShell?unrestrictedInstitutionShellPermissions:singleServicePermissions):sharedWorkspacePermissions);
     if(!Array.isArray(rules)||rules.length!==expected.length||expected.some((rule,i)=>rules[i].action!==rule.action||rules[i].resource!==rule.resource||rules[i].effect!==rule.effect))throw new AuthProblem(409,'SHARED_WORKSPACE_PERMISSION_MISMATCH');
   }
   serviceIdentity(){return this.current().serviceIdentity;}

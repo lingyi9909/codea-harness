@@ -9,11 +9,12 @@ import {AuthProblem} from './auth.ts';
 import {EmbeddedAuth} from './embed-auth.ts';
 import type {ExecutionRegistry} from './execution-registry.ts';
 import type {SceneConfigStore} from './scene-config.ts';
+import {SceneAccessStore} from './scene-access.ts';
 import {registerChat} from './modules/chat/routes.ts';
 import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
-export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;pool?:Pool;bindings?:ChatBindingStore;ensureOwner?:(id:string,subject:string)=>Promise<void>;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}){
+export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;sceneAccess?:SceneAccessStore;pool?:Pool;bindings?:ChatBindingStore;ensureOwner?:(id:string,subject:string)=>Promise<void>;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}){
   const {auth,execution,workspace,sceneConfig,pool}=opts;
   if(!opts.bindings&&!pool)throw new Error('EMBED_BINDING_STORE_REQUIRED');
   async function cleanup(g:{id:string;ownerId:string;nativeId?:string;serviceIdentity?:string;accessMode?:string}){
@@ -82,6 +83,9 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
     });
   }
   app.post('/api/v1/embed/anonymous',async(req,reply)=>{
+    if(opts.sceneAccess&&!opts.sceneAccess.policy('institution-message').lan&&
+      !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip))
+      throw new AuthProblem(403,'SCENE_LAN_DISABLED');
     const slots=await Promise.all((auth.config.anonymous?.executionOwners??[]).map(ownerId=>execution.run(ownerId,async()=>({ownerId,serviceIdentity:execution.serviceIdentity()}))));
     return reply.header('Cache-Control','no-store').send(wrap(await auth.anonymous(req,slots)));
   });
@@ -159,6 +163,6 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
         return wrap({workspace:value.directory,configPath:'',accessPath:'',username:null,canEdit:false,revision:'embedded',config:{version:1,scenes:{[institution?'institution-message':'message']:value}}});
       });
     });
-    await registerChat(embedded,auth,{sessionMetadata:req=>auth.metadata(req),blockSensitiveForms:true,prefix:'/api/v1/embed/chat',workspace,sceneConfig,execution,multiUser:true,bindings:opts.bindings??new MysqlChatBindings(pool!),onSessionCreated:(req,id)=>auth.bind(req,id,execution.serviceIdentity())});
+    await registerChat(embedded,auth,{sessionMetadata:req=>auth.metadata(req),blockSensitiveForms:true,prefix:'/api/v1/embed/chat',workspace,sceneConfig,sceneAccess:opts.sceneAccess,execution,multiUser:true,bindings:opts.bindings??new MysqlChatBindings(pool!),onSessionCreated:(req,id)=>auth.bind(req,id,execution.serviceIdentity())});
   });
 }

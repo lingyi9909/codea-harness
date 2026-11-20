@@ -1,6 +1,6 @@
 import {BearerEventSource,type ChatEventSource} from './activity-source.ts';
 import {configureUserStorage,resetUserStorage} from '../userStorage.ts';
-import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue } from '../../../../packages/contracts/src/chat.ts';
+import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue,SceneAccessConfig } from '../../../../packages/contracts/src/chat.ts';
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
@@ -82,7 +82,7 @@ export class HarnessApi {
     const body = await response.json() as { data?: Schema<'Bootstrap'>; error?: { message?: string } };
     if (!response.ok || !body.data) throw new ApiError(response.status, 'PAIRING_FAILED',
       body.error?.message ?? '配对失败，请检查一次性配对码');
-    configureUserStorage(body.data.owner.id,(body.data as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
+    configureUserStorage(body.data.owner.id,(body.data as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');
     this.businessVerificationEnabled=(body.data as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     this.setCsrf(body.data.csrfToken);
     return body.data;
@@ -92,6 +92,28 @@ export class HarnessApi {
   cancelBusinessCode(id:string,challenge:string){return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/business-verification/'+encodeURIComponent(challenge),{method:'DELETE'});}
   chatSettings(){return this.request<ChatSettings>('/chat/settings');}
   sceneConfig(){return this.request<SceneConfigResponse>('/scene-config');}
+  sceneRuntime(){return this.request<SceneConfigResponse>('/scene-runtime');}
+  accessConfig(){return this.request<SceneAccessConfig & {revision?:string}>('/scene-access');}
+  accessSettings(){return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access');}
+  saveAccessSettings(config:SceneAccessConfig,revision:string){
+    return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
+  }
+  pageStats(days:7|30=7){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>(`/page-visits?days=${days}`);}
+  private pageVisitorId?:string;
+  recordPageVisit(page:string){
+    // Keep tracking identity in memory. Anonymous iframes must not write to
+    // browser storage; an HTTP LAN origin may also lack crypto.randomUUID.
+    if(!this.pageVisitorId){
+      const bytes=new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      bytes[6]=(bytes[6]&15)|64;
+      bytes[8]=(bytes[8]&63)|128;
+      const hex=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+      this.pageVisitorId=[hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+    }
+    const visitorId=this.pageVisitorId;
+    void fetch('/api/v1/page-visits',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({page,visitorId}),keepalive:true}).catch(()=>{});
+  }
   saveSceneConfig(config:SceneConfigValue,revision:string){return this.request<SceneConfigResponse>('/scene-config',{method:'PUT',body:JSON.stringify({config,revision})});}
   chatHistory(directory:string|undefined,scenario:ChatScenario,cursor?:string){
     return this.request<ChatHistoryPage>('/chat/history',{method:'POST',body:JSON.stringify({directory,scenario,cursor})});
@@ -118,15 +140,15 @@ export class HarnessApi {
     return this.request<unknown>('/chat/sessions/'+encodeURIComponent(id)+'/'+action,{method:'POST',body:JSON.stringify(body)});
   }
   bootstrap() {
-    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');return boot;}).finally(()=>{this.connecting=undefined;});
+    this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
-  async login(name:string,phone:string) {
+  async login(name:string,phone:string,lanCode?:string) {
     const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
-      method:'POST',body:JSON.stringify({name,phone}),
+      method:'POST',body:JSON.stringify({name,phone,...(lanCode?{lanCode}:{})}),
     });
     this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
-    configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode==='multi-user');
+    configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');
     this.setCsrf(session.csrfToken);
     window.localStorage.setItem('harness.account-change',crypto.randomUUID());
     return session;

@@ -1,8 +1,9 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
+import {isPrivateLanIPv4} from './lan-access.ts';
 
-export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string}};
+export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string};scope?:'local'|'lan'};
 const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
@@ -21,10 +22,19 @@ export class LocalAuth implements RequestAuth {
   private readonly port:number;
   private readonly devOrigin?:string;
   private readonly publishCode?: (code:string)=>void;
-  constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void){
+  private readonly lanOrigin?:string;
+  private readonly lanKey?:Buffer;
+  private readonly lanAttempts:number[]=[];
+  constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void,lan?:{origin:string;code:string}){
     this.publishCode=publishCode;
     this.port=port;this.devOrigin=devOrigin;
     this.pairingHash=hash(pairingCode);
+    if(lan){
+      const url=new URL(lan.origin);
+      if(url.origin!==lan.origin||url.protocol!=='http:'||!isPrivateLanIPv4(url.hostname)||Number(url.port)!==port||lan.code.length<12)
+        throw new Error('LAN_AUTH_CONFIG_INVALID');
+      this.lanOrigin=lan.origin;this.lanKey=hash(lan.code);
+    }
     if(devOrigin&&!/^http:\/\/(127\.0\.0\.1|localhost):4175$/.test(devOrigin))
       throw new Error('UNSAFE_DEVELOPMENT_ORIGIN');
   }
@@ -37,10 +47,19 @@ export class LocalAuth implements RequestAuth {
     this.createdAt=now;this.pairingHash=hash(code);this.paired=false;
     this.publishCode(code);
   }
+  isLocal(req:FastifyRequest){
+    const host=req.headers.host??'';
+    return /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host)&&
+      ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip);
+  }
+  isLan(req:FastifyRequest){
+    return Boolean(this.lanOrigin&&req.headers.host===new URL(this.lanOrigin).host&&
+      (req.headers.origin===undefined||req.headers.origin===this.lanOrigin));
+  }
   origin(req:FastifyRequest):boolean{
     const host=req.headers.host??'';
-    if(!new RegExp('^(127\\.0\\.0\\.1|localhost|\\[::1\\]):'+this.port+'$').test(host))
-      return false;
+    if(this.isLan(req))return true;
+    if(!this.isLocal(req)||!new RegExp('^(127\\.0\\.0\\.1|localhost|\\[::1\\]):'+this.port+'$').test(host))return false;
     const origin=req.headers.origin;
     return origin===undefined||origin==='http://'+host||origin===this.devOrigin;
   }
@@ -58,7 +77,7 @@ export class LocalAuth implements RequestAuth {
     return this.issue(reply,ownerId);
   }
   requireLocalOrigin(req:FastifyRequest){
-    if(!this.origin(req)||req.headers.origin!=='http://'+req.headers.host)
+    if(!this.isLocal(req)||!this.origin(req)||req.headers.origin!=='http://'+req.headers.host)
       throw new AuthProblem(403,'ORIGIN_INVALID');
   }
   openLocal(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string},save:()=>void):Session{
@@ -66,7 +85,7 @@ export class LocalAuth implements RequestAuth {
     const now=Date.now();
     for(const [key,session] of this.sessions){
       if(session.expires<=now)this.sessions.delete(key);
-      else if(session.profile?.key!==profile.key)throw new AuthProblem(409,'PROFILE_IN_USE');
+      else if(session.scope!=='lan'&&session.profile?.key!==profile.key)throw new AuthProblem(409,'PROFILE_IN_USE');
     }
     // Saving and issuing are synchronous so overlapping logins cannot interleave.
     save();
@@ -75,9 +94,25 @@ export class LocalAuth implements RequestAuth {
     }
     return this.issue(reply,'local-workbench',profile);
   }
-  private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile']):Session{
+  openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string},code:unknown):Session{
+    if(!this.isLan(req)||req.headers.origin!==this.lanOrigin||!this.lanKey)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
+    const now=Date.now();
+    while(this.lanAttempts[0]!==undefined&&this.lanAttempts[0]<now-60000)this.lanAttempts.shift();
+    if(this.lanAttempts.length>=20)throw new AuthProblem(429,'LAN_LOGIN_RATE_LIMIT');
+    this.lanAttempts.push(now);
+    if(typeof code!=='string'||code.length>128||!safeEqual(hash(code),this.lanKey))throw new AuthProblem(401,'LAN_CODE_INVALID');
+    // Never derive a security identity from self-entered names or phone numbers.
+    // Every new browser login owns its own native sessions, even if another
+    // visitor chooses the same self-reported profile.
+    try{
+      const existing=this.session(req);
+      if(existing.scope==='lan'&&existing.profile?.key===profile.key)return existing;
+    }catch{}
+    return this.issue(reply,'lan:'+randomUUID(),profile,'lan');
+  }
+  private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local'):Session{
     const token=randomBytes(32).toString('base64url');
-    const session={ownerId,profile,csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
+    const session={ownerId,profile,scope,csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
     this.sessions.set(hash(token).toString('hex'),session);
     reply.header('Set-Cookie',COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
     return session;
@@ -90,6 +125,7 @@ export class LocalAuth implements RequestAuth {
     const key=hash(token).toString('hex');
     const session=this.sessions.get(key);
     if(!session||session.expires<Date.now()){this.sessions.delete(key);throw new AuthProblem(401,'AUTH_REQUIRED');}
+    if(session.scope==='lan'?!this.isLan(req):!this.isLocal(req))throw new AuthProblem(403,'SESSION_ORIGIN_MISMATCH');
     return session;
   }
   mutation(req:FastifyRequest):Session{
