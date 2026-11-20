@@ -72,7 +72,7 @@ export async function chooseEnvironment(env,{input=process.stdin,output=process.
   try{
     const scopeChoice=await select(rl,'一、访问方式',[
       '只允许本机访问（默认）',
-      '允许局域网同事访问机构报文页面',
+      '允许局域网同事访问业务页面（首页、代码审查、问题排查、数据分析）',
       '沿用已有环境配置（高级用户）',
     ]);
     const scope=scopeChoice===1?'local':scopeChoice===2?'lan':'existing';
@@ -159,7 +159,8 @@ async function main(){
     '；机构 Shell：'+(env.HARNESS_INSTITUTION_ALLOW_SHELL==='1'?'开放':'受限')+'\n');
   process.stdout.write('本机访问：http://127.0.0.1:'+port+'/\n');
   if(env.HARNESS_HTTP_BIND==='0.0.0.0'){
-    process.stdout.write('同事访问：'+origin+'/embed/institution-message\n');
+    process.stdout.write('局域网工作台：'+origin+'/\n');
+    process.stdout.write('机构报文排查：'+origin+'/embed/institution-message\n');
     process.stdout.write('提示：Windows 防火墙需仅允许授权同事的 IP 访问服务端口。\n');
   }
   const root=fileURLToPath(new URL('../',import.meta.url));
