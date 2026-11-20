@@ -77,7 +77,7 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
       {!submitted&&<form className="institution-form-panel" onSubmit={e=>{if(embedded)e.preventDefault();else submit(e);}} autoComplete="off">
         <h2><span aria-hidden="true">☷</span> 查询参数</h2>
         <div className="institution-divider"/>
-        <CalendarDate label="日期 *" value={day} invalid={!bounds} onChange={value=>{setDay(value);setNotice('');}}/>
+        <CalendarDate label="日期" value={day} invalid={!bounds} onChange={value=>{setDay(value);setNotice('');}}/>
         <p className="institution-day-summary" role="status">
           {bounds?'系统将自动查询该日 00:00:00 — 23:59:59 的报文数据。':'请选择有效的查询日期。'}
         </p>
