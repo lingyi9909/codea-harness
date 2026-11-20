@@ -1,4 +1,5 @@
 import {useState,type FormEvent} from 'react';
+import {CalendarDate,localDayBounds} from './TimeFields.tsx';
 import './institution-message-investigation.css';
 import {DirectChat} from './DirectChat.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
@@ -64,10 +65,7 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
     setEditing(false);
   }
   const controls=editing?<div className="institution-adjust-controls">
-    <label htmlFor="institution-adjust-date">日期
-      <input id="institution-adjust-date" type="date" aria-label="调整日期" required
-        value={day} aria-invalid={!bounds} onChange={e=>setDay(e.target.value)}/>
-    </label>
+    <CalendarDate label="调整日期" value={day} onChange={setDay} invalid={!bounds}/>
     <label htmlFor="institution-adjust-msgsn">报文编号（msgSn）
       <input id="institution-adjust-msgsn" type="text" aria-label="调整 msgSn" required
         maxLength={256} autoComplete="off" spellCheck={false} value={msgSn} onChange={e=>setMsgSn(e.target.value)}/>
@@ -87,9 +85,7 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
       {!submitted&&<form className="institution-form-panel" onSubmit={e=>{if(embedded)e.preventDefault();else submit(e);}} autoComplete="off">
         <h2><span aria-hidden="true">☷</span> 查询参数</h2>
         <div className="institution-divider"/>
-        <label htmlFor="institution-date">日期 <span className="institution-required">*</span></label>
-        <input id="institution-date" aria-label="日期" type="date" disabled={embedded&&submitted} value={day} required
-          aria-invalid={!bounds} onChange={e=>{setDay(e.target.value);setNotice('');}}/>
+        <CalendarDate label="日期 *" value={day} invalid={!bounds} onChange={value=>{setDay(value);setNotice('');}}/>
         <p className="institution-day-summary" role="status">
           {bounds?'系统将自动查询该日 00:00:00 — 23:59:59 的报文数据。':'请选择有效的查询日期。'}
         </p>
