@@ -83,6 +83,9 @@ export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAu
     });
   }
   app.post('/api/v1/embed/anonymous',async(req,reply)=>{
+    if(opts.sceneAccess&&!opts.sceneAccess.policy('institution-message').lan&&
+      !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip))
+      throw new AuthProblem(403,'SCENE_LAN_DISABLED');
     const slots=await Promise.all((auth.config.anonymous?.executionOwners??[]).map(ownerId=>execution.run(ownerId,async()=>({ownerId,serviceIdentity:execution.serviceIdentity()}))));
     return reply.header('Cache-Control','no-store').send(wrap(await auth.anonymous(req,slots)));
   });
