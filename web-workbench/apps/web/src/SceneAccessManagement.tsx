@@ -1,16 +1,16 @@
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';
-import type {AccessConfig,AccessScene,ToolChoice} from '../../server/src/scene-access.ts';
+import type {SceneSceneAccessConfig,AccessScene,AccessAccessToolChoice} from '../../../packages/contracts/src/chat.ts';
 import './scene-access-management.css';
 const names:Record<AccessScene,string>={
   home:'对话首页',review:'代码审查',logs:'公管问题排查',message:'报文问题排查',
   'institution-message':'机构报文排查',data:'公管数据分析','component-lab':'组件测试',
 };
 const ids=Object.keys(names) as AccessScene[];
-type Saved={config:AccessConfig;revision:string};
-const opts:[ToolChoice,string][]=[['inherit','沿用原生配置'],['allow','允许'],['deny','拒绝']];
+type Saved={config:SceneAccessConfig;revision:string};
+const opts:[AccessToolChoice,string][]=[['inherit','沿用原生配置'],['allow','允许'],['deny','拒绝']];
 export function SceneAccessManagement(){
-  const [saved,setSaved]=useState<Saved|null>(null),[config,setConfig]=useState<AccessConfig|null>(null);
+  const [saved,setSaved]=useState<Saved|null>(null),[config,setConfig]=useState<SceneAccessConfig|null>(null);
   const [stats,setStats]=useState<Awaited<ReturnType<typeof api.pageStats>>|null>(null);
   const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
   useEffect(()=>{
@@ -20,7 +20,7 @@ export function SceneAccessManagement(){
     }).catch(e=>{if(active)setError(e instanceof Error?e.message:'统计与权限数据读取失败');});
     return()=>{active=false;};
   },[]);
-  const patch=(id:AccessScene,part:Partial<AccessConfig['scenes'][AccessScene]>)=>{
+  const patch=(id:AccessScene,part:Partial<SceneAccessConfig['scenes'][AccessScene]>)=>{
     setConfig(old=>old?{...old,scenes:{...old.scenes,[id]:{...old.scenes[id],...part}}}:old);
     setMessage('');
   };
@@ -33,7 +33,7 @@ export function SceneAccessManagement(){
     }catch(e){setError(e instanceof Error?e.message:'保存失败');}
     finally{setBusy(false);}
   }
-  const select=(value:ToolChoice,change:(v:ToolChoice)=>void)=><select value={value} onChange={e=>change(e.target.value as ToolChoice)}>
+  const select=(value:AccessToolChoice,change:(v:AccessToolChoice)=>void)=><select value={value} onChange={e=>change(e.target.value as AccessToolChoice)}>
     {opts.map(([code,title])=><option key={code} value={code}>{title}</option>)}
   </select>;
   return <section className="scene-access-manage" aria-labelledby="access-manage-heading">
