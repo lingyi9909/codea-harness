@@ -7,6 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {PageVisitStore,validPageId} from '../../apps/server/src/page-visits.ts';
 import {SceneAccessStore,applyToolPolicy,defaultAccess} from '../../apps/server/src/scene-access.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
+import type {FastifyRequest,FastifyReply} from 'fastify';
 
 test('page visits deduplicate StrictMode and persist PV/UV without raw IDs',async()=>{
   const root=await mkdtemp(join(tmpdir(),'workbench-visits-'));
@@ -57,10 +58,10 @@ test('scene policy defaults preserve native rules; a saved revocation prevents w
 
 test('LAN colleague login requires explicit LAN code and cannot impersonate loopback administrator',()=>{
   const auth=new LocalAuth('pair',4176,undefined,undefined,{origin:'http://192.168.2.4:4176',code:'1234567890ABCD'});
-  const lan={ip:'192.168.2.44',headers:{host:'192.168.2.4:4176',origin:'http://192.168.2.4:4176'}} as never;
-  const loopback={ip:'127.0.0.1',headers:{host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'}} as never;
+  const lan={ip:'192.168.2.44',headers:{host:'192.168.2.4:4176',origin:'http://192.168.2.4:4176'}} as unknown as FastifyRequest;
+  const loopback={ip:'127.0.0.1',headers:{host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'}} as unknown as FastifyRequest;
   const responseHeaders:Record<string,string>={};
-  const reply={header:(name:string,value:string)=>{responseHeaders[name]=value;return reply;}} as never;
+  const reply={header:(name:string,value:string)=>{responseHeaders[name]=value;return reply;}} as unknown as FastifyReply;
   assert.equal(auth.isLan(lan),true);
   assert.equal(auth.isLocal(lan),false);
   assert.equal(auth.isLocal(loopback),true);
@@ -68,7 +69,7 @@ test('LAN colleague login requires explicit LAN code and cannot impersonate loop
   const opened=auth.openLan(lan,reply,{name:'user',key:'key'},'1234567890ABCD');
   assert.match(opened.ownerId,/^lan:[0-9a-f]{48}$/);
   const cookie=responseHeaders['Set-Cookie'].split(';')[0];
-  assert.equal(auth.session({...lan,headers:{...lan.headers,cookie}} as never).ownerId,opened.ownerId);
-  assert.throws(()=>auth.session({...loopback,headers:{...loopback.headers,cookie}} as never),/SESSION_ORIGIN_MISMATCH/);
+  assert.equal(auth.session({...lan,headers:{...lan.headers,cookie}} as FastifyRequest).ownerId,opened.ownerId);
+  assert.throws(()=>auth.session({...loopback,headers:{...loopback.headers,cookie}} as FastifyRequest),/SESSION_ORIGIN_MISMATCH/);
   assert.throws(()=>auth.openLan(loopback,reply,{name:'user',key:'key'},'1234567890ABCD'),/LAN_ORIGIN_FORBIDDEN/);
 });
