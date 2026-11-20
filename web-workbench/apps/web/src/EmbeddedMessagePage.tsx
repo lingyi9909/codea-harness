@@ -6,6 +6,7 @@ import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
 import './embedded-message.css';
 type LaunchMessage={type:'workbench.embed.launch';nonce:string;ticket:string};
 export function EmbeddedMessagePage(){
+  useEffect(()=>{api.recordPageVisit('embedded-message');},[]);
   const [ready,setReady]=useState(false),[error,setError]=useState(''),[expires,setExpires]=useState(0);
   const [model,setModel]=useState<ChatModel|undefined>();
   const [modelError,setModelError]=useState('');
