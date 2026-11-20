@@ -1,11 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,mkdir,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {PageVisitStore,validPageId} from '../../apps/server/src/page-visits.ts';
-import {SceneAccessStore,applyToolPolicy,defaultAccess} from '../../apps/server/src/scene-access.ts';
+import {SceneAccessStore,applyToolPolicy,defaultAccess,ACCESS_SCENES,validateAccess} from '../../apps/server/src/scene-access.ts';
 import {LocalAuth} from '../../apps/server/src/auth.ts';
 import {createApp} from '../../apps/server/src/app.ts';
 import type {FastifyRequest,FastifyReply} from 'fastify';
@@ -42,15 +42,25 @@ test('scene policy defaults preserve native rules; a saved revocation prevents w
     assert.equal(initial.config.scenes.logs.lan,true);
     assert.equal(applyToolPolicy(undefined,initial.config.scenes.logs),undefined);
     const updated=defaultAccess();
-    updated.scenes.logs={lan:false,shell:'deny',fileWrite:'deny',dbhub:'deny'};
+    updated.scenes.logs.lan=false;
+    updated.scenes.logs.tools.shell='deny';
+    updated.scenes.logs.tools.write='deny';
+    updated.scenes.logs.tools.edit='deny';
+    updated.scenes.logs.tools.dbhub_search_objects='deny';
+    updated.scenes.logs.tools.dbhub_execute_sql='deny';
+    updated.scenes.logs.tools.subagent='ask';
+    updated.scenes.logs.custom=[{action:'teamai_search',resource:'*',effect:'ask'}];
     const saved=store.save(updated,initial.revision);
+    assert.equal(saved.config.version,2);
     assert.equal(saved.config.scenes.logs.lan,false);
     assert.deepEqual(applyToolPolicy(undefined,saved.config.scenes.logs),[
       {action:'shell',resource:'*',effect:'deny'},
-      {action:'edit',resource:'*',effect:'deny'},
+      {action:'subagent',resource:'*',effect:'ask'},
       {action:'write',resource:'*',effect:'deny'},
+      {action:'edit',resource:'*',effect:'deny'},
       {action:'dbhub_search_objects',resource:'*',effect:'deny'},
       {action:'dbhub_execute_sql',resource:'*',effect:'deny'},
+      {action:'teamai_search',resource:'*',effect:'ask'},
     ]);
     assert.throws(()=>store.save(updated,initial.revision),/SCENE_ACCESS_STALE/);
     assert.throws(()=>store.save({version:1,scenes:{logs:{shell:'allow'}}},saved.revision),/SCENE_ACCESS_INVALID/);
@@ -100,7 +110,7 @@ test('LAN colleague can bootstrap workbench without being able to read or edit l
     const allowed=await app.inject({url:'/api/v1/scene-runtime',remoteAddress:'192.168.1.18',
       headers:{...remote,cookie:remoteCookie}});
     assert.equal(allowed.statusCode,200,allowed.body);
-    for(const url of ['/config','/api/v1/scene-config','/api/v1/scene-access','/api/v1/page-visits']){
+    for(const url of ['/config','/api/v1/scene-config','/api/v1/scene-access']){
       const response=await app.inject({url,remoteAddress:'192.168.1.18',
         headers:{...remote,cookie:remoteCookie}});
       assert.equal(response.statusCode,403,url+':'+response.body);
@@ -108,6 +118,18 @@ test('LAN colleague can bootstrap workbench without being able to read or edit l
     const view=await app.inject({method:'POST',url:'/api/v1/page-visits',remoteAddress:'192.168.1.18',
       headers:remote,payload:{page:'logs',visitorId:randomUUID()}});
     assert.equal(view.statusCode,200,view.body);
+    const remoteStats=await app.inject({url:'/api/v1/page-visits?days=30',remoteAddress:'192.168.1.18',
+      headers:{...remote,cookie:remoteCookie}});
+    assert.equal(remoteStats.statusCode,200,remoteStats.body);
+    assert.equal(remoteStats.json().data.days,30);
+    const editor=new SceneAccessStore(root),before=editor.read(),next=before.config;
+    next.scenes.analytics.lan=false;
+    editor.save(next,before.revision);
+    const denied=await app.inject({url:'/api/v1/page-visits',remoteAddress:'192.168.1.18',
+      headers:{...remote,cookie:remoteCookie}});
+    assert.equal(denied.statusCode,403,denied.body);
+    const remotePage=await app.inject({url:'/analytics',remoteAddress:'192.168.1.18',headers:remote});
+    assert.equal(remotePage.statusCode,403,remotePage.body);
     const localLogin=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
       remoteAddress:'127.0.0.1',headers:localhost,payload:{name:'zhangzhanhui',phone:'13800000000'}});
     assert.equal(localLogin.statusCode,200,localLogin.body);
@@ -117,4 +139,32 @@ test('LAN colleague can bootstrap workbench without being able to read or edit l
     assert.equal(stats.statusCode,200,stats.body);
     assert.equal(stats.json().data.rows.find((row:{page:string})=>row.page==='logs').views,1);
   }finally{await app.close();visits.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('version 1 page permissions migrate on read without overwriting the old file',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'workbench-access-v1-'));
+  try{
+    const folder=join(root,'.workbench');
+    await mkdir(folder);
+    const file=join(folder,'scene-access.json');
+    const old={version:1,scenes:Object.fromEntries(ACCESS_SCENES.filter(id=>id!=='analytics').map(id=>[
+      id,{lan:true,shell:id==='message'?'allow':'inherit',fileWrite:id==='message'?'deny':'inherit',
+        dbhub:id==='message'?'deny':'inherit'},
+    ]))};
+    await writeFile(file,JSON.stringify(old));
+    const store=new SceneAccessStore(root);
+    const loaded=store.read();
+    assert.equal(loaded.config.version,2);
+    assert.equal(loaded.config.scenes.message.tools.shell,'allow');
+    assert.equal(loaded.config.scenes.message.tools.edit,'deny');
+    assert.equal(loaded.config.scenes.message.tools.write,'deny');
+    assert.equal(loaded.config.scenes.message.tools.dbhub_execute_sql,'deny');
+    assert.equal(loaded.config.scenes.analytics.lan,true);
+    assert.equal(JSON.parse(await (await import('node:fs/promises')).readFile(file,'utf8')).version,1);
+    const saved=store.save(loaded.config,loaded.revision);
+    assert.equal(saved.config.version,2);
+    assert.throws(()=>validateAccess({...loaded.config,scenes:{...loaded.config.scenes,message:{
+      ...loaded.config.scenes.message,custom:[{action:'*',resource:'*',effect:'allow'}]
+    }}}),/SCENE_ACCESS_INVALID/);
+  }finally{await rm(root,{recursive:true,force:true});}
 });
