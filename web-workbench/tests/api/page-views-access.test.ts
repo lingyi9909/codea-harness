@@ -68,11 +68,16 @@ test('LAN colleague login requires explicit LAN code and cannot impersonate loop
   assert.equal(auth.isLocal(loopback),true);
   assert.throws(()=>auth.openLan(lan,reply,{name:'user',key:'key'},'wrong'),/LAN_CODE_INVALID/);
   const opened=auth.openLan(lan,reply,{name:'user',key:'key'},'1234567890ABCD');
-  assert.match(opened.ownerId,/^lan:[0-9a-f]{48}$/);
+  assert.match(opened.ownerId,/^lan:[0-9a-f-]{36}$/);
   const cookie=responseHeaders['Set-Cookie'].split(';')[0];
   assert.equal(auth.session({...lan,headers:{...lan.headers,cookie}} as FastifyRequest).ownerId,opened.ownerId);
   assert.throws(()=>auth.session({...loopback,headers:{...loopback.headers,cookie}} as FastifyRequest),/SESSION_ORIGIN_MISMATCH/);
   assert.throws(()=>auth.openLan(loopback,reply,{name:'user',key:'key'},'1234567890ABCD'),/LAN_ORIGIN_FORBIDDEN/);
+  const otherReplyHeaders:Record<string,string>={};
+  const otherReply={header:(name:string,value:string)=>{otherReplyHeaders[name]=value;return otherReply;}} as unknown as FastifyReply;
+  const sameSelfEnteredProfile=auth.openLan(lan,otherReply,{name:'user',key:'key'},'1234567890ABCD');
+  assert.notEqual(sameSelfEnteredProfile.ownerId,opened.ownerId,
+    'separate browser login must not inherit another coworker\'s native sessions');
 });
 
 test('LAN colleague can bootstrap workbench without being able to read or edit local configuration',async()=>{
