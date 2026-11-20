@@ -228,7 +228,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       reply.header('Content-Security-Policy',"frame-ancestors 'self' "+[...new Set([...opts.embedded!.config.clients.map(c=>c.parentOrigin),...(opts.embedded!.config.anonymous?.parentOrigins??[])])].join(' '));
       return reply.header('Referrer-Policy','no-referrer').header('Cache-Control','no-store').sendFile('index.html');
     });
-    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,pool:opts.pool,bindings:opts.embeddedBindings,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
+    await registerEmbedded(app,{auth:opts.embedded,execution:opts.execution,workspace,sceneConfig,sceneAccess,pool:opts.pool,bindings:opts.embeddedBindings,institutionAdapter:opts.institutionAdapter,resetSlot:opts.resetEmbedSlot});
   }
   await registerChat(app,opts.auth,{nativeConnection:opts.nativeConnection,mayStart:opts.autoOpenCode,workspace,sceneConfig,sceneAccess,business,...(multi?{bindings:new MysqlChatBindings(opts.pool!),execution:opts.execution,multiUser:true}:{})});
   if(!opts.pool){
