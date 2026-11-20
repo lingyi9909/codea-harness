@@ -350,9 +350,11 @@ export function WorkbenchApp() {
         <div className="side-section task-history-heading">Review 任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
         <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
       </>}
-      <a className="side-link" href="/analytics"><span aria-hidden="true">▤</span> 访问统计</a>
-      <a className="side-link" href="/component-lab"><span aria-hidden="true">◇</span> 组件测试</a>
-      {!onLan()&&<button type="button" className="side-link sidebar-settings" onClick={()=>window.location.assign('/config')}><span aria-hidden="true">⚙</span> 场景配置</button>}
+      {!onLan()&&<>
+        <a className="side-link" href="/analytics"><span aria-hidden="true">▤</span> 访问统计</a>
+        <a className="side-link" href="/component-lab"><span aria-hidden="true">◇</span> 组件测试</a>
+        <button type="button" className="side-link sidebar-settings" onClick={()=>window.location.assign('/config')}><span aria-hidden="true">⚙</span> 场景配置</button>
+      </>}
       <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
         <button aria-label="退出登录" disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
       </div>
