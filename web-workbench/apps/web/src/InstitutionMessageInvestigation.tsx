@@ -6,16 +6,8 @@ import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
 
 /** Browser-local calendar date. Day boundaries use local midnights, including DST days. */
 export function institutionDayBounds(day:string){
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return null;
-  const [year,month,date]=day.split('-').map(Number);
-  if(year<100||year>9999)return null;
-  const start=new Date(year,month-1,date,0,0,0,0);
-  if(start.getFullYear()!==year||start.getMonth()+1!==month||start.getDate()!==date||
-    start.getHours()!==0||start.getMinutes()!==0||start.getSeconds()!==0)return null;
-  // Do not assume a day is 24h: DST transitions can change the elapsed duration.
-  const next=new Date(year,month-1,date+1,0,0,0,0);
-  if(next.getTime()<=start.getTime())return null;
-  return {start:start.getTime(),endInclusive:next.getTime()-1000,endExclusive:next.getTime()};
+  const bounds=localDayBounds(day);
+  return bounds?{start:bounds.from,endInclusive:bounds.to-1000,endExclusive:bounds.to}:null;
 }
 function localToday(){
   const now=new Date();
