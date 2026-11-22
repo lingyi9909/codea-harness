@@ -1,5 +1,6 @@
 import type {chatConnection} from './modules/chat/connection.ts';
 import {PageVisitStore,validPageId} from './page-visits.ts';
+import {institutionIntegrationConfig,registerInstitutionIntegration} from './institution-integration.ts';
 import {SceneAccessStore} from './scene-access.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 import type {InstitutionQueryAdapter} from './institution-query.ts';
@@ -124,6 +125,14 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
   const sceneAccess=workspace?new SceneAccessStore(workspace):undefined;
   await sceneConfig?.initialize();
+  const institutionApiConfig=institutionIntegrationConfig();
+  if(institutionApiConfig){
+    if(!localSession||!workspace||!sceneConfig||!sceneAccess||!opts.execution?.singleService()||!opts.nativeConnection)
+      throw new Error('INSTITUTION_API_REQUIRES_LOCAL_SINGLE_SERVICE');
+    registerInstitutionIntegration(app,{
+      workspace,sceneConfig,sceneAccess,execution:opts.execution,nativeConnection:opts.nativeConnection,
+    },institutionApiConfig);
+  }
   if(multi){
     const auth=opts.auth as MultiUserAuth;
     app.post('/api/v1/auth/login',async(req,reply)=>{
@@ -141,7 +150,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     app.addHook('onRequest',async(req,reply)=>{
       const route=req.routeOptions.url;
       if(!route?.startsWith('/api/v1/')||route.startsWith('/api/v1/embed/')||route==='/api/v1/page-visits'||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
-        (route==='/api/v1/auth/session'&&req.method==='DELETE'))return;
+        (route==='/api/v1/auth/session'&&req.method==='DELETE')||route.startsWith('/api/v1/integrations/institution/investigations'))return;
       let session;
       try{session=await opts.auth.session(req);}catch(e){
         if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
