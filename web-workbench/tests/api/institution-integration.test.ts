@@ -17,12 +17,14 @@ import type {chatConnection} from '../../apps/server/src/modules/chat/connection
 
 const prefix='/api/v1/integrations/institution/investigations';
 type InjectResult={statusCode:number;body:string;json:()=>any};
-test('institution API is opt-in, validates credentials and day boundaries',()=>{
+test('institution API is opt-in, requires a valid B source IP allowlist, and validates day boundaries',()=>{
   assert.equal(institutionIntegrationConfig({}),undefined);
-  assert.throws(()=>institutionIntegrationConfig({HARNESS_INSTITUTION_API_KEY:'short'}),/AUTH_CONFIG/);
+  assert.equal(institutionIntegrationConfig({HARNESS_INSTITUTION_API_KEY:'legacy-unused'}),undefined);
+  assert.throws(()=>institutionIntegrationConfig({HARNESS_INSTITUTION_API_ALLOWED_IPS:''}),/AUTH_CONFIG/);
   assert.throws(()=>institutionIntegrationConfig({
-    HARNESS_INSTITUTION_API_KEY:'x'.repeat(40),HARNESS_INSTITUTION_API_ALLOWED_IPS:'0.0.0.0',
+    HARNESS_INSTITUTION_API_ALLOWED_IPS:'0.0.0.0',
   }),/AUTH_CONFIG/);
+  assert.deepEqual(institutionIntegrationConfig({HARNESS_INSTITUTION_API_ALLOWED_IPS:'10.10.20.30'})?.allowedIps,new Set(['10.10.20.30']));
   assert.deepEqual(institutionDayRange('2026-11-22'),{
     from:Date.parse('2026-11-22T00:00:00+08:00'),
     to:Date.parse('2026-11-23T00:00:00+08:00'),
@@ -55,14 +57,13 @@ test('B creates and reads only its own institution result; no extra privileged A
   const root=await mkdtemp(join(tmpdir(),'institution-b2b-'));
   const db=join(tmpdir(),'institution-api-'+randomUUID()+'.sqlite');
   const envKeys=[
-    'HARNESS_INSTITUTION_API_KEY','HARNESS_INSTITUTION_API_CLIENT_ID',
-    'HARNESS_INSTITUTION_API_ALLOWED_IPS','HARNESS_INSTITUTION_API_DB_PATH',
+    'HARNESS_INSTITUTION_API_ALLOWED_IPS','HARNESS_INSTITUTION_API_CLIENT_ID',
+    'HARNESS_INSTITUTION_API_DB_PATH',
     'HARNESS_INSTITUTION_API_MODEL_ID',
   ] as const;
   const old=Object.fromEntries(envKeys.map(key=>[key,process.env[key]]));
   let app:Awaited<ReturnType<typeof createApp>>|undefined;
   try{
-    process.env.HARNESS_INSTITUTION_API_KEY='top-secret-internal-platform-b-key-'+randomUUID();
     process.env.HARNESS_INSTITUTION_API_CLIENT_ID='platform-b';
     process.env.HARNESS_INSTITUTION_API_ALLOWED_IPS='10.10.20.30';
     process.env.HARNESS_INSTITUTION_API_DB_PATH=db;
@@ -112,7 +113,6 @@ test('B creates and reads only its own institution result; no extra privileged A
     });
     const headers={
       host:'10.10.40.50:4176',
-      authorization:'Bearer '+process.env.HARNESS_INSTITUTION_API_KEY,
       'x-workbench-user-id':'customer-01',
     };
     const submit=(requestId:string,msgSn:string,extra:Record<string,string>={})=>app!.inject({
@@ -122,9 +122,14 @@ test('B creates and reads only its own institution result; no extra privileged A
     });
     const denied=await app.inject({method:'POST',url:prefix,remoteAddress:'10.10.20.31',
       headers,payload:{date:'2026-11-22',msgSn:'0000123',requestId:'r1'}});
-    assert.equal(denied.statusCode,401,denied.body);
-    const invalid=await submit('r1','0000123',{authorization:'Bearer wrong'});
-    assert.equal(invalid.statusCode,401,invalid.body);
+    assert.equal(denied.statusCode,403,denied.body);
+    // Spoofed forwarded IP headers must never override the direct TCP peer address.
+    const forwarded=await app.inject({method:'POST',url:prefix,remoteAddress:'10.10.20.31',
+      headers:{...headers,'x-forwarded-for':'10.10.20.30'},
+      payload:{date:'2026-11-22',msgSn:'0000123',requestId:'r1'}});
+    assert.equal(forwarded.statusCode,403,forwarded.body);
+    // A request without any Authorization header is the intended integration contract.
+    assert.equal(Object.hasOwn(headers,'authorization'),false);
     const created=await submit('r1','0000123');
     assert.equal(created.statusCode,202,created.body);
     const taskId=created.json().data.taskId as string;
