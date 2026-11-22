@@ -1,0 +1,167 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
+import {SceneConfigStore} from '../../apps/server/src/scene-config.ts';
+import {SceneAccessStore} from '../../apps/server/src/scene-access.ts';
+import {ExecutionRegistry,singleServicePermissions} from '../../apps/server/src/execution-registry.ts';
+import {LocalAuth} from '../../apps/server/src/auth.ts';
+import {createApp} from '../../apps/server/src/app.ts';
+import {
+  InstitutionTaskStore,institutionDayRange,institutionIntegrationConfig,
+} from '../../apps/server/src/institution-integration.ts';
+import type {chatConnection} from '../../apps/server/src/modules/chat/connection.ts';
+
+const prefix='/api/v1/integrations/institution/investigations';
+test('institution API is opt-in, validates credentials and day boundaries',()=>{
+  assert.equal(institutionIntegrationConfig({}),undefined);
+  assert.throws(()=>institutionIntegrationConfig({HARNESS_INSTITUTION_API_KEY:'short'}),/AUTH_CONFIG/);
+  assert.throws(()=>institutionIntegrationConfig({
+    HARNESS_INSTITUTION_API_KEY:'x'.repeat(40),HARNESS_INSTITUTION_API_ALLOWED_IPS:'0.0.0.0',
+  }),/AUTH_CONFIG/);
+  assert.deepEqual(institutionDayRange('2026-11-22'),{
+    from:Date.parse('2026-11-22T00:00:00+08:00'),
+    to:Date.parse('2026-11-23T00:00:00+08:00'),
+  });
+  assert.throws(()=>institutionDayRange('2026-02-30'),/INVALID_INSTITUTION_DATE/);
+});
+
+test('persistent store deduplicates requests and never automatically retries after restart',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'institution-store-'));
+  try{
+    const db=join(root,'tasks.sqlite');
+    const first=new InstitutionTaskStore(db);
+    const a=first.create('b','user-hash','req-1','2026-11-22','000123');
+    const b=first.create('b','user-hash','req-1','2026-11-22','000123');
+    assert.equal(a.created,true);
+    assert.equal(b.created,false);
+    assert.equal(b.row.id,a.row.id);
+    assert.throws(()=>first.create('b','user-hash','req-1','2026-11-22','000124'),/REQUEST_ID_PAYLOAD_CONFLICT/);
+    assert.equal(first.take()?.id,a.row.id);
+    first.close();
+    const restored=new InstitutionTaskStore(db);
+    assert.equal(restored.get('b','user-hash',a.row.id)?.status,'UNKNOWN');
+    assert.equal(restored.get('b','other',a.row.id),undefined);
+    assert.equal(restored.take(),undefined,'a crashed task must not re-execute');
+    restored.close();
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('B creates and reads only its own institution result; no extra privileged API',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'institution-b2b-'));
+  const db=join(tmpdir(),'institution-api-'+randomUUID()+'.sqlite');
+  const envKeys=[
+    'HARNESS_INSTITUTION_API_KEY','HARNESS_INSTITUTION_API_CLIENT_ID',
+    'HARNESS_INSTITUTION_API_ALLOWED_IPS','HARNESS_INSTITUTION_API_DB_PATH',
+    'HARNESS_INSTITUTION_API_MODEL_ID',
+  ] as const;
+  const old=Object.fromEntries(envKeys.map(key=>[key,process.env[key]]));
+  let app:Awaited<ReturnType<typeof createApp>>|undefined;
+  try{
+    process.env.HARNESS_INSTITUTION_API_KEY='top-secret-internal-platform-b-key-'+randomUUID();
+    process.env.HARNESS_INSTITUTION_API_CLIENT_ID='platform-b';
+    process.env.HARNESS_INSTITUTION_API_ALLOWED_IPS='10.10.20.30';
+    process.env.HARNESS_INSTITUTION_API_DB_PATH=db;
+    delete process.env.HARNESS_INSTITUTION_API_MODEL_ID;
+    const settings=new SceneConfigStore(root);
+    await settings.initialize();
+    const current=settings.read();
+    await settings.save({version:1,scenes:{...current.config.scenes,
+      'institution-message':{directory:root,executor:{type:'skill',name:'institution-log-query'}}}},current.revision);
+    const calls:{prompt?:Record<string,unknown>;created?:Record<string,unknown>;count:number}={count:0};
+    const sessions=new Map<string,{id:string;location:{directory:string};permissions:unknown;metadata:unknown}>();
+    const results=new Map<string,unknown[]>();
+    const native={
+      skill:{list:async()=>({location:{directory:root},data:[{name:'institution-log-query',id:'institution-skill'}]})},
+      model:{list:async()=>({data:[{id:'kimi',providerID:'private',name:'Kimi',enabled:true}]})},
+      session:{
+        create:async(input:Record<string,unknown>)=>{
+          calls.created=input;
+          const session={id:'native-'+randomUUID(),location:input.location as {directory:string},
+            permissions:input.permissions,metadata:input.metadata};
+          sessions.set(session.id,session);
+          return session;
+        },
+        prompt:async(input:{sessionID:string;text:string;skills:unknown;delivery:string})=>{
+          calls.prompt=input;
+          calls.count++;
+          results.set(input.sessionID,[{
+            id:'assistant-answer',type:'assistant',finish:'stop',time:{completed:Date.now()},
+            content:[{type:'text',text:'报文 0000123 的最终排查结论'}],
+          }]);
+          return {id:'accepted'};
+        },
+        active:async()=>({}),inbox:{list:async()=>[]},
+        remove:async()=>({}),
+        interrupt:async()=>({interrupted:true}),
+      },
+      message:{list:async({sessionID}:{sessionID:string})=>({data:results.get(sessionID)??[]})},
+      permission:{list:async()=>[]},
+    };
+    const connection=async()=>native as unknown as Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
+    const execution=new ExecutionRegistry([],async()=>connection(),{
+      workspace:root,singleServiceIdentity:'single:'+'f'.repeat(64),
+    });
+    app=await createApp({
+      localOnly:true,workspace:root,auth:new LocalAuth('pair',4176),
+      nativeConnection:connection,execution,
+    });
+    const headers={
+      host:'10.10.40.50:4176',
+      authorization:'Bearer '+process.env.HARNESS_INSTITUTION_API_KEY,
+      'x-workbench-user-id':'customer-01',
+    };
+    const submit=(requestId:string,msgSn:string,extra:Record<string,string>={})=>app!.inject({
+      method:'POST',url:prefix,remoteAddress:'10.10.20.30',
+      headers:{...headers,...extra},
+      payload:{date:'2026-11-22',msgSn,requestId},
+    });
+    const denied=await app.inject({method:'POST',url:prefix,remoteAddress:'10.10.20.31',
+      headers,payload:{date:'2026-11-22',msgSn:'0000123',requestId:'r1'}});
+    assert.equal(denied.statusCode,401,denied.body);
+    const invalid=await submit('r1','0000123',{authorization:'Bearer wrong'});
+    assert.equal(invalid.statusCode,401,invalid.body);
+    const created=await submit('r1','0000123');
+    assert.equal(created.statusCode,202,created.body);
+    const taskId=created.json().data.taskId as string;
+    assert.match(taskId,/^[0-9a-f-]{36}$/);
+    const replay=await submit('r1','0000123');
+    assert.equal(replay.statusCode,200,replay.body);
+    assert.equal(replay.json().data.taskId,taskId);
+    const conflict=await submit('r1','0000124');
+    assert.equal(conflict.statusCode,409,conflict.body);
+    const anotherUser=await app.inject({url:prefix+'/'+taskId,remoteAddress:'10.10.20.30',
+      headers:{...headers,'x-workbench-user-id':'customer-02'}});
+    assert.equal(anotherUser.statusCode,404,anotherUser.body);
+    let final:{status:string;result:{summary:string}|null}|undefined;
+    for(let i=0;i<80;i++){
+      const response=await app.inject({url:prefix+'/'+taskId,remoteAddress:'10.10.20.30',headers});
+      assert.equal(response.statusCode,200,response.body);
+      final=response.json().data;
+      if(final?.status==='SUCCEEDED')break;
+      await delay(20);
+    }
+    assert.equal(final?.status,'SUCCEEDED');
+    assert.equal(final?.result?.summary,'报文 0000123 的最终排查结论');
+    assert.equal(calls.count,1,'idempotent replay must not rerun native prompt');
+    assert.deepEqual((calls.prompt as {skills:unknown}).skills,[{id:'institution-skill'}]);
+    assert.match(String(calls.prompt?.text),/0000123/);
+    assert.equal(JSON.stringify(final).includes('native-'),false);
+    assert.deepEqual(calls.created?.permissions,singleServicePermissions);
+    assert.equal((calls.created?.metadata as Record<string,string>).harnessScenario,'institution-message-inspection');
+    for(const forbidden of ['/config','/analytics','/api/v1/scene-access']){
+      const response=await app.inject({url:forbidden,remoteAddress:'10.10.20.30',headers});
+      assert.equal(response.statusCode,403,forbidden+response.body);
+    }
+  }finally{
+    if(app)await app.close();
+    for(const key of envKeys){
+      if(old[key]===undefined)delete process.env[key];else process.env[key]=old[key];
+    }
+    await rm(root,{recursive:true,force:true});
+    await rm(db,{force:true});await rm(db+'-wal',{force:true});await rm(db+'-shm',{force:true});
+  }
+});
