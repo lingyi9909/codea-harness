@@ -161,8 +161,11 @@ export class InstitutionIntegration {
   private closed=false;
   private readonly stop=new AbortController();
   private readonly secretDigest:Buffer;
-  constructor(private readonly cfg:InstitutionIntegrationConfig,
-    private readonly deps:InstitutionIntegrationDeps,private readonly tasks:InstitutionTaskStore){
+  private readonly cfg:InstitutionIntegrationConfig;
+  private readonly deps:InstitutionIntegrationDeps;
+  private readonly tasks:InstitutionTaskStore;
+  constructor(cfg:InstitutionIntegrationConfig,deps:InstitutionIntegrationDeps,tasks:InstitutionTaskStore){
+    this.cfg=cfg;this.deps=deps;this.tasks=tasks;
     this.secretDigest=Buffer.from(DIGEST(cfg.secret),'hex');
     if(!deps.execution.singleService())throw new Error('INSTITUTION_API_REQUIRES_SINGLE_SERVICE_RUNTIME');
   }
@@ -247,8 +250,8 @@ export class InstitutionIntegration {
               await client.session.interrupt({sessionID:session.id}).catch(()=>{});
               throw new AuthProblem(409,'INSTITUTION_PERMISSION_REQUIRED');
             }
-            const final=messages.data.find(m=>m.type==='assistant'&&
-              Boolean(m.time?.completed)&&Boolean(m.finish)&&m.finish!=='tool-calls');
+            const final=messages.data.find((m):m is Extract<(typeof messages.data)[number],{type:'assistant'}>=>
+              m.type==='assistant'&&Boolean(m.time?.completed)&&Boolean(m.finish)&&m.finish!=='tool-calls');
             if(final&&!active[session.id]&&inbox.length===0){
               if(final.error||final.finish==='error')throw new AuthProblem(502,'INSTITUTION_NATIVE_EXECUTION_FAILED');
               const answer=final.content.flatMap(part=>part.type==='text'?[part.text]:[]).join('\n').trim();
