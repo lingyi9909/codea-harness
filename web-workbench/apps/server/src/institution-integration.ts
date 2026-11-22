@@ -9,7 +9,7 @@
  * tools, transcripts, reasoning or secrets to the external caller.
  */
 import {DatabaseSync} from 'node:sqlite';
-import {createHash,randomUUID,timingSafeEqual} from 'node:crypto';
+import {createHash,createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
 import {existsSync,lstatSync,mkdirSync,chmodSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {isIP} from 'node:net';
@@ -89,11 +89,15 @@ export class InstitutionTaskStore {
     // The native session might still have run, so never assert FAILED/SUCCEEDED.
     this.db.prepare("UPDATE institution_api_tasks SET status='UNKNOWN',error_code='PROCESS_RESTARTED',updated_at=?"+
       " WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
+    this.prune();
+  }
+  private prune(){
+    this.db.prepare('DELETE FROM institution_api_tasks WHERE created_at<?').run(Date.now()-RETENTION_MS);
   }
   create(clientId:string,userHash:string,requestId:string,day:string,msgSn:string){
     const payloadHash=DIGEST(JSON.stringify([day,msgSn]));
     const id=randomUUID(),now=Date.now();
-    this.db.prepare('DELETE FROM institution_api_tasks WHERE created_at<?').run(now-RETENTION_MS);
+    this.prune();
     const change=this.db.prepare(
       "INSERT OR IGNORE INTO institution_api_tasks "+
       "(id,client_id,user_hash,request_id,payload_hash,day,msg_sn,status,created_at,updated_at) "+
@@ -106,6 +110,7 @@ export class InstitutionTaskStore {
     return {row,created:Number(change.changes)===1};
   }
   get(clientId:string,userHash:string,id:string):TaskRow|undefined{
+    this.prune();
     return this.db.prepare('SELECT * FROM institution_api_tasks WHERE id=? AND client_id=? AND user_hash=?')
       .get(id,clientId,userHash) as TaskRow|undefined;
   }
@@ -178,7 +183,7 @@ export class InstitutionIntegration {
     if(!valid||!this.cfg.allowedIps.has(ip))throw new AuthProblem(401,'INTEGRATION_UNAUTHORIZED');
     const subject=req.headers['x-workbench-user-id'];
     if(typeof subject!=='string'||!validId(subject))throw new AuthProblem(400,'INTEGRATION_USER_REQUIRED');
-    return DIGEST(this.cfg.clientId+':'+subject);
+    return createHmac('sha256',this.cfg.secret).update(this.cfg.clientId+':'+subject).digest('hex');
   }
   create(userHash:string,requestId:string,day:string,msgSn:string){
     const created=this.tasks.create(this.cfg.clientId,userHash,requestId,day,msgSn);
