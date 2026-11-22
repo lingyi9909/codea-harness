@@ -3,13 +3,13 @@
  *
  * This intentionally does not reuse browser/anonymous embed credentials:
  * the integration is enabled only by explicit environment configuration,
- * bound to a caller IP whitelist and a server-side Bearer secret.
+ * bound to an explicit caller IP allowlist, without application-layer API keys.
  *
  * One OpenCode session per task; never expose native session IDs, directories,
  * tools, transcripts, reasoning or secrets to the external caller.
  */
 import {DatabaseSync} from 'node:sqlite';
-import {createHash,createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {existsSync,lstatSync,mkdirSync,chmodSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {isIP} from 'node:net';
@@ -33,7 +33,7 @@ type TaskRow={
   result_text:string|null;error_code:string|null;created_at:number;updated_at:number;
 };
 export type InstitutionIntegrationConfig={
-  clientId:string;secret:string;allowedIps:ReadonlySet<string>;databasePath:string;
+  clientId:string;allowedIps:ReadonlySet<string>;databasePath:string;
 };
 export type InstitutionIntegrationDeps={
   workspace:string;sceneConfig:SceneConfigStore;sceneAccess:SceneAccessStore;
@@ -47,11 +47,12 @@ const status=(row:TaskRow)=>({
   errorCode:row.status==='FAILED'||row.status==='UNKNOWN'?row.error_code:null,
 });
 export function institutionIntegrationConfig(env:NodeJS.ProcessEnv=process.env):InstitutionIntegrationConfig|undefined{
-  const key=env.HARNESS_INSTITUTION_API_KEY;
-  if(!key)return undefined; // Explicit opt-in. No new unauthenticated route.
+  // An explicit source IP allowlist enables the API. No key or bearer token is required.
+  // Without the list, do not register these routes at all.
+  if(env.HARNESS_INSTITUTION_API_ALLOWED_IPS===undefined)return undefined;
   const clientId=env.HARNESS_INSTITUTION_API_CLIENT_ID??'platform-b';
   const ips=(env.HARNESS_INSTITUTION_API_ALLOWED_IPS??'').split(',').map(s=>s.trim()).filter(Boolean);
-  if(!validId(clientId)||key.length<32||key.length>512||ips.length===0||
+  if(!validId(clientId)||ips.length===0||
      ips.some(ip=>isIP(ip)===0||ip==='0.0.0.0'||ip==='::')||
      new Set(ips).size!==ips.length)
     throw new Error('INSTITUTION_API_AUTH_CONFIG_INVALID');
@@ -59,7 +60,7 @@ export function institutionIntegrationConfig(env:NodeJS.ProcessEnv=process.env):
     join(env.LOCALAPPDATA??homedir(),'.smart-workbench','state','institution-api.sqlite');
   if(!isAbsolute(databasePath)||databasePath.startsWith('\\\\')||databasePath.startsWith('//'))
     throw new Error('INSTITUTION_API_DB_PATH_INVALID');
-  return {clientId,secret:key,allowedIps:new Set(ips),databasePath};
+  return {clientId,allowedIps:new Set(ips),databasePath};
 }
 
 export class InstitutionTaskStore {
@@ -165,25 +166,21 @@ export class InstitutionIntegration {
   private busy=false;
   private closed=false;
   private readonly stop=new AbortController();
-  private readonly secretDigest:Buffer;
   private readonly cfg:InstitutionIntegrationConfig;
   private readonly deps:InstitutionIntegrationDeps;
   private readonly tasks:InstitutionTaskStore;
   constructor(cfg:InstitutionIntegrationConfig,deps:InstitutionIntegrationDeps,tasks:InstitutionTaskStore){
     this.cfg=cfg;this.deps=deps;this.tasks=tasks;
-    this.secretDigest=Buffer.from(DIGEST(cfg.secret),'hex');
     if(!deps.execution.singleService())throw new Error('INSTITUTION_API_REQUIRES_SINGLE_SERVICE_RUNTIME');
   }
   authenticate(req:FastifyRequest){
-    const authorization=req.headers.authorization??'';
-    const presented=authorization.startsWith('Bearer ')?authorization.slice(7):'';
-    const valid=presented.length>=32&&presented.length<=512&&
-      timingSafeEqual(Buffer.from(DIGEST(presented),'hex'),this.secretDigest);
+    // Fastify trustProxy=false: only the real socket peer IP is trusted.
+    // X-Forwarded-For/Origin/Host are not used for access decisions.
     const ip=req.ip.startsWith('::ffff:')?req.ip.slice(7):req.ip;
-    if(!valid||!this.cfg.allowedIps.has(ip))throw new AuthProblem(401,'INTEGRATION_UNAUTHORIZED');
+    if(!this.cfg.allowedIps.has(ip))throw new AuthProblem(403,'INTEGRATION_SOURCE_FORBIDDEN');
     const subject=req.headers['x-workbench-user-id'];
     if(typeof subject!=='string'||!validId(subject))throw new AuthProblem(400,'INTEGRATION_USER_REQUIRED');
-    return createHmac('sha256',this.cfg.secret).update(this.cfg.clientId+':'+subject).digest('hex');
+    return DIGEST(JSON.stringify([this.cfg.clientId,subject]));
   }
   create(userHash:string,requestId:string,day:string,msgSn:string){
     const created=this.tasks.create(this.cfg.clientId,userHash,requestId,day,msgSn);
