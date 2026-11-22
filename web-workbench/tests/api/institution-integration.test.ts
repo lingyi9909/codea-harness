@@ -17,14 +17,18 @@ import type {chatConnection} from '../../apps/server/src/modules/chat/connection
 
 const prefix='/api/v1/integrations/institution/investigations';
 type InjectResult={statusCode:number;body:string;json:()=>any};
-test('institution API is opt-in, requires a valid B source IP allowlist, and validates day boundaries',()=>{
-  assert.equal(institutionIntegrationConfig({}),undefined);
-  assert.equal(institutionIntegrationConfig({HARNESS_INSTITUTION_API_KEY:'legacy-unused'}),undefined);
-  assert.throws(()=>institutionIntegrationConfig({HARNESS_INSTITUTION_API_ALLOWED_IPS:''}),/AUTH_CONFIG/);
-  assert.throws(()=>institutionIntegrationConfig({
+test('institution API needs no application secret or IP allowlist, and validates day boundaries',()=>{
+  const defaults=institutionIntegrationConfig({});
+  assert.equal(defaults.clientId,'platform-b');
+  assert.ok(defaults.databasePath.endsWith('institution-api.sqlite'));
+  const obsolete=institutionIntegrationConfig({
+    HARNESS_INSTITUTION_API_KEY:'ignored-legacy-key',
     HARNESS_INSTITUTION_API_ALLOWED_IPS:'0.0.0.0',
-  }),/AUTH_CONFIG/);
-  assert.deepEqual(institutionIntegrationConfig({HARNESS_INSTITUTION_API_ALLOWED_IPS:'10.10.20.30'})?.allowedIps,new Set(['10.10.20.30']));
+  });
+  assert.deepEqual(obsolete,defaults,'obsolete key/allowlist settings must not gate API availability');
+  assert.throws(()=>institutionIntegrationConfig({
+    HARNESS_INSTITUTION_API_CLIENT_ID:' invalid identifier',
+  }),/CLIENT_CONFIG/);
   assert.deepEqual(institutionDayRange('2026-11-22'),{
     from:Date.parse('2026-11-22T00:00:00+08:00'),
     to:Date.parse('2026-11-23T00:00:00+08:00'),
@@ -65,7 +69,7 @@ test('B creates and reads only its own institution result; no extra privileged A
   let app:Awaited<ReturnType<typeof createApp>>|undefined;
   try{
     process.env.HARNESS_INSTITUTION_API_CLIENT_ID='platform-b';
-    process.env.HARNESS_INSTITUTION_API_ALLOWED_IPS='10.10.20.30';
+    delete process.env.HARNESS_INSTITUTION_API_ALLOWED_IPS;
     process.env.HARNESS_INSTITUTION_API_DB_PATH=db;
     delete process.env.HARNESS_INSTITUTION_API_MODEL_ID;
     const settings=new SceneConfigStore(root);
@@ -120,20 +124,19 @@ test('B creates and reads only its own institution result; no extra privileged A
       headers:{...headers,...extra},
       payload:{date:'2026-11-22',msgSn,requestId},
     });
-    const denied=await app.inject({method:'POST',url:prefix,remoteAddress:'10.10.20.31',
-      headers,payload:{date:'2026-11-22',msgSn:'0000123',requestId:'r1'}});
-    assert.equal(denied.statusCode,403,denied.body);
-    // Spoofed forwarded IP headers must never override the direct TCP peer address.
-    const forwarded=await app.inject({method:'POST',url:prefix,remoteAddress:'10.10.20.31',
-      headers:{...headers,'x-forwarded-for':'10.10.20.30'},
-      payload:{date:'2026-11-22',msgSn:'0000123',requestId:'r1'}});
-    assert.equal(forwarded.statusCode,403,forwarded.body);
-    // A request without any Authorization header is the intended integration contract.
+    // The API accepts direct requests regardless of originating client IP.
+    // Source access must be controlled by network infrastructure, not this app.
     assert.equal(Object.hasOwn(headers,'authorization'),false);
+    assert.equal(process.env.HARNESS_INSTITUTION_API_ALLOWED_IPS,undefined);
     const created=await submit('r1','0000123');
     assert.equal(created.statusCode,202,created.body);
     const taskId=created.json().data.taskId as string;
     assert.match(taskId,/^[0-9a-f-]{36}$/);
+    const anotherIp=await app.inject({url:prefix+'/'+taskId,remoteAddress:'10.10.20.31',headers});
+    assert.equal(anotherIp.statusCode,200,anotherIp.body);
+    const forwarded=await app.inject({url:prefix+'/'+taskId,remoteAddress:'10.10.20.31',
+      headers:{...headers,'x-forwarded-for':'10.10.20.30'}});
+    assert.equal(forwarded.statusCode,200,forwarded.body);
     const replay=await submit('r1','0000123');
     assert.equal(replay.statusCode,200,replay.body);
     assert.equal(replay.json().data.taskId,taskId);
