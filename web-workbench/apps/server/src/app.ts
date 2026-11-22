@@ -125,13 +125,12 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
   const sceneAccess=workspace?new SceneAccessStore(workspace):undefined;
   await sceneConfig?.initialize();
-  const institutionApiConfig=institutionIntegrationConfig();
-  if(institutionApiConfig){
-    if(!localSession||!workspace||!sceneConfig||!sceneAccess||!opts.execution?.singleService()||!opts.nativeConnection)
-      throw new Error('INSTITUTION_API_REQUIRES_LOCAL_SINGLE_SERVICE');
+  // Local single-service workbenches expose the two B2B routes automatically.
+  // Multi-user/isolated runtimes do not share this integration's execution context.
+  if(localSession&&workspace&&sceneConfig&&sceneAccess&&opts.execution?.singleService()&&opts.nativeConnection){
     registerInstitutionIntegration(app,{
       workspace,sceneConfig,sceneAccess,execution:opts.execution,nativeConnection:opts.nativeConnection,
-    },institutionApiConfig);
+    },institutionIntegrationConfig());
   }
   if(multi){
     const auth=opts.auth as MultiUserAuth;
