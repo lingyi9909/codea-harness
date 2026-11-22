@@ -109,6 +109,7 @@ export class InstitutionTaskStore {
     return this.db.prepare('SELECT * FROM institution_api_tasks WHERE id=? AND client_id=? AND user_hash=?')
       .get(id,clientId,userHash) as TaskRow|undefined;
   }
+  hasQueued(){return Boolean(this.db.prepare("SELECT 1 FROM institution_api_tasks WHERE status='QUEUED' LIMIT 1").get());}
   take():TaskRow|undefined{
     const row=this.db.prepare("SELECT * FROM institution_api_tasks WHERE status='QUEUED' ORDER BY created_at,id LIMIT 1").get() as TaskRow|undefined;
     if(!row)return undefined;
@@ -189,7 +190,10 @@ export class InstitutionIntegration {
   private kick(){
     if(this.busy||this.closed)return;
     this.busy=true;
-    void this.drain().finally(()=>{this.busy=false;});
+    void this.drain().finally(()=>{
+      this.busy=false;
+      if(!this.closed&&this.tasks.hasQueued())this.kick();
+    });
   }
   private async drain(){
     while(!this.closed){
@@ -227,6 +231,7 @@ export class InstitutionIntegration {
             if(session?.id)await client.session.remove({sessionID:session.id}).catch(()=>{});
             throw new AuthProblem(409,'INSTITUTION_SESSION_MISMATCH');
           }
+          if(this.closed){await client.session.remove({sessionID:session.id}).catch(()=>{});throw new Error('SERVER_STOPPED');}
           this.tasks.session(task.id,session.id);
           await client.session.prompt({sessionID:session.id,text:institutionPrompt(task.day,task.msg_sn),
             skills:[{id:matches[0].id}],delivery:'queue'});
