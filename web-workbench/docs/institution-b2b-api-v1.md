@@ -1,52 +1,46 @@
 # Code-Harness → 平台 B：机构报文排查 API V1
 
-> 分支：`feature/workbench-institution-b-proxy-access`；基于 PR #115。仅增加两个 **B 服务端 → C 服务端**接口；保留 C 上的机构嵌入页、其他场景、既有 OpenCode 调度和权限。**未经过企业内网真实模型与网络验收，不可直接视为生产可用。**
+> 分支：\`feature/workbench-institution-b-proxy-access\`（PR #116，基于 PR #115）。只提供创建排查任务和查询任务最终结果两个接口。原有机构嵌入页、其他工作台场景和 OpenCode 能力保持不变。真实内网模型/数据库/网络尚须现场验收。
 
-## 1. 网络架构
+## 1. 适用场景与网络
 
-```text
-B 客户的浏览器 ─HTTPS→ B 业务页面 ─ B 自己的服务端 ─内网 HTTP/TLS→ C Code-Harness
-                                                           └→ 现有 institution-message Skill → OpenCode/DBHub/TeamAI
-```
+\`\`\`text
+客户浏览器 → B 平台前端 → B 平台后端 → C 智能工作台 API → OpenCode → 机构排查 Skill
+\`\`\`
 
-客户**不访问 C**，平台 B 不需要 iframe。B 自己开发页面，其**服务端直接调用 C**。不需要申请、传递或配置 Bearer API 密钥。C 按真实 TCP 来源 IP 白名单允许 B 的后端访问；客户端浏览器不应直接访问 C。
+客户只需要访问 B；由 B 后端调用 C，不使用 iframe，不要求客户直接访问 C。
 
-## 2. 接口契约
+**按最新要求：不配置 API Key、Bearer Token，也不配置来源 IP 白名单。** C 不再验证请求是否来自 B：任何网络层能连接 C 服务端口的客户端都能够调用这两个 API。必须由企业网络/防火墙/网关限制 C 的可达范围。
 
-### 接口一：创建排查任务
+## 2. API 契约（只有两条）
 
-`POST http://<C 内网 IP>:<端口>/api/v1/integrations/institution/investigations`
+### 创建任务
 
-Headers（**两条接口都不需要 Authorization 或 API 密钥**；由 B 后端填入已认证的业务用户 ID）：
-
-```http
-X-Workbench-User-Id: <B 已认证且稳定不变的业务用户 ID>
+\`\`\`http
+POST http://<C内网IP>:<端口>/api/v1/integrations/institution/investigations
 Content-Type: application/json
-```
+X-Workbench-User-Id: customer-001
 
-Body：
-
-```json
 {
   "date": "2026-11-22",
   "msgSn": "000012345678",
-  "requestId": "B-20261122-10001"
+  "requestId": "B-20261122-001"
 }
-```
+\`\`\`
 
-- `date`：严格的 `YYYY-MM-DD` 日历日期，按 **Asia/Shanghai (UTC+08:00)** 解释，查询 `[00:00:00, 次日 00:00:00)`；不以浏览器所在时区解释。
-- `msgSn`：原始字符串，保留前导 0，1–256 位，允许英文字母、数字、`_`、`.`、`:`、`-`，不允许换行或注入额外 Prompt。
-- `requestId`：调用方生成的幂等号，1–128 位，允许英文字母、数字、`_`、`.`、`:`、`-`。同一客户用户、同一请求号和相同日期/msgSn **返回原任务，不重新执行**；重用同号却修改日期或 msgSn 返回 409。
-- `X-Workbench-User-Id`：只能由 B 的**可信后端**根据其登录态生成，不接受浏览器自行指定；仅存 SHA-256 派生值，不存明文。
+- \`date\`：严格的 YYYY-MM-DD，按 Asia/Shanghai UTC+08:00 计算全天 [00:00:00, 次日 00:00:00)。
+- \`msgSn\`：1–256 位字符串，保留前导 0；允许英文字母、数字、下划线、点、冒号、连字符。
+- \`requestId\`：1–128 位调用方幂等号。同一用户+同一请求号+相同 date/msgSn 复用旧任务，不重复执行；同号不同参数返回 409。
+- \`X-Workbench-User-Id\`：B 后端根据已登录用户生成的稳定业务标识。**C 不认证此标识，只在数据库中保存其摘要用于任务查询隔离；可达 C 的调用方可以伪造该标识。**
 
-新建任务返回 HTTP 202：
+新任务 HTTP 202；相同幂等号重复提交 HTTP 200。响应例：
 
-```json
+\`\`\`json
 {
   "data": {
     "taskId": "550e8400-e29b-41d4-a716-446655440000",
     "status": "QUEUED",
-    "requestId": "B-20261122-10001",
+    "requestId": "B-20261122-001",
     "createdAt": "2026-11-22T04:00:00.000Z",
     "updatedAt": "2026-11-22T04:00:00.000Z",
     "result": null,
@@ -54,148 +48,97 @@ Body：
   },
   "requestId": "response-trace-id"
 }
-```
+\`\`\`
 
-重复提交同一请求时返回 HTTP 200 和已有 `taskId`。创建接口**不等待模型执行完成**，避免 B HTTP 网关超时。
+### 查询任务状态与最终结果
 
-### 接口二：查询任务状态及最终结果
+\`\`\`http
+GET http://<C内网IP>:<端口>/api/v1/integrations/institution/investigations/{taskId}
+X-Workbench-User-Id: customer-001
+\`\`\`
 
-`GET http://<C 内网 IP>:<端口>/api/v1/integrations/institution/investigations/{taskId}`
+返回状态及完成后的结论；使用不同的业务用户标识查询他人任务返回 404，但标识本身不是安全凭证。
 
-仍须由 B 后端带上相同的 `X-Workbench-User-Id` 请求头，**无需 Authorization**。不属于该用户的任务返回 404。这个标识是业务归属标识，不是身份凭证；B 必须负责认证用户、防止用户伪造该标识。
-
-处理中示例：
-
-```json
-{
-  "data": {
-    "taskId": "550e8400-e29b-41d4-a716-446655440000",
-    "status": "RUNNING",
-    "requestId": "B-20261122-10001",
-    "createdAt": "...",
-    "updatedAt": "...",
-    "result": null,
-    "errorCode": null
-  },
-  "requestId": "..."
-}
-```
-
-成功示例：
-
-```json
+\`\`\`json
 {
   "data": {
     "taskId": "550e8400-e29b-41d4-a716-446655440000",
     "status": "SUCCEEDED",
-    "requestId": "B-20261122-10001",
+    "requestId": "B-20261122-001",
     "createdAt": "...",
     "updatedAt": "...",
-    "result": {
-      "summary": "基于真实查询证据形成的最终排查结论（Markdown 文本）"
-    },
+    "result": {"summary": "面向业务人员的最终排查结论（Markdown 文本）"},
     "errorCode": null
   },
-  "requestId": "..."
+  "requestId": "response-trace-id"
 }
-```
+\`\`\`
 
-状态取值：
+状态：\`QUEUED\`（排队）、\`RUNNING\`（执行中）、\`SUCCEEDED\`（已得到最终结论）、\`FAILED\`（确定失败）、\`UNKNOWN\`（重启、超时或传输异常使最终结果不确定，**不自动重跑模型任务**）。
 
-| 状态 | 含义 | B 端处理 |
-| --- | --- | --- |
-| `QUEUED` | 已受理，待执行 | 间隔 2–5 秒轮询 |
-| `RUNNING` | OpenCode 正在执行 | 间隔 2–5 秒轮询 |
-| `SUCCEEDED` | 收到可验证的已完成最终答复 | 展示 `result.summary` |
-| `FAILED` | 启动/配置/模型/权限等**执行前确定失败** | 展示 `errorCode`，联系维护人员 |
-| `UNKNOWN` | 提交已受理但网络中断、重启等原因使最终执行状态不确定 | **不要自动重试同一次模型调用**；联系管理员核对原任务后由用户另发新请求 |
+失败可能有 HTTP 400（参数格式不合法）、404（找不到此业务用户任务）、409（幂等号冲突）。**不再因缺少密钥或不在应用 IP 白名单而产生 401/403。**
 
-只返回最终用户可见文本，**不提供内部 reasoning/思考、SQL 原始工具轨迹、工作目录、OpenCode Session ID、原生权限和凭据**。
+B 可间隔 2–5 秒轮询查询接口；创建任务立刻返回，不需要维持长连接。当前不提供 SSE、追问、取消、客户端自定义模型或 Skill 接口。
 
-### HTTP 错误
+## 3. C 工作台部署
 
-- 400：日期、msgSn、requestId、用户标识不合法。
-- 403：请求的实际来源 IP 不在允许的 B 服务器 IP 白名单（不信任浏览器提供的 X-Forwarded-For）。
-- 404：任务不存在或不属于当前 B 用户。
-- 409：相同幂等号用于不同参数。
-- 503：服务不可用；B 不应盲目换号重复提交，请先使用原请求号重试查询或幂等创建。
+**不需要新的接口启用环境变量**。本地单服务工作台启动后自动注册这两个 API；不会在不支持的多用户/隔离执行模式下强行注册。
 
-目前没有 `GET .../events`、追问、停止或 B 远程设置工具权限的接口。
+如 C 需要对 B 开放 LAN 监听，可沿用既有的工作台启动菜单选择局域网地址和端口；示意配置如下（具体 IP 请替换为 C 自己的 IP）：
 
-## 3. C 服务启动与配置
-
-C 的 Windows 工作目录、模型、OpenCode 服务、Skill、DBHub/TeamAI 均沿用原有部署。C 本地 `/config` 的 `institution-message` 场景应绑定真实存在的机构 Skill（也支持现有配置的 message Skill 兼容回退）；API V1 **只接受 Skill 绑定**，不接受内置聊天、Command 或 Subagent 作为该 API 的自动执行入口，避免外部调用方触发任意命令。
-
-在 C 主机上配置以下**环境变量**（来源 IP 必须替换成 B 服务端真实出口 IP；**不配置 API 密钥**）：
-
-```cmd
+\`\`\`cmd
 set "HARNESS_ENABLE_LAN=1"
 set "HARNESS_HTTP_BIND=10.20.30.40"
 set "HARNESS_HTTP_PORT=4176"
 set "HARNESS_PUBLIC_ORIGIN=http://10.20.30.40:4176"
-set "HARNESS_INSTITUTION_API_CLIENT_ID=platform-b"
-set "HARNESS_INSTITUTION_API_ALLOWED_IPS=10.20.30.51,10.20.30.52"
-set "HARNESS_INSTITUTION_API_MODEL_ID=kimi"
 .\启动工作台.cmd "D:\teamai"
-```
+\`\`\`
 
-启动交互菜单请选择 **3「沿用已有环境配置」**，否则普通 LAN 菜单可能覆盖有关 Origin/IP 的设置。Shell 优先选择默认受限模式。B 的两台代理/服务端 IP 需替换为实际出口 IP。实际模型 ID 不一定为 `kimi`；如果省略 `HARNESS_INSTITUTION_API_MODEL_ID`，将优先选择实际模型目录中的 Kimi，只有一个启用模型时可使用它；多个非 Kimi 模型时明确拒绝，绝不凭空生成模型 ID。
+上述网络监听参数本来就属于工作台现有部署配置，不是 B 接口专属设置。如果采用启动菜单选择 LAN 地址/端口，按实际菜单启动即可。
 
-建议为 B→C 使用企业内网 HTTPS/mTLS 网关；如采用内部 HTTP，确保是受控可信网段。C 防火墙**只允许 B 服务端指定 IP**连接监听端口；API 层也按真实连接 IP 拒绝未列入白名单的请求。若不设置 `HARNESS_INSTITUTION_API_ALLOWED_IPS`，这两个 API **不注册**，原有功能照旧。明确配置为空值或无效 IP 会阻止启动，避免误开放。
+可选：\`HARNESS_INSTITUTION_API_MODEL_ID\` 精确指定已启用模型；未指定时优先寻找 Kimi，或在只启用了一个模型时使用该模型。默认 \`HARNESS_INSTITUTION_API_CLIENT_ID\` 是 platform-b，只有未来接入场景需要另行分组时才考虑配置。
 
-**只支持当前 Windows/Mac 单服务（`--local-only`）共享执行模式**。若 C 使用隔离执行池或独立 MySQL 多用户模式，启动时会拒绝启用 B API，避免错误复用会话身份或执行权限。
+接口不读取 \`HARNESS_INSTITUTION_API_KEY\` 或 \`HARNESS_INSTITUTION_API_ALLOWED_IPS\`：即使旧启动脚本里存在这两个环境变量，也不会用它们验证请求。
 
-数据库：API 任务状态单独使用 SQLite，默认位于运行系统账号下的 `.smart-workbench/state/institution-api.sqlite`；或由 `HARNESS_INSTITUTION_API_DB_PATH` 指定工作目录**外部**的本地绝对路径。保留最近 7 天任务记录和最终结论，不新增 MySQL 表。注意数据库备份时保持 SQLite WAL 一致性；不可将保存结果的目录共享给业务用户。
+机构场景必须绑定有效 Skill；API V1 不允许由 B 指定任意 Skill、工作目录、模型、SQL、Shell 或 Prompt。沿用当前机构场景权限和 C 启动时配置的 Shell 策略。
 
-## 4. 执行保障与边界
+任务状态及最终结论保存在独立 SQLite，默认是运行账户目录的 \`.smart-workbench/state/institution-api.sqlite\`，也可用 \`HARNESS_INSTITUTION_API_DB_PATH\` 指向业务工作目录外的本地绝对路径；保存最近 7 天，不需要新建 MySQL 表。
 
-- 每个任务创建独立 OpenCode Session，沿用 `institution-message` 场景的工具权限及 C 启动时的 Shell 约束；B **不能**指定 Skill、模型、工作目录、Session 或工具权限。
-- 一次只执行一个 B API 任务，后续任务排队，不抢占现有嵌入页会话。但它们仍共用底层 OpenCode 服务/OS 账户，生产应核实容量和资源隔离，不把 Session 隔离当成操作系统沙箱。
-- 接收原生最终完成消息，并核对会话当前无活动执行、无待处理输入后才返回 `SUCCEEDED`。若 Skill 请求人工确认权限，当前 API 不支持远程回答，任务不会假装执行成功。
-- 运行中服务重启或断电时，任务变为 `UNKNOWN`，不自动再次调用模型。这是安全的保守恢复策略，**不是断点续跑**。
-- 单任务最多等待 10 分钟；中途工具调用失败、超时或模型链路断开时，应排查 `errorCode`，而不是假定“没有进行数据库查询”。
-- API 不接受文件上传、自由 Prompt、客户端指定 SQL、脚本或任意资源路径。B 必须在其后端校验当前业务用户是否有权查询该日期和 msgSn，并承担业务审计责任。
+## 4. B 平台接入示例
 
-## 5. B 后端接入流程
+仅需 B 后端发 HTTP 请求，**不要把 C 的地址开放给 B 客户端浏览器**。
 
-```text
-1. B 校验客户登录态和“机构报文排查”业务权限。
-2. B 后端生成稳定 requestId、使用真实用户标识，直接请求 C POST；不需要 API 密钥。
-3. B 保存 taskId（关联自己的用户与业务请求）。
-4. B 轮询 C GET（2–5s），直到 SUCCEEDED、FAILED 或 UNKNOWN。
-5. B 在自己的页面展示最终 Markdown 结论（渲染时进行 HTML 转义/安全过滤）。
-```
-
-B 遇到 POST 超时不要立即换新的 requestId；使用**原 requestId**和完全相同参数幂等重试，避免重复执行。
-
-## 6. 验收清单
-
-- [ ] 客户仅访问 B，B 服务端可调用 C，两条接口从客户浏览器直接访问均失败。
-- [ ] 未配置来源 IP 白名单时，API 路由不存在；非白名单来源返回 403；可信 B 服务器不带密钥即可调用。
-- [ ] 同用户同 requestId 返回同 taskId，参数变更返回 409，跨用户读取返回 404。
-- [ ] 日期按 Asia/Shanghai 全天换算，msgSn 保留前导零，机构 Skill 在配置工作目录中真实生效。
-- [ ] 正常任务确实在 C OpenCode 执行，最终结果来自真实模型和业务证据，不是模拟脚本。
-- [ ] 同时发起两个 B 请求，Session 不互串，后续排队。
-- [ ] 断电/进程重启后任务标记 UNKNOWN，没有重复调用模型。
-- [ ] C 原有机构嵌入页、公管问题排查、报文排查、代码审查和配置/统计/组件页行为无回归。
-- [ ] 已配置 B 自己的客户认证、C 来源 IP 白名单、内网网络隔离、数据保留与日志审计策略；内网 HTTPS/mTLS 可由网络基础设施提供，不要求 B 在 HTTP 请求中携带应用密钥。
-
-本仓库自动化测试使用**脚本化模拟 OpenCode Peer**，只能验证本项目代码契约；真实私有模型、B 网络、业务 SQL 权限和进程重启必须由公司内网进行最终验收。
-
-## 7. 无密钥接入的网络边界
-
-此次按 B 的需求取消**应用层密钥**。这意味着 **C 无法仅凭请求区分是否由 B 本人发出**，只能依据 TCP 对端 IP 和内网防火墙限制访问。部署时必须满足：
-
-- `HARNESS_INSTITUTION_API_ALLOWED_IPS` 仅填写 B 后端的真实出口地址，不使用 `0.0.0.0`、`*`、整个网段或客户终端 IP；如果 B 经过 NAT/网关，填写 C 实际看到的可信网关源 IP。
-- 服务器 `trustProxy=false`，**不会**采用客户端伪造的 `X-Forwarded-For` 作为授权依据。
-- B 后端自行校验用户能否查询该报文；`X-Workbench-User-Id` 是 B 的可信服务端填充的业务用户标识，**不等价于安全鉴权**。
-- 禁止把 C 服务端口开放到公网或不可信办公网段；若未来多个系统需要共享访问，建议改用服务间身份鉴权或受控 API 网关。
-
-调用示例（从允许的 B 后端服务器执行，不需要 `Authorization`）：
-
-```bash
+\`\`\`bash
 curl -X POST 'http://10.20.30.40:4176/api/v1/integrations/institution/investigations' \
   -H 'Content-Type: application/json' \
   -H 'X-Workbench-User-Id: customer-001' \
   -d '{"date":"2026-11-22","msgSn":"000012345678","requestId":"B-20261122-001"}'
-```
+\`\`\`
+
+得到 taskId 后：
+
+\`\`\`bash
+curl 'http://10.20.30.40:4176/api/v1/integrations/institution/investigations/<taskId>' \
+  -H 'X-Workbench-User-Id: customer-001'
+\`\`\`
+
+B 请求 POST 网络超时，应使用原 \`requestId\` 和完全相同参数幂等重试，不要换号造成重复执行。B 自己负责客户登录、机构数据访问权限及审计。
+
+## 5. 权限与风险边界
+
+- API 层**没有密钥，没有 IP 白名单，没有用户身份认证**。任何能连接 C 服务端口的用户均可以创建机构排查任务、消耗模型/DBHub 查询资源。
+- 有任务 ID 且能伪造 \`X-Workbench-User-Id\` 的可达调用方可能读取该用户的排查结论。摘要化保存标识只降低静态存储明文，不意味着已认证。
+- **必须确认** C 网络端口不向公网、不可信内网或 B 客户终端暴露；若工作台的其他 LAN 页面面向较宽用户群，其端口所处的共享网络也可能让这些用户直接调用 API。推荐网络侧 ACL、企业网关或单独网络隔离。
+- B 后端不得信任浏览器直接传来的业务用户 ID；应从自己已登录会话中生成标识、检查报文查询授权，并限制调用频率。
+- 业务数据和任务结果保留 7 天；接口不返回 OpenCode Session ID、原始思考、工具调用轨迹或密钥。并发任务排队，进程重启后未完成任务标记 UNKNOWN，不会自动重跑。
+
+## 6. 联调验收
+
+- [ ] B 后端无需密钥、无需 IP 白名单配置，就能调用 C 的两条接口。
+- [ ] 不同 IP 的可达测试机均能得到 API 响应，证明应用层已取消白名单。
+- [ ] B 真实已认证用户与任务对应；请求号幂等，错参数返回 409；不同业务标识查不到别的任务。
+- [ ] 真实 OpenCode/机构 Skill 执行成功，最终只返回业务结论，机构 msgSn 保留前导零。
+- [ ] 两位 B 客户并发不互串，重启时不重复执行；原机构嵌入页和其他场景无回归。
+- [ ] C 的端口已由公司网络侧限定可达范围，B 客户端浏览器不能直接访问 C。
+
+CI 的模拟 OpenCode 测试不能代替公司内网真实业务及网络验证。
