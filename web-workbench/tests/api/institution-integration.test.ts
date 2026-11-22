@@ -16,6 +16,7 @@ import {
 import type {chatConnection} from '../../apps/server/src/modules/chat/connection.ts';
 
 const prefix='/api/v1/integrations/institution/investigations';
+type InjectResult={statusCode:number;body:string;json:()=>any};
 test('institution API is opt-in, validates credentials and day boundaries',()=>{
   assert.equal(institutionIntegrationConfig({}),undefined);
   assert.throws(()=>institutionIntegrationConfig({HARNESS_INSTITUTION_API_KEY:'short'}),/AUTH_CONFIG/);
@@ -138,7 +139,7 @@ test('B creates and reads only its own institution result; no extra privileged A
     assert.equal(anotherUser.statusCode,404,anotherUser.body);
     let final:{status:string;result:{summary:string}|null}|undefined;
     for(let i=0;i<80;i++){
-      const response:Awaited<ReturnType<NonNullable<typeof app>['inject']>>=
+      const response:InjectResult=
         await app.inject({url:prefix+'/'+taskId,remoteAddress:'10.10.20.30',headers});
       assert.equal(response.statusCode,200,response.body);
       final=response.json().data;
@@ -154,7 +155,7 @@ test('B creates and reads only its own institution result; no extra privileged A
     assert.deepEqual(calls.created?.permissions,singleServicePermissions);
     assert.equal((calls.created?.metadata as Record<string,string>).harnessScenario,'institution-message-inspection');
     for(const forbidden of ['/config','/analytics','/api/v1/scene-access']){
-      const response:Awaited<ReturnType<NonNullable<typeof app>['inject']>>=
+      const response:InjectResult=
         await app.inject({url:forbidden,remoteAddress:'10.10.20.30',headers});
       assert.equal(response.statusCode,403,forbidden+response.body);
     }
