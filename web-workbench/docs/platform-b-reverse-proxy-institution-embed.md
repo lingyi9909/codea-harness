@@ -63,6 +63,8 @@ proxy_set_header X-Forwarded-Host $host;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header Authorization $http_authorization;
 proxy_set_header X-CSRF-Token $http_x_csrf_token;
+# B 的认证 Cookie 仅用于前置鉴权，不转发给 C 的匿名 Bearer 会话。
+proxy_set_header Cookie "";
 proxy_set_header Connection "";
 proxy_buffering off;
 proxy_request_buffering off;
