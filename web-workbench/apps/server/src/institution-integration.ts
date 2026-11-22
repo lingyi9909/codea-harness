@@ -203,6 +203,7 @@ export class InstitutionIntegration {
       const task=this.tasks.take();
       if(!task)break;
       let accepted=false;
+      let definiteFailure=false;
       try{
         const result=await this.deps.execution.run(task.id,async()=>{
           const client=await this.deps.nativeConnection();
@@ -236,9 +237,11 @@ export class InstitutionIntegration {
           }
           if(this.closed){await client.session.remove({sessionID:session.id}).catch(()=>{});throw new Error('SERVER_STOPPED');}
           this.tasks.session(task.id,session.id);
+          // A transport error during submission is ambiguous: the server might have
+          // accepted the command even if the response was lost.
+          accepted=true;
           await client.session.prompt({sessionID:session.id,text:institutionPrompt(task.day,task.msg_sn),
             skills:[{id:matches[0].id}],delivery:'queue'});
-          accepted=true;
           const end=Date.now()+TIMEOUT_MS;
           while(!this.closed&&Date.now()<end){
             const [active,inbox,messages,permissionsPending]=await Promise.all([
@@ -247,7 +250,8 @@ export class InstitutionIntegration {
               client.permission.list({sessionID:session.id}),
             ]);
             if(permissionsPending.some(p=>p.sessionID===session.id)){
-              await client.session.interrupt({sessionID:session.id}).catch(()=>{});
+              await client.session.interrupt({sessionID:session.id});
+              definiteFailure=true;
               throw new AuthProblem(409,'INSTITUTION_PERMISSION_REQUIRED');
             }
             const final=messages.data.find((m):m is Extract<(typeof messages.data)[number],{type:'assistant'}>=>
@@ -267,9 +271,9 @@ export class InstitutionIntegration {
       }catch(error){
         if(!this.closed){
           const code=error instanceof AuthProblem?error.code:'INSTITUTION_EXECUTION_UNAVAILABLE';
-          // An accepted prompt may still be running after a transport failure.
-          // Only report a definite failure if the task was never admitted.
-          this.tasks.finish(task.id,accepted?'UNKNOWN':'FAILED',null,code);
+          // Delivery/network failure after prompt dispatch can be ambiguous;
+          // only definite pre-dispatch or confirmed-interrupted failures are FAILED.
+          this.tasks.finish(task.id,accepted&&!definiteFailure?'UNKNOWN':'FAILED',null,code);
         }
       }
     }
