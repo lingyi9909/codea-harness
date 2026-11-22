@@ -1,9 +1,9 @@
 /**
  * Server-to-server institution investigation API for trusted platform B.
  *
- * This intentionally does not reuse browser/anonymous embed credentials:
- * the integration is enabled only by explicit environment configuration,
- * bound to an explicit caller IP allowlist, without application-layer API keys.
+ * API routes are available for the local single-service workbench by default.
+ * The B-to-C endpoints do not perform application authentication or IP allowlisting;
+ * network access MUST be controlled outside this application.
  *
  * One OpenCode session per task; never expose native session IDs, directories,
  * tools, transcripts, reasoning or secrets to the external caller.
@@ -12,7 +12,6 @@ import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomUUID} from 'node:crypto';
 import {existsSync,lstatSync,mkdirSync,chmodSync} from 'node:fs';
 import {homedir} from 'node:os';
-import {isIP} from 'node:net';
 import {dirname,isAbsolute,join,relative,sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {FastifyInstance,FastifyRequest} from 'fastify';
@@ -33,7 +32,7 @@ type TaskRow={
   result_text:string|null;error_code:string|null;created_at:number;updated_at:number;
 };
 export type InstitutionIntegrationConfig={
-  clientId:string;allowedIps:ReadonlySet<string>;databasePath:string;
+  clientId:string;databasePath:string;
 };
 export type InstitutionIntegrationDeps={
   workspace:string;sceneConfig:SceneConfigStore;sceneAccess:SceneAccessStore;
@@ -46,21 +45,16 @@ const status=(row:TaskRow)=>({
   result:row.status==='SUCCEEDED'&&row.result_text?{summary:row.result_text}:null,
   errorCode:row.status==='FAILED'||row.status==='UNKNOWN'?row.error_code:null,
 });
-export function institutionIntegrationConfig(env:NodeJS.ProcessEnv=process.env):InstitutionIntegrationConfig|undefined{
-  // An explicit source IP allowlist enables the API. No key or bearer token is required.
-  // Without the list, do not register these routes at all.
-  if(env.HARNESS_INSTITUTION_API_ALLOWED_IPS===undefined)return undefined;
+export function institutionIntegrationConfig(env:NodeJS.ProcessEnv=process.env):InstitutionIntegrationConfig{
+  // The two APIs are available by default in local single-service mode.
+  // Neither a token nor an IP allowlist is required or consulted here.
   const clientId=env.HARNESS_INSTITUTION_API_CLIENT_ID??'platform-b';
-  const ips=(env.HARNESS_INSTITUTION_API_ALLOWED_IPS??'').split(',').map(s=>s.trim()).filter(Boolean);
-  if(!validId(clientId)||ips.length===0||
-     ips.some(ip=>isIP(ip)===0||ip==='0.0.0.0'||ip==='::')||
-     new Set(ips).size!==ips.length)
-    throw new Error('INSTITUTION_API_AUTH_CONFIG_INVALID');
+  if(!validId(clientId))throw new Error('INSTITUTION_API_CLIENT_CONFIG_INVALID');
   const databasePath=env.HARNESS_INSTITUTION_API_DB_PATH??
     join(env.LOCALAPPDATA??homedir(),'.smart-workbench','state','institution-api.sqlite');
   if(!isAbsolute(databasePath)||databasePath.startsWith('\\\\')||databasePath.startsWith('//'))
     throw new Error('INSTITUTION_API_DB_PATH_INVALID');
-  return {clientId,allowedIps:new Set(ips),databasePath};
+  return {clientId,databasePath};
 }
 
 export class InstitutionTaskStore {
@@ -173,11 +167,9 @@ export class InstitutionIntegration {
     this.cfg=cfg;this.deps=deps;this.tasks=tasks;
     if(!deps.execution.singleService())throw new Error('INSTITUTION_API_REQUIRES_SINGLE_SERVICE_RUNTIME');
   }
-  authenticate(req:FastifyRequest){
-    // Fastify trustProxy=false: only the real socket peer IP is trusted.
-    // X-Forwarded-For/Origin/Host are not used for access decisions.
-    const ip=req.ip.startsWith('::ffff:')?req.ip.slice(7):req.ip;
-    if(!this.cfg.allowedIps.has(ip))throw new AuthProblem(403,'INTEGRATION_SOURCE_FORBIDDEN');
+  ownerFor(req:FastifyRequest){
+    // User IDs are asserted by the caller, NOT verified by C. Only use the API
+    // behind network-level access control and a B backend enforcing identity.
     const subject=req.headers['x-workbench-user-id'];
     if(typeof subject!=='string'||!validId(subject))throw new AuthProblem(400,'INTEGRATION_USER_REQUIRED');
     return DIGEST(JSON.stringify([this.cfg.clientId,subject]));
@@ -289,31 +281,36 @@ export class InstitutionIntegration {
 
 export function registerInstitutionIntegration(app:FastifyInstance,
   deps:InstitutionIntegrationDeps,cfg:InstitutionIntegrationConfig){
-  const tasks=new InstitutionTaskStore(cfg.databasePath,deps.workspace);
-  const manager=new InstitutionIntegration(cfg,deps,tasks);
-  app.addHook('onClose',()=>manager.close());
+  // Lazy initialization avoids creating a sensitive task DB during mere app
+  // startup, including unrelated workbench tests that never call this API.
+  let manager:InstitutionIntegration|undefined;
+  const getManager=()=>manager??=new InstitutionIntegration(cfg,deps,
+    new InstitutionTaskStore(cfg.databasePath,deps.workspace));
+  app.addHook('onClose',()=>manager?.close());
   app.post<{Body:{date:string;msgSn:string;requestId:string}}>(API_ROOT,{
     schema:{body:{type:'object',additionalProperties:false,required:['date','msgSn','requestId'],properties:{
       date:{type:'string',minLength:10,maxLength:10},msgSn:{type:'string',minLength:1,maxLength:256},
       requestId:{type:'string',minLength:1,maxLength:128},
     }}},
   },async(req,reply)=>{
-    const user=manager.authenticate(req);
+    const service=getManager();
+    const user=service.ownerFor(req);
     const {date,msgSn,requestId}=req.body;
     institutionDayRange(date);
     if(typeof msgSn!=='string'||!/^[A-Za-z0-9_.:-]{1,256}$/.test(msgSn)||
       typeof requestId!=='string'||!validId(requestId))
       throw new AuthProblem(400,'INSTITUTION_PARAMETERS_INVALID');
-    const result=manager.create(user,requestId,date,msgSn);
+    const result=service.create(user,requestId,date,msgSn);
     return reply.code(result.created?202:200).header('Cache-Control','no-store')
       .send({data:result.data,requestId:randomUUID()});
   });
   app.get<{Params:{id:string}}>(API_ROOT+'/:id',async(req,reply)=>{
-    const user=manager.authenticate(req);
+    const service=getManager();
+    const user=service.ownerFor(req);
     const id=req.params.id;
     if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))
       throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
     return reply.header('Cache-Control','no-store')
-      .send({data:manager.get(user,id),requestId:randomUUID()});
+      .send({data:service.get(user,id),requestId:randomUUID()});
   });
 }
