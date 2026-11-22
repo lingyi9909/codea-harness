@@ -138,7 +138,8 @@ test('B creates and reads only its own institution result; no extra privileged A
     assert.equal(anotherUser.statusCode,404,anotherUser.body);
     let final:{status:string;result:{summary:string}|null}|undefined;
     for(let i=0;i<80;i++){
-      const response=await app.inject({url:prefix+'/'+taskId,remoteAddress:'10.10.20.30',headers});
+      const response:Awaited<ReturnType<NonNullable<typeof app>['inject']>>=
+        await app.inject({url:prefix+'/'+taskId,remoteAddress:'10.10.20.30',headers});
       assert.equal(response.statusCode,200,response.body);
       final=response.json().data;
       if(final?.status==='SUCCEEDED')break;
@@ -153,7 +154,8 @@ test('B creates and reads only its own institution result; no extra privileged A
     assert.deepEqual(calls.created?.permissions,singleServicePermissions);
     assert.equal((calls.created?.metadata as Record<string,string>).harnessScenario,'institution-message-inspection');
     for(const forbidden of ['/config','/analytics','/api/v1/scene-access']){
-      const response=await app.inject({url:forbidden,remoteAddress:'10.10.20.30',headers});
+      const response:Awaited<ReturnType<NonNullable<typeof app>['inject']>>=
+        await app.inject({url:forbidden,remoteAddress:'10.10.20.30',headers});
       assert.equal(response.statusCode,403,forbidden+response.body);
     }
   }finally{
