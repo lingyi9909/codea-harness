@@ -65,6 +65,11 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
     return reply.header('Cache-Control','no-store').header('Content-Security-Policy',"frame-ancestors 'none'").sendFile('index.html');
   });
+  app.get('/institution-tasks',async(req,reply)=>{
+    if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+    if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
+    return reply.header('Cache-Control','no-store').header('Content-Security-Policy',"frame-ancestors 'none'").sendFile('index.html');
+  });
   if(!(opts.auth instanceof MultiUserAuth) && opts.native && opts.pool && enabled){
     const stop=new AbortController();
     const config={...opts.native,pool:opts.pool,signal:stop.signal};
@@ -127,9 +132,11 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   await sceneConfig?.initialize();
   // Local single-service workbenches expose the two B2B routes automatically.
   // Multi-user/isolated runtimes do not share this integration's execution context.
-  if(localSession&&workspace&&sceneConfig&&sceneAccess&&opts.execution?.singleService()&&opts.nativeConnection){
+  if(localSession&&workspace&&sceneConfig&&sceneAccess&&opts.auth instanceof LocalAuth&&
+     opts.execution?.singleService()&&opts.nativeConnection){
     registerInstitutionIntegration(app,{
-      workspace,sceneConfig,sceneAccess,execution:opts.execution,nativeConnection:opts.nativeConnection,
+      workspace,sceneConfig,sceneAccess,auth:opts.auth,
+      execution:opts.execution,nativeConnection:opts.nativeConnection,
     },institutionIntegrationConfig());
   }
   if(multi){
