@@ -43,6 +43,10 @@ const validId=(id:string)=>/^[A-Za-z0-9_.:-]{1,128}$/.test(id);
 const taskIdPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ADMIN_ROOT='/api/v1/institution-tasks';
 const ADMIN_STATUSES=['QUEUED','RUNNING','SUCCEEDED','FAILED','UNKNOWN'] as const;
+export const INSTITUTION_CONCURRENCY_OPTIONS=[3,5,10,15] as const;
+export type InstitutionConcurrency=typeof INSTITUTION_CONCURRENCY_OPTIONS[number];
+const validConcurrency=(n:unknown):n is InstitutionConcurrency=>
+  typeof n==='number'&&INSTITUTION_CONCURRENCY_OPTIONS.includes(n as InstitutionConcurrency);
 const status=(row:TaskRow)=>({
   taskId:row.id,status:row.status,requestId:row.request_id,
   createdAt:new Date(row.created_at).toISOString(),updatedAt:new Date(row.updated_at).toISOString(),
@@ -83,7 +87,9 @@ export class InstitutionTaskStore {
       "status TEXT NOT NULL,session_id TEXT,result_text TEXT,error_code TEXT,external_user_id TEXT,"+
       "created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,"+
       "UNIQUE(client_id,user_hash,request_id));"+
-      "CREATE INDEX IF NOT EXISTS ix_institution_api_task_status ON institution_api_tasks(status,created_at);");
+      "CREATE INDEX IF NOT EXISTS ix_institution_api_task_status ON institution_api_tasks(status,created_at);"+
+      "CREATE TABLE IF NOT EXISTS institution_api_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);"+
+      "INSERT OR IGNORE INTO institution_api_settings(key,value) VALUES ('max_concurrency','3');");
     // Preserve all prior tasks. Their hashed user IDs are irreversible.
     const columns=this.db.prepare("PRAGMA table_info(institution_api_tasks)").all() as Array<{name:string}>;
     if(!columns.some(c=>c.name==='external_user_id'))
@@ -117,12 +123,54 @@ export class InstitutionTaskStore {
     return this.db.prepare('SELECT * FROM institution_api_tasks WHERE id=? AND client_id=? AND user_hash=?')
       .get(id,clientId,userHash) as TaskRow|undefined;
   }
+  concurrency():InstitutionConcurrency{
+    const row=this.db.prepare("SELECT value FROM institution_api_settings WHERE key='max_concurrency'")
+      .get() as {value:string}|undefined;
+    const value=Number(row?.value??'3');
+    if(!validConcurrency(value))throw new Error('INSTITUTION_CONCURRENCY_CONFIG_INVALID');
+    return value;
+  }
+  setConcurrency(n:InstitutionConcurrency){
+    if(!validConcurrency(n))throw new AuthProblem(400,'INSTITUTION_CONCURRENCY_INVALID');
+    this.db.prepare("UPDATE institution_api_settings SET value=? WHERE key='max_concurrency'").run(String(n));
+    return this.concurrency();
+  }
+  queueCounts(){
+    const rows=this.db.prepare("SELECT status,COUNT(*) AS n FROM institution_api_tasks WHERE status IN ('QUEUED','RUNNING') GROUP BY status")
+      .all() as Array<{status:string;n:number}>;
+    return {running:rows.find(r=>r.status==='RUNNING')?.n??0,
+      queued:rows.find(r=>r.status==='QUEUED')?.n??0};
+  }
+  /** Only config administrators may obtain opaque per-user group identifiers. */
+  groupsAdmin(query:string|undefined,offset:number){
+    this.prune();
+    const where=query?' WHERE external_user_id=?':'',params=query?[query]:[];
+    const count=this.db.prepare('SELECT COUNT(*) AS n FROM (SELECT 1 FROM institution_api_tasks'+where+
+      ' GROUP BY client_id,user_hash)').get(...params) as {n:number};
+    const rows=this.db.prepare(
+      'SELECT client_id,user_hash,MAX(external_user_id) AS external_user_id,COUNT(*) AS total,'+
+      "SUM(CASE WHEN status='QUEUED' THEN 1 ELSE 0 END) AS queued,"+
+      "SUM(CASE WHEN status='RUNNING' THEN 1 ELSE 0 END) AS running,"+
+      "SUM(CASE WHEN status='SUCCEEDED' THEN 1 ELSE 0 END) AS succeeded,"+
+      "SUM(CASE WHEN status='FAILED' THEN 1 ELSE 0 END) AS failed,"+
+      "SUM(CASE WHEN status='UNKNOWN' THEN 1 ELSE 0 END) AS unknown,"+
+      'MAX(created_at) AS last_seen FROM institution_api_tasks'+where+
+      ' GROUP BY client_id,user_hash ORDER BY last_seen DESC LIMIT 50 OFFSET ?'
+    ).all(...params,offset) as Array<{client_id:string;user_hash:string;external_user_id:string|null;total:number;
+      queued:number;running:number;succeeded:number;failed:number;unknown:number;last_seen:number}>;
+    return {total:count.n,limit:50,offset,items:rows.map(row=>({
+      clientId:row.client_id,userHash:row.user_hash,externalUserId:row.external_user_id,
+      total:row.total,queued:row.queued,running:row.running,succeeded:row.succeeded,
+      failed:row.failed,unknown:row.unknown,lastSeen:new Date(row.last_seen).toISOString(),
+    }))};
+  }
   /** B integration tasks across users; only the separately authorized local admin routes call this. */
-  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number){
+  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number,userHash?:string){
     this.prune();
     const clauses:string[]=[],params:string[]=[];
     if(statusFilter){clauses.push('status=?');params.push(statusFilter);}
     if(query){clauses.push('(id=? OR request_id=? OR external_user_id=?)');params.push(query,query,query);}
+    if(userHash){clauses.push('user_hash=?');params.push(userHash);}
     const where=clauses.length?' WHERE '+clauses.join(' AND '):'';
     const total=(this.db.prepare('SELECT COUNT(*) AS n FROM institution_api_tasks'+where)
       .get(...params) as {n:number}).n;
@@ -219,7 +267,7 @@ export function institutionPrompt(day:string,msgSn:string){
   ].join('\n');
 }
 export class InstitutionIntegration {
-  private busy=false;
+  private readonly active=new Set<Promise<void>>();
   private closed=false;
   private readonly stop=new AbortController();
   private readonly cfg:InstitutionIntegrationConfig;
@@ -238,7 +286,7 @@ export class InstitutionIntegration {
   }
   create(userHash:string,requestId:string,day:string,msgSn:string,externalUserId:string){
     const created=this.tasks.create(this.cfg.clientId,userHash,requestId,day,msgSn,externalUserId);
-    if(created.created)this.kick();
+    if(created.created)this.pump();
     return {data:status(created.row),created:created.created};
   }
   get(userHash:string,id:string){
@@ -246,24 +294,40 @@ export class InstitutionIntegration {
     if(!row)throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
     return status(row);
   }
-  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number){
-    return this.tasks.listAdmin(statusFilter,query,offset);
+  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number,userHash?:string){
+    return this.tasks.listAdmin(statusFilter,query,offset,userHash);
+  }
+  groupsAdmin(query:string|undefined,offset:number){return this.tasks.groupsAdmin(query,offset);}
+  concurrencyStatus(){return {maxConcurrency:this.tasks.concurrency(),...this.tasks.queueCounts()};}
+  setConcurrency(n:InstitutionConcurrency){
+    this.tasks.setConcurrency(n);
+    // Increase capacity immediately; reductions do not terminate running sessions.
+    this.pump();
+    return this.concurrencyStatus();
   }
   detailAdmin(id:string){return this.tasks.detailAdmin(id);}
   usageAdmin(){return {...this.tasks.usageAdmin(),currentPlatformLabel:this.cfg.clientId};}
-  private kick(){
-    if(this.busy||this.closed)return;
-    this.busy=true;
-    void this.drain().finally(()=>{
-      this.busy=false;
-      if(!this.closed&&this.tasks.hasQueued())this.kick();
-    });
-  }
-  private async drain(){
-    while(!this.closed){
+  private pump(){
+    if(this.closed)return;
+    // Claims are synchronous and conditional in SQLite; each task has its own
+    // Promise, execution context and native OpenCode Session.
+    while(!this.closed&&this.active.size<this.tasks.concurrency()){
       const task=this.tasks.take();
       if(!task)break;
-      let accepted=false;
+      let job:Promise<void>;
+      job=this.runTask(task).catch(error=>{
+        if(!this.closed)this.tasks.finish(task.id,'UNKNOWN',null,
+          error instanceof AuthProblem?error.code:'INSTITUTION_WORKER_UNEXPECTED');
+      }).finally(()=>{
+        this.active.delete(job);
+        if(!this.closed)this.pump();
+      });
+      this.active.add(job);
+    }
+  }
+  private async runTask(task:TaskRow){
+    if(this.closed)return;
+    let accepted=false;
       let definiteFailure=false;
       try{
         const result=await this.deps.execution.run(task.id,async()=>{
@@ -337,7 +401,6 @@ export class InstitutionIntegration {
           this.tasks.finish(task.id,accepted&&!definiteFailure?'UNKNOWN':'FAILED',null,code);
         }
       }
-    }
   }
   close(){
     this.closed=true;this.stop.abort();
