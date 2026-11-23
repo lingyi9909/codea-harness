@@ -53,7 +53,7 @@ export function PageAnalyticsPage(){
       <div><small>WORKBENCH INSIGHTS</small><h1>页面访问统计</h1>
         <p>按子页面查看访问趋势和使用情况，统计结果不包含报文正文、手机号与操作内容。</p>
       </div>
-      <a href="/">返回智能工作台</a>
+      <nav className="analytics-admin-links" aria-label="系统管理"><a href="/config">场景配置</a><a href="/institution-tasks">接口任务管理</a><a href="/institution-tasks?view=access">接口接入情况</a><a href="/component-lab">组件测试</a><a href="/">返回工作台</a></nav>
     </header>
     <div className="analytics-toolbar"><div role="group" aria-label="统计日期范围">
       <button type="button" aria-pressed={days===7} className={days===7?'active':''} onClick={()=>setDays(7)}>最近 7 天</button>
