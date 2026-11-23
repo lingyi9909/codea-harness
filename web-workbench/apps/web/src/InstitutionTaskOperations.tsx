@@ -20,12 +20,12 @@ export function InstitutionConcurrencyControl({refresh,onForbidden}:{
 }){
   const [status,setStatus]=useState<InstitutionConcurrencyStatus|null>(null);
   const [selected,setSelected]=useState<InstitutionConcurrency>(3);
-  const [saving,setSaving]=useState(false);
+  const [saving,setSaving]=useState(false),[editing,setEditing]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState('');
   useEffect(()=>{
     let live=true;
     api.institutionConcurrency().then(result=>{
-      if(live){setStatus(result);if(!saving)setSelected(result.maxConcurrency);setError('');}
+      if(live){setStatus(result);if(!editing&&!saving)setSelected(result.maxConcurrency);setError('');}
     }).catch(e=>{
       if(!live)return;
       if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
@@ -39,7 +39,7 @@ export function InstitutionConcurrencyControl({refresh,onForbidden}:{
     setSaving(true);setNotice('');setError('');
     try{
       const result=await api.saveInstitutionConcurrency(selected);
-      setStatus(result);setSelected(result.maxConcurrency);
+      setStatus(result);setSelected(result.maxConcurrency);setEditing(false);
       setNotice('并发设置已保存，新的排队任务将按此上限执行。');
     }catch(e){
       if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
@@ -57,7 +57,7 @@ export function InstitutionConcurrencyControl({refresh,onForbidden}:{
     <div className="institution-operations-capacity-picker">
       <label htmlFor="institution-max-concurrency">最大并发任务数</label>
       <select id="institution-max-concurrency" value={selected} disabled={!status||saving}
-        onChange={e=>setSelected(Number(e.target.value) as InstitutionConcurrency)}>
+        onChange={e=>{setSelected(Number(e.target.value) as InstitutionConcurrency);setEditing(true);}}>
         {choices.map(n=><option key={n} value={n}>{n} 个任务</option>)}
       </select>
       <button type="button" disabled={!status||saving||selected===status.maxConcurrency}
