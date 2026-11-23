@@ -4,6 +4,14 @@ import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,Sce
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
+export type InstitutionTaskStatus='QUEUED'|'RUNNING'|'SUCCEEDED'|'FAILED'|'UNKNOWN';
+export type InstitutionAdminTask={
+  taskId:string;clientId:string;userHash:string;requestId:string;
+  day:string;msgSn:string|null;status:InstitutionTaskStatus;errorCode:string|null;
+  hasResult?:boolean;createdAt:string;updatedAt:string;
+};
+export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
+export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
 export class ApiError extends Error {
   readonly status:number;
   readonly code:string;
@@ -99,6 +107,13 @@ export class HarnessApi {
     return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
   }
   pageStats(days:7|30=7){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>(`/page-visits?days=${days}`);}
+  institutionTasks(status:InstitutionTaskStatus|'ALL'='ALL',q='',offset=0){
+    const params=new URLSearchParams({status,q,offset:String(offset)});
+    return this.request<InstitutionTaskPage>('/institution-tasks?'+params.toString());
+  }
+  institutionTask(id:string){
+    return this.request<InstitutionAdminTaskDetail>('/institution-tasks/'+encodeURIComponent(id));
+  }
   private pageVisitorId?:string;
   recordPageVisit(page:string){
     // Keep tracking identity in memory. Anonymous iframes must not write to
