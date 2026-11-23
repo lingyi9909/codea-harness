@@ -352,6 +352,7 @@ export function WorkbenchApp() {
       </>}
       {!onLan()&&<>
         <a className="side-link" href="/analytics"><span aria-hidden="true">▤</span> 访问统计</a>
+        <a className="side-link" href="/institution-tasks"><span aria-hidden="true">◷</span> 接口任务管理</a>
         <a className="side-link" href="/component-lab"><span aria-hidden="true">◇</span> 组件测试</a>
         <button type="button" className="side-link sidebar-settings" onClick={()=>window.location.assign('/config')}><span aria-hidden="true">⚙</span> 场景配置</button>
       </>}
