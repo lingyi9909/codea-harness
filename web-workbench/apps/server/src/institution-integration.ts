@@ -156,7 +156,7 @@ export class InstitutionTaskStore {
   usageAdmin(){
     this.prune();
     const rows=this.db.prepare(
-      "SELECT client_id,external_user_id,user_hash,COUNT(*) AS task_count,"+
+      "SELECT client_id,MAX(external_user_id) AS external_user_id,user_hash,COUNT(*) AS task_count,"+
       "MIN(created_at) AS first_seen,MAX(created_at) AS last_seen,"+
       "SUM(CASE WHEN status='SUCCEEDED' THEN 1 ELSE 0 END) AS succeeded "+
       "FROM institution_api_tasks GROUP BY client_id,user_hash "+
