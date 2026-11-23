@@ -421,10 +421,10 @@ export function registerInstitutionIntegration(app:FastifyInstance,
   // workspace login, and exact editor username in config-access.json.
   // The B-supplied X-Workbench-User-Id is not an administrator credential.
   const localProfile=new WorkspaceProfile(deps.workspace);
-  const authorizeAdmin=(req:FastifyRequest)=>{
+  const authorizeAdmin=(req:FastifyRequest,mutating=false)=>{
     if(!deps.auth.isLocal(req)||!deps.auth.origin(req))
       throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
-    const session=deps.auth.session(req);
+    const session=mutating?deps.auth.mutation(req):deps.auth.session(req);
     if(session.scope==='lan'||!session.profile||!localProfile.matches(session.profile.key))
       throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
     if(!deps.sceneConfig.canEdit(session.profile.name))
@@ -435,15 +435,43 @@ export function registerInstitutionIntegration(app:FastifyInstance,
     return reply.header('Cache-Control','no-store')
       .send({data:getManager().usageAdmin(),requestId:randomUUID()});
   });
-  app.get<{Querystring:{status?:string;q?:string;offset?:string}}>(ADMIN_ROOT,async(req,reply)=>{
+  app.get('/api/v1/institution-concurrency',async(req,reply)=>{
     authorizeAdmin(req);
-    const {status:state='ALL',q='',offset='0'}=req.query;
+    return reply.header('Cache-Control','no-store')
+      .send({data:getManager().concurrencyStatus(),requestId:randomUUID()});
+  });
+  app.patch<{Body:{maxConcurrency:number}}>('/api/v1/institution-concurrency',{
+    schema:{body:{type:'object',required:['maxConcurrency'],additionalProperties:false,
+      properties:{maxConcurrency:{type:'integer',enum:[3,5,10,15]}}}},
+  },async(req,reply)=>{
+    authorizeAdmin(req,true);
+    if(!validConcurrency(req.body.maxConcurrency))
+      throw new AuthProblem(400,'INSTITUTION_CONCURRENCY_INVALID');
+    return reply.header('Cache-Control','no-store')
+      .send({data:getManager().setConcurrency(req.body.maxConcurrency),requestId:randomUUID()});
+  });
+  const parseAdminOffset=(value:string)=>{
+    if(!/^[0-9]{1,5}$/.test(String(value))||Number(value)>10000)
+      throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
+    return Number(value);
+  };
+  app.get<{Querystring:{q?:string;offset?:string}}>(ADMIN_ROOT+'/users',async(req,reply)=>{
+    authorizeAdmin(req);
+    const {q='',offset='0'}=req.query;
+    if(q&&!validId(q))throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
+    return reply.header('Cache-Control','no-store')
+      .send({data:getManager().groupsAdmin(q||undefined,parseAdminOffset(offset)),requestId:randomUUID()});
+  });
+  app.get<{Querystring:{status?:string;q?:string;offset?:string;userHash?:string}}>(ADMIN_ROOT,async(req,reply)=>{
+    authorizeAdmin(req);
+    const {status:state='ALL',q='',offset='0',userHash}=req.query;
     if(state!=='ALL'&&!ADMIN_STATUSES.includes(state as TaskStatus))
       throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
-    if(q&&(!validId(q)||q.length>128)||!/^\d{1,5}$/.test(String(offset))||Number(offset)>10000)
+    if(q&&!validId(q)||userHash&&!/^[a-f0-9]{64}$/.test(userHash))
       throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
     return reply.header('Cache-Control','no-store')
-      .send({data:getManager().listAdmin(state==='ALL'?undefined:state as TaskStatus,q||undefined,Number(offset)),requestId:randomUUID()});
+      .send({data:getManager().listAdmin(state==='ALL'?undefined:state as TaskStatus,q||undefined,
+        parseAdminOffset(offset),userHash),requestId:randomUUID()});
   });
   app.get<{Params:{id:string}}>(ADMIN_ROOT+'/:id',async(req,reply)=>{
     authorizeAdmin(req);
