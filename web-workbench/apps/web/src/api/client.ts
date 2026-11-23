@@ -12,6 +12,13 @@ export type InstitutionAdminTask={
 };
 export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
 export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
+export type InstitutionConcurrency=3|5|10|15;
+export type InstitutionConcurrencyStatus={maxConcurrency:InstitutionConcurrency;queued:number;running:number};
+export type InstitutionUserGroup={
+  clientId:string;userHash:string;externalUserId:string|null;
+  total:number;queued:number;running:number;succeeded:number;failed:number;unknown:number;lastSeen:string;
+};
+export type InstitutionUserGroupPage={total:number;offset:number;limit:number;items:InstitutionUserGroup[]};
 export type InstitutionAccessOverview={
   authMode:'NONE';platformIdentityVerified:false;platformAllowlistEnabled:false;
   currentPlatformLabel:string;retentionDays:number;
@@ -113,9 +120,22 @@ export class HarnessApi {
     return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
   }
   pageStats(days:7|30=7){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>(`/page-visits?days=${days}`);}
-  institutionTasks(status:InstitutionTaskStatus|'ALL'='ALL',q='',offset=0){
+  institutionTasks(status:InstitutionTaskStatus|'ALL'='ALL',q='',offset=0,userHash?:string){
     const params=new URLSearchParams({status,q,offset:String(offset)});
+    if(userHash)params.set('userHash',userHash);
     return this.request<InstitutionTaskPage>('/institution-tasks?'+params.toString());
+  }
+  institutionTaskGroups(q='',offset=0){
+    const params=new URLSearchParams({q,offset:String(offset)});
+    return this.request<InstitutionUserGroupPage>('/institution-tasks/users?'+params.toString());
+  }
+  institutionConcurrency(){
+    return this.request<InstitutionConcurrencyStatus>('/institution-concurrency');
+  }
+  saveInstitutionConcurrency(maxConcurrency:InstitutionConcurrency){
+    return this.request<InstitutionConcurrencyStatus>('/institution-concurrency',{
+      method:'PATCH',body:JSON.stringify({maxConcurrency}),
+    });
   }
   institutionTask(id:string){
     return this.request<InstitutionAdminTaskDetail>('/institution-tasks/'+encodeURIComponent(id));
