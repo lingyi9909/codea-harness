@@ -1,0 +1,194 @@
+import {useEffect,useState} from 'react';
+import Markdown from 'react-markdown';
+import {api,ApiError,type InstitutionAdminTask,type InstitutionAdminTaskDetail,
+  type InstitutionConcurrency,type InstitutionConcurrencyStatus,
+  type InstitutionTaskPage,type InstitutionUserGroup,type InstitutionUserGroupPage} from './api/client.ts';
+import './institution-task-operations.css';
+
+const choices=[3,5,10,15] as const;
+const labels:Record<InstitutionAdminTask['status'],string>={
+  QUEUED:'排队中',RUNNING:'执行中',SUCCEEDED:'已完成',FAILED:'失败',UNKNOWN:'未知',
+};
+const displayTime=(s:string)=>new Date(s).toLocaleString('zh-CN',{
+  timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',
+  hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,
+});
+const errorText=(e:unknown)=>e instanceof Error?e.message:'请求失败';
+
+export function InstitutionConcurrencyControl({refresh,onForbidden}:{
+  refresh:number;onForbidden:()=>void;
+}){
+  const [status,setStatus]=useState<InstitutionConcurrencyStatus|null>(null);
+  const [selected,setSelected]=useState<InstitutionConcurrency>(3);
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState(''),[notice,setNotice]=useState('');
+  useEffect(()=>{
+    let live=true;
+    api.institutionConcurrency().then(result=>{
+      if(live){setStatus(result);if(!saving)setSelected(result.maxConcurrency);setError('');}
+    }).catch(e=>{
+      if(!live)return;
+      if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
+      setError(errorText(e));
+    });
+    return()=>{live=false;};
+  // Refresh requests only reflect server state, they never submit configuration.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[refresh]);
+  const save=async()=>{
+    setSaving(true);setNotice('');setError('');
+    try{
+      const result=await api.saveInstitutionConcurrency(selected);
+      setStatus(result);setSelected(result.maxConcurrency);
+      setNotice('并发设置已保存，新的排队任务将按此上限执行。');
+    }catch(e){
+      if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
+      setError(errorText(e));
+    }finally{setSaving(false);}
+  };
+  return <section className="institution-operations-capacity" aria-label="任务并发配置">
+    <div className="institution-operations-capacity-title">
+      <div><strong>任务并发配置</strong><p>最多同时执行的机构报文排查任务数。设置保存在 C 服务器，可随时调整。</p></div>
+      <div className="institution-operations-load">
+        <span>运行中 <strong>{status?.running??'—'}</strong></span>
+        <span>排队中 <strong>{status?.queued??'—'}</strong></span>
+      </div>
+    </div>
+    <div className="institution-operations-capacity-picker">
+      <label htmlFor="institution-max-concurrency">最大并发任务数</label>
+      <select id="institution-max-concurrency" value={selected} disabled={!status||saving}
+        onChange={e=>setSelected(Number(e.target.value) as InstitutionConcurrency)}>
+        {choices.map(n=><option key={n} value={n}>{n} 个任务</option>)}
+      </select>
+      <button type="button" disabled={!status||saving||selected===status.maxConcurrency}
+        onClick={()=>void save()}>{saving?'保存中…':'保存配置'}</button>
+      <small>当前生效：{status?.maxConcurrency??'—'} 个</small>
+    </div>
+    {error&&<p role="alert" className="institution-tasks-error">{error}</p>}
+    {notice&&<p role="status" className="institution-operations-notice">{notice}</p>}
+    <p className="institution-operations-hint">调低上限不会强行停止已运行任务，只限制后续新任务启动。15 并发需确认内网模型、DBHub 和数据库能够承受相应压力。</p>
+  </section>;
+}
+
+export function InstitutionUserGroupsView({refresh,onForbidden}:{
+  refresh:number;onForbidden:()=>void;
+}){
+  const [q,setQ]=useState(''),[applied,setApplied]=useState('');
+  const [offset,setOffset]=useState(0),[groups,setGroups]=useState<InstitutionUserGroupPage|null>(null);
+  const [selected,setSelected]=useState<InstitutionUserGroup|null>(null),[tasksOffset,setTasksOffset]=useState(0);
+  const [tasks,setTasks]=useState<InstitutionTaskPage|null>(null);
+  const [taskDetail,setTaskDetail]=useState<InstitutionAdminTaskDetail|null>(null);
+  const [error,setError]=useState(''),[taskError,setTaskError]=useState('');
+  const [openedTask,setOpenedTask]=useState('');
+  useEffect(()=>{
+    let live=true;
+    api.institutionTaskGroups(applied,offset).then(data=>{
+      if(live){setGroups(data);setError('');}
+    }).catch(e=>{
+      if(!live)return;
+      if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
+      setError(errorText(e));
+    });
+    return()=>{live=false;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[applied,offset,refresh]);
+  useEffect(()=>{
+    if(!selected)return;
+    let live=true;
+    api.institutionTasks('ALL','',tasksOffset,selected.userHash).then(data=>{
+      if(live){setTasks(data);setTaskError('');}
+    }).catch(e=>{
+      if(!live)return;
+      if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
+      setTaskError(errorText(e));
+    });
+    return()=>{live=false;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[selected?.userHash,tasksOffset,refresh]);
+  useEffect(()=>{
+    if(!openedTask)return;
+    let live=true;
+    api.institutionTask(openedTask).then(data=>{
+      if(live){setTaskDetail(data);setTaskError('');}
+    }).catch(e=>{
+      if(!live)return;
+      if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
+      setTaskError(errorText(e));
+    });
+    return()=>{live=false;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[openedTask,refresh]);
+  return <section className="institution-user-groups" aria-label="按业务用户聚合任务">
+    <div className="institution-user-groups-heading">
+      <div><h2>按业务用户聚合</h2><p>以请求头 X-Workbench-User-Id 所属的任务标识分组，不把不同用户的任务混合。聚合仅用于查看，不代表用户经过鉴权。</p></div>
+      <form onSubmit={e=>{e.preventDefault();setApplied(q.trim());setOffset(0);}}>
+        <input aria-label="搜索业务用户" value={q} maxLength={128} onChange={e=>setQ(e.target.value)}
+          placeholder="例如 customer-001"/>
+        <button type="submit">搜索</button>
+        {applied&&<button type="button" className="institution-operations-secondary"
+          onClick={()=>{setQ('');setApplied('');setOffset(0);}}>清除</button>}
+      </form>
+    </div>
+    {error&&<p className="institution-tasks-error" role="alert">{error}</p>}
+    <div className="institution-user-groups-layout">
+      <div className="institution-tasks-list institution-user-groups-list">
+        <div className="institution-tasks-table-wrap"><table>
+          <thead><tr><th>业务用户 ID</th><th>任务总数</th><th>运行</th><th>排队</th><th>成功</th><th>失败</th><th>未知</th><th>操作</th></tr></thead>
+          <tbody>{groups?.items.map(group=><tr key={group.clientId+':'+group.userHash}
+            className={selected?.userHash===group.userHash?'selected':''}>
+            <td><strong title={group.externalUserId??group.userHash}>{group.externalUserId??'历史用户'}</strong>
+              <small>{group.clientId}</small></td>
+            <td>{group.total}</td><td>{group.running}</td><td>{group.queued}</td>
+            <td>{group.succeeded}</td><td>{group.failed}</td><td>{group.unknown}</td>
+            <td><button type="button" className="institution-tasks-open" onClick={()=>{
+              setSelected(group);setTasksOffset(0);setTasks(null);setOpenedTask('');setTaskDetail(null);
+            }}>查看任务</button></td>
+          </tr>)}</tbody>
+        </table></div>
+        {groups?.items.length===0&&<p className="institution-tasks-empty">没有符合条件的业务用户任务。</p>}
+        {!groups&&!error&&<p className="institution-tasks-empty">正在获取业务用户任务统计…</p>}
+        <div className="institution-tasks-pager">
+          <span>共 {groups?.total??'—'} 个用户</span>
+          <button disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-50))}>上一页</button>
+          <span>第 {Math.floor(offset/50)+1} 页</span>
+          <button disabled={!groups||offset+50>=groups.total} onClick={()=>setOffset(offset+50)}>下一页</button>
+        </div>
+      </div>
+      <section className="institution-tasks-detail institution-user-group-details" aria-label="选中用户的任务明细">
+        {!selected?<p className="institution-tasks-empty">点击左侧某个业务用户的「查看任务」，查看其排查任务及最终结论。</p>:<>
+          <header><h2>业务用户：{selected.externalUserId??'历史用户（仅保存摘要）'}</h2>
+            <span>{tasks?.total??selected.total} 条任务</span></header>
+          {taskError&&<p className="institution-tasks-error" role="alert">{taskError}</p>}
+          <div className="institution-tasks-table-wrap"><table>
+            <thead><tr><th>请求号</th><th>日期</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+            <tbody>{tasks?.items.map(task=><tr key={task.taskId}>
+              <td title={task.requestId}>{task.requestId}</td>
+              <td>{task.day}</td>
+              <td><span className={'institution-task-status '+task.status.toLowerCase()}>{labels[task.status]}</span></td>
+              <td>{displayTime(task.createdAt)}</td>
+              <td><button type="button" className="institution-tasks-open" onClick={()=>{
+                setOpenedTask(task.taskId);setTaskDetail(null);
+              }}>查看结果</button></td>
+            </tr>)}</tbody>
+          </table></div>
+          <div className="institution-tasks-pager">
+            <button disabled={tasksOffset===0} onClick={()=>{setTasksOffset(Math.max(0,tasksOffset-50));setOpenedTask('');setTaskDetail(null);}}>上一页</button>
+            <span>第 {Math.floor(tasksOffset/50)+1} 页</span>
+            <button disabled={!tasks||tasksOffset+50>=tasks.total} onClick={()=>{setTasksOffset(tasksOffset+50);setOpenedTask('');setTaskDetail(null);}}>下一页</button>
+          </div>
+          {openedTask&&<section className="institution-user-group-result">
+            <h3>任务结果 <code>{openedTask}</code></h3>
+            {!taskDetail?<p>正在获取任务结果…</p>:<>
+              <p>状态：<strong>{labels[taskDetail.status]}</strong></p>
+              {taskDetail.errorCode&&<p className="institution-tasks-error">错误：{taskDetail.errorCode}</p>}
+              {taskDetail.result?.summary?
+                <div className="institution-tasks-markdown"><Markdown>{taskDetail.result.summary}</Markdown></div>:
+                <p>{taskDetail.status==='QUEUED'||taskDetail.status==='RUNNING'?
+                  '任务尚未完成，页面每 5 秒更新。':'该任务没有最终结论。'}</p>}
+            </>}
+          </section>}
+        </>}
+      </section>
+    </div>
+  </section>;
+}
