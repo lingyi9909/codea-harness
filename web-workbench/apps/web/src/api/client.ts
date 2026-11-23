@@ -6,12 +6,18 @@ import type { components } from '../../../../packages/contracts/src/api.generate
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
 export type InstitutionTaskStatus='QUEUED'|'RUNNING'|'SUCCEEDED'|'FAILED'|'UNKNOWN';
 export type InstitutionAdminTask={
-  taskId:string;clientId:string;userHash:string;requestId:string;
+  taskId:string;clientId:string;userHash:string;externalUserId:string|null;requestId:string;
   day:string;msgSn:string|null;status:InstitutionTaskStatus;errorCode:string|null;
   hasResult?:boolean;createdAt:string;updatedAt:string;
 };
 export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
 export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
+export type InstitutionAccessOverview={
+  authMode:'NONE';platformIdentityVerified:false;platformAllowlistEnabled:false;
+  currentPlatformLabel:string;retentionDays:number;
+  users:Array<{clientId:string;externalUserId:string|null;userHash:string;
+    taskCount:number;successCount:number;firstSeen:string;lastSeen:string}>;
+};
 export class ApiError extends Error {
   readonly status:number;
   readonly code:string;
@@ -114,6 +120,7 @@ export class HarnessApi {
   institutionTask(id:string){
     return this.request<InstitutionAdminTaskDetail>('/institution-tasks/'+encodeURIComponent(id));
   }
+  institutionAccessOverview(){return this.request<InstitutionAccessOverview>('/institution-access');}
   private pageVisitorId?:string;
   recordPageVisit(page:string){
     // Keep tracking identity in memory. Anonymous iframes must not write to
