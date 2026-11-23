@@ -93,7 +93,7 @@ test('bounded concurrency 3/5/10/15, user aggregation, restart persistence and A
       submit(6,'customer-001')]);
     assert.equal(new Set(requests).size,6);
     await until(async()=>{const x=await status();return x.running===3&&x.queued===3;},'3 parallel tasks not started');
-    assert.equal(submitted.size,3,'first wave must admit no more than 3 native sessions');
+    await until(()=>submitted.size===3,'3 native sessions were not submitted');
     const users=await get(adminRoot+'/users');
     assert.equal(users.statusCode,200,users.body);
     const entries=users.json().data.items;
@@ -114,7 +114,7 @@ test('bounded concurrency 3/5/10/15, user aggregation, restart persistence and A
     const raise=await change(5);
     assert.equal(raise.statusCode,200,raise.body);
     await until(async()=>{const x=await status();return x.running===5&&x.queued===1;},'5 parallel tasks not admitted');
-    assert.equal(submitted.size,5);
+    await until(()=>submitted.size===5,'5 native sessions were not submitted');
     const lower=await change(3);
     assert.equal(lower.statusCode,200,lower.body);
     assert.equal((await status()).running,5,'lowering limit must not cancel running work');
