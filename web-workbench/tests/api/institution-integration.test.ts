@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -162,6 +162,54 @@ test('B creates and reads only its own institution result; no extra privileged A
     assert.equal(JSON.stringify(final).includes('native-'),false);
     assert.deepEqual(calls.created?.permissions,singleServicePermissions);
     assert.equal((calls.created?.metadata as Record<string,string>).harnessScenario,'institution-message-inspection');
+
+    // Admin task monitoring is independent of the public keyless B API. A B
+    // caller cannot self-assert admin via X-Workbench-User-Id.
+    const noSession=await app.inject({url:'/api/v1/institution-tasks',remoteAddress:'127.0.0.1',
+      headers:{host:'127.0.0.1:4176','x-workbench-user-id':'zhangzhanhui'}});
+    assert.equal(noSession.statusCode,401,noSession.body);
+    const adminLogin=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
+      remoteAddress:'127.0.0.1',
+      headers:{host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'},
+      payload:{name:'zhangzhanhui',phone:'13800000000'}});
+    assert.equal(adminLogin.statusCode,200,adminLogin.body);
+    const adminCookie=String(adminLogin.headers['set-cookie']).split(';')[0];
+    const adminHeaders={host:'127.0.0.1:4176',cookie:adminCookie};
+    const remoteAdmin=await app.inject({url:'/api/v1/institution-tasks',
+      remoteAddress:'10.10.20.30',headers:{...adminHeaders,host:'10.10.20.30:4176'}});
+    assert.equal(remoteAdmin.statusCode,403,remoteAdmin.body);
+    const remotePage=await app.inject({url:'/institution-tasks',remoteAddress:'10.10.20.30',
+      headers:{host:'10.10.20.30:4176'}});
+    assert.equal(remotePage.statusCode,403,remotePage.body);
+    const adminList=await app.inject({url:'/api/v1/institution-tasks?status=SUCCEEDED&q=r1&offset=0',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(adminList.statusCode,200,adminList.body);
+    assert.equal(adminList.json().data.total,1);
+    assert.equal(adminList.json().data.items[0].taskId,taskId);
+    assert.equal(adminList.json().data.items[0].status,'SUCCEEDED');
+    assert.equal(adminList.json().data.items[0].hasResult,true);
+    assert.equal(JSON.stringify(adminList.json()).includes('最终排查结论'),false,
+      'listing must never expose full report content');
+    const detail=await app.inject({url:'/api/v1/institution-tasks/'+taskId,
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(detail.statusCode,200,detail.body);
+    assert.equal(detail.json().data.result.summary,'报文 0000123 的最终排查结论');
+    assert.equal(JSON.stringify(detail.json()).includes('native-'),false);
+    const invalidFilter=await app.inject({url:'/api/v1/institution-tasks?status=ANYTHING',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(invalidFilter.statusCode,400,invalidFilter.body);
+    const invalidDetail=await app.inject({url:'/api/v1/institution-tasks/not-a-task',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(invalidDetail.statusCode,404,invalidDetail.body);
+    // Revoking the same configured editor permission takes effect at once.
+    await writeFile(join(root,'.workbench','config-access.json'),
+      JSON.stringify({version:1,editors:['another-admin']}));
+    const revoked=await app.inject({url:'/api/v1/institution-tasks',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(revoked.statusCode,403,revoked.body);
+    const revokedDetail=await app.inject({url:'/api/v1/institution-tasks/'+taskId,
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(revokedDetail.statusCode,403,revokedDetail.body);
     for(const forbidden of ['/config','/analytics','/api/v1/scene-access']){
       const response:InjectResult=
         await app.inject({url:forbidden,remoteAddress:'10.10.20.30',headers});
