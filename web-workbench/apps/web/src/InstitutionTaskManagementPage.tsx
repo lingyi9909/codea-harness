@@ -16,15 +16,21 @@ const errorText=(e:unknown)=>e instanceof Error?e.message:'查询失败';
 const active=(value:InstitutionTaskStatus)=>value==='QUEUED'||value==='RUNNING';
 const accessView=new URLSearchParams(window.location.search).get('view')==='access';
 
-function AccessOverviewView({refresh}:{refresh:number}){
+function AccessOverviewView({refresh,onForbidden}:{refresh:number;onForbidden:()=>void}){
   const [overview,setOverview]=useState<InstitutionAccessOverview|null>(null);
   const [error,setError]=useState('');
   useEffect(()=>{
     let live=true;
     api.institutionAccessOverview().then(data=>{if(live){setOverview(data);setError('');}})
-      .catch(e=>{if(live)setError(errorText(e));});
+      .catch(e=>{
+        if(!live)return;
+        if(e instanceof ApiError&&(e.status===403||e.status===401)){
+          setOverview(null);onForbidden();return;
+        }
+        setError(errorText(e));
+      });
     return()=>{live=false;};
-  },[refresh]);
+  },[refresh,onForbidden]);
   return <section className="institution-access-section" aria-label="机构接口接入情况">
     <div className="institution-access-warning">
       <strong>当前接口：无应用层鉴权 · 无 IP 白名单</strong>
@@ -156,7 +162,7 @@ export function InstitutionTaskManagementPage(){
         className={accessView?'selected':''}>接口接入情况</a>
       <button type="button" onClick={()=>setRefresh(n=>n+1)}>刷新</button>
     </div>
-    {accessView?<AccessOverviewView refresh={refresh}/>:<>
+    {accessView?<AccessOverviewView refresh={refresh} onForbidden={()=>setMode('denied')}/>:<>
     <div className="institution-tasks-toolbar">
       <form onSubmit={e=>{e.preventDefault();setAppliedQuery(query.trim());setOffset(0);}}>
         <label htmlFor="institution-task-search">任务 ID / 请求号 / 业务用户标识</label>
