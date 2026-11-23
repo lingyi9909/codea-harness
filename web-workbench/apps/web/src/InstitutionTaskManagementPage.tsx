@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import Markdown from 'react-markdown';
-import {api,ApiError,type InstitutionAdminTaskDetail,type InstitutionTaskPage,type InstitutionTaskStatus} from './api/client.ts';
+import {api,ApiError,type InstitutionAccessOverview,type InstitutionAdminTaskDetail,type InstitutionTaskPage,type InstitutionTaskStatus} from './api/client.ts';
 import {ProfileLogin} from './ProfileLogin.tsx';
 import './institution-tasks.css';
 
@@ -14,6 +14,48 @@ const formatTime=(value:string)=>new Date(value).toLocaleString('zh-CN',{
 });
 const errorText=(e:unknown)=>e instanceof Error?e.message:'查询失败';
 const active=(value:InstitutionTaskStatus)=>value==='QUEUED'||value==='RUNNING';
+const accessView=new URLSearchParams(window.location.search).get('view')==='access';
+
+function AccessOverviewView({refresh}:{refresh:number}){
+  const [overview,setOverview]=useState<InstitutionAccessOverview|null>(null);
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    let live=true;
+    api.institutionAccessOverview().then(data=>{if(live){setOverview(data);setError('');}})
+      .catch(e=>{if(live)setError(errorText(e));});
+    return()=>{live=false;};
+  },[refresh]);
+  return <section className="institution-access-section" aria-label="机构接口接入情况">
+    <div className="institution-access-warning">
+      <strong>当前接口：无应用层鉴权 · 无 IP 白名单</strong>
+      <p>尚未向任何平台分配可验证的调用凭证。所有网络上能够连接 C 服务的客户端均可请求机构排查接口。下表是接口调用时提供的用户标识记录，<b>不是已授权平台或人员名单</b>。</p>
+      <p>来源平台“{overview?.currentPlatformLabel??'platform-b'}”来自 C 的配置标签，不代表服务端已确认请求确实来自平台 B。</p>
+    </div>
+    {error&&<p className="institution-tasks-error" role="alert">{error}</p>}
+    <div className="institution-access-summary">
+      <div><span>访问控制模式</span><strong>开放直连（不鉴权）</strong></div>
+      <div><span>平台身份验证</span><strong>未启用</strong></div>
+      <div><span>平台访问白名单</span><strong>未配置</strong></div>
+      <div><span>已观察到的业务用户</span><strong>{overview?.users.length??'—'}</strong></div>
+    </div>
+    <section className="institution-tasks-list institution-access-table" aria-label="已观察到的接口调用用户">
+      <h2>调用记录中的业务用户</h2>
+      <p>从最近 7 天已保存的任务中统计，最多显示 100 个不同用户。只记录客户端主动声明的信息；不等于认证结果。</p>
+      <div className="institution-tasks-table-wrap"><table>
+        <thead><tr><th>来源标签</th><th>X-Workbench-User-Id</th><th>任务数量</th><th>成功数量</th><th>最近提交时间</th></tr></thead>
+        <tbody>{overview?.users.map(row=><tr key={row.clientId+':'+row.userHash}>
+          <td>{row.clientId}</td>
+          <td><strong>{row.externalUserId??'历史记录未保存原值'}</strong>
+            {!row.externalUserId&&<small>摘要 {row.userHash}…，不可逆向恢复</small>}
+          </td>
+          <td>{row.taskCount}</td><td>{row.successCount}</td><td>{formatTime(row.lastSeen)}</td>
+        </tr>)}</tbody>
+      </table></div>
+      {overview?.users.length===0&&<p className="institution-tasks-empty">最近 7 天暂无 API 任务调用记录。</p>}
+      {!overview&&!error&&<p className="institution-tasks-empty">正在加载接口接入情况…</p>}
+    </section>
+  </section>;
+}
 
 export function InstitutionTaskManagementPage(){
   const [mode,setMode]=useState<'loading'|'profile'|'pair'|'ready'|'denied'|'error'>('loading');
@@ -55,7 +97,7 @@ export function InstitutionTaskManagementPage(){
   },[mode]);
 
   useEffect(()=>{
-    if(mode!=='ready')return;
+    if(mode!=='ready'||accessView)return;
     let live=true;
     setLoading(true);
     api.institutionTasks(filter,appliedQuery,offset).then(data=>{
@@ -70,7 +112,7 @@ export function InstitutionTaskManagementPage(){
   },[mode,filter,appliedQuery,offset,refresh]);
 
   useEffect(()=>{
-    if(mode!=='ready'||!selectedId)return;
+    if(mode!=='ready'||accessView||!selectedId)return;
     let live=true;
     api.institutionTask(selectedId).then(data=>{
       if(live){setDetail(data);setDetailError('');}
@@ -102,15 +144,24 @@ export function InstitutionTaskManagementPage(){
 
   return <main className="institution-tasks-page">
     <header className="institution-tasks-header">
-      <div><small>INSTITUTION API OPERATIONS</small><h1>接口任务管理</h1>
-        <p>集中查看平台 B 通过接口创建的机构报文排查任务、执行状态和最终返回结论。仅本机配置管理员可查看。</p></div>
-      <nav aria-label="管理页面导航"><a href="/config">场景配置</a><a href="/">返回工作台</a></nav>
+      <div><small>SYSTEM ADMINISTRATION</small><h1>{accessView?'接口接入情况':'接口任务管理'}</h1>
+        <p>{accessView?'查看机构 API 的开放策略与实际提交的业务用户标识（非授权名单）。':
+          '集中查看接口创建的排查任务、执行状态和最终返回结论。仅本机配置管理员可查看。'}</p></div>
+      <nav aria-label="管理页面导航"><a href="/config">场景配置</a><a href="/analytics">访问统计</a><a href="/">返回工作台</a></nav>
     </header>
+    <div className="institution-tasks-tabs" role="navigation" aria-label="接口管理导航">
+      <a href="/institution-tasks" aria-current={!accessView?'page':undefined}
+        className={!accessView?'selected':''}>任务记录</a>
+      <a href="/institution-tasks?view=access" aria-current={accessView?'page':undefined}
+        className={accessView?'selected':''}>接口接入情况</a>
+      <button type="button" onClick={()=>setRefresh(n=>n+1)}>刷新</button>
+    </div>
+    {accessView?<AccessOverviewView refresh={refresh}/>:<>
     <div className="institution-tasks-toolbar">
       <form onSubmit={e=>{e.preventDefault();setAppliedQuery(query.trim());setOffset(0);}}>
-        <label htmlFor="institution-task-search">任务 ID / 请求号</label>
+        <label htmlFor="institution-task-search">任务 ID / 请求号 / 业务用户标识</label>
         <input id="institution-task-search" type="search" value={query} onChange={e=>setQuery(e.target.value)}
-          maxLength={128} placeholder="输入完整任务 ID 或 requestId"/>
+          maxLength={128} placeholder="任务 ID、requestId 或 customer-001"/>
         <button type="submit">查询</button>
         {(query||appliedQuery)&&<button type="button" className="institution-tasks-secondary" onClick={()=>{
           setQuery('');setAppliedQuery('');setOffset(0);
@@ -131,10 +182,11 @@ export function InstitutionTaskManagementPage(){
     <div className="institution-tasks-layout">
       <section className="institution-tasks-list" aria-label="接口任务列表">
         <div className="institution-tasks-table-wrap">
-          <table><thead><tr><th>任务 / 请求号</th><th>排查日期</th><th>执行状态</th><th>创建时间</th><th>操作</th></tr></thead>
+          <table><thead><tr><th>任务 / 请求号</th><th>业务用户</th><th>排查日期</th><th>执行状态</th><th>创建时间</th><th>操作</th></tr></thead>
             <tbody>{page?.items.map(task=><tr key={task.taskId} className={selectedId===task.taskId?'selected':''}>
               <td><strong title={task.taskId}>{task.taskId.slice(0,8)}…</strong>
                 <small title={task.requestId}>{task.requestId}</small></td>
+              <td title={task.externalUserId??'旧记录仅保存了摘要'}>{task.externalUserId??'旧记录'}</td>
               <td>{task.day}</td>
               <td><span className={'institution-task-status '+task.status.toLowerCase()}>
                 {statusLabels[task.status]}</span></td>
@@ -163,6 +215,7 @@ export function InstitutionTaskManagementPage(){
               <span>任务 ID</span><code>{detail.taskId}</code>
               <span>来源系统</span><span>{detail.clientId}</span>
               <span>请求号</span><span>{detail.requestId}</span>
+              <span>业务用户 ID</span><span>{detail.externalUserId??'历史记录仅保存摘要'}</span>
               <span>用户标识摘要</span><span>{detail.userHash}…</span>
               <span>排查日期</span><span>{detail.day}</span>
               <span>报文编号</span><span>{detail.msgSn??'已清理（任务结束后不保留）'}</span>
@@ -180,5 +233,6 @@ export function InstitutionTaskManagementPage(){
         </>}
       </section>
     </div>
+    </>}
   </main>;
 }
