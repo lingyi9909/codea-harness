@@ -58,6 +58,8 @@ export function WorkbenchApp() {
     return Object.hasOwn(scenes,saved)&&(!onLan()||saved!=='settings')?saved as Scene:'home';
   });
   const [expandedGroup,setExpandedGroup]=useState<ScenarioGroup|null>(()=>groupForScene(scene));
+  const [adminVisible,setAdminVisible]=useState(false);
+  const [adminExpanded,setAdminExpanded]=useState(true);
   const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
   const [chatDirectory,setChatDirectory]=useState('');
   // One model selection for all OpenCode chats (home, investigations, analytics).
@@ -69,6 +71,15 @@ export function WorkbenchApp() {
     if(globalModel)localStorage.setItem(globalModelKey,JSON.stringify(globalModel));
     else localStorage.removeItem(globalModelKey);
   },[globalModel]);
+  // Never infer administrator rights from localhost alone. The backend
+  // checks the same config-access.json editor ACL used for configuration writes.
+  useEffect(()=>{
+    if(!bootstrap||onLan()){setAdminVisible(false);return;}
+    let live=true;setAdminVisible(false);
+    api.accessSettings().then(()=>{if(live)setAdminVisible(true);})
+      .catch(()=>{if(live)setAdminVisible(false);});
+    return()=>{live=false;};
+  },[bootstrap,connectionAttempt]);
   useEffect(()=>{
     if(!bootstrap)return;
     let live=true;setSceneModelConfig(null);
@@ -343,18 +354,28 @@ export function WorkbenchApp() {
           </div>}
         </div>)}
         <button className="side-link mobile-history-link" onClick={()=>openChat('history')}><span aria-hidden="true">▤</span>历史对话</button>
+        {adminVisible&&<div className="scenario-group admin-group" role="group" aria-label="系统管理">
+          <div className="side-section">管理功能</div>
+          <button type="button" className={'side-link scenario-parent '+(adminExpanded?'expanded':'')}
+            aria-expanded={adminExpanded} aria-controls="system-admin-pages"
+            onClick={()=>setAdminExpanded(open=>!open)}>
+            <span className="scenario-icon admin" aria-hidden="true">⚙</span>系统管理
+            <span className="scenario-caret" aria-hidden="true">{adminExpanded?'⌄':'›'}</span>
+          </button>
+          {adminExpanded&&<div className="scenario-children admin-children" id="system-admin-pages" role="group" aria-label="系统管理子页面">
+            <a className="side-link scenario-child" href="/config"><span className="scenario-child-mark" aria-hidden="true">·</span>场景配置</a>
+            <a className="side-link scenario-child" href="/institution-tasks"><span className="scenario-child-mark" aria-hidden="true">·</span>接口任务管理</a>
+            <a className="side-link scenario-child" href="/institution-tasks?view=access"><span className="scenario-child-mark" aria-hidden="true">·</span>接口接入情况</a>
+            <a className="side-link scenario-child" href="/analytics"><span className="scenario-child-mark" aria-hidden="true">·</span>访问统计</a>
+            <a className="side-link scenario-child" href="/component-lab"><span className="scenario-child-mark" aria-hidden="true">·</span>组件测试</a>
+          </div>}
+        </div>}
       </nav>
       <div className="side-section history-heading">最近对话 <button title="查看完整对话历史" onClick={()=>openChat('history')}>全部</button></div>
       <SidebarChatHistory onSelect={id=>openChat('select',id)} onViewAll={()=>openChat('history')}/>
       {(tasks.length>0||selected||scene==='review')&&<>
         <div className="side-section task-history-heading">Review 任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
         <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
-      </>}
-      {!onLan()&&<>
-        <a className="side-link" href="/analytics"><span aria-hidden="true">▤</span> 访问统计</a>
-        <a className="side-link" href="/institution-tasks"><span aria-hidden="true">◷</span> 接口任务管理</a>
-        <a className="side-link" href="/component-lab"><span aria-hidden="true">◇</span> 组件测试</a>
-        <button type="button" className="side-link sidebar-settings" onClick={()=>window.location.assign('/config')}><span aria-hidden="true">⚙</span> 场景配置</button>
       </>}
       <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
         <button aria-label="退出登录" disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>
