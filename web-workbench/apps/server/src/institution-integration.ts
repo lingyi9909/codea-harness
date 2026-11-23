@@ -29,7 +29,7 @@ const DIGEST=(s:string)=>createHash('sha256').update(s).digest('hex');
 type TaskStatus='QUEUED'|'RUNNING'|'SUCCEEDED'|'FAILED'|'UNKNOWN';
 type TaskRow={
   id:string;client_id:string;user_hash:string;request_id:string;payload_hash:string;
-  day:string;msg_sn:string;status:TaskStatus;session_id:string|null;
+  day:string;msg_sn:string;external_user_id:string|null;status:TaskStatus;session_id:string|null;
   result_text:string|null;error_code:string|null;created_at:number;updated_at:number;
 };
 export type InstitutionIntegrationConfig={
@@ -80,10 +80,14 @@ export class InstitutionTaskStore {
       "CREATE TABLE IF NOT EXISTS institution_api_tasks ("+
       "id TEXT PRIMARY KEY,client_id TEXT NOT NULL,user_hash TEXT NOT NULL,"+
       "request_id TEXT NOT NULL,payload_hash TEXT NOT NULL,day TEXT NOT NULL,msg_sn TEXT NOT NULL,"+
-      "status TEXT NOT NULL,session_id TEXT,result_text TEXT,error_code TEXT,"+
+      "status TEXT NOT NULL,session_id TEXT,result_text TEXT,error_code TEXT,external_user_id TEXT,"+
       "created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,"+
       "UNIQUE(client_id,user_hash,request_id));"+
       "CREATE INDEX IF NOT EXISTS ix_institution_api_task_status ON institution_api_tasks(status,created_at);");
+    // Preserve all prior tasks. Their hashed user IDs are irreversible.
+    const columns=this.db.prepare("PRAGMA table_info(institution_api_tasks)").all() as Array<{name:string}>;
+    if(!columns.some(c=>c.name==='external_user_id'))
+      this.db.exec("ALTER TABLE institution_api_tasks ADD COLUMN external_user_id TEXT");
     // Crashes or service restarts must not silently replay model/tool actions.
     // The native session might still have run, so never assert FAILED/SUCCEEDED.
     this.db.prepare("UPDATE institution_api_tasks SET status='UNKNOWN',error_code='PROCESS_RESTARTED',updated_at=?"+
@@ -93,15 +97,15 @@ export class InstitutionTaskStore {
   private prune(){
     this.db.prepare('DELETE FROM institution_api_tasks WHERE created_at<?').run(Date.now()-RETENTION_MS);
   }
-  create(clientId:string,userHash:string,requestId:string,day:string,msgSn:string){
+  create(clientId:string,userHash:string,requestId:string,day:string,msgSn:string,externalUserId?:string){
     const payloadHash=DIGEST(JSON.stringify([day,msgSn]));
     const id=randomUUID(),now=Date.now();
     this.prune();
     const change=this.db.prepare(
       "INSERT OR IGNORE INTO institution_api_tasks "+
-      "(id,client_id,user_hash,request_id,payload_hash,day,msg_sn,status,created_at,updated_at) "+
-      "VALUES (?,?,?,?,?,?,?,'QUEUED',?,?)"
-    ).run(id,clientId,userHash,requestId,payloadHash,day,msgSn,now,now);
+      "(id,client_id,user_hash,request_id,payload_hash,day,msg_sn,external_user_id,status,created_at,updated_at) "+
+      "VALUES (?,?,?,?,?,?,?,?,'QUEUED',?,?)"
+    ).run(id,clientId,userHash,requestId,payloadHash,day,msgSn,externalUserId??null,now,now);
     const row=this.db.prepare('SELECT * FROM institution_api_tasks WHERE client_id=? AND user_hash=? AND request_id=?')
       .get(clientId,userHash,requestId) as TaskRow|undefined;
     if(!row)throw new Error('INSTITUTION_API_TASK_NOT_SAVED');
@@ -118,17 +122,18 @@ export class InstitutionTaskStore {
     this.prune();
     const clauses:string[]=[],params:string[]=[];
     if(statusFilter){clauses.push('status=?');params.push(statusFilter);}
-    if(query){clauses.push('(id=? OR request_id=?)');params.push(query,query);}
+    if(query){clauses.push('(id=? OR request_id=? OR external_user_id=?)');params.push(query,query,query);}
     const where=clauses.length?' WHERE '+clauses.join(' AND '):'';
     const total=(this.db.prepare('SELECT COUNT(*) AS n FROM institution_api_tasks'+where)
       .get(...params) as {n:number}).n;
-    const rows=this.db.prepare('SELECT id,client_id,user_hash,request_id,day,msg_sn,status,error_code,'+
+    const rows=this.db.prepare('SELECT id,client_id,user_hash,external_user_id,request_id,day,msg_sn,status,error_code,'+
       'created_at,updated_at,(result_text IS NOT NULL) AS has_result FROM institution_api_tasks'+
       where+' ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET ?')
       .all(...params,offset) as Array<Pick<TaskRow,
-      'id'|'client_id'|'user_hash'|'request_id'|'day'|'msg_sn'|'status'|'error_code'|'created_at'|'updated_at'>&{has_result:number}>;
+      'id'|'client_id'|'user_hash'|'external_user_id'|'request_id'|'day'|'msg_sn'|'status'|'error_code'|'created_at'|'updated_at'>&{has_result:number}>;
     return {total,limit:50,offset,items:rows.map(row=>({
       taskId:row.id,clientId:row.client_id,userHash:row.user_hash.slice(0,12),
+      externalUserId:row.external_user_id,
       requestId:row.request_id,day:row.day,msgSn:row.msg_sn||null,status:row.status,
       errorCode:row.error_code,hasResult:row.has_result===1,
       createdAt:new Date(row.created_at).toISOString(),updatedAt:new Date(row.updated_at).toISOString(),
@@ -140,11 +145,31 @@ export class InstitutionTaskStore {
     if(!row)throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
     return {
       taskId:row.id,clientId:row.client_id,userHash:row.user_hash.slice(0,12),
+      externalUserId:row.external_user_id,
       requestId:row.request_id,day:row.day,msgSn:row.msg_sn||null,status:row.status,
       errorCode:row.error_code,
       createdAt:new Date(row.created_at).toISOString(),updatedAt:new Date(row.updated_at).toISOString(),
       result:row.status==='SUCCEEDED'&&row.result_text?{summary:row.result_text}:null,
     };
+  }
+  /** Observed caller assertions, NOT an authenticated or approved-platform list. */
+  usageAdmin(){
+    this.prune();
+    const rows=this.db.prepare(
+      "SELECT client_id,external_user_id,user_hash,COUNT(*) AS task_count,"+
+      "MIN(created_at) AS first_seen,MAX(created_at) AS last_seen,"+
+      "SUM(CASE WHEN status='SUCCEEDED' THEN 1 ELSE 0 END) AS succeeded "+
+      "FROM institution_api_tasks GROUP BY client_id,user_hash "+
+      "ORDER BY last_seen DESC LIMIT 100"
+    ).all() as Array<{client_id:string;external_user_id:string|null;user_hash:string;
+      task_count:number;first_seen:number;last_seen:number;succeeded:number}>;
+    return {authMode:'NONE',platformIdentityVerified:false,platformAllowlistEnabled:false,
+      retentionDays:7,users:rows.map(row=>({
+        clientId:row.client_id,externalUserId:row.external_user_id,
+        userHash:row.user_hash.slice(0,12),taskCount:row.task_count,
+        successCount:row.succeeded,firstSeen:new Date(row.first_seen).toISOString(),
+        lastSeen:new Date(row.last_seen).toISOString(),
+      }))};
   }
   hasQueued(){return Boolean(this.db.prepare("SELECT 1 FROM institution_api_tasks WHERE status='QUEUED' LIMIT 1").get());}
   take():TaskRow|undefined{
@@ -211,8 +236,8 @@ export class InstitutionIntegration {
     if(typeof subject!=='string'||!validId(subject))throw new AuthProblem(400,'INTEGRATION_USER_REQUIRED');
     return DIGEST(JSON.stringify([this.cfg.clientId,subject]));
   }
-  create(userHash:string,requestId:string,day:string,msgSn:string){
-    const created=this.tasks.create(this.cfg.clientId,userHash,requestId,day,msgSn);
+  create(userHash:string,requestId:string,day:string,msgSn:string,externalUserId:string){
+    const created=this.tasks.create(this.cfg.clientId,userHash,requestId,day,msgSn,externalUserId);
     if(created.created)this.kick();
     return {data:status(created.row),created:created.created};
   }
@@ -225,6 +250,7 @@ export class InstitutionIntegration {
     return this.tasks.listAdmin(statusFilter,query,offset);
   }
   detailAdmin(id:string){return this.tasks.detailAdmin(id);}
+  usageAdmin(){return {...this.tasks.usageAdmin(),currentPlatformLabel:this.cfg.clientId};}
   private kick(){
     if(this.busy||this.closed)return;
     this.busy=true;
@@ -341,6 +367,11 @@ export function registerInstitutionIntegration(app:FastifyInstance,
     if(!deps.sceneConfig.canEdit(session.profile.name))
       throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
   };
+  app.get('/api/v1/institution-access',async(req,reply)=>{
+    authorizeAdmin(req);
+    return reply.header('Cache-Control','no-store')
+      .send({data:getManager().usageAdmin(),requestId:randomUUID()});
+  });
   app.get<{Querystring:{status?:string;q?:string;offset?:string}}>(ADMIN_ROOT,async(req,reply)=>{
     authorizeAdmin(req);
     const {status:state='ALL',q='',offset='0'}=req.query;
@@ -370,7 +401,7 @@ export function registerInstitutionIntegration(app:FastifyInstance,
     if(typeof msgSn!=='string'||!/^[A-Za-z0-9_.:-]{1,256}$/.test(msgSn)||
       typeof requestId!=='string'||!validId(requestId))
       throw new AuthProblem(400,'INSTITUTION_PARAMETERS_INVALID');
-    const result=service.create(user,requestId,date,msgSn);
+    const result=service.create(user,requestId,date,msgSn,req.headers['x-workbench-user-id'] as string);
     return reply.code(result.created?202:200).header('Cache-Control','no-store')
       .send({data:result.data,requestId:randomUUID()});
   });
