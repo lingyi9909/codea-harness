@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {DatabaseSync} from 'node:sqlite';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -41,9 +42,10 @@ test('persistent store deduplicates requests and never automatically retries aft
   try{
     const db=join(root,'tasks.sqlite');
     const first=new InstitutionTaskStore(db);
-    const a=first.create('b','user-hash','req-1','2026-11-22','000123');
+    const a=first.create('b','user-hash','req-1','2026-11-22','000123','customer-001');
     const b=first.create('b','user-hash','req-1','2026-11-22','000123');
     assert.equal(a.created,true);
+    assert.equal(a.row.external_user_id,'customer-001');
     assert.equal(b.created,false);
     assert.equal(b.row.id,a.row.id);
     assert.throws(()=>first.create('b','user-hash','req-1','2026-11-22','000124'),/REQUEST_ID_PAYLOAD_CONFLICT/);
@@ -53,11 +55,34 @@ test('persistent store deduplicates requests and never automatically retries aft
     assert.equal(restored.get('b','user-hash',a.row.id)?.status,'UNKNOWN');
     assert.equal(restored.get('b','other',a.row.id),undefined);
     assert.equal(restored.take(),undefined,'a crashed task must not re-execute');
+    assert.equal(restored.usageAdmin().users[0].externalUserId,'customer-001');
     restored.close();
   }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('B creates and reads only its own institution result; no extra privileged API',async()=>{
+test('upgrade of legacy institution API database preserves tasks and previous irrecoverable hashes',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'institution-legacy-'));
+  try{
+    const path=join(root,'old.sqlite');
+    const legacy=new DatabaseSync(path);
+    legacy.exec("CREATE TABLE institution_api_tasks ("+
+      "id TEXT PRIMARY KEY,client_id TEXT NOT NULL,user_hash TEXT NOT NULL,"+
+      "request_id TEXT NOT NULL,payload_hash TEXT NOT NULL,day TEXT NOT NULL,msg_sn TEXT NOT NULL,"+
+      "status TEXT NOT NULL,session_id TEXT,result_text TEXT,error_code TEXT,"+
+      "created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,"+
+      "UNIQUE(client_id,user_hash,request_id));");
+    legacy.close();
+    const migrated=new InstitutionTaskStore(path);
+    const recorded=migrated.create('b','legacy-hash','legacy-req','2026-11-22','000111');
+    assert.equal(recorded.row.external_user_id,null,'old caller ID cannot be recovered');
+    const newRecord=migrated.create('b','new-hash','new-req','2026-11-23','000222','customer-002');
+    assert.equal(newRecord.row.external_user_id,'customer-002');
+    assert.equal(migrated.usageAdmin().users.length,2);
+    migrated.close();
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('B creates and reads only its own institution result; admin usage is separate from public API',async()=>{
   const root=await mkdtemp(join(tmpdir(),'institution-b2b-'));
   const db=join(tmpdir(),'institution-api-'+randomUUID()+'.sqlite');
   const envKeys=[
@@ -168,6 +193,9 @@ test('B creates and reads only its own institution result; no extra privileged A
     const noSession=await app.inject({url:'/api/v1/institution-tasks',remoteAddress:'127.0.0.1',
       headers:{host:'127.0.0.1:4176','x-workbench-user-id':'zhangzhanhui'}});
     assert.equal(noSession.statusCode,401,noSession.body);
+    const noSessionUsage=await app.inject({url:'/api/v1/institution-access',remoteAddress:'127.0.0.1',
+      headers:{host:'127.0.0.1:4176','x-workbench-user-id':'zhangzhanhui'}});
+    assert.equal(noSessionUsage.statusCode,401,noSessionUsage.body);
     const adminLogin=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
       remoteAddress:'127.0.0.1',
       headers:{host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'},
@@ -178,6 +206,9 @@ test('B creates and reads only its own institution result; no extra privileged A
     const remoteAdmin=await app.inject({url:'/api/v1/institution-tasks',
       remoteAddress:'10.10.20.30',headers:{...adminHeaders,host:'10.10.20.30:4176'}});
     assert.equal(remoteAdmin.statusCode,403,remoteAdmin.body);
+    const remoteUsage=await app.inject({url:'/api/v1/institution-access',
+      remoteAddress:'10.10.20.30',headers:{host:'10.10.20.30:4176'}});
+    assert.equal(remoteUsage.statusCode,403,remoteUsage.body);
     const remotePage=await app.inject({url:'/institution-tasks',remoteAddress:'10.10.20.30',
       headers:{host:'10.10.20.30:4176'}});
     assert.equal(remotePage.statusCode,403,remotePage.body);
@@ -187,6 +218,20 @@ test('B creates and reads only its own institution result; no extra privileged A
     assert.equal(adminList.json().data.total,1);
     assert.equal(adminList.json().data.items[0].taskId,taskId);
     assert.equal(adminList.json().data.items[0].status,'SUCCEEDED');
+    assert.equal(adminList.json().data.items[0].externalUserId,'customer-01');
+    const byUser=await app.inject({url:'/api/v1/institution-tasks?q=customer-01',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(byUser.statusCode,200,byUser.body);
+    assert.equal(byUser.json().data.total,1);
+    const usage=await app.inject({url:'/api/v1/institution-access',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(usage.statusCode,200,usage.body);
+    assert.equal(usage.json().data.authMode,'NONE');
+    assert.equal(usage.json().data.platformIdentityVerified,false);
+    assert.equal(usage.json().data.platformAllowlistEnabled,false);
+    assert.equal(usage.json().data.currentPlatformLabel,'platform-b');
+    assert.equal(usage.json().data.users[0].externalUserId,'customer-01');
+    assert.equal(usage.json().data.users[0].taskCount,1);
     assert.equal(adminList.json().data.items[0].hasResult,true);
     assert.equal(JSON.stringify(adminList.json()).includes('最终排查结论'),false,
       'listing must never expose full report content');
@@ -194,6 +239,7 @@ test('B creates and reads only its own institution result; no extra privileged A
       remoteAddress:'127.0.0.1',headers:adminHeaders});
     assert.equal(detail.statusCode,200,detail.body);
     assert.equal(detail.json().data.result.summary,'报文 0000123 的最终排查结论');
+    assert.equal(detail.json().data.externalUserId,'customer-01');
     assert.equal(JSON.stringify(detail.json()).includes('native-'),false);
     const invalidFilter=await app.inject({url:'/api/v1/institution-tasks?status=ANYTHING',
       remoteAddress:'127.0.0.1',headers:adminHeaders});
@@ -210,6 +256,9 @@ test('B creates and reads only its own institution result; no extra privileged A
     const revokedDetail=await app.inject({url:'/api/v1/institution-tasks/'+taskId,
       remoteAddress:'127.0.0.1',headers:adminHeaders});
     assert.equal(revokedDetail.statusCode,403,revokedDetail.body);
+    const revokedUsage=await app.inject({url:'/api/v1/institution-access',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(revokedUsage.statusCode,403,revokedUsage.body);
     for(const forbidden of ['/config','/analytics','/api/v1/scene-access']){
       const response:InjectResult=
         await app.inject({url:forbidden,remoteAddress:'10.10.20.30',headers});
