@@ -20,7 +20,7 @@ export function ComponentLabPage(){
   return <main className="component-lab">
     <header><div><small>UI COMPONENTS / 组件验证</small><h1>公共组件测试</h1>
       <p>真实复用工作台使用的日期、秒级时间和模型选择组件。所有操作仅在页面内模拟，不发送业务查询。</p></div>
-      <a href="/">返回工作台</a>
+      <nav className="component-admin-links" aria-label="系统管理"><a href="/config">场景配置</a><a href="/institution-tasks">接口任务管理</a><a href="/institution-tasks?view=access">接口接入情况</a><a href="/analytics">访问统计</a><a href="/">返回工作台</a></nav>
     </header>
     <div className="lab-grid">
       <section className="lab-panel">
