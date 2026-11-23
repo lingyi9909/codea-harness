@@ -16,6 +16,7 @@ import {dirname,isAbsolute,join,relative,sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {AuthProblem,type LocalAuth} from './auth.ts';
+import {WorkspaceProfile} from './local-profile.ts';
 import {type ExecutionRegistry} from './execution-registry.ts';
 import {type SceneConfigStore} from './scene-config.ts';
 import {type SceneAccessStore,applyToolPolicy} from './scene-access.ts';
@@ -327,14 +328,17 @@ export function registerInstitutionIntegration(app:FastifyInstance,
   const getManager=()=>manager??=new InstitutionIntegration(cfg,deps,
     new InstitutionTaskStore(cfg.databasePath,deps.workspace));
   app.addHook('onClose',()=>manager?.close());
-  // Same management boundary as /config editing: local socket + exact username in
-  // .workbench/config-access.json. The API caller's B-supplied user header is
-  // never accepted as an administrator credential.
+  // Same management boundary as /config editing: actual local socket, active
+  // workspace login, and exact editor username in config-access.json.
+  // The B-supplied X-Workbench-User-Id is not an administrator credential.
+  const localProfile=new WorkspaceProfile(deps.workspace);
   const authorizeAdmin=(req:FastifyRequest)=>{
     if(!deps.auth.isLocal(req)||!deps.auth.origin(req))
       throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
     const session=deps.auth.session(req);
-    if(session.scope==='lan'||!deps.sceneConfig.canEdit(session.profile?.name))
+    if(session.scope==='lan'||!session.profile||!localProfile.matches(session.profile.key))
+      throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+    if(!deps.sceneConfig.canEdit(session.profile.name))
       throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
   };
   app.get<{Querystring:{status?:string;q?:string;offset?:string}}>(ADMIN_ROOT,async(req,reply)=>{
