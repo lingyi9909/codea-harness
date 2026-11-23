@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react';
 import Markdown from 'react-markdown';
 import {api,ApiError,type InstitutionAccessOverview,type InstitutionAdminTaskDetail,type InstitutionTaskPage,type InstitutionTaskStatus} from './api/client.ts';
 import {ProfileLogin} from './ProfileLogin.tsx';
+import {InstitutionConcurrencyControl,InstitutionUserGroupsView} from './InstitutionTaskOperations.tsx';
 import './institution-tasks.css';
 
 const statusLabels:Record<InstitutionTaskStatus,string>={
@@ -14,7 +15,9 @@ const formatTime=(value:string)=>new Date(value).toLocaleString('zh-CN',{
 });
 const errorText=(e:unknown)=>e instanceof Error?e.message:'查询失败';
 const active=(value:InstitutionTaskStatus)=>value==='QUEUED'||value==='RUNNING';
-const accessView=new URLSearchParams(window.location.search).get('view')==='access';
+const pageView=new URLSearchParams(window.location.search).get('view');
+const accessView=pageView==='access';
+const usersView=pageView==='users';
 
 function AccessOverviewView({refresh,onForbidden}:{refresh:number;onForbidden:()=>void}){
   const [overview,setOverview]=useState<InstitutionAccessOverview|null>(null);
@@ -103,7 +106,7 @@ export function InstitutionTaskManagementPage(){
   },[mode]);
 
   useEffect(()=>{
-    if(mode!=='ready'||accessView)return;
+    if(mode!=='ready'||accessView||usersView)return;
     let live=true;
     setLoading(true);
     api.institutionTasks(filter,appliedQuery,offset).then(data=>{
@@ -118,7 +121,7 @@ export function InstitutionTaskManagementPage(){
   },[mode,filter,appliedQuery,offset,refresh]);
 
   useEffect(()=>{
-    if(mode!=='ready'||accessView||!selectedId)return;
+    if(mode!=='ready'||accessView||usersView||!selectedId)return;
     let live=true;
     api.institutionTask(selectedId).then(data=>{
       if(live){setDetail(data);setDetailError('');}
@@ -152,17 +155,22 @@ export function InstitutionTaskManagementPage(){
     <header className="institution-tasks-header">
       <div><small>SYSTEM ADMINISTRATION</small><h1>{accessView?'接口接入情况':'接口任务管理'}</h1>
         <p>{accessView?'查看机构 API 的开放策略与实际提交的业务用户标识（非授权名单）。':
+          usersView?'按照业务用户标识聚合查看排查任务、各执行状态与最终结果。':
           '集中查看接口创建的排查任务、执行状态和最终返回结论。仅本机配置管理员可查看。'}</p></div>
       <nav aria-label="管理页面导航"><a href="/config">场景配置</a><a href="/analytics">访问统计</a><a href="/">返回工作台</a></nav>
     </header>
     <div className="institution-tasks-tabs" role="navigation" aria-label="接口管理导航">
-      <a href="/institution-tasks" aria-current={!accessView?'page':undefined}
-        className={!accessView?'selected':''}>任务记录</a>
+      <a href="/institution-tasks" aria-current={!accessView&&!usersView?'page':undefined}
+        className={!accessView&&!usersView?'selected':''}>任务记录</a>
+      <a href="/institution-tasks?view=users" aria-current={usersView?'page':undefined}
+        className={usersView?'selected':''}>按业务用户聚合</a>
       <a href="/institution-tasks?view=access" aria-current={accessView?'page':undefined}
         className={accessView?'selected':''}>接口接入情况</a>
       <button type="button" onClick={()=>setRefresh(n=>n+1)}>刷新</button>
     </div>
     {accessView?<AccessOverviewView refresh={refresh} onForbidden={()=>setMode('denied')}/>:<>
+      <InstitutionConcurrencyControl refresh={refresh} onForbidden={()=>setMode('denied')}/>
+      {usersView?<InstitutionUserGroupsView refresh={refresh} onForbidden={()=>setMode('denied')}/>:<>
     <div className="institution-tasks-toolbar">
       <form onSubmit={e=>{e.preventDefault();setAppliedQuery(query.trim());setOffset(0);}}>
         <label htmlFor="institution-task-search">任务 ID / 请求号 / 业务用户标识</label>
@@ -239,6 +247,7 @@ export function InstitutionTaskManagementPage(){
         </>}
       </section>
     </div>
+    </>}
     </>}
   </main>;
 }
