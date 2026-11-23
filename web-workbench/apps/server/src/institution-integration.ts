@@ -15,7 +15,7 @@ import {homedir} from 'node:os';
 import {dirname,isAbsolute,join,relative,sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {FastifyInstance,FastifyRequest} from 'fastify';
-import {AuthProblem} from './auth.ts';
+import {AuthProblem,type LocalAuth} from './auth.ts';
 import {type ExecutionRegistry} from './execution-registry.ts';
 import {type SceneConfigStore} from './scene-config.ts';
 import {type SceneAccessStore,applyToolPolicy} from './scene-access.ts';
@@ -35,10 +35,13 @@ export type InstitutionIntegrationConfig={
   clientId:string;databasePath:string;
 };
 export type InstitutionIntegrationDeps={
-  workspace:string;sceneConfig:SceneConfigStore;sceneAccess:SceneAccessStore;
+  workspace:string;sceneConfig:SceneConfigStore;sceneAccess:SceneAccessStore;auth:LocalAuth;
   execution:ExecutionRegistry;nativeConnection:ReturnType<typeof chatConnection>;
 };
 const validId=(id:string)=>/^[A-Za-z0-9_.:-]{1,128}$/.test(id);
+const taskIdPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ADMIN_ROOT='/api/v1/institution-tasks';
+const ADMIN_STATUSES=['QUEUED','RUNNING','SUCCEEDED','FAILED','UNKNOWN'] as const;
 const status=(row:TaskRow)=>({
   taskId:row.id,status:row.status,requestId:row.request_id,
   createdAt:new Date(row.created_at).toISOString(),updatedAt:new Date(row.updated_at).toISOString(),
@@ -108,6 +111,39 @@ export class InstitutionTaskStore {
     this.prune();
     return this.db.prepare('SELECT * FROM institution_api_tasks WHERE id=? AND client_id=? AND user_hash=?')
       .get(id,clientId,userHash) as TaskRow|undefined;
+  }
+  /** B integration tasks across users; only the separately authorized local admin routes call this. */
+  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number){
+    this.prune();
+    const clauses:string[]=[],params:string[]=[];
+    if(statusFilter){clauses.push('status=?');params.push(statusFilter);}
+    if(query){clauses.push('(id=? OR request_id=?)');params.push(query,query);}
+    const where=clauses.length?' WHERE '+clauses.join(' AND '):'';
+    const total=(this.db.prepare('SELECT COUNT(*) AS n FROM institution_api_tasks'+where)
+      .get(...params) as {n:number}).n;
+    const rows=this.db.prepare('SELECT id,client_id,user_hash,request_id,day,msg_sn,status,error_code,'+
+      'created_at,updated_at,(result_text IS NOT NULL) AS has_result FROM institution_api_tasks'+
+      where+' ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET ?')
+      .all(...params,offset) as Array<Pick<TaskRow,
+      'id'|'client_id'|'user_hash'|'request_id'|'day'|'msg_sn'|'status'|'error_code'|'created_at'|'updated_at'>&{has_result:number}>;
+    return {total,limit:50,offset,items:rows.map(row=>({
+      taskId:row.id,clientId:row.client_id,userHash:row.user_hash.slice(0,12),
+      requestId:row.request_id,day:row.day,msgSn:row.msg_sn||null,status:row.status,
+      errorCode:row.error_code,hasResult:row.has_result===1,
+      createdAt:new Date(row.created_at).toISOString(),updatedAt:new Date(row.updated_at).toISOString(),
+    }))};
+  }
+  detailAdmin(id:string){
+    this.prune();
+    const row=this.db.prepare('SELECT * FROM institution_api_tasks WHERE id=?').get(id) as TaskRow|undefined;
+    if(!row)throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
+    return {
+      taskId:row.id,clientId:row.client_id,userHash:row.user_hash.slice(0,12),
+      requestId:row.request_id,day:row.day,msgSn:row.msg_sn||null,status:row.status,
+      errorCode:row.error_code,
+      createdAt:new Date(row.created_at).toISOString(),updatedAt:new Date(row.updated_at).toISOString(),
+      result:row.status==='SUCCEEDED'&&row.result_text?{summary:row.result_text}:null,
+    };
   }
   hasQueued(){return Boolean(this.db.prepare("SELECT 1 FROM institution_api_tasks WHERE status='QUEUED' LIMIT 1").get());}
   take():TaskRow|undefined{
@@ -184,6 +220,10 @@ export class InstitutionIntegration {
     if(!row)throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
     return status(row);
   }
+  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number){
+    return this.tasks.listAdmin(statusFilter,query,offset);
+  }
+  detailAdmin(id:string){return this.tasks.detailAdmin(id);}
   private kick(){
     if(this.busy||this.closed)return;
     this.busy=true;
@@ -287,6 +327,32 @@ export function registerInstitutionIntegration(app:FastifyInstance,
   const getManager=()=>manager??=new InstitutionIntegration(cfg,deps,
     new InstitutionTaskStore(cfg.databasePath,deps.workspace));
   app.addHook('onClose',()=>manager?.close());
+  // Same management boundary as /config editing: local socket + exact username in
+  // .workbench/config-access.json. The API caller's B-supplied user header is
+  // never accepted as an administrator credential.
+  const authorizeAdmin=(req:FastifyRequest)=>{
+    if(!deps.auth.isLocal(req)||!deps.auth.origin(req))
+      throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+    const session=deps.auth.session(req);
+    if(session.scope==='lan'||!deps.sceneConfig.canEdit(session.profile?.name))
+      throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
+  };
+  app.get<{Querystring:{status?:string;q?:string;offset?:string}}>(ADMIN_ROOT,async(req,reply)=>{
+    authorizeAdmin(req);
+    const {status:state='ALL',q='',offset='0'}=req.query;
+    if(state!=='ALL'&&!ADMIN_STATUSES.includes(state as TaskStatus))
+      throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
+    if(q&&(!validId(q)||q.length>128)||!/^\d{1,5}$/.test(String(offset))||Number(offset)>10000)
+      throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
+    return reply.header('Cache-Control','no-store')
+      .send({data:getManager().listAdmin(state==='ALL'?undefined:state as TaskStatus,q||undefined,Number(offset)),requestId:randomUUID()});
+  });
+  app.get<{Params:{id:string}}>(ADMIN_ROOT+'/:id',async(req,reply)=>{
+    authorizeAdmin(req);
+    if(!taskIdPattern.test(req.params.id))throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
+    return reply.header('Cache-Control','no-store')
+      .send({data:getManager().detailAdmin(req.params.id),requestId:randomUUID()});
+  });
   app.post<{Body:{date:string;msgSn:string;requestId:string}}>(API_ROOT,{
     schema:{body:{type:'object',additionalProperties:false,required:['date','msgSn','requestId'],properties:{
       date:{type:'string',minLength:10,maxLength:10},msgSn:{type:'string',minLength:1,maxLength:256},
@@ -308,7 +374,7 @@ export function registerInstitutionIntegration(app:FastifyInstance,
     const service=getManager();
     const user=service.ownerFor(req);
     const id=req.params.id;
-    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))
+    if(!taskIdPattern.test(id))
       throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
     return reply.header('Cache-Control','no-store')
       .send({data:service.get(user,id),requestId:randomUUID()});
