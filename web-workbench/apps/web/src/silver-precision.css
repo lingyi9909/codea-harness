@@ -725,3 +725,10 @@ body{background:#fff;color:var(--silver-ink);}
 @media(prefers-reduced-motion:reduce){
   .investigation-drawer-backdrop,.investigation-drawer{animation:none!important;transition:none!important;}
 }
+
+/* Administrator-only navigation: separate from task/conversation history. */
+.sidebar .scene-nav .admin-group{margin-top:15px;padding-top:10px;border-top:1px solid #d8dee5}
+.sidebar .scene-nav .admin-group>.side-section{margin:9px 8px 7px;font-size:11px}
+.sidebar .scene-nav .scenario-icon.admin{color:#6b7685}
+.sidebar .scene-nav .admin-children .scenario-child{text-decoration:none}
+.sidebar .scene-nav .admin-children .scenario-child:hover{background:#e5e9ed;color:#283342}
