@@ -31,17 +31,16 @@ export class LocalAuth implements RequestAuth {
   private readonly devOrigin?:string;
   private readonly publishCode?: (code:string)=>void;
   private readonly lanOrigin?:string;
-  private readonly lanKey?:Buffer;
   private readonly lanAttempts:number[]=[];
-  constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void,lan?:{origin:string;code:string}){
+  constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void,lan?:{origin:string}){
     this.publishCode=publishCode;
     this.port=port;this.devOrigin=devOrigin;
     this.pairingHash=hash(pairingCode);
     if(lan){
       const url=new URL(lan.origin);
-      if(url.origin!==lan.origin||url.protocol!=='http:'||!isPrivateLanIPv4(url.hostname)||Number(url.port)!==port||lan.code.length<12)
+      if(url.origin!==lan.origin||url.protocol!=='http:'||!isPrivateLanIPv4(url.hostname)||Number(url.port)!==port)
         throw new Error('LAN_AUTH_CONFIG_INVALID');
-      this.lanOrigin=lan.origin;this.lanKey=hash(lan.code);
+      this.lanOrigin=lan.origin;
     }
     if(devOrigin&&!/^http:\/\/(127\.0\.0\.1|localhost):4175$/.test(devOrigin))
       throw new Error('UNSAFE_DEVELOPMENT_ORIGIN');
@@ -102,13 +101,13 @@ export class LocalAuth implements RequestAuth {
     }
     return this.issue(reply,'local-workbench',profile);
   }
-  openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string},code:unknown):Session{
-    if(!this.isLan(req)||req.headers.origin!==this.lanOrigin||!this.lanKey)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
+  openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string}):Session{
+    if(!this.isLan(req)||req.headers.origin!==this.lanOrigin)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
     const now=Date.now();
     while(this.lanAttempts[0]!==undefined&&this.lanAttempts[0]<now-60000)this.lanAttempts.shift();
     if(this.lanAttempts.length>=20)throw new AuthProblem(429,'LAN_LOGIN_RATE_LIMIT');
     this.lanAttempts.push(now);
-    if(typeof code!=='string'||code.length>128||!safeEqual(hash(code),this.lanKey))throw new AuthProblem(401,'LAN_CODE_INVALID');
+    // 局域网访问无需额外访问码；仍保留 Origin、登录速率、Cookie 和会话隔离。
     // Never derive a security identity from self-entered names or phone numbers.
     // Every new browser login owns its own native sessions, even if another
     // visitor chooses the same self-reported profile.

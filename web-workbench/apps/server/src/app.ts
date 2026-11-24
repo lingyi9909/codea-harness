@@ -177,10 +177,10 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       const localAuth=opts.auth as LocalAuth;
       if(!localAuth.origin(req)||req.headers.origin!=='http://'+req.headers.host)
         throw new AuthProblem(403,'ORIGIN_INVALID');
-      const fields=req.body as {name?:unknown;phone?:unknown;lanCode?:unknown}|undefined;
+      const fields=req.body as {name?:unknown;phone?:unknown}|undefined;
       const profile=parseProfile({name:fields?.name,phone:fields?.phone});
       const session=localAuth.isLan(req)
-        ?localAuth.openLan(req,reply,{name:profile.name,key:profileKey(profile)},fields?.lanCode)
+        ?localAuth.openLan(req,reply,{name:profile.name,key:profileKey(profile)})
         :localAuth.openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
       return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,{id:session.ownerId,name:profile.name})));
     });

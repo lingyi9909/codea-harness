@@ -74,8 +74,8 @@ test('scene policy defaults preserve native rules; a saved revocation prevents w
   }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('LAN colleague login requires explicit LAN code and cannot impersonate loopback administrator',()=>{
-  const auth=new LocalAuth('pair',4176,undefined,undefined,{origin:'http://192.168.2.4:4176',code:'1234567890ABCD'});
+test('LAN colleague login needs no access code and cannot impersonate loopback administrator',()=>{
+  const auth=new LocalAuth('pair',4176,undefined,undefined,{origin:'http://192.168.2.4:4176'});
   const lan={ip:'192.168.2.44',headers:{host:'192.168.2.4:4176',origin:'http://192.168.2.4:4176'}} as unknown as FastifyRequest;
   const loopback={ip:'127.0.0.1',headers:{host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'}} as unknown as FastifyRequest;
   const responseHeaders:Record<string,string>={};
@@ -83,16 +83,16 @@ test('LAN colleague login requires explicit LAN code and cannot impersonate loop
   assert.equal(auth.isLan(lan),true);
   assert.equal(auth.isLocal(lan),false);
   assert.equal(auth.isLocal(loopback),true);
-  assert.throws(()=>auth.openLan(lan,reply,{name:'user',key:'key'},'wrong'),/LAN_CODE_INVALID/);
-  const opened=auth.openLan(lan,reply,{name:'user',key:'key'},'1234567890ABCD');
+  assert.throws(()=>auth.openLan({...lan,headers:{...lan.headers,origin:'http://malicious.example'}} as FastifyRequest,reply,{name:'user',key:'key'}),/LAN_ORIGIN_FORBIDDEN/);
+  const opened=auth.openLan(lan,reply,{name:'user',key:'key'});
   assert.match(opened.ownerId,/^lan:[0-9a-f-]{36}$/);
   const cookie=responseHeaders['Set-Cookie'].split(';')[0];
   assert.equal(auth.session({...lan,headers:{...lan.headers,cookie}} as FastifyRequest).ownerId,opened.ownerId);
   assert.throws(()=>auth.session({...loopback,headers:{...loopback.headers,cookie}} as FastifyRequest),/SESSION_ORIGIN_MISMATCH/);
-  assert.throws(()=>auth.openLan(loopback,reply,{name:'user',key:'key'},'1234567890ABCD'),/LAN_ORIGIN_FORBIDDEN/);
+  assert.throws(()=>auth.openLan(loopback,reply,{name:'user',key:'key'}),/LAN_ORIGIN_FORBIDDEN/);
   const otherReplyHeaders:Record<string,string>={};
   const otherReply={header:(name:string,value:string)=>{otherReplyHeaders[name]=value;return otherReply;}} as unknown as FastifyReply;
-  const sameSelfEnteredProfile=auth.openLan(lan,otherReply,{name:'user',key:'key'},'1234567890ABCD');
+  const sameSelfEnteredProfile=auth.openLan(lan,otherReply,{name:'user',key:'key'});
   assert.notEqual(sameSelfEnteredProfile.ownerId,opened.ownerId,
     'separate browser login must not inherit another coworker\'s native sessions');
 });
@@ -100,13 +100,13 @@ test('LAN colleague login requires explicit LAN code and cannot impersonate loop
 test('LAN colleague can bootstrap workbench without being able to read or edit local configuration',async()=>{
   const root=await mkdtemp(join(tmpdir(),'workbench-lan-app-'));
   const visits=new PageVisitStore(join(root,'visits.sqlite'));
-  const auth=new LocalAuth('unused',4176,undefined,undefined,{origin:'http://192.168.1.99:4176',code:'LAN-TEST-ACCESS-CODE'});
+  const auth=new LocalAuth('unused',4176,undefined,undefined,{origin:'http://192.168.1.99:4176'});
   const app=await createApp({auth,localOnly:true,workspace:root,pageVisits:visits});
   const remote={host:'192.168.1.99:4176',origin:'http://192.168.1.99:4176'};
   const localhost={host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'};
   try{
     const remoteLogin=await app.inject({method:'POST',url:'/api/v1/auth/local-session',remoteAddress:'192.168.1.18',
-      headers:remote,payload:{name:'同事一',phone:'13800000010',lanCode:'LAN-TEST-ACCESS-CODE'}});
+      headers:remote,payload:{name:'同事一',phone:'13800000010'}});
     assert.equal(remoteLogin.statusCode,200,remoteLogin.body);
     const remoteCookie=String(remoteLogin.headers['set-cookie']).split(';')[0];
     assert.match(remoteLogin.json().data.owner.id,/^lan:/);
@@ -117,7 +117,7 @@ test('LAN colleague can bootstrap workbench without being able to read or edit l
     const allowed=await app.inject({url:'/api/v1/scene-runtime',remoteAddress:'192.168.1.18',
       headers:{...remote,cookie:remoteCookie}});
     assert.equal(allowed.statusCode,200,allowed.body);
-    for(const url of ['/config','/api/v1/scene-config','/api/v1/scene-access']){
+    for(const url of ['/config','/institution-tasks','/api/v1/scene-config','/api/v1/scene-access']){
       const response=await app.inject({url,remoteAddress:'192.168.1.18',
         headers:{...remote,cookie:remoteCookie}});
       assert.equal(response.statusCode,403,url+':'+response.body);

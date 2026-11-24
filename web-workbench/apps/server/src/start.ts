@@ -47,9 +47,8 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   const pairingCode=randomBytes(32).toString('base64url');
   const printCode=(code:string)=>process.stdout.write('智能工作台本地配对码（5 分钟内有效，仅可使用一次）：'+code+'\n');
   const lanOrigin=localOnly&&listenHost!=='127.0.0.1'?process.env.HARNESS_PUBLIC_ORIGIN:undefined;
-  const lanCode=lanOrigin?(process.env.HARNESS_LAN_ACCESS_CODE?.trim()||randomBytes(16).toString('base64url')):undefined;
   const auth=multiUser?new MultiUserAuth(new MysqlIdentityStore(pool!),process.env.HARNESS_PUBLIC_ORIGIN??''):new LocalAuth(pairingCode,config.port,localOnly?undefined:process.env.HARNESS_DEV_ORIGIN,localOnly?undefined:printCode,
-    lanOrigin&&lanCode?{origin:lanOrigin,code:lanCode}:undefined);
+    lanOrigin?{origin:lanOrigin}:undefined);
   let execution:ExecutionRegistry|undefined;
   if(multiUser&&process.env.HARNESS_EXECUTION_REGISTRY){
     execution=await loadExecutionRegistry(process.env.HARNESS_EXECUTION_REGISTRY,workspace,(url,authorization)=>chatConnection(false,{url,authorization})());
@@ -70,7 +69,7 @@ export async function startWorkbench(native?:Omit<SchedulerConfig,'pool'|'signal
   if(localEmbed)app.addHook('onClose',async()=>{await localEmbed!.store.close();});
   const shutdown=async()=>{await app?.close();await pool?.end();await embedLocks?.end();pageVisits?.close();};
   await app.listen({host:listenHost,port:config.port});
-  if(listenHost!=='127.0.0.1')process.stdout.write('LAN 同事访问已开启：请限制 Windows 防火墙来源 IP。登录访问码（仅授权同事使用）：'+lanCode+'\n');
+  if(listenHost!=='127.0.0.1')process.stdout.write('LAN 同事访问已开启：请限制 Windows 防火墙来源 IP。普通业务页面无需局域网访问码，仍需填写姓名和手机号。\n');
   process.once('SIGTERM',()=>{void shutdown()});
   process.once('SIGINT',()=>{void shutdown()});
   if(!localOnly&&!multiUser)printCode(pairingCode);
