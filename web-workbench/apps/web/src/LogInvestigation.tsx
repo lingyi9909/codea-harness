@@ -123,6 +123,7 @@ function restoredRange(bounds:Bounds):TimeRange{
   const day=wholeDay(calendarDay);
   return day&&day.from===bounds.from&&day.to===bounds.to?day:rangeFromBounds(bounds);
 }
+/** 阅读提示：问题排查条件组件：规范化时间、traceId/关键词等输入，后端仍负责最终参数合法性。 */
 export function LogInvestigation({mode='public',globalModel,embedded=false}:{embedded?:boolean;mode?:'public'|'message';globalModel?:Pick<ChatModel,'id'|'providerID'|'variant'>}={}){
   const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
   const title=mode==='message'?'报文问题排查':'公管问题排查';

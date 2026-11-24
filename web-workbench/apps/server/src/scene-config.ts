@@ -23,6 +23,7 @@ const EMPTY:SceneConfiguration={version:1,scenes:{}};
 // Defaults do not install any external Skill. The public brainstorming skill
 // must already be loaded by OpenCode. /models opens the model selector, not
 // the custom-command execution endpoint.
+/** 阅读提示：为未配置工作目录生成各业务子场景的默认绑定；不等于 Skill 已被模型成功加载。 */
 export function defaultSceneConfiguration(root:string):SceneConfiguration{
   return {version:1,scenes:{
     logs:{directory:root,executor:{type:'skill',name:'brainstorming'}},
@@ -37,6 +38,7 @@ const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
 const plain=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
 const invalid=(code='SCENE_CONFIG_INVALID')=>new AuthProblem(400,code);
 
+/** 阅读提示：管理场景配置文件的读取、校验与版本；关注 save/初始化时对目录和绑定的约束。 */
 export class SceneConfigStore {
   readonly root:string;
   readonly file:string;

@@ -49,6 +49,7 @@ const localRequest=(req:{ip:string;headers:{host?:string}})=>
   ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip)&&
   /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(req.headers.host??'');
 
+/** 阅读提示：Spring Boot 的应用装配入口：挂载各 Controller、会话校验与静态页面。这里决定哪些路由供本机管理、哪些可在 LAN 使用。 */
 export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatConnection>;localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;embeddedBindings?:ChatBindingStore;embeddedStorageCheck?:()=>void;native?:Omit<SchedulerConfig,'pool'|'signal'>;pageVisits?:PageVisitStore}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;

@@ -42,6 +42,7 @@ export function accessForChat(scenario:string):AccessScene{
     scenario==='institution-message-inspection'?'institution-message':
     scenario==='data-analysis'?'data':'home';
 }
+/** 阅读提示：将全局执行权限与场景策略组合；后端必须保留限制，前端配置不可覆盖安全底座。 */
 export function applyToolPolicy(base:NativeRule[]|undefined,policy:SceneAccessPolicy):NativeRule[]|undefined{
   const rules:NativeRule[]=[...(base??[])];
   for(const action of accessToolActions){
@@ -105,6 +106,7 @@ export function validateAccess(value:unknown):SceneAccessConfig{
   }
   return config;
 }
+/** 阅读提示：场景级权限配置仓储，读取和保存前都需要验证结构与编辑权限。 */
 export class SceneAccessStore{
   readonly file:string;
   private readonly folder:string;

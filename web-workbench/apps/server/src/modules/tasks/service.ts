@@ -42,6 +42,7 @@ const baseSql='FROM wh_tasks t JOIN wh_review_previews p ON p.id=t.preview_id '+
   'JOIN wh_runs r ON r.task_id=t.id AND r.run_number='+
   '(SELECT MAX(w.run_number) FROM wh_runs w WHERE w.task_id=t.id) ';
 
+/** 阅读提示：创建任务入口；先确认所有者与请求幂等，再进入任务持久化和异步执行阶段。 */
 export async function createTask(input:{
   ownerId:string;operationId:string;previewId:string;title?:string;controller?:string;notes?:string;
 },opts:TaskOptions):Promise<DTO<'Operation'>>{
@@ -213,6 +214,7 @@ function decodeCursor(secret:string,token:string,ownerId:string,status:string,re
     typeof v.date!=='string'||typeof v.id!=='string')throw new AuthProblem(400,'CURSOR_INVALID');
   return {date:v.date,id:v.id};
 }
+/** 阅读提示：按业务所有者分页查询任务；过滤条件和游标不能越过用户归属边界。 */
 export async function listTasks(input:{ownerId:string;limit:number;cursor?:string;
   repositoryId?:string;status?:string;},opts:TaskOptions):Promise<DTO<'TaskPage'>>{
   const {ownerId,limit}=input;

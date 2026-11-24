@@ -189,6 +189,7 @@ async function prepare(config:SchedulerConfig,lease:Lease,
     continuation(config,lease,row,scope,kind);
 }
 /** Pure selection: a continuation MUST NOT silently become a fresh REVIEW. */
+/** 阅读提示：把已准备完成的任务派发给 OpenCode 原生适配器；提交成功与任务完成是两件事。 */
 export async function invokePreparedNative(adapter:OpenCodeAdapter,prepared:Prepared,
   runId:string):Promise<Awaited<ReturnType<OpenCodeAdapter['startReview']>>>{
   if(prepared.kind==='DISCUSS'){
@@ -200,6 +201,7 @@ export async function invokePreparedNative(adapter:OpenCodeAdapter,prepared:Prep
     ...(prepared.kind==='RECHECK'?{recheck:true}:{}),
   });
 }
+/** 阅读提示：任务调度主入口；关注领取、执行锁/心跳和失败恢复，避免任务被重复执行。 */
 export async function dispatchNext(config:SchedulerConfig):Promise<string|null>{
   if(!config.nativeVersion.trim()||config.nativeVersion==='UNVERIFIED')return null;
   const capabilities=await config.adapter.probe();

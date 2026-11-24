@@ -30,6 +30,7 @@ function rawJson(value:unknown):string{
   if(value&&typeof value==='object')return JSON.stringify(value);
   throw new AuthProblem(503,'STORED_JSON_INVALID');
 }
+/** 阅读提示：在已有任务上创建追问/继续执行操作；区分新消息与原生任务再次运行。 */
 export async function createContinuation(input:{
   ownerId:string;taskId:string;operationId:string;kind:ContinuationKind;
   text?:string;quote?:string;reportArtifactId?:string;
@@ -157,6 +158,7 @@ function parseCursor(secret:string,cursor:string,ownerId:string,taskId:string){
     throw new AuthProblem(400,'MESSAGE_CURSOR_INVALID');
   return {date:obj.date,id:obj.id};
 }
+/** 阅读提示：按用户、任务与分页信息读取消息；避免跨任务拼接历史结果。 */
 export async function listTaskMessages(input:{
   pool:Pool;ownerId:string;taskId:string;limit:number;cursor?:string;cursorKey:string;
 }):Promise<DTO<'MessagePage'>>{

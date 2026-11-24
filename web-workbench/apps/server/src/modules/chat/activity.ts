@@ -56,6 +56,7 @@ function publicInput(input:unknown){
   const json=JSON.stringify(input,(key,value)=>sensitive.test(key)?'[隐藏]':value,2);
   return json==='{}'?undefined:activityPreview(json,1600);
 }
+/** 阅读提示：将 OpenCode 消息内容转为前端活动步骤；转换结果只用于展示而非事实执行凭证。 */
 export function activity(m:Message):ChatStep[]{
   const steps:ChatStep[]=[];
   if(m.type==='assistant'){

@@ -39,6 +39,7 @@ const asFormFields=(obj:Record<string,unknown>):Field[]=>{
     throw new AuthProblem(503,'UNSUPPORTED_NATIVE_FORM_SCHEMA');
   return fields;
 };
+/** 阅读提示：对用户交互答案按后端字段结构逐项验证，不允许把浏览器输入直接交给工具。 */
 export function validateAnswer(kind:string,schemaRaw:unknown,answer:unknown):Answer{
   if(!isObject(answer))throw new AuthProblem(400,'INVALID_ANSWER');
   const schema=parseJson(schemaRaw);
@@ -115,6 +116,7 @@ export async function listPendingInteractions(pool:Pool,ownerId:string,taskId:st
     [taskId,taskId]);
   return rows.map(mappedInteraction);
 }
+/** 阅读提示：把用户的回答写入对应交互请求并推动执行；必须核对任务与请求归属。 */
 export async function answerInteraction(input:{
   pool:Pool;ownerId:string;interactionId:string;operationId:string;revision:number;answer:unknown;
 }):Promise<DTO<'Operation'>>{

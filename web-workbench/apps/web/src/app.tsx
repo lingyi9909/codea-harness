@@ -51,6 +51,7 @@ function savedGlobalModel():SelectedModel|undefined{
   }catch{return undefined;}
 }
 
+/** 阅读提示：React 根业务组件：组织场景、侧栏和管理目录。useState 是页面状态，权限必须由后端重复验证。 */
 export function WorkbenchApp() {
   useEffect(()=>{const changed=(event:StorageEvent)=>{if(event.key==='harness.account-change')window.location.reload();};window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed);},[]);
   const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);

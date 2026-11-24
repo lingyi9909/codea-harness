@@ -62,6 +62,7 @@ type Investigation={
 const scenarioFor=(id?:SceneId):ChatScenario=>id==='logs'?'log-inspection':id==='message'?'message-inspection':id==='institution-message'?'institution-message-inspection':id==='data'?'data-analysis':'direct-chat';
 type ChatNavigation={kind:'new'|'history'|'select';id?:string;seq:number};
 type GlobalModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
+/** 阅读提示：对话场景的消息发送与执行状态组件；按用户输入 → API 请求 → 状态轮询 → 输出展示阅读。 */
 export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,globalModel,embedded=false}:{embedded?:boolean;investigation?:Investigation;navigation?:ChatNavigation;onDirectoryChange?:(directory:string)=>void;sceneId?:SceneId;globalModel?:GlobalModel}={}){
   const [baseSettings,configure]=useState<ChatSettings|null>(null),[error,fail]=useState('');
   const [sceneSettings,setSceneSettings]=useState<SceneConfigResponse|null>(null);

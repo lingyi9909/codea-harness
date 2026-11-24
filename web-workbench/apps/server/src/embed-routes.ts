@@ -22,6 +22,7 @@ import {registerChat} from './modules/chat/routes.ts';
 import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
+/** 阅读提示：嵌入页业务路由总入口；阅读时区分宿主调用、匿名访问和独立会话处理。 */
 export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;sceneAccess?:SceneAccessStore;pool?:Pool;bindings?:ChatBindingStore;ensureOwner?:(id:string,subject:string)=>Promise<void>;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}){
   const {auth,execution,workspace,sceneConfig,pool}=opts;
   if(!opts.bindings&&!pool)throw new Error('EMBED_BINDING_STORE_REQUIRED');

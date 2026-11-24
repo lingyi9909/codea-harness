@@ -12,6 +12,7 @@ import type {Lease} from '../../../../packages/storage/src/slots.ts';
 import {withTransaction} from '../../../../packages/storage/src/db.ts';
 import {appendEvent} from '../../../../packages/storage/src/events.ts';
 
+/** 阅读提示：恢复过期执行租约或任务状态；已提交外部动作的重放需要特别谨慎。 */
 export async function resumeExpired(config:SchedulerConfig){
   if(!config.adapter.reattach)return null;
   const query="SELECT r.id,r.task_id,r.native_input_id,s.fence,o.id AS outbox_id,"+

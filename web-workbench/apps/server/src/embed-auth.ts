@@ -26,6 +26,7 @@ export function trustedOrigin(origin:string){
     throw new Error('EMBED_HTTPS_ORIGIN_REQUIRED');
   return url;
 }
+/** 阅读提示：嵌入场景的票据、会话和宿主身份边界；与本机配置管理员登录是不同授权链路。 */
 export class EmbeddedAuth implements RequestAuth {
   readonly config:EmbedConfig;
   readonly store:EmbedStore;
