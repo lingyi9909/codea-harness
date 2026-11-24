@@ -99,7 +99,11 @@ export class LocalAuth implements RequestAuth {
     try{return this.session(req);}catch(e){
       if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
     }
-    return this.issue(reply,'local-workbench',profile);
+    // Prior versions used one shared 'local-workbench' owner for every local profile.
+    // That allowed a different local login to see or mutate another user's native
+    // OpenCode sessions. Bind ownership to the *profile*, not the machine.
+    // Legacy shared-owner sessions cannot safely be assigned to any one user.
+    return this.issue(reply,'local:'+profile.key,profile);
   }
   openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string}):Session{
     if(!this.isLan(req)||req.headers.origin!==this.lanOrigin)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
