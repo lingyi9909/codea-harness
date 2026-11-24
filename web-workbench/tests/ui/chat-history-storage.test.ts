@@ -45,6 +45,7 @@ it('titles log requests from the question or filters and preserves existing sess
   assert.equal(summarizeFirstInput(log+'\nmsgSn：0000456\n排查问题：核查失败',true),'核查失败 · msgSn 0000456');
   assert.equal(displayChatTitle('团队自定义名称','缓存的名称'),'团队自定义名称');
   assert.equal(displayChatTitle('Code Harness · 直接对话','以前的对话'),'以前的对话');
+  assert.equal(displayChatTitle('智能工作台 · 专项场景','该用户真实的排查标题'),'该用户真实的排查标题');
 });
 
 it('uniquifies repeated generated titles and forgets only the deleted session',()=>{
