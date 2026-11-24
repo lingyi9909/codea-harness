@@ -22,5 +22,5 @@ test('T2: browser switches A/B/C without reading legacy or foreign drafts/histor
   for(const owner of ['A','B','C']){configureUserStorage(owner,true);assert.equal(cache.getItem('harness.chat'),null);cache.setItem('harness.chat',owner);cache.setItem('harness.draft',owner+' draft');}
   configureUserStorage('A',true);assert.equal(cache.getItem('harness.chat'),'A');assert.equal(cache.length,2);cache.clear();
   configureUserStorage('B',true);assert.equal(cache.getItem('harness.draft'),'B draft');resetUserStorage();assert.equal(cache.length,0);
-  configureUserStorage('local-workbench',false);assert.equal(cache.getItem('harness.chat'),'legacy');resetUserStorage();
+  configureUserStorage('local-workbench',false);assert.equal(cache.getItem('harness.chat'),null,'legacy unscoped cache is unsafe for any owner');assert.equal(raw.getItem('harness.chat'),'legacy');resetUserStorage();
 });
