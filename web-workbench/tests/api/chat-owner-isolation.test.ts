@@ -130,4 +130,16 @@ test('two LAN logins even with identical self-reported details have distinct ses
   assert.match(one,/^lan:/);
   assert.match(two,/^lan:/);
   assert.notEqual(one,two,'two LAN browsers must never share session ownership');
+  const oldCookie=String(first.headers['set-cookie']).split(';')[0];
+  const switched=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
+    remoteAddress:'192.168.1.15',headers:{...headers,cookie:oldCookie},payload:{...B}});
+  assert.equal(switched.statusCode,200,switched.body);
+  assert.notEqual(switched.json().data.owner.id,one);
+  const oldBootstrap=await app.inject({url:'/api/v1/bootstrap',remoteAddress:'192.168.1.15',
+    headers:{...headers,cookie:oldCookie}});
+  assert.equal(oldBootstrap.statusCode,401,'old LAN cookie must be revoked on account switch');
+  const newCookie=String(switched.headers['set-cookie']).split(';')[0];
+  const newBootstrap=await app.inject({url:'/api/v1/bootstrap',remoteAddress:'192.168.1.15',
+    headers:{...headers,cookie:newCookie}});
+  assert.equal(newBootstrap.statusCode,200);
 });
