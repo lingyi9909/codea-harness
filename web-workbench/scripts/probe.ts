@@ -1,3 +1,11 @@
+/**
+ * 原生能力诊断脚本
+ *
+ * 职责：检查工作台依赖的 OpenCode 或运行时能力。
+ * Java 研发阅读提示：诊断通过不代表私有模型和数据库的所有业务场景都已联调成功。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { readFile, writeFile, mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';

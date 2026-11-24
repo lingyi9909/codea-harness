@@ -1,3 +1,11 @@
+/**
+ * 嵌入式业务持久层
+ *
+ * 职责：保存或查询嵌入场景会话、授权票据及关联记录。
+ * Java 研发阅读提示：嵌入访问与普通工作台任务必须严格隔离数据归属。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import type {Pool,RowDataPacket,ResultSetHeader} from 'mysql2/promise';
 import {withTransaction} from './db.ts';
 export type EmbedTicket={digest:string;ownerId:string;clientId:string;parentOrigin:string;expires:number};

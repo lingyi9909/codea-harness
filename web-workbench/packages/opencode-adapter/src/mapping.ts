@@ -1,3 +1,11 @@
+/**
+ * OpenCode 状态映射
+ *
+ * 职责：将原生服务的返回字段转换为工作台内部领域结构。
+ * Java 研发阅读提示：映射层不应编造状态，也不等同于执行操作本身。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 /** Input validation before the fixed native command. No Shell interpolation. */
 const CONTROLLER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const REVIEW_BASE_ALIAS = 'harness-review-base';

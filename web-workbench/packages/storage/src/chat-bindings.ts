@@ -1,3 +1,11 @@
+/**
+ * 对话绑定持久化
+ *
+ * 职责：保存会话与业务场景、执行目录或身份之间的绑定信息。
+ * Java 研发阅读提示：绑定数据是后续权限和上下文路由的重要输入。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import type { Pool,RowDataPacket } from 'mysql2/promise';
 export type ChatBinding={ownerId:string;serviceIdentity:string;id:string;scenario:string;directory:string};
 export interface ChatBindingStore {

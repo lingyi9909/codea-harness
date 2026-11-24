@@ -1,3 +1,11 @@
+/**
+ * Git 代码快照
+ *
+ * 职责：保存或生成用于固定审查范围的仓库快照。
+ * Java 研发阅读提示：固定审查输入可避免任务过程中源码变化引起结果不可复验。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { execFile as execFileCallback } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';

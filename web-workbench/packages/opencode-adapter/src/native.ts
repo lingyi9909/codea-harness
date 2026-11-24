@@ -1,3 +1,11 @@
+/**
+ * OpenCode 原生客户端
+ *
+ * 职责：直接与 OpenCode 服务进行 Session、消息和工具能力交互。
+ * Java 研发阅读提示：每个业务任务的 Session 生命周期应由上层 Service 管理。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, relative, resolve, isAbsolute } from 'node:path';

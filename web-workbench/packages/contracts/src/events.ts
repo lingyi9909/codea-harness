@@ -1,3 +1,11 @@
+/**
+ * 业务事件类型契约
+ *
+ * 职责：定义后台事件传输和消费时使用的数据结构。
+ * Java 研发阅读提示：事件并不等价于业务最终成功，需结合持久化状态判断。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import type { DTO, UUID } from './domain.ts';
 
 export type NativeEnvelope = {

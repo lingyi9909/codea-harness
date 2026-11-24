@@ -1,3 +1,11 @@
+/**
+ * OpenCode 能力探测
+ *
+ * 职责：识别当前原生服务版本和支持的执行能力。
+ * Java 研发阅读提示：能力存在与具体模型/Skill 已可执行是不同的判断。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import type { DTO } from '../../contracts/src/domain.ts';
 import type { Continuity } from '../../contracts/src/events.ts';
 

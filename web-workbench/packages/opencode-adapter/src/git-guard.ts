@@ -1,3 +1,11 @@
+/**
+ * Git 执行安全保护
+ *
+ * 职责：限制原生工具执行中涉及的 Git 访问或操作范围。
+ * Java 研发阅读提示：重点阅读只读许可、工作目录保护和命令判断的边界条件。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';

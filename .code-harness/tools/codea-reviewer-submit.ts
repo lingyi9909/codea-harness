@@ -1,3 +1,11 @@
+/**
+ * 代码审查辅助工具
+ *
+ * 职责：将代码审查流程或结果提交操作封装为可执行工具。
+ * Java 研发阅读提示：工具输入、目标仓库与结果落点都应遵守既有只读/审批边界。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { tool } from "@opencode-ai/plugin"
 import { createHash } from "node:crypto"
 import { mkdir, rename, writeFile } from "node:fs/promises"

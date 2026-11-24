@@ -1,3 +1,11 @@
+/**
+ * 嵌入式存储初始化脚本
+ *
+ * 职责：用于准备或检查嵌入场景使用的持久化文件。
+ * Java 研发阅读提示：脚本属于运维入口，和应用运行时业务请求不是同一流程。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import {parseArgs} from 'node:util';
 import {existsSync} from 'node:fs';
 import {SqliteEmbedStore} from '../packages/storage/src/sqlite-embed.ts';

@@ -1,3 +1,11 @@
+/**
+ * 模块间依赖接口
+ *
+ * 职责：定义适配器和业务模块之间的边界类型。
+ * Java 研发阅读提示：类似 Java Service Interface，用接口隔离 OpenCode、Git 与存储实现。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import type { DTO, NativeAcceptance, NativeInspection, SessionBinding, Snapshot, UUID } from './domain.ts';
 import type { NativeEnvelope, NativeObservation } from './events.ts';
 

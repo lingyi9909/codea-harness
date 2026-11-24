@@ -1,3 +1,11 @@
+/**
+ * 数据库迁移启动脚本
+ *
+ * 职责：触发既有版本化数据库升级流程。
+ * Java 研发阅读提示：操作前应确认数据库目标和权限，避免误对生产库执行迁移。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { configFromEnv } from '../packages/storage/src/db.ts';

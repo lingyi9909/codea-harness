@@ -1,3 +1,11 @@
+/**
+ * 任务事件存储
+ *
+ * 职责：维护任务执行过程中的事件写入与查询。
+ * Java 研发阅读提示：事件顺序、重放和持久化状态需要分开理解。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { createHash } from 'node:crypto';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import type { DTO } from '../../contracts/src/domain.ts';

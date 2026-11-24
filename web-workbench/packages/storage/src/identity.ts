@@ -1,3 +1,11 @@
+/**
+ * 身份与归属存储
+ *
+ * 职责：持久化执行用户和业务身份关联信息。
+ * Java 研发阅读提示：区分调用者自报 ID 与服务端已验证身份，防止数据跨租户访问。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { randomUUID } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { withTransaction } from './db.ts';

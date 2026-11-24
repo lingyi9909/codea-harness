@@ -1,3 +1,11 @@
+/**
+ * Git 仓库定位
+ *
+ * 职责：识别并校验允许访问的工作目录或仓库信息。
+ * Java 研发阅读提示：路径归一化和允许仓库列表是服务端的安全边界。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { execFile } from 'node:child_process';
 import { createHmac, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
