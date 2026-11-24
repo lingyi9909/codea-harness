@@ -4,21 +4,32 @@ import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,Sce
 import type { components } from '../../../../packages/contracts/src/api.generated.ts';
 
 export type Schema<K extends keyof components['schemas']> = components['schemas'][K];
+/**
+ * 机构 API 的前端 DTO（编译期类型）。
+ *
+ * Java 类比：InstitutionTaskStatus 是枚举，InstitutionAdminTask 是响应 DTO。
+ * TS type 只帮助编辑器和 tsc 检查，运行时并不会自动验证 HTTP 返回的 JSON。
+ * 运行时的参数校验位于 C 后端的 Fastify schema / 权限校验逻辑。
+ */
 export type InstitutionTaskStatus='QUEUED'|'RUNNING'|'SUCCEEDED'|'FAILED'|'UNKNOWN';
 export type InstitutionAdminTask={
   taskId:string;clientId:string;userHash:string;externalUserId:string|null;requestId:string;
   day:string;msgSn:string|null;status:InstitutionTaskStatus;errorCode:string|null;
   hasResult?:boolean;createdAt:string;updatedAt:string;
 };
+// 交叉类型 A & B：在列表 DTO 的基础上增加 detail 独有字段，类似 Java DTO 继承/组合。
 export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
 export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
+// 数值联合类型：仅接受四种并发档位；提交时后端仍会再次做运行时校验。
 export type InstitutionConcurrency=3|5|10|15;
 export type InstitutionConcurrencyStatus={maxConcurrency:InstitutionConcurrency;queued:number;running:number};
+/** 后端按 clientId + userHash 聚合的任务统计，供 React 绘制分组表格。 */
 export type InstitutionUserGroup={
   clientId:string;userHash:string;externalUserId:string|null;
   total:number;queued:number;running:number;succeeded:number;failed:number;unknown:number;lastSeen:string;
 };
 export type InstitutionUserGroupPage={total:number;offset:number;limit:number;items:InstitutionUserGroup[]};
+/** 接口使用观测数据：不是平台认证、授权白名单或可信身份信息。 */
 export type InstitutionAccessOverview={
   authMode:'NONE';platformIdentityVerified:false;platformAllowlistEnabled:false;
   currentPlatformLabel:string;retentionDays:number;
@@ -37,6 +48,12 @@ export class HarnessApi {
   businessVerificationEnabled=false;
   private connecting?: Promise<Schema<'Bootstrap'>>;
   setCsrf(token: string): void { this.csrf = token; }
+  /**
+   * 统一 HTTP 客户端（Java 类比：Feign/RestTemplate 的公共拦截器）。
+   * <T> 是「预期响应的类型」；Promise<T> 表示未来异步返回 T。
+   * fetch 是浏览器原生请求 API，credentials:'same-origin' 负责带上工作台 Cookie。
+   * 注意：GET 与 PATCH 使用不同的权限策略；PATCH 必须携带 CSRF。
+   */
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('..'))
       throw new Error('UNSAFE_API_PATH');
@@ -120,27 +137,38 @@ export class HarnessApi {
     return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
   }
   pageStats(days:7|30=7){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>(`/page-visits?days=${days}`);}
+  /**
+   * 接口任务列表：对应 C 的 GET /api/v1/institution-tasks。
+   * userHash?:string 表示可选参数，URLSearchParams 负责正确编码查询参数。
+   */
   institutionTasks(status:InstitutionTaskStatus|'ALL'='ALL',q='',offset=0,userHash?:string){
     const params=new URLSearchParams({status,q,offset:String(offset)});
     if(userHash)params.set('userHash',userHash);
     return this.request<InstitutionTaskPage>('/institution-tasks?'+params.toString());
   }
+  /** 按 B 自报业务用户分组（后端 SQL GROUP BY），查询结果不包含完整最终结论。 */
   institutionTaskGroups(q='',offset=0){
     const params=new URLSearchParams({q,offset:String(offset)});
     return this.request<InstitutionUserGroupPage>('/institution-tasks/users?'+params.toString());
   }
+  /** 查询当前最大并发档位和运行中/排队中的任务数。 */
   institutionConcurrency(){
     return this.request<InstitutionConcurrencyStatus>('/institution-concurrency');
   }
+  /** 用户点击「保存配置」才发出 PATCH；request() 会自动带 CSRF 请求头。 */
   saveInstitutionConcurrency(maxConcurrency:InstitutionConcurrency){
     return this.request<InstitutionConcurrencyStatus>('/institution-concurrency',{
       method:'PATCH',body:JSON.stringify({maxConcurrency}),
     });
   }
+  /** 管理员选中一条任务时才查询详细结果，避免列表一次性暴露所有结论。 */
   institutionTask(id:string){
     return this.request<InstitutionAdminTaskDetail>('/institution-tasks/'+encodeURIComponent(id));
   }
-  institutionAccessOverview(){return this.request<InstitutionAccessOverview>('/institution-access');}
+  /** 已观察到的接口调用情况；不能据此推断平台真实身份或授权。 */
+  institutionAccessOverview(){
+    return this.request<InstitutionAccessOverview>('/institution-access');
+  }
   private pageVisitorId?:string;
   recordPageVisit(page:string){
     // Keep tracking identity in memory. Anonymous iframes must not write to
