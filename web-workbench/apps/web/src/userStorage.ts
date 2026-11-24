@@ -8,7 +8,12 @@
  */
 // All browser caches are inaccessible until bootstrap establishes an owner.
 let scope:string|undefined;
-export function configureUserStorage(ownerId:string,multiUser:boolean){scope=multiUser?'harness.user.'+encodeURIComponent(ownerId)+'.':'';}
+/** Every authenticated owner gets an independent namespace, including localhost.
+ * Old unscoped caches are deliberately NOT migrated: they may mix users. */
+export function configureUserStorage(ownerId:string,_multiUser:boolean){
+  if(!ownerId)throw new Error('STORAGE_OWNER_REQUIRED');
+  scope='harness.user.'+encodeURIComponent(ownerId)+'.';
+}
 export function resetUserStorage(){scope=undefined;}
 export function scopedStorage(storage:()=>Storage):Storage{
   const keys=()=>{if(scope===undefined)return [];const raw=storage(),out:string[]=[];for(let i=0;i<raw.length;i++){const key=raw.key(i);if(key?.startsWith(scope))out.push(key.slice(scope.length));}return out;};
