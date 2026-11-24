@@ -117,7 +117,14 @@ export class LocalAuth implements RequestAuth {
     // visitor chooses the same self-reported profile.
     try{
       const existing=this.session(req);
-      if(existing.scope==='lan'&&existing.profile?.key===profile.key)return existing;
+      if(existing.scope==='lan'){
+        if(existing.profile?.key===profile.key)return existing;
+        // An account switch in the same LAN browser revokes the previous Cookie.
+        // Otherwise a copied/stale old token would remain usable for 12 hours.
+        const cookie=req.headers.cookie?.split(';').map(s=>s.trim())
+          .find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+        if(cookie)this.sessions.delete(hash(cookie).toString('hex'));
+      }
     }catch{}
     return this.issue(reply,'lan:'+randomUUID(),profile,'lan');
   }
