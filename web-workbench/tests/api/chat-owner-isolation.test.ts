@@ -70,7 +70,7 @@ test('local users A/B cannot list, read, write, rename, delete or interrupt each
       {method:'GET',url:api+'/sessions/'+sessionId+'/activity'},
       {method:'POST',url:api+'/sessions/'+sessionId+'/messages',payload:{text:'越权',scenario:'direct-chat'}},
       {method:'POST',url:api+'/sessions/'+sessionId+'/interrupt',payload:{}},
-      {method:'POST',url:api+'/sessions/'+sessionId+'/permission',payload:{requestId:'bad',decision:'allow'}},
+      {method:'POST',url:api+'/sessions/'+sessionId+'/permission',payload:{requestId:'bad',decision:'once',revision:'r'}},
       {method:'PATCH',url:api+'/sessions/'+sessionId,payload:{title:'越权改名'}},
       {method:'DELETE',url:api+'/sessions/'+sessionId},
     ];
