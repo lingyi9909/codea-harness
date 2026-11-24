@@ -167,8 +167,8 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
           fs.writeFileSync(process.env.HARNESS_OPENCODE_SERVICE_FILE+'.body',body);
           const create=JSON.parse(body);
           if(create.metadata.harnessScenario==='log-inspection'){
-            if(logSession){secondLog={...create,id:'ses_second_log'};res.end(JSON.stringify({data:secondLog}));return;}
-            logSession={...create,id:'ses_logs_fixture'};res.end(JSON.stringify({data:logSession}));return;
+            if(logSession){secondLog={...create,id:'ses_second_log',time:{updated:Date.now()}};res.end(JSON.stringify({data:secondLog}));return;}
+            logSession={...create,id:'ses_logs_fixture',time:{updated:Date.now()}};res.end(JSON.stringify({data:logSession}));return;
           }
           res.writeHead(503);res.end('{}');
         });return;
@@ -795,6 +795,12 @@ it('groups a multi-step weather response and keeps verification output out of th
       assistant('answer',[{kind:'text',text:answer}]),
       assistant('done',[{kind:'notice',text:'本轮已完成'}]),
     ];
+    // This UI-only test uses a synthetic ChatStatus without a native session.
+    // Stub the *server-confirmed* history list; ownership denial is covered
+    // independently by tests/api/chat-owner-isolation.test.ts.
+    await page.route('**/api/v1/chat/history',route=>route.fulfill({json:{data:{
+      items:[{id,title:'北京明天的天气',updated:Date.now()}],next:undefined,
+    },requestId:'ui-history-fixture'}}));
     await page.route('**/chat/sessions/'+id+'/activity',route=>route.fulfill({status:204}));
     await page.route('**/chat/sessions/'+id,route=>route.fulfill({json:{data:{
       id,directory:root,title:'北京明天的天气',active:false,messages,permissions:[],forms:[]},requestId:'fixture'}}));
