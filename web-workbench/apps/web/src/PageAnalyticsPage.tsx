@@ -12,7 +12,6 @@ import {ProfileLogin} from './ProfileLogin.tsx';
 import './page-analytics.css';
 
 type Stat=Awaited<ReturnType<typeof api.pageStats>>;
-const isLan=()=>!['127.0.0.1','localhost','::1','[::1]'].includes(location.hostname);
 export function PageAnalyticsPage(){
   const [mode,setMode]=useState<'loading'|'profile'|'pair'|'ready'|'error'>('loading');
   const [error,setError]=useState(''),[pairCode,setPairCode]=useState(''),[busy,setBusy]=useState(false);
@@ -47,8 +46,8 @@ export function PageAnalyticsPage(){
   const total=stats?.rows.reduce((n,row)=>n+row.views,0)??0;
   const today=stats?.daily.filter(row=>row.day===new Date().toISOString().slice(0,10))
     .reduce((n,row)=>n+row.views,0)??0;
-  if(mode==='profile')return <ProfileLogin lan={isLan()} onLogin={async(name,phone,lanCode)=>{
-    await api.login(name,phone,lanCode);setMode('ready');
+  if(mode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
+    await api.login(name,phone);setMode('ready');
   }}/>;
   if(mode==='pair')return <main className="pair-page"><form className="pair-card" onSubmit={e=>{
     e.preventDefault();if(busy)return;setBusy(true);setError('');
