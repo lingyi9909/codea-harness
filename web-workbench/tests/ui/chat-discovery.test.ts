@@ -156,6 +156,11 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
         {type:'text',text:'检查结束。'},{type:'text',text:${JSON.stringify(diagnosis)}}]}]}));
       if(req.url===logBase+'/inbox')return res.end(JSON.stringify({data:[]}));
       if(req.url==='/api/session/active')return res.end(JSON.stringify({data:fs.existsSync(flag+'.prompt')&&!generated?{ses_logs_fixture:{}}:{}}));
+      // History API now lists only server-verified Owner sessions. Simulate
+      // the actual native session list instead of relying on browser caches.
+      if(req.url.split('?')[0]==='/api/session'&&req.method==='GET'){
+        return res.end(JSON.stringify({data:[secondLog,logSession].filter(Boolean),cursor:{}}));
+      }
       if(req.url==='/api/session'&&req.method==='POST'){
         req.setEncoding('utf8');let body='';
         req.on('data',s=>body+=s);req.on('end',()=>{
@@ -795,7 +800,11 @@ it('groups a multi-step weather response and keeps verification output out of th
       id,directory:root,title:'北京明天的天气',active:false,messages,permissions:[],forms:[]},requestId:'fixture'}}));
     await page.goto('http://127.0.0.1:'+port);
     await login(page);
-    await seedAccountSession(page,{'harness.scene':'chat','harness.chat':id});
+    await seedAccountSession(page,{
+      'harness.scene':'chat',
+      'harness.chat':id,
+      ['harness.chat.selected.'+JSON.stringify(root)]:id,
+    });
     await page.reload();
     const response=page.getByRole('article',{name:'OpenCode 回答'});
     const shots=join(process.cwd(),'screenshots');
