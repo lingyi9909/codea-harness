@@ -20,6 +20,25 @@ async function observePaintedText(page:Page){
     });
 }
 
+// Browser storage is scoped by server-confirmed Owner ID, including localhost.
+async function accountStorage(page:Page,which:'local'|'session',key:string){
+  return page.evaluate(async({which,key})=>{
+    const response=await fetch('/api/v1/bootstrap');
+    if(!response.ok)throw Error('AUTH_REQUIRED');
+    const {data}=await response.json();
+    const prefix='harness.user.'+encodeURIComponent(data.owner.id)+'.';
+    return (which==='local'?localStorage:sessionStorage).getItem(prefix+key);
+  },{which,key});
+}
+async function seedAccountSession(page:Page,values:Record<string,string>){
+  await page.evaluate(async(values)=>{
+    const response=await fetch('/api/v1/bootstrap');
+    if(!response.ok)throw Error('AUTH_REQUIRED');
+    const {data}=await response.json();
+    const prefix='harness.user.'+encodeURIComponent(data.owner.id)+'.';
+    for(const [key,value] of Object.entries(values))sessionStorage.setItem(prefix+key,value);
+  },values);
+}
 async function login(page:Page){
   await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
   await page.getByLabel('姓名',{exact:true}).fill('测试同事');
@@ -309,7 +328,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.screenshot({path:join(shots,'02-model-picker.png')});
     await search.press('Enter');
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','company/intranet');
-    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+    assert.deepEqual(JSON.parse((await accountStorage(page,'local','harness.global.model'))??'null'),
       {id:'intranet',providerID:'company'});
     const composer=page.getByLabel('对话内容');
     await composer.fill('第一行');
@@ -576,7 +595,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('combobox',{name:'模型变体'}).selectOption('high');
     await page.getByRole('button',{name:'使用此模型'}).click();
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','labs/analysis');
-    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+    assert.deepEqual(JSON.parse((await accountStorage(page,'local','harness.global.model'))??'null'),
       {id:'analysis',providerID:'labs',variant:'high'});
     await page.reload();
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','labs/analysis');
@@ -653,7 +672,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     await expect(summaryBar).toHaveCount(0);
-    assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('harness.logs.filters.ses_logs_fixture')??'{}').msgSn),'000123');
+    assert.equal(JSON.parse((await accountStorage(page,'session','harness.logs.filters.ses_logs_fixture'))??'{}').msgSn,'000123');
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/第二次排查/}).click();
     await page.reload();
@@ -665,7 +684,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await history.getByRole('button',{name:/检查超时原因/}).click();
     await expect(summaryBar).toHaveCount(0);
     await expect(page.getByRole('dialog',{name:'调整排查条件'})).toHaveCount(0);
-    assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
+    assert.deepEqual(await Promise.all([accountStorage(page,'session','harness.chat'),accountStorage(page,'session','harness.logs')]),['','ses_logs_fixture']);
     // Applying conditions reuses the current session, closes the drawer,
     // preserves a pending reply draft and does not attach reply-only files.
     const pendingDraft='未发送的追问草稿';
@@ -679,7 +698,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await dialog.getByRole('button',{name:'应用并重新排查'}).click();
     await expect(dialog).toHaveCount(0);
     await expect(summaryBar).toHaveCount(0);
-    await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('harness.logs.filters.ses_logs_fixture')??'{}')))
+    await expect.poll(async()=>JSON.parse((await accountStorage(page,'session','harness.logs.filters.ses_logs_fixture'))??'{}'))
       .toMatchObject({keyword:'retry-timeout',msgSn:'000789'});
     await expect(page.getByLabel('对话内容')).toHaveValue(pendingDraft);
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text)
@@ -688,7 +707,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.ok(rerun.text.includes('msgSn：000789'));
     assert.ok(!rerun.text.includes(pendingDraft));
     assert.deepEqual(rerun.files,[]);
-    assert.equal(await page.evaluate(()=>sessionStorage.getItem('harness.logs')),'ses_logs_fixture');
+    assert.equal(await accountStorage(page,'session','harness.logs'),'ses_logs_fixture');
     assert.deepEqual(retiredRequests,[]);
     // History management must persist in native OpenCode, not only localStorage.
     await page.getByRole('button',{name:'历史对话'}).click();
@@ -750,6 +769,7 @@ it('groups a multi-step weather response and keeps verification output out of th
   try{
     await app.listen({host:'127.0.0.1',port});
     const page=await browser.newPage({viewport:{width:1280,height:800}});
+    // A legacy unscoped history entry must remain invisible after login.
     await page.addInitScript(id=>{sessionStorage.setItem('harness.scene','chat');sessionStorage.setItem('harness.chat',id);},id);
     const answer='北京明天晴，早晚温差较大。\n\n- **白天**：晴，最高 **15℃**\n- **夜间**：晴，最低 **3℃**\n\n数据来源：[中央气象台](https://www.nmc.cn/publish/forecast/ABJ/beijing.html)';
     const tool=(name:string,result:string)=>({kind:'tool',name,status:'completed',result});
@@ -775,6 +795,8 @@ it('groups a multi-step weather response and keeps verification output out of th
       id,directory:root,title:'北京明天的天气',active:false,messages,permissions:[],forms:[]},requestId:'fixture'}}));
     await page.goto('http://127.0.0.1:'+port);
     await login(page);
+    await seedAccountSession(page,{'harness.scene':'chat','harness.chat':id});
+    await page.reload();
     const response=page.getByRole('article',{name:'OpenCode 回答'});
     const shots=join(process.cwd(),'screenshots');
     await mkdir(shots,{recursive:true});
