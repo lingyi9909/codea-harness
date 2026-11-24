@@ -1,3 +1,11 @@
+/**
+ * 工作台直接对话
+ *
+ * 职责：管理首页对话交互、消息流与执行反馈。
+ * Java 研发阅读提示：先读用户提交和 useEffect 请求，再追踪 api/client.ts 的 HTTP 调用。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {BusinessVerification} from './BusinessVerification.tsx';
 import {localStorage,sessionStorage} from './userStorage.ts';
 import {useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode} from 'react';

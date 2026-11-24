@@ -1,3 +1,11 @@
+/**
+ * 文件类研发场景组件
+ *
+ * 职责：组织文件相关的研发场景输入和页面交互。
+ * Java 研发阅读提示：React JSX 只负责渲染和事件，底层文件访问范围仍由服务端核验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useMemo,useRef,useState} from 'react';
 
 // CSV accepts escaped quotes, quoted newlines, CRLF and a UTF-8 BOM.

@@ -1,3 +1,11 @@
+/**
+ * 公共组件测试页
+ *
+ * 职责：集中展示并验证各类输入控件和共享前端组件。
+ * Java 研发阅读提示：这是本机管理员测试入口，不承载真实业务授权。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useEffect,useState} from 'react';
 import {CalendarDate,SecondClock,localDayBounds,parseSecondDateTime} from './TimeFields.tsx';
 import {ModelPicker} from './ModelPicker.tsx';

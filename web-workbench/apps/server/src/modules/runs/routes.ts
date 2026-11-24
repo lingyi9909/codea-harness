@@ -1,3 +1,11 @@
+/**
+ * 执行记录 Controller
+ *
+ * 职责：向前端暴露运行状态、详情和控制入口。
+ * Java 研发阅读提示：区分持久化 Run 与实时 OpenCode Session 的不同状态。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';

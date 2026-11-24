@@ -1,4 +1,12 @@
 /**
+ * 机构任务 SQLite 仓储
+ *
+ * 职责：保存幂等请求、任务状态、并发档位和用户聚合。
+ * Java 研发阅读提示：重点关注 take/finish 与 UNKNOWN：执行结果不确定时不得自动重放。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
+/**
  * 机构 API 的 SQLite 持久层。请先读这里，再读 institution-integration.ts。
  *
  * 阅读路线：表结构 -> create/get 幂等 -> take/finish 状态机 ->

@@ -1,3 +1,11 @@
+/**
+ * 本机登录和 CSRF 校验
+ *
+ * 职责：维护本地 Cookie、会话有效期、请求来源及修改操作的 CSRF。
+ * Java 研发阅读提示：用户资料不等于企业认证，真正的管理权限必须在服务端校验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';

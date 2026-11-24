@@ -1,3 +1,11 @@
+/**
+ * 消息处理业务层
+ *
+ * 职责：处理消息存取、顺序和前端展示所需的业务数据。
+ * Java 研发阅读提示：流式增量与最终消息不能当成同一个完成信号。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { DTO } from '../../../../../packages/contracts/src/domain.ts';

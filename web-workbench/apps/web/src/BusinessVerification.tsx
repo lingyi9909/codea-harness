@@ -1,3 +1,11 @@
+/**
+ * 业务验证表单
+ *
+ * 职责：展示业务验证码等交互字段并处理提交状态。
+ * Java 研发阅读提示：用户填写/前端校验不代表后端已经完成业务身份校验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useEffect,useState,type FormEvent} from 'react';
 import {api} from './api/client.ts';
 // The code is ephemeral component state, never composer/history/Form input.

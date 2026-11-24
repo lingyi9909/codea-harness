@@ -1,3 +1,11 @@
+/**
+ * 机构查询适配
+ *
+ * 职责：组织机构排查中使用的查询条件及数据访问适配。
+ * Java 研发阅读提示：不要把查询适配结果直接等同于最终排查结论。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {createHash} from 'node:crypto';
 import {AuthProblem} from './auth.ts';
 import type {EmbedStore} from '../../../packages/storage/src/embed.ts';

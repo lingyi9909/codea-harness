@@ -1,3 +1,11 @@
+/**
+ * 前端活动流传输
+ *
+ * 职责：封装前端接收持续执行事件的连接与生命周期。
+ * Java 研发阅读提示：实时事件可能延迟或重放；最终任务状态需按后端记录确认。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 export interface ChatEventSource {
   onmessage:((event:MessageEvent<string>)=>void)|null;
   onerror:(()=>void)|null;

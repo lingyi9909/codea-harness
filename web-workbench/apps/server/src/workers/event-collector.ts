@@ -1,3 +1,11 @@
+/**
+ * 后台执行事件收集
+ *
+ * 职责：收集执行期间的事件并整理成持久化或可推送的数据。
+ * Java 研发阅读提示：事件回放可能不同于当前真实进度，最终结果需以任务状态为准。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { setTimeout as delay } from 'node:timers/promises';
 import { dispatchControl, syncInteractions } from './native-controls.ts';
 import { randomUUID } from 'node:crypto';

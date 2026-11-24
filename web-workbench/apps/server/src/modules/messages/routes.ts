@@ -1,3 +1,11 @@
+/**
+ * 消息查询 Controller
+ *
+ * 职责：暴露会话消息查询与显示所需的 HTTP 接口。
+ * Java 研发阅读提示：按任务和用户归属过滤数据，不应泄露原生内部消息。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';

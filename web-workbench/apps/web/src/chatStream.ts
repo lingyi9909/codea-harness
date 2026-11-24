@@ -1,3 +1,11 @@
+/**
+ * 流式消息处理
+ *
+ * 职责：接收并整理模型执行过程中的流式消息片段。
+ * Java 研发阅读提示：分片完成与整个任务完成不是同一信号，需处理重连和有序追加。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {api} from './api/client.ts';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import type {ChatFragment,ChatLifecycle,ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';

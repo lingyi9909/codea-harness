@@ -1,3 +1,11 @@
+/**
+ * OpenCode 执行上下文
+ *
+ * 职责：为不同任务传递执行身份、工具权限与任务级上下文。
+ * Java 研发阅读提示：可类比 Java ThreadLocal，但 Promise 并发并非一请求一线程。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {readFile,realpath} from 'node:fs/promises';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {isAbsolute,relative,sep} from 'node:path';

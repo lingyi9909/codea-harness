@@ -1,3 +1,11 @@
+/**
+ * 仓库变更预览 Service
+ *
+ * 职责：在受允许范围内读取代码仓库变更和文件内容。
+ * Java 研发阅读提示：预览只读，执行前仍需固定审查基线与调用范围。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import type { Pool, RowDataPacket, PoolConnection } from 'mysql2/promise';
 import type { DTO } from '../../../../../packages/contracts/src/domain.ts';

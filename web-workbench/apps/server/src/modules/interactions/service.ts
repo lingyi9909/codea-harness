@@ -1,3 +1,11 @@
+/**
+ * 工具交互 Service
+ *
+ * 职责：处理执行过程中需要用户决定的权限或参数请求。
+ * Java 研发阅读提示：理解请求与应答的对应关系，避免交互串到其他任务。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { DTO } from '../../../../../packages/contracts/src/domain.ts';

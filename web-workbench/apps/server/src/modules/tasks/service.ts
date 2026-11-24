@@ -1,3 +1,11 @@
+/**
+ * 任务业务 Service
+ *
+ * 职责：组织任务创建、状态更新、执行关联和任务持久化。
+ * Java 研发阅读提示：优先阅读任务状态转换和幂等约束，再看其他业务方法。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { DTO } from '../../../../../packages/contracts/src/domain.ts';

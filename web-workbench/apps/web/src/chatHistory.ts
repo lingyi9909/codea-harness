@@ -1,3 +1,11 @@
+/**
+ * 会话历史存储
+ *
+ * 职责：维护或整理浏览器侧的历史会话索引与持久化信息。
+ * Java 研发阅读提示：本地缓存与服务器实际任务记录可能不同步，不应混用作为权限凭据。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {sessionStorage} from './userStorage.ts';
 import type {ChatHistoryPage} from '../../../packages/contracts/src/chat.ts';
 

@@ -1,3 +1,11 @@
+/**
+ * 场景配置表单
+ *
+ * 职责：管理场景与工作目录、Skill/Agent/Command 的绑定关系。
+ * Java 研发阅读提示：配置保存前需要后端校验真实目录及执行能力。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useEffect,useState} from 'react';
 import {SceneAccessManagement} from './SceneAccessManagement.tsx';
 import {api} from './api/client.ts';

@@ -1,3 +1,11 @@
+/**
+ * 侧栏历史对话
+ *
+ * 职责：将用户历史会话映射为可切换的导航列表。
+ * Java 研发阅读提示：区别当前选中会话与持久化历史数据的真实来源。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {localStorage} from './userStorage.ts';
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';

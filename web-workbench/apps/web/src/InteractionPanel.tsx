@@ -1,3 +1,11 @@
+/**
+ * 执行权限交互面板
+ *
+ * 职责：展示并处理模型工具执行过程中的授权或补参请求。
+ * Java 研发阅读提示：前端确认动作最终必须由后台根据真实会话再次校验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { useState } from 'react';
 import type { Schema } from './api/client.ts';
 

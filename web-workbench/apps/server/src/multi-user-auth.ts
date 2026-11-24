@@ -1,3 +1,11 @@
+/**
+ * 多用户身份隔离
+ *
+ * 职责：处理不同 LAN 用户或会话的身份范围和凭证校验。
+ * Java 研发阅读提示：本机管理用户、外部业务用户和浏览器会话不是同一身份模型。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest,FastifyReply } from 'fastify';
 import { AuthProblem,type Session } from './auth.ts';

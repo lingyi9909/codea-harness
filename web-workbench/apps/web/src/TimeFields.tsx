@@ -1,3 +1,11 @@
+/**
+ * 通用时间输入组件
+ *
+ * 职责：统一管理日期与时间的录入和格式转换。
+ * Java 研发阅读提示：注意业务时区、日期边界以及浏览器本地时间的差异。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 /** Shared native date and second-precision clock controls used by investigations and component tests. */
 type Props={label:string;value:string;onChange:(value:string)=>void;invalid?:boolean;descriptionId?:string;required?:boolean};
 export function CalendarDate({label,value,onChange,invalid=false,descriptionId,required=true}:Props){

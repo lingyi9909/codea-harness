@@ -1,3 +1,11 @@
+/**
+ * React 页面启动入口
+ *
+ * 职责：挂载智能工作台页面，并根据 URL 选择相应应用入口。
+ * Java 研发阅读提示：类比 Java 应用启动初始化；这里只负责前端挂载和模块装配。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {StandaloneConfigPage} from './StandaloneConfigPage.tsx';
 import {ComponentLabPage} from './ComponentLabPage.tsx';
 import {PageAnalyticsPage} from './PageAnalyticsPage.tsx';

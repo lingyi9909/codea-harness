@@ -1,3 +1,11 @@
+/**
+ * 页面访问统计
+ *
+ * 职责：聚合页面访问次数和访客信息以供管理页展示。
+ * Java 研发阅读提示：统计数据不能替代审计凭证；留意用户标识与保留周期。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
 import {existsSync,lstatSync,mkdirSync,chmodSync} from 'node:fs';

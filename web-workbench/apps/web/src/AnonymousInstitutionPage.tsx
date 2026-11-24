@@ -1,3 +1,11 @@
+/**
+ * 匿名机构排查页面
+ *
+ * 职责：实现机构独立入口的参数输入、请求执行及结果展示。
+ * Java 研发阅读提示：TSX 包含 UI 和状态，数据可信性由 C 后端校验而非前端控件。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {institutionDefaultModel} from './institution-model.ts';
 import {useEffect,useRef,useState} from 'react';
 import {api,ApiError} from './api/client.ts';

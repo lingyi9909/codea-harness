@@ -1,3 +1,11 @@
+/**
+ * 工作目录用户资料
+ *
+ * 职责：读取/核对当前工作目录对应的本地登录用户资料。
+ * Java 研发阅读提示：用户自填姓名手机号不构成强身份认证。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync,
   renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';

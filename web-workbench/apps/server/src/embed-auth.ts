@@ -1,3 +1,11 @@
+/**
+ * 嵌入场景身份边界
+ *
+ * 职责：核验宿主接入票据和嵌入用户的会话归属。
+ * Java 研发阅读提示：嵌入会话与 C 本机管理员会话采用不同的信任范围。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {createHash,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import type {FastifyRequest,FastifyReply} from 'fastify';
 import {AuthProblem,type RequestAuth} from './auth.ts';

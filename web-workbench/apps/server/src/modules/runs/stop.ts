@@ -1,3 +1,11 @@
+/**
+ * 执行停止编排
+ *
+ * 职责：协调用户停止请求与后台运行终止。
+ * Java 研发阅读提示：停止是协作式动作，不能推断之前提交的外部操作被撤销。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import type { DTO } from '../../../../../packages/contracts/src/domain.ts';

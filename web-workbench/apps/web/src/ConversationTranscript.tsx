@@ -1,3 +1,11 @@
+/**
+ * 对话消息正文
+ *
+ * 职责：负责展示多轮对话内容及任务过程中的消息片段。
+ * Java 研发阅读提示：区分最终回复与执行过程中的中间消息。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {lazy,Suspense,useState} from 'react';
 import type {ChatMessage,ChatStep,ToolProgress} from '../../../packages/contracts/src/chat.ts';
 import {api,ApiError} from './api/client.ts';

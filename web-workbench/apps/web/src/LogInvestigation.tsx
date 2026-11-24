@@ -1,3 +1,11 @@
+/**
+ * 问题排查输入页
+ *
+ * 职责：组织日志/业务问题排查的条件、用户追问与结果显示。
+ * Java 研发阅读提示：输入参数应由页面规范化，但后端仍需校验字段及范围。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {sessionStorage} from './userStorage.ts';
 import {useState} from 'react';
 import {CalendarDate,SecondClock} from './TimeFields.tsx';

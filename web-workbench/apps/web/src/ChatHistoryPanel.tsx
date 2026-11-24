@@ -1,3 +1,11 @@
+/**
+ * 历史对话面板
+ *
+ * 职责：展示历史会话列表及用户对会话的选择操作。
+ * Java 研发阅读提示：React useState 表示界面状态；持久化数据由后端或存储层提供。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {localStorage,sessionStorage} from './userStorage.ts';
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';

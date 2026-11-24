@@ -1,3 +1,11 @@
+/**
+ * 智能工作台 React 主应用
+ *
+ * 职责：组织场景侧栏、直接对话、系统管理和页面切换。
+ * Java 研发阅读提示：JSX 描述视图，useState/useEffect 管理页面状态和副作用；真实权限仍在后端。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {localStorage,sessionStorage} from './userStorage.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api/client.ts';

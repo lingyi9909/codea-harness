@@ -1,3 +1,11 @@
+/**
+ * 用户相关浏览器存储
+ *
+ * 职责：集中管理客户端可保存的用户或会话相关数据。
+ * Java 研发阅读提示：浏览器存储可能被用户修改，不应承载机密信息或授权事实。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 // All browser caches are inaccessible until bootstrap establishes an owner.
 let scope:string|undefined;
 export function configureUserStorage(ownerId:string,multiUser:boolean){scope=multiUser?'harness.user.'+encodeURIComponent(ownerId)+'.':'';}

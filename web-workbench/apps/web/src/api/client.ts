@@ -1,3 +1,11 @@
+/**
+ * 前端 HTTP API 客户端
+ *
+ * 职责：集中封装任务、配置、登录及机构排查的后端请求。
+ * Java 研发阅读提示：泛型 Promise<T> 类比异步 Feign 返回值；TS 类型不会自动验证响应 JSON。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {BearerEventSource,type ChatEventSource} from './activity-source.ts';
 import {configureUserStorage,resetUserStorage} from '../userStorage.ts';
 import type { ChatStatus,ChatSettings,ChatHistoryPage,ChatScenario,ChatModel,SceneConfigResponse,SceneConfigValue,SceneAccessConfig } from '../../../../packages/contracts/src/chat.ts';

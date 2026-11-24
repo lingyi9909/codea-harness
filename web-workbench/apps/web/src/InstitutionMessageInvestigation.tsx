@@ -1,3 +1,11 @@
+/**
+ * 机构报文排查表单
+ *
+ * 职责：接收排查日期和 msgSn 并驱动机构业务排查页面。
+ * Java 研发阅读提示：业务日期应按上海时区处理，报文编号应保留原始字符串。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useState,type FormEvent} from 'react';
 import {CalendarDate,localDayBounds} from './TimeFields.tsx';
 import './institution-message-investigation.css';

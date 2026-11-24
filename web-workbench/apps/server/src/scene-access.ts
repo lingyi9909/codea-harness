@@ -1,3 +1,11 @@
+/**
+ * 场景权限策略
+ *
+ * 职责：保存/核验不同研发场景的工具使用权限。
+ * Java 研发阅读提示：权限校验在 C 后端完成；配置编辑权限和工具执行权限需分开理解。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {closeSync,constants,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,unlinkSync,writeFileSync} from 'node:fs';
 import {createHash,randomUUID} from 'node:crypto';
 import {join} from 'node:path';

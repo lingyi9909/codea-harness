@@ -1,3 +1,11 @@
+/**
+ * 场景执行配置
+ *
+ * 职责：维护每个业务子场景的工作目录及 Skill、Agent 或命令绑定。
+ * Java 研发阅读提示：类比 Java 配置中心；目录与执行能力必须在实际调用前核验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, join, relative, resolve } from 'node:path';

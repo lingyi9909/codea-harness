@@ -1,3 +1,11 @@
+/**
+ * 服务端 HTTP 总入口
+ *
+ * 职责：装配会话认证、业务路由、场景配置及静态资源。
+ * Java 研发阅读提示：类似 Spring Boot Web 配置与 Controller 注册入口。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {chatConnection} from './modules/chat/connection.ts';
 import {PageVisitStore,validPageId} from './page-visits.ts';
 import {institutionIntegrationConfig,registerInstitutionIntegration} from './institution-integration.ts';

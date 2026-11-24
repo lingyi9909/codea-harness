@@ -1,3 +1,11 @@
+/**
+ * 聊天操作组件
+ *
+ * 职责：组织聊天中用户发起的请求或交互式操作。
+ * Java 研发阅读提示：理解页面事件处理与后台真实会话状态之间的区别。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useId,useRef,useState} from 'react';
 import type {FormEvent} from 'react';
 import {activeFormFields,formDefaults,type ChatForm,type ChatFormField,type ChatStatus,type FormValue} from '../../../packages/contracts/src/chat.ts';

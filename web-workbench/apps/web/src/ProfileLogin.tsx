@@ -1,3 +1,11 @@
+/**
+ * 本地资料登录页
+ *
+ * 职责：收集姓名、手机号等本机资料并提交登录。
+ * Java 研发阅读提示：本地资料不是强认证；服务端管理员 ACL 才决定可否访问敏感接口。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { useState, type FormEvent } from 'react';
 import { ApiError } from './api/client.ts';
 import './profile-login.css';

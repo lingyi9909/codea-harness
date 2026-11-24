@@ -1,3 +1,11 @@
+/**
+ * 后台任务调度器
+ *
+ * 职责：领取待执行任务并协调任务执行顺序及 worker 生命周期。
+ * Java 研发阅读提示：可类比 Java ExecutorService/队列；注意任务幂等和并发边界。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { resumeExpired } from './recovery.ts';
 import { collectNativeEvents } from './event-collector.ts';
 import { join, resolve } from 'node:path';

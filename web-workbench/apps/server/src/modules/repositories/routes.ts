@@ -1,3 +1,11 @@
+/**
+ * 代码仓库 Controller
+ *
+ * 职责：为前端提供仓库信息和只读预览相关接口。
+ * Java 研发阅读提示：HTTP 输入校验与具体 Git 操作应分层理解。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { AuthProblem } from '../../auth.ts';

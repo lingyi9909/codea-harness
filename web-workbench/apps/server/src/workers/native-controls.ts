@@ -1,3 +1,11 @@
+/**
+ * 原生执行控制
+ *
+ * 职责：对接 OpenCode 的运行控制、权限或停止操作。
+ * Java 研发阅读提示：区分向原生服务发起控制命令与控制实际完成。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import { AuthProblem } from '../auth.ts';
 import { requestStop } from '../modules/runs/stop.ts';

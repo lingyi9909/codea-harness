@@ -1,3 +1,11 @@
+/**
+ * 独立场景配置管理页
+ *
+ * 职责：为本机管理员提供场景设置和系统管理快捷入口。
+ * Java 研发阅读提示：仅本机打开并不等于拥有编辑权限，后端仍验证 editors 名单。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useEffect,useState} from 'react';
 import {api,ApiError} from './api/client.ts';
 import {ProfileLogin} from './ProfileLogin.tsx';

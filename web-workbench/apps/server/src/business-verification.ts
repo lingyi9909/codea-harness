@@ -1,3 +1,11 @@
+/**
+ * 业务验证码处理
+ *
+ * 职责：协调业务验证流程中的挑战、状态与校验结果。
+ * Java 研发阅读提示：区分浏览器登录态与具体业务的验证状态。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {randomBytes,randomUUID} from 'node:crypto';
 import {AuthProblem} from './auth.ts';
 import {UserContextResolver,type UserScope} from './user-context.ts';

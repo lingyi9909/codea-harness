@@ -1,3 +1,11 @@
+/**
+ * 通用对话 Controller
+ *
+ * 职责：承接对话创建、查询、执行、追问和管理接口。
+ * Java 研发阅读提示：这是长文件，建议先按 URL 路由分组，再沿调用关系找到 Service。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {BusinessVerificationBridge} from '../../business-verification.ts';
 import type {UserContextResolver} from '../../user-context.ts';
 import type {ExecutionRegistry} from '../../execution-registry.ts';

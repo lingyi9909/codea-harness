@@ -1,3 +1,11 @@
+/**
+ * 消息 Markdown 渲染
+ *
+ * 职责：将模型的正文内容渲染为可读格式。
+ * Java 研发阅读提示：渲染属于展示层，不应把模型生成文本当成可执行命令。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {memo,useRef,useState,type ComponentPropsWithoutRef} from 'react';
 import Markdown,{type Components} from 'react-markdown';
 import remarkGfm from 'remark-gfm';

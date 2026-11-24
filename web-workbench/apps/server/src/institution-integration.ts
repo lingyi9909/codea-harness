@@ -1,4 +1,12 @@
 /**
+ * 机构 B→C API 与调度
+ *
+ * 职责：封装创建任务、并发领取、独立 OpenCode Session 和管理员接口。
+ * Java 研发阅读提示：主线为 create → pump → runTask；数据库逻辑在 institution-task-store.ts。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
+/**
  * 机构报文排查 API：HTTP 路由（Controller）+ 执行调度（Service）。
  *
  * 建议 Java 同学阅读顺序：

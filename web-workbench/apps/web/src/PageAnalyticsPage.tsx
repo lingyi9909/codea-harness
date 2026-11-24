@@ -1,3 +1,11 @@
+/**
+ * 页面访问统计管理页
+ *
+ * 职责：展示工作台各页面的访问次数和相关统计。
+ * Java 研发阅读提示：访问统计是运营信息，不能替代可验证的身份认证和审计日志。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {api,ApiError} from './api/client.ts';
 import {ProfileLogin} from './ProfileLogin.tsx';

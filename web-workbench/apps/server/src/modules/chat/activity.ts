@@ -1,3 +1,11 @@
+/**
+ * 对话执行活动
+ *
+ * 职责：归纳会话中的工具执行、消息和进度活动。
+ * Java 研发阅读提示：实时事件、持久化消息和最终结果不是同一层数据。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {SessionMessagesResponse} from '@opencode/client';
 import type {ChatFooter,ChatStep} from '../../../../../packages/contracts/src/chat.ts';
 

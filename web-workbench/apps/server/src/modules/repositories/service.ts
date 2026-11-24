@@ -1,3 +1,11 @@
+/**
+ * 仓库管理业务层
+ *
+ * 职责：定位受允许访问的代码仓库并组织审查输入。
+ * Java 研发阅读提示：项目路径和 Git 范围属于安全边界，不能由模型任意扩张。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
 import type { DTO } from '../../../../../packages/contracts/src/domain.ts';

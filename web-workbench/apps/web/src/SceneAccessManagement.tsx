@@ -1,3 +1,11 @@
+/**
+ * 场景权限管理界面
+ *
+ * 职责：展示和修改不同场景的工具访问配置。
+ * Java 研发阅读提示：按钮/表单只是客户端表达，编辑权限和 CSRF 在后端校验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';
 import type {SceneAccessConfig,AccessScene,AccessToolChoice,AccessToolAction,CustomToolRule} from '../../../packages/contracts/src/chat.ts';

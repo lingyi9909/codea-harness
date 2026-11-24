@@ -1,3 +1,11 @@
+/**
+ * 任务文件处理
+ *
+ * 职责：读取、验证或整理任务相关的输入文件。
+ * Java 研发阅读提示：注意目录范围和路径归一化，避免读取不属于任务的文件。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type { FastifyInstance } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';

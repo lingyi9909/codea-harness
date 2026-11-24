@@ -1,3 +1,11 @@
+/**
+ * 源码与文件查看组件
+ *
+ * 职责：在界面上展示代码、文件或来源数据。
+ * Java 研发阅读提示：浏览器只用于只读展示，不应通过视图实现仓库写入。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { useEffect,useState } from 'react';
 import { api,type Schema } from './api/client.ts';
 

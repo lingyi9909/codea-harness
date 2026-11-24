@@ -1,3 +1,11 @@
+/**
+ * 渐进式消息展示
+ *
+ * 职责：合并或处理逐步到达的对话内容，保持页面稳定展示。
+ * Java 研发阅读提示：渐进展示属于视图状态，不能代替任务成功完成的服务端记录。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useLayoutEffect,useMemo,useRef,useState} from 'react';
 import type {ChatMessage} from '../../../packages/contracts/src/chat.ts';
 

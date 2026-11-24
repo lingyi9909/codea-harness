@@ -1,3 +1,11 @@
+/**
+ * 嵌入场景 HTTP 路由
+ *
+ * 职责：为宿主平台的嵌入页提供初始化、执行和状态查询接口。
+ * Java 研发阅读提示：先读请求验证，再追踪原生执行和会话隔离。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import type {InstitutionQueryAdapter} from './institution-query.ts';

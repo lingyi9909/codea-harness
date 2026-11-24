@@ -1,3 +1,11 @@
+/**
+ * 共享模型选择组件
+ *
+ * 职责：展示可用模型并处理用户选择、切换和展示状态。
+ * Java 研发阅读提示：模型名称是选择信息，不代表工作目录下已配置的提供商一定可执行。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {localStorage} from './userStorage.ts';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';

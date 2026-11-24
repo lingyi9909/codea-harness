@@ -1,3 +1,11 @@
+/**
+ * 工作台服务启动入口
+ *
+ * 职责：读取启动参数并装配工作台所需运行能力。
+ * Java 研发阅读提示：可对照 Spring Boot main，区分启动参数与业务请求参数。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {httpInstitutionAdapter} from './institution-query.ts';
 import {PageVisitStore} from './page-visits.ts';
 import {resolveListenHost} from './lan-access.ts';

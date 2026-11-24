@@ -1,3 +1,11 @@
+/**
+ * 执行报告采集
+ *
+ * 职责：将原生任务结果整理为业务可用的报告或证据。
+ * Java 研发阅读提示：要区分最终结论、执行轨迹、证据文件和模型中间输出。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { createHash, randomUUID } from 'node:crypto';
 import { link, lstat, mkdir, open, readFile, realpath, unlink } from 'node:fs/promises';
 import { join, resolve, relative, isAbsolute, sep } from 'node:path';

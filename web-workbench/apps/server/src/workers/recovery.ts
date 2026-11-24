@@ -1,3 +1,11 @@
+/**
+ * 后台任务异常恢复
+ *
+ * 职责：处理进程恢复时的未完成运行和状态收敛。
+ * Java 研发阅读提示：执行是否已经到达模型或数据库可能不确定，不能无条件重跑。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {RowDataPacket,ResultSetHeader} from 'mysql2/promise';
 import type {SchedulerConfig} from './scheduler.ts';
 import type {Lease} from '../../../../packages/storage/src/slots.ts';
