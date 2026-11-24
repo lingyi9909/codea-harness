@@ -1,3 +1,12 @@
+/**
+ * 「系统管理 → 接口任务管理」的页面入口。
+ *
+ * 与 Java MVC 最大的区别：React 组件同时描述「页面 UI」和「页面状态」。
+ * 不要把 useState 中的变量理解成数据库数据；持久化状态仍由 C 的 SQLite 管理。
+ *
+ * 本页面负责权限态、筛选、自动刷新、任务详情；
+ * 并发配置和按用户聚合拆在 InstitutionTaskOperations.tsx。
+ */
 import {useEffect,useState} from 'react';
 import Markdown from 'react-markdown';
 import {api,ApiError,type InstitutionAccessOverview,type InstitutionAdminTaskDetail,type InstitutionTaskPage,type InstitutionTaskStatus} from './api/client.ts';
@@ -5,6 +14,7 @@ import {ProfileLogin} from './ProfileLogin.tsx';
 import {InstitutionConcurrencyControl,InstitutionUserGroupsView} from './InstitutionTaskOperations.tsx';
 import './institution-tasks.css';
 
+// Record<状态, 文案>：用 TS 声明完整的枚举映射，类似 Java 的 Map<Enum,String>。
 const statusLabels:Record<InstitutionTaskStatus,string>={
   QUEUED:'排队中',RUNNING:'执行中',SUCCEEDED:'已完成',FAILED:'执行失败',UNKNOWN:'状态未知',
 };
@@ -15,13 +25,19 @@ const formatTime=(value:string)=>new Date(value).toLocaleString('zh-CN',{
 });
 const errorText=(e:unknown)=>e instanceof Error?e.message:'查询失败';
 const active=(value:InstitutionTaskStatus)=>value==='QUEUED'||value==='RUNNING';
+// 通过 URL query 切换子视图：?view=users / ?view=access / 默认任务列表。
 const pageView=new URLSearchParams(window.location.search).get('view');
 const accessView=pageView==='access';
 const usersView=pageView==='users';
 
+/**
+ * 「接口接入情况」只展示过去 7 天的调用记录，并不管理平台授权。
+ * 这里的 clientId 是 C 服务配置标签，不证明请求者真实来自哪个平台。
+ */
 function AccessOverviewView({refresh,onForbidden}:{refresh:number;onForbidden:()=>void}){
   const [overview,setOverview]=useState<InstitutionAccessOverview|null>(null);
   const [error,setError]=useState('');
+  // React effect 在 refresh 变化时重新发起 GET。通过 live 避免卸载后更新 UI。
   useEffect(()=>{
     let live=true;
     api.institutionAccessOverview().then(data=>{if(live){setOverview(data);setError('');}})
@@ -66,20 +82,38 @@ function AccessOverviewView({refresh,onForbidden}:{refresh:number;onForbidden:()
   </section>;
 }
 
+/**
+ * 主页面：根据登录/访问权限渲染不同状态。
+ *
+ * mode 是一个联合类型（loading | profile | pair | ready | denied | error），
+ * 可以类比 Java 中的页面状态枚举；但在 TS 中无需定义单独的 enum 类。
+ */
 export function InstitutionTaskManagementPage(){
   const [mode,setMode]=useState<'loading'|'profile'|'pair'|'ready'|'denied'|'error'>('loading');
+  // 登录态/管理员权限只决定前端如何展示；后端每个接口仍重新校验权限。
   const [error,setError]=useState('');
-  const [pairCode,setPairCode]=useState(''),[pairBusy,setPairBusy]=useState(false);
+  const [pairCode,setPairCode]=useState('');
+  const [pairBusy,setPairBusy]=useState(false);
+
+  // 任务列表：筛选条件、分页、当前结果。
   const [filter,setFilter]=useState<InstitutionTaskStatus|'ALL'>('ALL');
-  const [query,setQuery]=useState(''),[appliedQuery,setAppliedQuery]=useState('');
+  const [query,setQuery]=useState('');
+  const [appliedQuery,setAppliedQuery]=useState('');
   const [offset,setOffset]=useState(0);
-  const [refresh,setRefresh]=useState(0);
   const [page,setPage]=useState<InstitutionTaskPage|null>(null);
-  const [listError,setListError]=useState(''),[loading,setLoading]=useState(false);
+  const [listError,setListError]=useState('');
+  const [loading,setLoading]=useState(false);
+
+  // 单个任务详情，与任务列表分开请求，避免把敏感的完整结论发到列表接口。
   const [selectedId,setSelectedId]=useState('');
   const [detail,setDetail]=useState<InstitutionAdminTaskDetail|null>(null);
   const [detailError,setDetailError]=useState('');
 
+  // 父页面的刷新计数器；值本身没有业务含义，只是触发 useEffect 的重新执行。
+  const [refresh,setRefresh]=useState(0);
+
+  // 1. 页面首次加载：复用工作台已有的登录会话，获取 CSRF Token。
+  // 注意：bootstrap 成功只代表有登录态，不代表天然有管理员权限。
   useEffect(()=>{
     let live=true;
     api.bootstrap().then(boot=>{
@@ -95,8 +129,8 @@ export function InstitutionTaskManagementPage(){
     return()=>{live=false;};
   },[]);
 
-  // The B API is asynchronous: while this page is open, refresh both the list
-  // and selected result every five seconds. Neither action launches new tasks.
+  // 2. 自动刷新：每 5 秒变化一次 refresh；浏览器标签页隐藏时暂不刷新。
+  // 只查询已存在的任务，不会新建任务、重新投递 Prompt 或改变执行状态。
   useEffect(()=>{
     if(mode!=='ready')return;
     const timer=window.setInterval(()=>{
@@ -105,6 +139,7 @@ export function InstitutionTaskManagementPage(){
     return()=>window.clearInterval(timer);
   },[mode]);
 
+  // 3. 任务列表：仅默认视图请求；切换状态/查询/页码或 refresh 时重查。
   useEffect(()=>{
     if(mode!=='ready'||accessView||usersView)return;
     let live=true;
@@ -120,6 +155,7 @@ export function InstitutionTaskManagementPage(){
     return()=>{live=false;};
   },[mode,filter,appliedQuery,offset,refresh]);
 
+  // 4. 单任务详情：通过 taskId 读最终 result.summary，成功后显示 Markdown。
   useEffect(()=>{
     if(mode!=='ready'||accessView||usersView||!selectedId)return;
     let live=true;
@@ -133,6 +169,7 @@ export function InstitutionTaskManagementPage(){
     return()=>{live=false;};
   },[mode,selectedId,refresh]);
 
+  // 以下 JSX 是按 mode 分支返回的视图，类似 Java Controller 选择不同页面模板。
   if(mode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
     await api.login(name,phone);setMode('ready');
   }}/>;
@@ -151,6 +188,7 @@ export function InstitutionTaskManagementPage(){
   </main>;
   if(mode!=='ready')return <main className="institution-tasks-page"><p role={error?'alert':'status'}>{error||'正在验证本机管理权限…'}</p></main>;
 
+  // 通过 ?view=users 显示用户聚合；?view=access 显示接入记录；默认显示列表。
   return <main className="institution-tasks-page">
     <header className="institution-tasks-header">
       <div><small>SYSTEM ADMINISTRATION</small><h1>{accessView?'接口接入情况':'接口任务管理'}</h1>
