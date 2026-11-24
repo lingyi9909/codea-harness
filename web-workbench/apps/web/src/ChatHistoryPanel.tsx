@@ -33,15 +33,15 @@ export function ChatHistoryPanel({scene,directory,active,disabled,running,onSele
       .finally(()=>{if(live)setLoading(false);});
     return ()=>{live=false;};
   },[scene,directory,cursor,retry]);
-  // OpenCode title is authoritative; browser history only caches the index.
-  const local=readHistory(localStorage,scene,directory);
+  // The server is the ONLY source of visible session IDs. Browser caches
+  // may contain records from a previous account or an older unscoped release.
+  // Cache titles are display fallbacks for IDs confirmed as owned by the server.
+  const cached=new Map(readHistory(localStorage,scene,directory).map(row=>[row.id,row]));
   void revision;
-  const rows=new Map(local.map(row=>[row.id,row]));
-  for(const row of remote){
-    const known=rows.get(row.id);
-    rows.set(row.id,{id:row.id,title:displayChatTitle(row.title,known?.title),updated:Math.max(row.updated||0,known?.updated??0)});
-  }
-  const sorted=Array.from(rows.values()).sort((a,b)=>b.updated-a.updated);
+  const sorted=remote.map(row=>{
+    const known=cached.get(row.id);
+    return {id:row.id,title:displayChatTitle(row.title,known?.title),updated:Math.max(row.updated||0,known?.updated??0)};
+  }).sort((a,b)=>b.updated-a.updated);
 
   function editRow(row:HistoryRow){
     setError('');setDeleting('');setEditing(row.id);setDraft(row.title);
