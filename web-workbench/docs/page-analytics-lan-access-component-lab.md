@@ -79,3 +79,14 @@ Windows 用 `启动工作台.cmd "D:\\teamai"`，Mac 用 `./启动工作台.comm
 - **登录记录**：成功登录时写入独立的 `user_access_log`，记录登记姓名、脱敏手机号、来源 IP、Local/LAN、登录时间、最近 API 活动和退出时间。使用每次登录 Cookie 的随机 auditId 做记录索引，不记录 Session Cookie 原文、手机号原文、报文正文或聊天内容。关闭浏览器/网络中断没有可靠的退出事件，故显示「未记录退出」，**不得推断当前在线**。
 - **访问入口**：工作台本机的「系统管理 → 用户访问记录」或 `http://127.0.0.1:4176/analytics?view=users`。`GET /api/v1/user-visits?days=7|30&offset=0&q=` 仅允许实际回环请求 + 本机已登录配置管理员（`.workbench/config-access.json` 的 editors），非管理员、LAN 同事和外部系统不能访问；分页大小 20。
 - **数据存储**：与 PV/UV 共用 %LOCALAPPDATA% 下 `.smart-workbench/state/page-visits.sqlite`，审计记录最多保留 90 天。只对升级后发生的登录/访问建立记录；不能倒推出此前哪些同事登录过。姓名和手机号由本人填写，未接企业 SSO，因此记录仅供操作追溯，不代表强身份认证。
+
+## 机构任务「状态未知」诊断与多实例数据库安全（2026-11-25）
+
+- `UNKNOWN` 不是模型返回值，而是后台无法安全确认模型任务的最终状态。查看 `/institution-tasks` 的任务详情 **异常代码**：`PROCESS_RESTARTED`（服务/任务存储重新初始化）、`SERVER_STOPPED`（进程关闭）、`INSTITUTION_EXECUTION_TIMEOUT`（超过 10 分钟）、`INSTITUTION_POLL_UNAVAILABLE`（OpenCode 只读状态查询持续异常）、`INSTITUTION_EXECUTION_UNAVAILABLE`（执行链其他异常）；不会因未知状态自动重发 Prompt，以免重复查询或副作用。
+- 以前 `institution-api.sqlite` 默认位于同一用户的 `%LOCALAPPDATA%\.smart-workbench\state\`，**不同工作目录、不同端口共享同一任务数据库**。第二个实例初始化时把第一个实例的 `RUNNING` 更新成 `PROCESS_RESTARTED`；或某个实例停止时把另一个实例的任务更新成 `SERVER_STOPPED`。
+- 本次增加数据库原子单实例租约（PID + 随机 token）和工作目录指纹。另一个活实例打开相同数据库会明确拒绝并返回 `INSTITUTION_API_DB_ALREADY_IN_USE`；工作目录不同会返回 `INSTITUTION_API_DB_WORKSPACE_CONFLICT`，**不会改变其他任务状态**。进程异常退出留下的旧 PID 租约可回收；同一工作目录正常重启仍可读取原任务历史，未完成任务保守标记未知。**绝不自动清库或自动迁移不确定属主的历史任务**。
+- **多实例启动**：保留 A 实例原有数据库路径，在 B 实例的独立 CMD 窗口先执行：
+  `set "HARNESS_INSTITUTION_API_DB_PATH=%LOCALAPPDATA%\.smart-workbench\state\institution-api-b.sqlite"`
+  再执行 `启动工作台.cmd "D:\project-b"` 并选择 B 的独立端口。若 B 也使用嵌入式匿名排查，为 B 另设 `HARNESS_SQLITE_PATH`，避免共用 embedded.sqlite。不要为不同工作目录指向相同路径，也不要删除原任务数据库。
+- OpenCode 状态轮询的 `active`、`inbox`、`message`、`permission` 是**只读查询**：本次对可恢复的 HTTP 502/503/504 和网络超时做有限重试，避免一次短暂断连直接将运行任务标为未知；从不自动重投递 `session.prompt()`。模型明确报错、最终回答为空和 Prompt 明确被 4xx 拒绝，改为可确认的 `FAILED`。
+- 管理页面现在在列表和详情中显示具体错误代码与中文解释。实际部署前需检查 CI、确认无回归。若无法确认具体原因，提供任务详情的 `errorCode`、创建/更新时间，以及 C 服务器重启记录即可进一步定位，无需提供敏感报文内容。
