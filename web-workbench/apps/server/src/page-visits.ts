@@ -43,7 +43,15 @@ export class PageVisitStore{
         day TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS ix_visits_page_day ON page_visits(page,day);
-      CREATE INDEX IF NOT EXISTS ix_visits_visitor_at ON page_visits(visitor,page,at);`);
+      CREATE INDEX IF NOT EXISTS ix_visits_visitor_at ON page_visits(visitor,page,at);
+      CREATE TABLE IF NOT EXISTS user_access_log (
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, profile_key TEXT NOT NULL,
+        name TEXT NOT NULL, phone_mask TEXT NOT NULL, ip TEXT NOT NULL,
+        scope TEXT NOT NULL, logged_in_at INTEGER NOT NULL,
+        last_active_at INTEGER NOT NULL, logged_out_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS ix_user_access_login_time ON user_access_log(logged_in_at DESC);
+      CREATE INDEX IF NOT EXISTS ix_user_access_profile ON user_access_log(profile_key,logged_in_at DESC);`);
   }
   record(page:PageId,visitorId:string,now=Date.now()){
     if(!/^[a-f0-9-]{36}$/i.test(visitorId))throw new AuthProblem(400,'VISITOR_INVALID');
@@ -67,6 +75,56 @@ export class PageVisitStore{
       const row=stats.find(r=>r.page===page);
       return {page,name:pageNames[page],views:Number(row?.views??0),visitors:Number(row?.visitors??0),lastAt:row?.latest?Number(row.latest):null};
     }),daily:daily.map(r=>({page:String(r.page),day:String(r.day),views:Number(r.views),visitors:Number(r.visitors)}))};
+  }
+
+  /**
+   * Log successful local/LAN logins only. auditId identifies a Cookie lifecycle,
+   * and INSERT OR IGNORE avoids duplicate audit rows when reusing a login Cookie.
+   * Phone number is masked before writing to disk.
+   */
+  recordLogin(record:{
+    auditId:string;ownerId:string;profileKey:string;name:string;phone:string;
+    ip:string;scope:'local'|'lan';
+  },now=Date.now()){
+    const masked=record.phone.slice(0,3)+'****'+record.phone.slice(-4);
+    this.db.prepare('INSERT OR IGNORE INTO user_access_log '+
+      '(id,owner_id,profile_key,name,phone_mask,ip,scope,logged_in_at,last_active_at) '+
+      'VALUES (?,?,?,?,?,?,?,?,?)').run(record.auditId,record.ownerId,record.profileKey,
+        record.name,masked,record.ip,record.scope,now,now);
+    this.db.prepare('DELETE FROM user_access_log WHERE logged_in_at<?').run(now-90*86400000);
+  }
+  /** Record API activity at most once per 30 seconds per active login Cookie. */
+  touch(auditId:string,now=Date.now()){
+    this.db.prepare('UPDATE user_access_log SET last_active_at=? WHERE id=? '+
+      'AND logged_out_at IS NULL AND last_active_at<=?').run(now,auditId,now-30000);
+  }
+  recordLogout(auditId:string,now=Date.now()){
+    this.db.prepare('UPDATE user_access_log SET logged_out_at=?,last_active_at=? '+
+      'WHERE id=? AND logged_out_at IS NULL').run(now,now,auditId);
+  }
+  /** Only the localhost admin HTTP route may expose these saved login records. */
+  users(days:7|30,offset=0,query='',now=Date.now()){
+    if(!Number.isSafeInteger(offset)||offset<0||offset>1000000||query.length>128)
+      throw new AuthProblem(400,'USER_VISITS_FILTER_INVALID');
+    const search=query.trim(),start=now-days*86400000;
+    const where=search?' WHERE logged_in_at>=? AND (name LIKE ? OR phone_mask LIKE ? OR ip LIKE ?)':
+      ' WHERE logged_in_at>=?';
+    const params:(string|number)[]=[start];
+    if(search){const pattern='%'+search+'%';params.push(pattern,pattern,pattern);}
+    const total=this.db.prepare('SELECT COUNT(*) AS n FROM user_access_log'+where)
+      .get(...params) as {n:number};
+    const distinct=this.db.prepare('SELECT COUNT(DISTINCT profile_key) AS n FROM user_access_log'+where)
+      .get(...params) as {n:number};
+    const rows=this.db.prepare('SELECT id,name,phone_mask,ip,scope,logged_in_at,last_active_at,logged_out_at '+
+      'FROM user_access_log'+where+' ORDER BY logged_in_at DESC,id DESC LIMIT 20 OFFSET ?')
+      .all(...params,offset);
+    return {days,offset,limit:20,total:total.n,distinctUsers:distinct.n,items:rows.map(row=>({
+      id:String(row.id),name:String(row.name),phoneMask:String(row.phone_mask),
+      ip:String(row.ip),scope:String(row.scope),
+      loginAt:new Date(Number(row.logged_in_at)).toISOString(),
+      lastActiveAt:new Date(Number(row.last_active_at)).toISOString(),
+      logoutAt:row.logged_out_at==null?null:new Date(Number(row.logged_out_at)).toISOString(),
+    }))};
   }
   close(){this.db.close();}
 }
