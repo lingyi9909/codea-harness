@@ -302,24 +302,20 @@ export class InstitutionIntegration {
 
         // 5. 定期轮询最终 assistant 消息，最多等待 10 分钟。
         const end=Date.now()+TIMEOUT_MS;
+        const readSnapshot=()=>Promise.all([
+          client.session.active(),
+          client.session.inbox.list({sessionID:session.id}),
+          client.message.list({sessionID:session.id,order:'desc',limit:100}),
+          client.permission.list({sessionID:session.id}),
+        ]);
         let consecutivePollErrors=0;
         while(!this.closed&&Date.now()<end){
           // Polling four read-only native APIs in parallel is particularly
           // vulnerable to temporary 25-second HTTP timeouts under load.
           // A failed *read* does not mean the running model session failed.
-          let snapshot:Awaited<ReturnType<typeof Promise.all<[
-            ReturnType<typeof client.session.active>,
-            ReturnType<typeof client.session.inbox.list>,
-            ReturnType<typeof client.message.list>,
-            ReturnType<typeof client.permission.list>
-          ]>>>;
+          let snapshot:Awaited<ReturnType<typeof readSnapshot>>;
           try{
-            snapshot=await Promise.all([
-              client.session.active(),
-              client.session.inbox.list({sessionID:session.id}),
-              client.message.list({sessionID:session.id,order:'desc',limit:100}),
-              client.permission.list({sessionID:session.id}),
-            ]);
+            snapshot=await readSnapshot();
             consecutivePollErrors=0;
           }catch(error){
             if(!transientInstitutionPollError(error))throw error;
