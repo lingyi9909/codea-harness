@@ -216,6 +216,18 @@ test('B creates and reads only its own institution result; admin usage is separa
       remoteAddress:'127.0.0.1',headers:adminHeaders});
     assert.equal(adminList.statusCode,200,adminList.body);
     assert.equal(adminList.json().data.total,1);
+    const paged=await app.inject({url:'/api/v1/institution-tasks?limit=20&offset=0',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(paged.statusCode,200,paged.body);
+    assert.equal(paged.json().data.limit,20);
+    const groupPage=await app.inject({url:'/api/v1/institution-tasks/users?limit=100&offset=0',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(groupPage.statusCode,200,groupPage.body);
+    assert.equal(groupPage.json().data.limit,100);
+    const badPage=await app.inject({url:'/api/v1/institution-tasks?limit=1000',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(badPage.statusCode,400,badPage.body);
+
     assert.equal(adminList.json().data.items[0].taskId,taskId);
     assert.equal(adminList.json().data.items[0].status,'SUCCEEDED');
     assert.equal(adminList.json().data.items[0].externalUserId,'customer-01');
