@@ -22,7 +22,7 @@ test('login audit persists, masks phone, tracks activity/logout and paginates',a
     assert.equal(store.users(7,0,'',now+50).items.length,20);
     assert.equal(store.users(7,20,'',now+50).items.length,5);
     assert.equal(store.users(7,0,'张三',now+50).total,1);
-    assert.equal(store.users(7,0,'192.168.1.2',now+50).total,1);
+    assert.equal(store.users(7,0,'192.168.1.25',now+50).total,1);
     const first=store.users(7,0,'张三',now+50).items[0];
     assert.equal(first.phoneMask,'138****5678');
     assert.equal(first.logoutAt,null);
