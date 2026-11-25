@@ -350,12 +350,15 @@ export class InstitutionIntegration {
           // 只收最终完成的 assistant 文本，过滤工具调用过程和中间消息。
           // m is Extract<...> 是 TS 类型守卫，不是 Java 风格的运行时强制转换。
           const final=messages.data.find((m):m is Extract<(typeof messages.data)[number],{type:'assistant'}>=>
-            m.type==='assistant'&&Boolean(m.time?.completed)&&Boolean(m.finish)&&m.finish!=='tool-calls');
+            m.type==='assistant'&&Boolean(m.time?.completed)&&
+            (Boolean(m.error)||(Boolean(m.finish)&&m.finish!=='tool-calls')));
+          // A completed native assistant error is definitive even if the
+          // active-session indicator has not caught up yet.
+          if(final?.error||final?.finish==='error'){
+            definiteFailure=true;
+            throw new AuthProblem(502,'INSTITUTION_NATIVE_EXECUTION_FAILED');
+          }
           if(final&&!active[session.id]&&inbox.length===0){
-            if(final.error||final.finish==='error'){
-              definiteFailure=true;
-              throw new AuthProblem(502,'INSTITUTION_NATIVE_EXECUTION_FAILED');
-            }
             const answer=final.content
               .flatMap(part=>part.type==='text'?[part.text]:[])
               .join('\n')
