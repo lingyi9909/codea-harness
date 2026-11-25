@@ -8,7 +8,7 @@
  */
 import {sessionStorage} from './userStorage.ts';
 import {useState} from 'react';
-import {CalendarDate,SecondClock} from './TimeFields.tsx';
+import {CalendarDate,EditableCalendarDate,SecondClock} from './TimeFields.tsx';
 import {DirectChat} from './DirectChat.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
 
@@ -230,7 +230,7 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
         <div className="range-bound">
           <span className="range-bound-title">开始时间</span>
           <div className="range-split-inputs">
-            <CalendarDate label="开始日期" value={start.split('T')[0]||''} onChange={value=>editDate('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
+            <EditableCalendarDate label="开始日期" value={start.split('T')[0]||''} onChange={value=>editDate('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
             <SecondClock label="开始时刻" value={start.split('T')[1]||''} onChange={value=>editClock('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
           </div>
         </div>
@@ -238,7 +238,7 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
         <div className="range-bound">
           <span className="range-bound-title">结束时间</span>
           <div className="range-split-inputs">
-            <CalendarDate label="结束日期" value={end.split('T')[0]||''} onChange={value=>editDate('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
+            <EditableCalendarDate label="结束日期" value={end.split('T')[0]||''} onChange={value=>editDate('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
             <SecondClock label="结束时刻" value={end.split('T')[1]||''} onChange={value=>editClock('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
           </div>
         </div>
