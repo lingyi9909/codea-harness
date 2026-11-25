@@ -203,7 +203,7 @@ export function InstitutionTaskManagementPage(){
         <p>{accessView?'查看机构 API 的开放策略与实际提交的业务用户标识（非授权名单）。':
           usersView?'按照业务用户标识聚合查看排查任务、各执行状态与最终结果。':
           '集中查看接口创建的排查任务、执行状态和最终返回结论。仅本机配置管理员可查看。'}</p></div>
-      <nav aria-label="管理页面导航"><a href="/config">场景配置</a><a href="/analytics">访问统计</a><a href="/">返回工作台</a></nav>
+      <nav aria-label="管理页面导航"><a href="/config">场景配置</a><a href="/analytics">访问统计</a><a href="/analytics?view=users">用户访问记录</a><a href="/">返回工作台</a></nav>
     </header>
     <div className="institution-tasks-tabs" role="navigation" aria-label="接口管理导航">
       <a href="/institution-tasks" aria-current={!accessView&&!usersView?'page':undefined}
