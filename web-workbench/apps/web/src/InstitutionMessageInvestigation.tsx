@@ -7,7 +7,7 @@
  * 以下为模块说明注释，不改变原有执行逻辑。
  */
 import {useState,type FormEvent} from 'react';
-import {CalendarDate,localDayBounds} from './TimeFields.tsx';
+import {CalendarDate,EditableCalendarDate,localDayBounds} from './TimeFields.tsx';
 import './institution-message-investigation.css';
 import {DirectChat} from './DirectChat.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
@@ -65,7 +65,7 @@ export function InstitutionMessageInvestigation({embedded=false,globalModel}:{em
     setEditing(false);
   }
   const controls=editing?<div className="institution-adjust-controls">
-    <CalendarDate label="调整日期" value={day} onChange={setDay} invalid={!bounds}/>
+    <EditableCalendarDate label="调整日期" value={day} onChange={setDay} invalid={!bounds}/>
     <label htmlFor="institution-adjust-msgsn">报文编号（msgSn）
       <input id="institution-adjust-msgsn" type="text" aria-label="调整 msgSn" required
         maxLength={256} autoComplete="off" spellCheck={false} value={msgSn} onChange={e=>setMsgSn(e.target.value)}/>
