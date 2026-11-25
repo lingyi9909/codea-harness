@@ -420,10 +420,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.locator('.range-zone')).toHaveText('精确到秒');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
-    // No native time scroll columns: exact HH:mm:ss remains stable under
-    // mouse-wheel scrolling; dates keep Chromium's built-in calendar popup.
+    // HH:mm:ss and progressive YYYY-MM-DD text editing stay stable on Windows.
+    // The whole-day selector remains a native calendar date picker.
     for(const [date,time] of [['开始日期','开始时刻'],['结束日期','结束时刻']] as const){
-      await expect(page.getByLabel(date)).toHaveAttribute('type','date');
+      await expect(page.getByLabel(date)).toHaveAttribute('type','text');
       await expect(page.getByLabel(time)).toHaveAttribute('type','text');
     }
     await page.getByLabel('开始时刻').hover();
@@ -570,6 +570,17 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(dialog.getByLabel('Trace ID',{exact:true})).toHaveValue('abc123');
     await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
     await expect(dialog.getByLabel('关键词',{exact:true})).toHaveValue('timeout');
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
+    // Regression: native date fields could clear the entire value on Backspace.
+    // An incomplete edit must remain visible as draft, disable re-run, and
+    // preserve the existing conversation/results above the drawer.
+    const editableDate=dialog.getByLabel('开始日期',{exact:true});
+    const beforeDate=await editableDate.inputValue();
+    await editableDate.focus();await editableDate.press('End');await editableDate.press('Backspace');
+    await expect(editableDate).toHaveValue(beforeDate.slice(0,-1));
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeDisabled();
+    await expect(feed).toContainText(finalAnswer);
+    await editableDate.fill(beforeDate);
     await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
     const answerDuring=await feed.boundingBox(),composerDuring=await page.locator('.log-investigation-active .composer').boundingBox();
     assert.ok(answerDuring&&composerDuring);
