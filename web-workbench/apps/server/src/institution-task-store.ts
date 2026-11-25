@@ -20,7 +20,7 @@
  */
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomUUID} from 'node:crypto';
-import {existsSync,lstatSync,mkdirSync,chmodSync} from 'node:fs';
+import {existsSync,lstatSync,mkdirSync,chmodSync,realpathSync} from 'node:fs';
 import {dirname,isAbsolute,relative,sep} from 'node:path';
 import {AuthProblem} from './auth.ts';
 
@@ -55,6 +55,7 @@ export const validConcurrency=(n:unknown):n is InstitutionConcurrency=>
  */
 export class InstitutionTaskStore {
   private readonly db:DatabaseSync;
+  private readonly lease=JSON.stringify({pid:process.pid,token:randomUUID()});
   /**
    * 首次打开时自动建表/兼容旧库；已有 RUNNING/QUEUED 统一标记 UNKNOWN。
    * 类比 Java 应用启动时执行数据库迁移，绝不自动重试可能已触发的业务动作。
@@ -86,6 +87,10 @@ export class InstitutionTaskStore {
       "CREATE INDEX IF NOT EXISTS ix_institution_api_task_status ON institution_api_tasks(status,created_at);"+
       "CREATE TABLE IF NOT EXISTS institution_api_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);"+
       "INSERT OR IGNORE INTO institution_api_settings(key,value) VALUES ('max_concurrency','3');");
+    // This is deliberately a single-writer queue. Different ports/workspaces
+    // previously opened one default SQLite file and rewrote each other's
+    // RUNNING tasks to UNKNOWN during initialization or shutdown.
+    try{this.claimExclusive(workspace);}catch(error){this.db.close();throw error;}
     // Preserve all prior tasks. Their hashed user IDs are irreversible.
     const columns=this.db.prepare("PRAGMA table_info(institution_api_tasks)").all() as Array<{name:string}>;
     if(!columns.some(c=>c.name==='external_user_id'))
@@ -95,6 +100,48 @@ export class InstitutionTaskStore {
     this.db.prepare("UPDATE institution_api_tasks SET status='UNKNOWN',error_code='PROCESS_RESTARTED',updated_at=?"+
       " WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
     this.prune();
+  }
+  /**
+   * Claim the database atomically BEFORE any in-flight task status migration.
+   * Two service processes may never take() from the same institution queue.
+   * The workspace fingerprint prevents accidental cross-project sharing,
+   * including after a prior process releases its lease.
+   * A dead PID is a stale lease left by a crash and may be reclaimed safely;
+   * it does NOT imply prior tasks completed (constructor marks them UNKNOWN).
+   */
+  private claimExclusive(workspace?:string){
+    const normalized=workspace?realpathSync.native(workspace):undefined;
+    const fingerprint=normalized?DIGEST(process.platform==='win32'?normalized.toLowerCase():normalized):undefined;
+    this.db.exec('BEGIN IMMEDIATE');
+    let committed=false;
+    try{
+      const owner=this.db.prepare("SELECT value FROM institution_api_settings WHERE key='workspace_fingerprint'")
+        .get() as {value:string}|undefined;
+      if(owner&&fingerprint&&owner.value!==fingerprint)
+        throw new AuthProblem(409,'INSTITUTION_API_DB_WORKSPACE_CONFLICT');
+      const holder=this.db.prepare("SELECT value FROM institution_api_settings WHERE key='active_instance'")
+        .get() as {value:string}|undefined;
+      if(holder){
+        let alive=true;
+        try{
+          const info=JSON.parse(holder.value) as {pid:number;token:string};
+          if(!Number.isSafeInteger(info.pid)||info.pid<=0||typeof info.token!=='string')
+            throw new Error('INVALID_LEASE');
+          try{process.kill(info.pid,0);}
+          catch(error){
+            if((error as NodeJS.ErrnoException).code==='ESRCH')alive=false;
+          }
+        }catch{/* Invalid owner metadata must fail closed; do not reset live tasks. */}
+        if(alive)throw new AuthProblem(409,'INSTITUTION_API_DB_ALREADY_IN_USE');
+      }
+      if(fingerprint&&!owner){
+        this.db.prepare("INSERT INTO institution_api_settings(key,value) VALUES('workspace_fingerprint',?)")
+          .run(fingerprint);
+      }
+      this.db.prepare("INSERT INTO institution_api_settings(key,value) VALUES('active_instance',?) "+
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(this.lease);
+      this.db.exec('COMMIT');committed=true;
+    }finally{if(!committed)this.db.exec('ROLLBACK');}
   }
   /** 按创建时间清理超过 7 天的数据，避免保存敏感业务信息过久。 */
   private prune(){
@@ -283,6 +330,7 @@ export class InstitutionTaskStore {
   }
   /** 释放 SQLite 文件句柄。 */
   close(){
-    this.db.close();
+    try{this.db.prepare("DELETE FROM institution_api_settings WHERE key='active_instance' AND value=?")
+      .run(this.lease);}finally{this.db.close();}
   }
 }
