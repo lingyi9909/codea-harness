@@ -33,5 +33,5 @@ export function StandaloneConfigPage(){
   }}><h1>连接场景配置</h1><label>一次性配对码<input type="password" value={code} onChange={e=>setCode(e.target.value)} required autoComplete="off"/></label>
     {error&&<p role="alert">{error}</p>}<button disabled={busy||!code.trim()}>连接工作台</button></form></main>;
   if(mode!=='ready')return <main className="standalone-config"><p role={error?'alert':'status'}>{error||'正在读取配置访问权限…'}</p></main>;
-  return <main className="standalone-config"><header className="standalone-config-header"><strong>智能工作台</strong><nav><a href="/institution-tasks">接口任务管理</a><a href="/institution-tasks?view=access">接口接入情况</a><a href="/analytics">访问统计</a><a href="/component-lab">组件测试</a><a href="/">返回工作台</a></nav></header><SceneConfigPage/></main>;
+  return <main className="standalone-config"><header className="standalone-config-header"><strong>智能工作台</strong><nav><a href="/institution-tasks">接口任务管理</a><a href="/institution-tasks?view=access">接口接入情况</a><a href="/analytics">访问统计</a><a href="/analytics?view=users">用户访问记录</a><a href="/component-lab">组件测试</a><a href="/">返回工作台</a></nav></header><SceneConfigPage/></main>;
 }
