@@ -124,13 +124,15 @@ export function InstitutionUserGroupsView({refresh,onForbidden}:{
   const [q,setQ]=useState('');
   const [applied,setApplied]=useState('');
 
-  // 第一层：用户分组与分组分页（每页 50 条）。
+  // 第一层：用户分组与分组分页（服务端 SQL 分页）。
   const [offset,setOffset]=useState(0);
+  const [groupSize,setGroupSize]=useState<20|50|100>(20);
   const [groups,setGroups]=useState<InstitutionUserGroupPage|null>(null);
   const [selected,setSelected]=useState<InstitutionUserGroup|null>(null);
 
   // 第二层：点击用户后，查看这个用户的任务列表。
   const [tasksOffset,setTasksOffset]=useState(0);
+  const [taskSize,setTaskSize]=useState<20|50|100>(20);
   const [tasks,setTasks]=useState<InstitutionTaskPage|null>(null);
 
   // 第三层：点击单个任务后，显示后端返回的最终排查结论。
@@ -143,8 +145,11 @@ export function InstitutionUserGroupsView({refresh,onForbidden}:{
   // applied / offset / refresh 变化时才重新获取。
   useEffect(()=>{
     let live=true;
-    api.institutionTaskGroups(applied,offset).then(data=>{
-      if(live){setGroups(data);setError('');}
+    api.institutionTaskGroups(applied,offset,groupSize).then(data=>{
+      if(live){
+        if(offset>0&&offset>=data.total){setOffset(Math.max(0,Math.ceil(data.total/groupSize)-1)*groupSize);return;}
+        setGroups(data);setError('');
+      }
     }).catch(e=>{
       if(!live)return;
       if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
@@ -152,14 +157,17 @@ export function InstitutionUserGroupsView({refresh,onForbidden}:{
     });
     return()=>{live=false;};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[applied,offset,refresh]);
+  },[applied,offset,groupSize,refresh]);
   // 第二层数据请求：按 userHash 查询某用户的具体 taskId 列表。
   // userHash 是精确分组键，原始业务用户 ID 只是显示字段。
   useEffect(()=>{
     if(!selected)return;
     let live=true;
-    api.institutionTasks('ALL','',tasksOffset,selected.userHash).then(data=>{
-      if(live){setTasks(data);setTaskError('');}
+    api.institutionTasks('ALL','',tasksOffset,selected.userHash,taskSize).then(data=>{
+      if(live){
+        if(tasksOffset>0&&tasksOffset>=data.total){setTasksOffset(Math.max(0,Math.ceil(data.total/taskSize)-1)*taskSize);return;}
+        setTasks(data);setTaskError('');
+      }
     }).catch(e=>{
       if(!live)return;
       if(e instanceof ApiError&&(e.status===403||e.status===401)){onForbidden();return;}
@@ -167,7 +175,7 @@ export function InstitutionUserGroupsView({refresh,onForbidden}:{
     });
     return()=>{live=false;};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[selected?.userHash,tasksOffset,refresh]);
+  },[selected?.userHash,tasksOffset,taskSize,refresh]);
   // 第三层数据请求：选中 taskId 后读取最终结论；刷新时也会更新运行状态。
   useEffect(()=>{
     if(!openedTask)return;
@@ -214,10 +222,13 @@ export function InstitutionUserGroupsView({refresh,onForbidden}:{
         {groups?.items.length===0&&<p className="institution-tasks-empty">没有符合条件的业务用户任务。</p>}
         {!groups&&!error&&<p className="institution-tasks-empty">正在获取业务用户任务统计…</p>}
         <div className="institution-tasks-pager">
+          <label>每页 <select aria-label="业务用户每页条数" value={groupSize} onChange={e=>{
+            setGroupSize(Number(e.target.value) as 20|50|100);setOffset(0);setSelected(null);setGroups(null);
+          }}><option value={20}>20 条</option><option value={50}>50 条</option><option value={100}>100 条</option></select></label>
           <span>共 {groups?.total??'—'} 个用户</span>
-          <button disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-50))}>上一页</button>
-          <span>第 {Math.floor(offset/50)+1} 页</span>
-          <button disabled={!groups||offset+50>=groups.total} onClick={()=>setOffset(offset+50)}>下一页</button>
+          <button type="button" disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-groupSize))}>上一页</button>
+          <span>第 {Math.floor(offset/groupSize)+1} / {Math.max(1,Math.ceil((groups?.total??0)/groupSize))} 页</span>
+          <button type="button" disabled={!groups||offset+groupSize>=groups.total} onClick={()=>setOffset(offset+groupSize)}>下一页</button>
         </div>
       </div>
       <section className="institution-tasks-detail institution-user-group-details" aria-label="选中用户的任务明细">
@@ -238,9 +249,12 @@ export function InstitutionUserGroupsView({refresh,onForbidden}:{
             </tr>)}</tbody>
           </table></div>
           <div className="institution-tasks-pager">
-            <button disabled={tasksOffset===0} onClick={()=>{setTasksOffset(Math.max(0,tasksOffset-50));setOpenedTask('');setTaskDetail(null);}}>上一页</button>
-            <span>第 {Math.floor(tasksOffset/50)+1} 页</span>
-            <button disabled={!tasks||tasksOffset+50>=tasks.total} onClick={()=>{setTasksOffset(tasksOffset+50);setOpenedTask('');setTaskDetail(null);}}>下一页</button>
+            <label>每页 <select aria-label="用户任务每页条数" value={taskSize} onChange={e=>{
+              setTaskSize(Number(e.target.value) as 20|50|100);setTasksOffset(0);setOpenedTask('');setTaskDetail(null);
+            }}><option value={20}>20 条</option><option value={50}>50 条</option><option value={100}>100 条</option></select></label>
+            <button type="button" disabled={tasksOffset===0} onClick={()=>{setTasksOffset(Math.max(0,tasksOffset-taskSize));setOpenedTask('');setTaskDetail(null);}}>上一页</button>
+            <span>第 {Math.floor(tasksOffset/taskSize)+1} / {Math.max(1,Math.ceil((tasks?.total??0)/taskSize))} 页</span>
+            <button type="button" disabled={!tasks||tasksOffset+taskSize>=tasks.total} onClick={()=>{setTasksOffset(tasksOffset+taskSize);setOpenedTask('');setTaskDetail(null);}}>下一页</button>
           </div>
           {openedTask&&<section className="institution-user-group-result">
             <h3>任务结果 <code>{openedTask}</code></h3>
