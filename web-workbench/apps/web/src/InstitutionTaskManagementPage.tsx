@@ -33,6 +33,24 @@ const formatTime=(value:string)=>new Date(value).toLocaleString('zh-CN',{
 });
 const errorText=(e:unknown)=>e instanceof Error?e.message:'查询失败';
 const active=(value:InstitutionTaskStatus)=>value==='QUEUED'||value==='RUNNING';
+/** Server-reported terminal diagnostic codes: no guessing whether a job really ran. */
+const taskFailureReason:Record<string,string>={
+  PROCESS_RESTARTED:'服务重启时任务尚未完成；原任务不会自动重跑',
+  SERVER_STOPPED:'工作台服务关闭时任务仍在执行或排队',
+  INSTITUTION_EXECUTION_TIMEOUT:'等待原生执行结果超过 10 分钟',
+  INSTITUTION_POLL_UNAVAILABLE:'OpenCode 状态接口连续连接失败；任务是否完成仍需核验',
+  INSTITUTION_EXECUTION_UNAVAILABLE:'模型、执行环境或服务请求异常；请检查 OpenCode 连接',
+  INSTITUTION_WORKER_UNEXPECTED:'任务执行调度出现未预期异常',
+  INSTITUTION_NATIVE_EXECUTION_FAILED:'OpenCode 已明确返回执行失败',
+  INSTITUTION_PERMISSION_REQUIRED:'任务执行期间需要人工权限授权，已停止等待',
+  INSTITUTION_EMPTY_RESULT:'原生会话执行完毕，但没有返回有效结论',
+  INSTITUTION_SKILL_NOT_CONFIGURED:'机构排查 Skill 尚未配置',
+  INSTITUTION_SKILL_NOT_FOUND:'配置的机构排查 Skill 不存在',
+  INSTITUTION_MODEL_NOT_CONFIGURED:'没有可用的配置模型',
+};
+const describeTaskFailure=(code:string)=>taskFailureReason[code]||
+  (code.startsWith('OPENCODE_HTTP_')?'OpenCode 接口返回 HTTP '+code.slice('OPENCODE_HTTP_'.length):
+  '请检查工作台后端异常日志和 OpenCode Session');
 // 通过 URL query 切换子视图：?view=users / ?view=access / 默认任务列表。
 const pageView=new URLSearchParams(window.location.search).get('view');
 const accessView=pageView==='access';
@@ -260,7 +278,10 @@ export function InstitutionTaskManagementPage(){
               <td title={task.externalUserId??'旧记录仅保存了摘要'}>{task.externalUserId??'旧记录'}</td>
               <td>{task.day}</td>
               <td><span className={'institution-task-status '+task.status.toLowerCase()}>
-                {statusLabels[task.status]}</span></td>
+                {statusLabels[task.status]}</span>
+                {task.errorCode&&<small className="institution-task-reason" title={describeTaskFailure(task.errorCode)}>
+                  {task.errorCode}
+                </small>}</td>
               <td>{formatTime(task.createdAt)}</td>
               <td><button type="button" className="institution-tasks-open" aria-label={'查看任务 '+task.taskId}
                 onClick={()=>{setSelectedId(task.taskId);setDetail(null);setDetailError('');}}>详情</button></td>
@@ -305,7 +326,9 @@ export function InstitutionTaskManagementPage(){
               <span>创建时间</span><span>{formatTime(detail.createdAt)}</span>
               <span>最后更新</span><span>{formatTime(detail.updatedAt)}</span>
             </div>
-            {detail.errorCode&&<p className="institution-tasks-error" role="alert">异常代码：{detail.errorCode}</p>}
+            {detail.errorCode&&<p className="institution-tasks-error" role="alert">
+              异常代码：{detail.errorCode}。{describeTaskFailure(detail.errorCode)}
+            </p>}
             <div className="institution-tasks-answer"><h3>最终返回结果</h3>
               {detail.result?.summary?<div className="institution-tasks-markdown"><Markdown>{detail.result.summary}</Markdown></div>:
                 <p className="institution-tasks-empty">{active(detail.status)?'任务尚未完成，完成后会自动显示最终结论。':
