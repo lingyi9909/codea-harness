@@ -11,7 +11,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import {isPrivateLanIPv4} from './lan-access.ts';
 
-export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string};scope?:'local'|'lan'};
+export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string};scope?:'local'|'lan';auditId?:string};
 const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
@@ -130,7 +130,7 @@ export class LocalAuth implements RequestAuth {
   }
   private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local'):Session{
     const token=randomBytes(32).toString('base64url');
-    const session={ownerId,profile,scope,csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
+    const session={ownerId,profile,scope,auditId:randomUUID(),csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
     this.sessions.set(hash(token).toString('hex'),session);
     reply.header('Set-Cookie',COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
     return session;
