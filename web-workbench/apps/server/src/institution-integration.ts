@@ -293,12 +293,21 @@ export class InstitutionIntegration {
         // delivery:'queue' 是 OpenCode Session 内的投递方式，
         // 和 C 层 SQLite 的 QUEUED 任务队列不是同一个概念。
         accepted=true;
-        await client.session.prompt({
-          sessionID:session.id,
-          text:institutionPrompt(task.day,task.msg_sn),
-          skills:[{id:matches[0].id}],
-          delivery:'queue',
-        });
+        try{
+          await client.session.prompt({
+            sessionID:session.id,
+            text:institutionPrompt(task.day,task.msg_sn),
+            skills:[{id:matches[0].id}],
+            delivery:'queue',
+          });
+        }catch(error){
+          // An explicit HTTP 4xx from native service is a definite rejection,
+          // unlike a transport timeout where Prompt may have arrived.
+          if(error instanceof AuthProblem&&
+            /^OPENCODE_HTTP_(?:400|401|403|404|409|422)$/.test(error.code))
+            definiteFailure=true;
+          throw error;
+        }
 
         // 5. 定期轮询最终 assistant 消息，最多等待 10 分钟。
         const end=Date.now()+TIMEOUT_MS;
