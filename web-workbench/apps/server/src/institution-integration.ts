@@ -41,6 +41,14 @@ export type {InstitutionConcurrency} from './institution-task-store.ts';
 
 const API_ROOT='/api/v1/integrations/institution/investigations';
 const TIMEOUT_MS=10*60*1000;
+const MAX_CONSECUTIVE_POLL_ERRORS=5;
+/** Only retry read-only native status calls. NEVER retry session.prompt(). */
+export function transientInstitutionPollError(error:unknown){
+  if(error instanceof AuthProblem)return [502,503,504].includes(error.status);
+  if(error instanceof Error)return error.name==='AbortError'||error.name==='TimeoutError'||
+    /fetch failed|network|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up/i.test(error.message);
+  return false;
+}
 const DIGEST=(s:string)=>createHash('sha256').update(s).digest('hex');
 /** C 服务启动时读取的配置。对应 Java 中的 ConfigurationProperties/配置 DTO。 */
 export type InstitutionIntegrationConfig={
@@ -294,14 +302,35 @@ export class InstitutionIntegration {
 
         // 5. 定期轮询最终 assistant 消息，最多等待 10 分钟。
         const end=Date.now()+TIMEOUT_MS;
+        let consecutivePollErrors=0;
         while(!this.closed&&Date.now()<end){
-          // Promise.all 并行发起多项远端只读查询，类似 Java allOf()。
-          const [active,inbox,messages,permissionsPending]=await Promise.all([
-            client.session.active(),
-            client.session.inbox.list({sessionID:session.id}),
-            client.message.list({sessionID:session.id,order:'desc',limit:100}),
-            client.permission.list({sessionID:session.id}),
-          ]);
+          // Polling four read-only native APIs in parallel is particularly
+          // vulnerable to temporary 25-second HTTP timeouts under load.
+          // A failed *read* does not mean the running model session failed.
+          let snapshot:Awaited<ReturnType<typeof Promise.all<[
+            ReturnType<typeof client.session.active>,
+            ReturnType<typeof client.session.inbox.list>,
+            ReturnType<typeof client.message.list>,
+            ReturnType<typeof client.permission.list>
+          ]>>>;
+          try{
+            snapshot=await Promise.all([
+              client.session.active(),
+              client.session.inbox.list({sessionID:session.id}),
+              client.message.list({sessionID:session.id,order:'desc',limit:100}),
+              client.permission.list({sessionID:session.id}),
+            ]);
+            consecutivePollErrors=0;
+          }catch(error){
+            if(!transientInstitutionPollError(error))throw error;
+            consecutivePollErrors++;
+            if(consecutivePollErrors>MAX_CONSECUTIVE_POLL_ERRORS||Date.now()>=end)
+              throw new AuthProblem(503,'INSTITUTION_POLL_UNAVAILABLE');
+            // Do not re-send Prompt: the native model may still be running.
+            await delay(Math.min(consecutivePollErrors,3)*1200,undefined,{signal:this.stop.signal});
+            continue;
+          }
+          const [active,inbox,messages,permissionsPending]=snapshot;
           if(permissionsPending.some(p=>p.sessionID===session.id)){
             await client.session.interrupt({sessionID:session.id});
             definiteFailure=true;
@@ -314,13 +343,14 @@ export class InstitutionIntegration {
             m.type==='assistant'&&Boolean(m.time?.completed)&&Boolean(m.finish)&&m.finish!=='tool-calls');
           if(final&&!active[session.id]&&inbox.length===0){
             if(final.error||final.finish==='error'){
+              definiteFailure=true;
               throw new AuthProblem(502,'INSTITUTION_NATIVE_EXECUTION_FAILED');
             }
             const answer=final.content
               .flatMap(part=>part.type==='text'?[part.text]:[])
               .join('\n')
               .trim();
-            if(!answer)throw new AuthProblem(502,'INSTITUTION_EMPTY_RESULT');
+            if(!answer){definiteFailure=true;throw new AuthProblem(502,'INSTITUTION_EMPTY_RESULT');}
             return answer.slice(0,65536);
           }
           await delay(1200,undefined,{signal:this.stop.signal});
