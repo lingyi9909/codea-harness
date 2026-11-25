@@ -135,7 +135,13 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
   const [day,setDay]=useState(()=>localTime(Date.now()).slice(0,10));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
-    setRange(previous=>({...previous,[side]:value,[side==='start'?'from':'to']:parseLocal(value),preset:null}));
+    // Incomplete Windows date edits are UI drafts. Keep the last valid numeric
+    // bounds until the user finishes typing; NaN must never leak into the
+    // existing applied range or the already-rendered investigation transcript.
+    setRange(previous=>{
+      const numeric=side==='start'?'from':'to',parsed=parseLocal(value);
+      return {...previous,[side]:value,[numeric]:Number.isFinite(parsed)?parsed:previous[numeric],preset:null};
+    });
   }
   function editDate(side:'start'|'end',value:string){
     const previous=side==='start'?start:end;
@@ -161,7 +167,7 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
   }
   const timeError=range.preset==='day'&&!wholeDay(day)?'请选择有效的查询日期。':
     !start||!end?'请填写完整的开始和结束时间。':
-    !Number.isFinite(from)||!Number.isFinite(to)?'所选时间无效，请重新选择。':
+    !Number.isFinite(parseLocal(start))||!Number.isFinite(parseLocal(end))?'所选时间无效，请重新选择。':
     from>=to?'结束时间必须晚于开始时间。':'';
   const validTime=!timeError;
   const ready=Boolean(validTime&&(trace.trim()||keyword.trim()||msgSn.trim()));
