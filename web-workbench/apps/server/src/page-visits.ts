@@ -106,6 +106,8 @@ export class PageVisitStore{
   users(days:7|30,offset=0,query='',now=Date.now()){
     if(!Number.isSafeInteger(offset)||offset<0||offset>1000000||query.length>128)
       throw new AuthProblem(400,'USER_VISITS_FILTER_INVALID');
+    // Retention applies to reads too, even when no fresh login has occurred.
+    this.db.prepare('DELETE FROM user_access_log WHERE logged_in_at<?').run(now-90*86400000);
     const search=query.trim(),start=now-days*86400000;
     const where=search?' WHERE logged_in_at>=? AND (name LIKE ? OR phone_mask LIKE ? OR ip LIKE ?)':
       ' WHERE logged_in_at>=?';
