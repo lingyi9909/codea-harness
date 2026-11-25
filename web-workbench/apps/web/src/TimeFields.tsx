@@ -13,6 +13,19 @@ export function CalendarDate({label,value,onChange,invalid=false,descriptionId,r
     aria-invalid={invalid} aria-describedby={descriptionId}
     onChange={e=>onChange(e.target.value)}/></label>;
 }
+/**
+ * Windows native date inputs can emit an empty value while only one date
+ * segment is being edited/deleted. For a *custom time range*, use a plain
+ * progressive text draft so Backspace changes just the selected segment,
+ * never clears the previously applied investigation or unmounts the editor.
+ * The parent validates YYYY-MM-DD and disables submission until complete.
+ */
+export function EditableCalendarDate({label,value,onChange,invalid=false,descriptionId,required=true}:Props){
+  return <label>{label}<input type="text" aria-label={label} inputMode="numeric"
+    maxLength={10} placeholder="YYYY-MM-DD" autoComplete="off" value={value}
+    required={required} aria-invalid={invalid} aria-describedby={descriptionId}
+    onChange={e=>onChange(e.target.value)}/></label>;
+}
 export function SecondClock({label,value,onChange,invalid=false,descriptionId,required=true}:Props){
   return <label>{label}<input type="text" aria-label={label} inputMode="numeric" value={value}
     maxLength={8} placeholder="HH:mm:ss" autoComplete="off" required={required}
