@@ -40,8 +40,8 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
     message:{list:async()=>{
       if(mode==='transient'&&pollErrors++===0)
         throw new AuthProblem(502,'OPENCODE_HTTP_503');
-      return {data:[{id:'answer',type:'assistant',finish:mode==='native-error'?'error':'stop',
-        ...(mode==='native-error'?{error:{name:'NativeError'}}:{}),
+      return {data:[{id:'answer',type:'assistant',
+        ...(mode==='native-error'?{error:{name:'NativeError'}}:{finish:'stop'}),
         time:{completed:Date.now()},
         content:[{type:'text',text:mode==='native-error'?'':'实际排查结果'}]}]};
     }},
