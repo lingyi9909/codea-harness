@@ -44,7 +44,12 @@ const TIMEOUT_MS=10*60*1000;
 const MAX_CONSECUTIVE_POLL_ERRORS=5;
 /** Only retry read-only native status calls. NEVER retry session.prompt(). */
 export function transientInstitutionPollError(error:unknown){
-  if(error instanceof AuthProblem)return [502,503,504].includes(error.status);
+  if(error instanceof AuthProblem){
+    // The SDK wraps native HTTP 4xx as an AuthProblem(502). They are definite
+    // request/authentication errors, not transient network transport failures.
+    if(/^OPENCODE_HTTP_4\d\d$/.test(error.code))return false;
+    return [502,503,504].includes(error.status);
+  }
   if(error instanceof Error)return error.name==='AbortError'||error.name==='TimeoutError'||
     /fetch failed|network|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up/i.test(error.message);
   return false;
