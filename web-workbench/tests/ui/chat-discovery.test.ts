@@ -578,6 +578,18 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     const beforeDate=await editableDate.inputValue();
     await editableDate.focus();await editableDate.press('End');await editableDate.press('Backspace');
     await expect(editableDate).toHaveValue(beforeDate.slice(0,-1));
+    const dateVisibility=await editableDate.evaluate(el=>{
+      let item:Element|null=el;
+      const ancestry=[] as Array<{tag:string;name:string;display:string;visibility:string;width:number;height:number}>;
+      while(item&&ancestry.length<10){
+        const box=item.getBoundingClientRect(),style=getComputedStyle(item);
+        ancestry.push({tag:item.tagName,name:item.className.toString().slice(0,90),
+          display:style.display,visibility:style.visibility,width:box.width,height:box.height});
+        item=item.parentElement;
+      }
+      return {ancestry,active:document.activeElement?.getAttribute('aria-label')};
+    });
+    console.log('DATE_DRAFT_VISIBILITY',JSON.stringify(dateVisibility));
     await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeDisabled();
     await expect(feed).toContainText(finalAnswer);
     await editableDate.fill(beforeDate);
