@@ -12,7 +12,7 @@ test('institution task/group lists paginate in SQL without duplicating records',
     for(let i=0;i<125;i++)
       store.create('platform-b','hash-main','request-'+i,'2026-11-25','000123','customer-001');
     for(let i=0;i<57;i++)
-      store.create('platform-b','user-hash-'+i,'group-'+i,'2026-11-25','000456','customer-'+i);
+      store.create('platform-b','user-hash-'+i,'group-'+i,'2026-11-25','000456',i===1?'customer-001':'customer-'+i);
     const a=store.listAdmin(undefined,undefined,0,undefined,20);
     const b=store.listAdmin(undefined,undefined,20,undefined,20);
     const c=store.listAdmin(undefined,undefined,150,undefined,50);
