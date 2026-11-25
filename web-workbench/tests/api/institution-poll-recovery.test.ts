@@ -92,6 +92,7 @@ test('native 4xx Prompt rejection is FAILED; it must never be considered possibl
 
 test('only network/read transient errors are retryable, not invalid native input',()=>{
   assert.equal(transientInstitutionPollError(new AuthProblem(502,'OPENCODE_HTTP_503')),true);
+  assert.equal(transientInstitutionPollError(new AuthProblem(502,'OPENCODE_HTTP_400')),false);
   assert.equal(transientInstitutionPollError(new Error('fetch failed: ECONNRESET')),true);
   assert.equal(transientInstitutionPollError(new AuthProblem(400,'INVALID_INSTITUTION_DATE')),false);
   assert.equal(transientInstitutionPollError(new Error('programmer bug')),false);
