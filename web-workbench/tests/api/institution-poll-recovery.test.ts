@@ -16,16 +16,18 @@ type FinalState={status:string;errorCode:string|null};
 async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
   const root=await mkdtemp(join(tmpdir(),'institution-poll-recovery-'));
   const db=join(root,'tasks.sqlite');
-  const sceneConfig=new SceneConfigStore(root);
+  const workspace=join(root,'project');
+  const {mkdir}=await import('node:fs/promises');await mkdir(workspace);
+  const sceneConfig=new SceneConfigStore(workspace);
   await sceneConfig.initialize();
   const config=sceneConfig.read();
   await sceneConfig.save({version:1,scenes:{...config.config.scenes,
-    'institution-message':{directory:root,executor:{type:'skill',name:'institution-log-query'}}}},config.revision);
-  const access=new SceneAccessStore(root);
-  const tasks=new InstitutionTaskStore(db,root);
+    'institution-message':{directory:workspace,executor:{type:'skill',name:'institution-log-query'}}}},config.revision);
+  const access=new SceneAccessStore(workspace);
+  const tasks=new InstitutionTaskStore(db,workspace);
   let prompts=0,pollErrors=0;
   const native={
-    skill:{list:async()=>({location:{directory:root},data:[{id:'skill-id',name:'institution-log-query'}]})},
+    skill:{list:async()=>({location:{directory:workspace},data:[{id:'skill-id',name:'institution-log-query'}]})},
     model:{list:async()=>({data:[{id:'kimi',name:'Kimi',providerID:'private',enabled:true}]})},
     session:{
       create:async(input:{location:unknown;permissions:unknown})=>({
@@ -49,10 +51,10 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
   };
   const connection=async()=>native as unknown as Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
   const execution=new ExecutionRegistry([],async()=>connection(),{
-    workspace:root,singleServiceIdentity:'single:'+'f'.repeat(64),
+    workspace,singleServiceIdentity:'single:'+'f'.repeat(64),
   });
   const service=new InstitutionIntegration({clientId:'platform-b',databasePath:db},{
-    workspace:root,sceneConfig,sceneAccess:access,
+    workspace,sceneConfig,sceneAccess:access,
     auth:new LocalAuth('unused',4176),execution,nativeConnection:connection,
   },tasks);
   try{
