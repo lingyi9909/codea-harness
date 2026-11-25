@@ -28,6 +28,13 @@ export type InstitutionAdminTask={
 // 交叉类型 A & B：在列表 DTO 的基础上增加 detail 独有字段，类似 Java DTO 继承/组合。
 export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
 export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
+export type UserAccessVisit={
+  id:string;name:string;phoneMask:string;ip:string;scope:'lan'|'local';
+  loginAt:string;lastActiveAt:string;logoutAt:string|null;
+};
+export type UserAccessPage={
+  days:7|30;offset:number;limit:number;total:number;distinctUsers:number;items:UserAccessVisit[];
+};
 // 数值联合类型：仅接受四种并发档位；提交时后端仍会再次做运行时校验。
 export type InstitutionConcurrency=3|5|10|15;
 export type InstitutionConcurrencyStatus={maxConcurrency:InstitutionConcurrency;queued:number;running:number};
@@ -145,6 +152,11 @@ export class HarnessApi {
     return this.request<{config:SceneAccessConfig;revision:string}>('/scene-access',{method:'PUT',body:JSON.stringify({config,revision})});
   }
   pageStats(days:7|30=7){return this.request<{days:number;rows:{page:string;name:string;views:number;visitors:number;lastAt:number|null}[];daily:{page:string;day:string;views:number;visitors:number}[]}>(`/page-visits?days=${days}`);}
+  /** Only localhost editors may read actual login history; not exposed to LAN users. */
+  userVisits(days:7|30=7,offset=0,q=''){
+    const params=new URLSearchParams({days:String(days),offset:String(offset),q});
+    return this.request<UserAccessPage>('/user-visits?'+params.toString());
+  }
   /**
    * 接口任务列表：对应 C 的 GET /api/v1/institution-tasks。
    * userHash?:string 表示可选参数，URLSearchParams 负责正确编码查询参数。
