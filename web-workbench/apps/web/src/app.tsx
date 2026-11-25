@@ -376,6 +376,7 @@ export function WorkbenchApp() {
             <a className="side-link scenario-child" href="/institution-tasks"><span className="scenario-child-mark" aria-hidden="true">·</span>接口任务管理</a>
             <a className="side-link scenario-child" href="/institution-tasks?view=access"><span className="scenario-child-mark" aria-hidden="true">·</span>接口接入情况</a>
             <a className="side-link scenario-child" href="/analytics"><span className="scenario-child-mark" aria-hidden="true">·</span>访问统计</a>
+             <a className="side-link scenario-child" href="/analytics?view=users"><span className="scenario-child-mark" aria-hidden="true">·</span>用户访问记录</a>
             <a className="side-link scenario-child" href="/component-lab"><span className="scenario-child-mark" aria-hidden="true">·</span>组件测试</a>
           </div>}
         </div>}
