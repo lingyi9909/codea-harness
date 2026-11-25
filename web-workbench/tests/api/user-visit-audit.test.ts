@@ -38,8 +38,9 @@ test('login audit persists, masks phone, tracks activity/logout and paginates',a
     assert.throws(()=>store.users(7,-1),/USER_VISITS_FILTER_INVALID/);
   }finally{store.close();}
   const db=new DatabaseSync(path);
-  assert.equal((db.prepare('SELECT phone_mask FROM user_access_log WHERE id=?').get('audit-0')
-    as {phone_mask:string}).phone_mask,'138****5678');
+  const stored=db.prepare('SELECT phone_mask FROM user_access_log WHERE id=?')
+    .get('audit-0') as {phone_mask:string};
+  assert.equal(stored.phone_mask,'138****5678');
   db.close();
   const reopened=new PageVisitStore(path);
   assert.equal(reopened.users(7,0,'',now+100000).total,25,'audit survives process restart');
