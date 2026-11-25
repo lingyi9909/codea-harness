@@ -171,6 +171,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
         if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
       }
       if(!session?.profile||(session.scope==='lan'? !session.ownerId.startsWith('lan:'): !store.matches(session.profile.key)))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+      if(session.auditId)opts.pageVisits?.touch(session.auditId);
       reply.header('Cache-Control','no-store');
     });
     app.post('/api/v1/auth/local-session',async(req,reply)=>{
@@ -179,9 +180,17 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
         throw new AuthProblem(403,'ORIGIN_INVALID');
       const fields=req.body as {name?:unknown;phone?:unknown}|undefined;
       const profile=parseProfile({name:fields?.name,phone:fields?.phone});
+      const existing=await Promise.resolve().then(()=>localAuth.session(req)).catch(()=>undefined);
       const session=localAuth.isLan(req)
         ?localAuth.openLan(req,reply,{name:profile.name,key:profileKey(profile)})
         :localAuth.openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
+      // A previously authenticated LAN account may switch profiles in this
+      // browser. The old Cookie is revoked, and its audit visit is closed.
+      if(existing.auditId&&existing.auditId!==session.auditId)opts.pageVisits?.recordLogout(existing.auditId);
+      if(session.auditId)opts.pageVisits?.recordLogin({
+        auditId:session.auditId,ownerId:session.ownerId,profileKey:profileKey(profile),
+        name:profile.name,phone:profile.phone,ip:req.ip,scope:session.scope==='lan'?'lan':'local',
+      });
       return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,{id:session.ownerId,name:profile.name})));
     });
   }else app.post<{Body:{pairingCode:string}}>('/api/v1/auth/session',{schema:{
@@ -193,7 +202,10 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
   app.delete('/api/v1/auth/session',async(req,reply)=>{
-    await opts.auth.logout(req,reply);return reply.status(204).send();
+    const old=await opts.auth.session(req);
+    await opts.auth.logout(req,reply);
+    if(old.auditId)opts.pageVisits?.recordLogout(old.auditId);
+    return reply.status(204).send();
   });
   app.get('/api/v1/bootstrap',async(req,reply)=>{
     const session=await Promise.resolve().then(()=>opts.auth.session(req)).catch(error=>{if(multi&&error instanceof AuthProblem&&error.code==='AUTH_REQUIRED')throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');throw error;});
@@ -257,6 +269,21 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     const days=req.query.days===undefined?7:Number(req.query.days);
     if(days!==7&&days!==30)throw new AuthProblem(400,'ANALYTICS_RANGE_INVALID');
     return result(opts.pageVisits?.summary(days)??{days,rows:[],daily:[]});
+  });
+  // Login audit is administrator-only. It is NOT the public PV/UV endpoint.
+  app.get<{Querystring:{days?:string;offset?:string;q?:string}}>('/api/v1/user-visits',async req=>{
+    if(!localRequest(req))throw new AuthProblem(403,'USER_VISITS_LOCAL_ONLY');
+    if(!localSession||!sceneConfig||!opts.pageVisits)throw new AuthProblem(404,'USER_VISITS_UNAVAILABLE');
+    const session=await opts.auth.session(req);
+    if(session.scope!=='local'||!session.profile||
+      !sceneConfig.canEdit(session.profile.name))throw new AuthProblem(403,'USER_VISITS_FORBIDDEN');
+    const days=req.query.days===undefined?7:Number(req.query.days);
+    const offset=req.query.offset===undefined?0:Number(req.query.offset);
+    const q=req.query.q??'';
+    if((days!==7&&days!==30)||!Number.isSafeInteger(offset)||offset<0||
+      offset>1000000||typeof q!=='string'||q.length>128)
+      throw new AuthProblem(400,'USER_VISITS_FILTER_INVALID');
+    return result(opts.pageVisits.users(days,offset,q));
   });
   if(multi)app.addHook('onRoute',route=>{
     if(!String(route.url).startsWith('/api/v1/chat/'))return;
