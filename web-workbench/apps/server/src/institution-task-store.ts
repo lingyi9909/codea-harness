@@ -158,7 +158,7 @@ export class InstitutionTaskStore {
    * 由服务端管理员路由调用；user_hash 是不对外开放给普通 B 调用方的分组键。
    * 原始用户标识是后续版本才保存的，历史记录可能为 NULL。
    */
-  groupsAdmin(query:string|undefined,offset:number){
+  groupsAdmin(query:string|undefined,offset:number,limit=50){
     this.prune();
     const where=query?' WHERE external_user_id=?':'',params=query?[query]:[];
     const count=this.db.prepare('SELECT COUNT(*) AS n FROM (SELECT 1 FROM institution_api_tasks'+where+
@@ -171,10 +171,10 @@ export class InstitutionTaskStore {
       "SUM(CASE WHEN status='FAILED' THEN 1 ELSE 0 END) AS failed,"+
       "SUM(CASE WHEN status='UNKNOWN' THEN 1 ELSE 0 END) AS unknown,"+
       'MAX(created_at) AS last_seen FROM institution_api_tasks'+where+
-      ' GROUP BY client_id,user_hash ORDER BY last_seen DESC LIMIT 50 OFFSET ?'
-    ).all(...params,offset) as Array<{client_id:string;user_hash:string;external_user_id:string|null;total:number;
+      ' GROUP BY client_id,user_hash ORDER BY last_seen DESC LIMIT ? OFFSET ?'
+    ).all(...params,limit,offset) as Array<{client_id:string;user_hash:string;external_user_id:string|null;total:number;
       queued:number;running:number;succeeded:number;failed:number;unknown:number;last_seen:number}>;
-    return {total:count.n,limit:50,offset,items:rows.map(row=>({
+    return {total:count.n,limit,offset,items:rows.map(row=>({
       clientId:row.client_id,userHash:row.user_hash,externalUserId:row.external_user_id,
       total:row.total,queued:row.queued,running:row.running,succeeded:row.succeeded,
       failed:row.failed,unknown:row.unknown,lastSeen:new Date(row.last_seen).toISOString(),
@@ -184,7 +184,7 @@ export class InstitutionTaskStore {
    * 管理后台任务列表：参数采用绑定值，不拼接用户输入到 SQL 语句。
    * 通过 status、requestId、业务用户 ID 或 userHash 组合过滤。
    */
-  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number,userHash?:string){
+  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number,userHash?:string,limit=50){
     this.prune();
     const clauses:string[]=[],params:string[]=[];
     if(statusFilter){clauses.push('status=?');params.push(statusFilter);}
@@ -195,10 +195,10 @@ export class InstitutionTaskStore {
       .get(...params) as {n:number}).n;
     const rows=this.db.prepare('SELECT id,client_id,user_hash,external_user_id,request_id,day,msg_sn,status,error_code,'+
       'created_at,updated_at,(result_text IS NOT NULL) AS has_result FROM institution_api_tasks'+
-      where+' ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET ?')
-      .all(...params,offset) as Array<Pick<TaskRow,
+      where+' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?')
+      .all(...params,limit,offset) as Array<Pick<TaskRow,
       'id'|'client_id'|'user_hash'|'external_user_id'|'request_id'|'day'|'msg_sn'|'status'|'error_code'|'created_at'|'updated_at'>&{has_result:number}>;
-    return {total,limit:50,offset,items:rows.map(row=>({
+    return {total,limit,offset,items:rows.map(row=>({
       taskId:row.id,clientId:row.client_id,userHash:row.user_hash.slice(0,12),
       externalUserId:row.external_user_id,
       requestId:row.request_id,day:row.day,msgSn:row.msg_sn||null,status:row.status,
