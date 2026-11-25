@@ -37,14 +37,16 @@ test('second workbench instance cannot reset another live institution task in sh
 test('dead owner PID lease can be reclaimed without manual database deletion',async()=>{
   const root=await mkdtemp(join(tmpdir(),'institution-crash-lease-'));
   const path=join(root,'tasks.sqlite');
-  const first=new InstitutionTaskStore(path,root);
+  const workspace=join(root,'project');
+  const {mkdir}=await import('node:fs/promises');await mkdir(workspace);
+  const first=new InstitutionTaskStore(path,workspace);
   first.close();
   const {DatabaseSync}=await import('node:sqlite');
   const db=new DatabaseSync(path);
   db.prepare("INSERT INTO institution_api_settings(key,value) VALUES('active_instance',?)")
     .run(JSON.stringify({pid:987654321,token:'crashed-process'}));
   db.close();
-  const restarted=new InstitutionTaskStore(path,root);
+  const restarted=new InstitutionTaskStore(path,workspace);
   try{assert.equal(restarted.queueCounts().running,0);}finally{restarted.close();}
   await rm(root,{recursive:true,force:true});
 });
