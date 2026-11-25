@@ -170,10 +170,10 @@ export class InstitutionIntegration {
     if(!row)throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
     return status(row);
   }
-  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number,userHash?:string){
-    return this.tasks.listAdmin(statusFilter,query,offset,userHash);
+  listAdmin(statusFilter:TaskStatus|undefined,query:string|undefined,offset:number,userHash?:string,limit=50){
+    return this.tasks.listAdmin(statusFilter,query,offset,userHash,limit);
   }
-  groupsAdmin(query:string|undefined,offset:number){return this.tasks.groupsAdmin(query,offset);}
+  groupsAdmin(query:string|undefined,offset:number,limit=50){return this.tasks.groupsAdmin(query,offset,limit);}
   concurrencyStatus(){return {maxConcurrency:this.tasks.concurrency(),...this.tasks.queueCounts()};}
   /** 管理员修改并发档位；升容立即补位，缩容不取消已运行任务。 */
   setConcurrency(n:InstitutionConcurrency){
@@ -398,27 +398,31 @@ export function registerInstitutionIntegration(app:FastifyInstance,
       .send({data:getManager().setConcurrency(req.body.maxConcurrency),requestId:randomUUID()});
   });
   const parseAdminOffset=(value:string)=>{
-    if(!/^[0-9]{1,5}$/.test(String(value))||Number(value)>10000)
+    if(!/^[0-9]{1,7}$/.test(String(value))||Number(value)>1000000)
       throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
     return Number(value);
   };
-  app.get<{Querystring:{q?:string;offset?:string}}>(ADMIN_ROOT+'/users',async(req,reply)=>{
+  const parseAdminLimit=(value:string)=>{
+    if(!['20','50','100'].includes(value))throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
+    return Number(value);
+  };
+  app.get<{Querystring:{q?:string;offset?:string;limit?:string}}>(ADMIN_ROOT+'/users',async(req,reply)=>{
     authorizeAdmin(req);
-    const {q='',offset='0'}=req.query;
+    const {q='',offset='0',limit='50'}=req.query;
     if(q&&!validId(q))throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
     return reply.header('Cache-Control','no-store')
-      .send({data:getManager().groupsAdmin(q||undefined,parseAdminOffset(offset)),requestId:randomUUID()});
+      .send({data:getManager().groupsAdmin(q||undefined,parseAdminOffset(offset),parseAdminLimit(limit)),requestId:randomUUID()});
   });
-  app.get<{Querystring:{status?:string;q?:string;offset?:string;userHash?:string}}>(ADMIN_ROOT,async(req,reply)=>{
+  app.get<{Querystring:{status?:string;q?:string;offset?:string;limit?:string;userHash?:string}}>(ADMIN_ROOT,async(req,reply)=>{
     authorizeAdmin(req);
-    const {status:state='ALL',q='',offset='0',userHash}=req.query;
+    const {status:state='ALL',q='',offset='0',limit='50',userHash}=req.query;
     if(state!=='ALL'&&!ADMIN_STATUSES.includes(state as TaskStatus))
       throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
     if(q&&!validId(q)||userHash&&!/^[a-f0-9]{64}$/.test(userHash))
       throw new AuthProblem(400,'INSTITUTION_TASK_FILTER_INVALID');
     return reply.header('Cache-Control','no-store')
       .send({data:getManager().listAdmin(state==='ALL'?undefined:state as TaskStatus,q||undefined,
-        parseAdminOffset(offset),userHash),requestId:randomUUID()});
+        parseAdminOffset(offset),userHash,parseAdminLimit(limit)),requestId:randomUUID()});
   });
   app.get<{Params:{id:string}}>(ADMIN_ROOT+'/:id',async(req,reply)=>{
     authorizeAdmin(req);
