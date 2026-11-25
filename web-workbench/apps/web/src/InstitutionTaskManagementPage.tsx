@@ -108,6 +108,8 @@ export function InstitutionTaskManagementPage(){
   const [query,setQuery]=useState('');
   const [appliedQuery,setAppliedQuery]=useState('');
   const [offset,setOffset]=useState(0);
+  const [pageSize,setPageSize]=useState<20|50|100>(20);
+  const [jump,setJump]=useState('1');
   const [page,setPage]=useState<InstitutionTaskPage|null>(null);
   const [listError,setListError]=useState('');
   const [loading,setLoading]=useState(false);
@@ -152,8 +154,11 @@ export function InstitutionTaskManagementPage(){
     if(mode!=='ready'||accessView||usersView)return;
     let live=true;
     setLoading(true);
-    api.institutionTasks(filter,appliedQuery,offset).then(data=>{
-      if(live){setPage(data);setListError('');}
+    api.institutionTasks(filter,appliedQuery,offset,undefined,pageSize).then(data=>{
+      if(live){
+        if(offset>0&&offset>=data.total){setOffset(Math.max(0,Math.ceil(data.total/pageSize)-1)*pageSize);return;}
+        setPage(data);setListError('');setJump(String(Math.floor(offset/pageSize)+1));
+      }
     }).catch(e=>{
       if(!live)return;
       if(e instanceof ApiError&&e.status===403){setMode('denied');return;}
@@ -161,7 +166,7 @@ export function InstitutionTaskManagementPage(){
       setListError(errorText(e));
     }).finally(()=>{if(live)setLoading(false);});
     return()=>{live=false;};
-  },[mode,filter,appliedQuery,offset,refresh]);
+  },[mode,filter,appliedQuery,offset,pageSize,refresh]);
 
   // 4. 单任务详情：通过 taskId 读最终 result.summary，成功后显示 Markdown。
   useEffect(()=>{
@@ -177,6 +182,12 @@ export function InstitutionTaskManagementPage(){
     return()=>{live=false;};
   },[mode,selectedId,refresh]);
 
+  const totalPages=Math.max(1,Math.ceil((page?.total??0)/pageSize));
+  function moveTo(index:number){
+    if(!Number.isSafeInteger(index)||index<0||index>=totalPages||index*pageSize>1000000)return;
+    setOffset(index*pageSize);setJump(String(index+1));
+    setSelectedId('');setDetail(null);setDetailError('');
+  }
   // 以下 JSX 是按 mode 分支返回的视图，类似 Java Controller 选择不同页面模板。
   if(mode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
     await api.login(name,phone);setMode('ready');
@@ -257,10 +268,22 @@ export function InstitutionTaskManagementPage(){
         </div>
         {!page&&!listError&&<p className="institution-tasks-empty">正在读取任务…</p>}
         {page?.items.length===0&&<p className="institution-tasks-empty">暂无符合条件的接口任务</p>}
-        <div className="institution-tasks-pager">
-          <button type="button" disabled={offset===0} onClick={()=>setOffset(n=>Math.max(0,n-50))}>上一页</button>
-          <span>第 {Math.floor(offset/50)+1} 页</span>
-          <button type="button" disabled={!page||offset+page.limit>=page.total} onClick={()=>setOffset(n=>n+50)}>下一页</button>
+        <div className="institution-tasks-pager" aria-label="接口任务分页">
+          <label htmlFor="institution-page-size">每页
+            <select id="institution-page-size" value={pageSize} onChange={e=>{
+              setPageSize(Number(e.target.value) as 20|50|100);setOffset(0);setJump('1');
+              setSelectedId('');setDetail(null);
+            }}><option value={20}>20 条</option><option value={50}>50 条</option><option value={100}>100 条</option></select>
+          </label>
+          <button type="button" disabled={offset===0} onClick={()=>moveTo(Math.floor(offset/pageSize)-1)}>上一页</button>
+          <span>第 {Math.floor(offset/pageSize)+1} / {totalPages} 页 · 共 {page?.total??0} 条</span>
+          <button type="button" disabled={!page||offset+pageSize>=page.total}
+            onClick={()=>moveTo(Math.floor(offset/pageSize)+1)}>下一页</button>
+          <form onSubmit={e=>{e.preventDefault();moveTo(Number(jump)-1);}}>
+            <input type="number" aria-label="跳转页码" min={1} max={totalPages} value={jump}
+              onChange={e=>setJump(e.target.value)}/>
+            <button type="submit" disabled={!jump||Number(jump)<1||Number(jump)>totalPages}>跳转</button>
+          </form>
         </div>
       </section>
       <section className="institution-tasks-detail" aria-label="任务执行详情">
