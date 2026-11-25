@@ -13,7 +13,7 @@ import {InstitutionIntegration,transientInstitutionPollError} from '../../apps/s
 import type {chatConnection} from '../../apps/server/src/modules/chat/connection.ts';
 
 type FinalState={status:string;errorCode:string|null};
-async function execute(mode:'transient'|'native-error'){
+async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
   const root=await mkdtemp(join(tmpdir(),'institution-poll-recovery-'));
   const db=join(root,'tasks.sqlite');
   const sceneConfig=new SceneConfigStore(root);
@@ -31,7 +31,7 @@ async function execute(mode:'transient'|'native-error'){
       create:async(input:{location:unknown;permissions:unknown})=>({
         id:'native-session-1',location:input.location,permissions:input.permissions,
       }),
-      prompt:async()=>{prompts++;return {id:'submitted'};},
+      prompt:async()=>{prompts++;if(mode==='prompt-rejected')throw new AuthProblem(502,'OPENCODE_HTTP_400');return {id:'submitted'};},
       active:async()=>({}),
       inbox:{list:async()=>[]},
       interrupt:async()=>({interrupted:true}),
@@ -81,6 +81,12 @@ test('temporary read-only native status API failure is retried, not UNKNOWN and 
 test('a completed native assistant error is definitely FAILED, not UNKNOWN', {timeout:12000},async()=>{
   const value=await execute('native-error');
   assert.deepEqual(value.state,{status:'FAILED',errorCode:'INSTITUTION_NATIVE_EXECUTION_FAILED'});
+  assert.equal(value.prompts,1);
+});
+
+test('native 4xx Prompt rejection is FAILED; it must never be considered possibly delivered', {timeout:12000},async()=>{
+  const value=await execute('prompt-rejected');
+  assert.deepEqual(value.state,{status:'FAILED',errorCode:'OPENCODE_HTTP_400'});
   assert.equal(value.prompts,1);
 });
 
