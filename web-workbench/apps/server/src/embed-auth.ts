@@ -1,3 +1,11 @@
+/**
+ * 嵌入场景身份边界
+ *
+ * 职责：核验宿主接入票据和嵌入用户的会话归属。
+ * Java 研发阅读提示：嵌入会话与 C 本机管理员会话采用不同的信任范围。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {createHash,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import type {FastifyRequest,FastifyReply} from 'fastify';
 import {AuthProblem,type RequestAuth} from './auth.ts';
@@ -18,6 +26,7 @@ export function trustedOrigin(origin:string){
     throw new Error('EMBED_HTTPS_ORIGIN_REQUIRED');
   return url;
 }
+/** 阅读提示：嵌入场景的票据、会话和宿主身份边界；与本机配置管理员登录是不同授权链路。 */
 export class EmbeddedAuth implements RequestAuth {
   readonly config:EmbedConfig;
   readonly store:EmbedStore;

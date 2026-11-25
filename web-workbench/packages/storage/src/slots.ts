@@ -1,3 +1,11 @@
+/**
+ * 嵌入执行槽位管理
+ *
+ * 职责：记录嵌入用户与受控执行槽位的占用和释放。
+ * Java 研发阅读提示：关注同一槽位的并发竞争，避免不同业务用户混用执行会话。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { withTransaction } from './db.ts';
 import { appendEvent } from './events.ts';

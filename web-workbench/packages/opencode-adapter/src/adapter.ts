@@ -1,3 +1,11 @@
+/**
+ * OpenCode 执行适配器
+ *
+ * 职责：将工作台的执行请求映射到 OpenCode 的能力接口。
+ * Java 研发阅读提示：这是基础适配层；不要让业务页直接使用未经核验的原生操作。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { realpath } from 'node:fs/promises';

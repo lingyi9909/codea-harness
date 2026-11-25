@@ -1,3 +1,11 @@
+/**
+ * 场景权限策略
+ *
+ * 职责：保存/核验不同研发场景的工具使用权限。
+ * Java 研发阅读提示：权限校验在 C 后端完成；配置编辑权限和工具执行权限需分开理解。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {closeSync,constants,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,unlinkSync,writeFileSync} from 'node:fs';
 import {createHash,randomUUID} from 'node:crypto';
 import {join} from 'node:path';
@@ -34,6 +42,7 @@ export function accessForChat(scenario:string):AccessScene{
     scenario==='institution-message-inspection'?'institution-message':
     scenario==='data-analysis'?'data':'home';
 }
+/** 阅读提示：将全局执行权限与场景策略组合；后端必须保留限制，前端配置不可覆盖安全底座。 */
 export function applyToolPolicy(base:NativeRule[]|undefined,policy:SceneAccessPolicy):NativeRule[]|undefined{
   const rules:NativeRule[]=[...(base??[])];
   for(const action of accessToolActions){
@@ -97,6 +106,7 @@ export function validateAccess(value:unknown):SceneAccessConfig{
   }
   return config;
 }
+/** 阅读提示：场景级权限配置仓储，读取和保存前都需要验证结构与编辑权限。 */
 export class SceneAccessStore{
   readonly file:string;
   private readonly folder:string;

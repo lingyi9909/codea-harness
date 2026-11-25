@@ -1,3 +1,11 @@
+/**
+ * 任务事件 HTTP 接口
+ *
+ * 职责：提供事件读取或订阅相关接口供页面追踪执行进度。
+ * Java 研发阅读提示：事件推送顺序与数据库最终状态需分开理解。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';
 import type { RequestAuth } from '../../auth.ts';

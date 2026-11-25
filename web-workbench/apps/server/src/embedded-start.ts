@@ -1,3 +1,11 @@
+/**
+ * 嵌入服务启动
+ *
+ * 职责：处理启动参数、监听地址及运行入口。
+ * Java 研发阅读提示：启动层不负责真实模型分析和业务数据库查询。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {realpath,mkdir,readFile} from 'node:fs/promises';
 import {dirname,isAbsolute,relative,join,sep,resolve} from 'node:path';
 import {homedir} from 'node:os';

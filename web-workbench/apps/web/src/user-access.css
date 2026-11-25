@@ -1,0 +1,28 @@
+/* Login audit belongs to the local admin area; do not introduce a new app shell. */
+.user-access-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:22px 0}
+.user-access-toolbar form{display:flex;align-items:center;gap:8px;flex:1 1 360px}
+.user-access-toolbar form input{min-width:220px;flex:1}
+.user-access-toolbar input,.user-access-toolbar button,.user-access-pager button{
+  border:1px solid #d8dee6;background:#fff;color:#344054;border-radius:8px;
+  height:36px;padding:0 12px;font:inherit;font-size:13px
+}
+.user-access-toolbar [aria-pressed=true]{background:#293240;color:#fff;border-color:#293240}
+.user-access-toolbar [role=group]{display:flex;gap:6px}
+.user-access-toolbar button{cursor:pointer}
+.user-access-summary{display:flex;gap:24px;flex-wrap:wrap;color:#647084;font-size:13px;margin:12px 0 16px}
+.user-access-summary strong{font-size:17px;color:#253040;margin-left:5px}
+.user-access-table-wrap{overflow-x:auto;border:1px solid #e3e7ec;border-radius:11px}
+.user-access-table-wrap table{border-collapse:collapse;min-width:790px;width:100%;font-size:13px}
+.user-access-table-wrap th,.user-access-table-wrap td{text-align:left;padding:14px 16px;border-bottom:1px solid #e9edf1;white-space:nowrap}
+.user-access-table-wrap th{background:#f7f9fb;color:#566476;font-size:12px;font-weight:650}
+.user-access-table-wrap td{color:#334155}
+.user-access-table-wrap td strong{display:block;font-size:13px;font-weight:650}
+.user-access-table-wrap td small{display:block;color:#788596;margin-top:4px}
+.user-access-table-wrap tr:last-child td{border-bottom:0}
+.user-access-empty{padding:24px;margin:0;color:#667085;text-align:center}
+.user-access-pager{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-size:12px;color:#687588;padding:15px 0}
+.user-access-pager button{height:32px;cursor:pointer}
+.user-access-pager button:disabled{opacity:.5;cursor:not-allowed}
+.user-access-error{color:#9a3412;font-size:13px}
+.user-access-note{margin:14px 0;font-size:12px;line-height:1.7;color:#778395}
+@media(max-width:700px){.user-access-toolbar form{flex-basis:100%}.user-access-summary{gap:12px}}

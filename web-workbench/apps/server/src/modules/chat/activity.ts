@@ -1,3 +1,11 @@
+/**
+ * 对话执行活动
+ *
+ * 职责：归纳会话中的工具执行、消息和进度活动。
+ * Java 研发阅读提示：实时事件、持久化消息和最终结果不是同一层数据。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {SessionMessagesResponse} from '@opencode/client';
 import type {ChatFooter,ChatStep} from '../../../../../packages/contracts/src/chat.ts';
 
@@ -48,6 +56,7 @@ function publicInput(input:unknown){
   const json=JSON.stringify(input,(key,value)=>sensitive.test(key)?'[隐藏]':value,2);
   return json==='{}'?undefined:activityPreview(json,1600);
 }
+/** 阅读提示：将 OpenCode 消息内容转为前端活动步骤；转换结果只用于展示而非事实执行凭证。 */
 export function activity(m:Message):ChatStep[]{
   const steps:ChatStep[]=[];
   if(m.type==='assistant'){

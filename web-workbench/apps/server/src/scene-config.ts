@@ -1,3 +1,11 @@
+/**
+ * 场景执行配置
+ *
+ * 职责：维护每个业务子场景的工作目录及 Skill、Agent 或命令绑定。
+ * Java 研发阅读提示：类比 Java 配置中心；目录与执行能力必须在实际调用前核验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, join, relative, resolve } from 'node:path';
@@ -15,6 +23,7 @@ const EMPTY:SceneConfiguration={version:1,scenes:{}};
 // Defaults do not install any external Skill. The public brainstorming skill
 // must already be loaded by OpenCode. /models opens the model selector, not
 // the custom-command execution endpoint.
+/** 阅读提示：为未配置工作目录生成各业务子场景的默认绑定；不等于 Skill 已被模型成功加载。 */
 export function defaultSceneConfiguration(root:string):SceneConfiguration{
   return {version:1,scenes:{
     logs:{directory:root,executor:{type:'skill',name:'brainstorming'}},
@@ -29,6 +38,7 @@ const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
 const plain=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
 const invalid=(code='SCENE_CONFIG_INVALID')=>new AuthProblem(400,code);
 
+/** 阅读提示：管理场景配置文件的读取、校验与版本；关注 save/初始化时对目录和绑定的约束。 */
 export class SceneConfigStore {
   readonly root:string;
   readonly file:string;

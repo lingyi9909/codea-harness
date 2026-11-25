@@ -1,3 +1,11 @@
+/**
+ * 嵌入场景 HTTP 路由
+ *
+ * 职责：为宿主平台的嵌入页提供初始化、执行和状态查询接口。
+ * Java 研发阅读提示：先读请求验证，再追踪原生执行和会话隔离。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import type {InstitutionQueryAdapter} from './institution-query.ts';
@@ -14,6 +22,7 @@ import {registerChat} from './modules/chat/routes.ts';
 import {MysqlChatBindings} from '../../../packages/storage/src/chat-bindings.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 const wrap=<T>(data:T)=>({data,requestId:randomUUID()});
+/** 阅读提示：嵌入页业务路由总入口；阅读时区分宿主调用、匿名访问和独立会话处理。 */
 export async function registerEmbedded(app:FastifyInstance,opts:{auth:EmbeddedAuth;execution:ExecutionRegistry;workspace:string;sceneConfig:SceneConfigStore;sceneAccess?:SceneAccessStore;pool?:Pool;bindings?:ChatBindingStore;ensureOwner?:(id:string,subject:string)=>Promise<void>;institutionAdapter?:InstitutionQueryAdapter;resetSlot?:(owner:string)=>Promise<void>}){
   const {auth,execution,workspace,sceneConfig,pool}=opts;
   if(!opts.bindings&&!pool)throw new Error('EMBED_BINDING_STORE_REQUIRED');

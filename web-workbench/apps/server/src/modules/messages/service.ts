@@ -1,3 +1,11 @@
+/**
+ * 消息处理业务层
+ *
+ * 职责：处理消息存取、顺序和前端展示所需的业务数据。
+ * Java 研发阅读提示：流式增量与最终消息不能当成同一个完成信号。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { DTO } from '../../../../../packages/contracts/src/domain.ts';
@@ -22,6 +30,7 @@ function rawJson(value:unknown):string{
   if(value&&typeof value==='object')return JSON.stringify(value);
   throw new AuthProblem(503,'STORED_JSON_INVALID');
 }
+/** 阅读提示：在已有任务上创建追问/继续执行操作；区分新消息与原生任务再次运行。 */
 export async function createContinuation(input:{
   ownerId:string;taskId:string;operationId:string;kind:ContinuationKind;
   text?:string;quote?:string;reportArtifactId?:string;
@@ -149,6 +158,7 @@ function parseCursor(secret:string,cursor:string,ownerId:string,taskId:string){
     throw new AuthProblem(400,'MESSAGE_CURSOR_INVALID');
   return {date:obj.date,id:obj.id};
 }
+/** 阅读提示：按用户、任务与分页信息读取消息；避免跨任务拼接历史结果。 */
 export async function listTaskMessages(input:{
   pool:Pool;ownerId:string;taskId:string;limit:number;cursor?:string;cursorKey:string;
 }):Promise<DTO<'MessagePage'>>{

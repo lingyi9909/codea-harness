@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { createApp } from '../../apps/server/src/app.ts';
 import { LocalAuth } from '../../apps/server/src/auth.ts';
+import {profileKey} from '../../apps/server/src/local-profile.ts';
 
 const port=4181,host='127.0.0.1:'+port,origin='http://'+host;
 const profile={name:'示例用户',phone:'+12025550123'};
@@ -36,7 +37,7 @@ it('packaged local sessions require a loopback Host and matching Origin, reuse t
     }
     const opened=await app.inject({method:'POST',url:open,headers:{host,origin},payload:profile});
     assert.equal(opened.statusCode,200);
-    assert.deepEqual(opened.json().data.owner,{id:'local-workbench',name:profile.name});
+    assert.deepEqual(opened.json().data.owner,{id:'local:'+profileKey(profile),name:profile.name});
     assert.ok(!opened.body.includes(profile.phone));
     assert.deepEqual(JSON.parse(await readFile(join(workspace,'.workbench','user.json'),'utf8')),profile);
     const setCookie=String(opened.headers['set-cookie']);
@@ -77,6 +78,10 @@ it('serializes different logins, allows a switch after logout, and gates externa
   await app.inject({method:'DELETE',url:'/api/v1/auth/session',headers:sessionHeaders(attempts[winner])});
   const switched=await login(candidates[1-winner]);
   assert.equal(switched.statusCode,200);
+  // Localhost accounts must NOT share the previous global 'local-workbench' ID.
+  // A profile returns to the same owner across logout/restart, not the owner of B.
+  assert.equal(switched.json().data.owner.id,'local:'+profileKey(candidates[1-winner]));
+  assert.notEqual(switched.json().data.owner.id,attempts[winner].json().data.owner.id);
   assert.deepEqual(JSON.parse(await readFile(file,'utf8')),candidates[1-winner]);
   await writeFile(file,JSON.stringify(candidates[winner]));
   for(const url of [bootstrap,'/api/v1/chat/settings','/api/v1/tasks']){

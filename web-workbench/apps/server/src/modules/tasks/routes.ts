@@ -1,3 +1,11 @@
+/**
+ * 任务 REST Controller
+ *
+ * 职责：负责创建/获取任务相关的 HTTP 请求入口。
+ * Java 研发阅读提示：将接口参数验证与任务 Service 的业务处理区分开。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';

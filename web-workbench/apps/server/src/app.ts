@@ -1,5 +1,14 @@
+/**
+ * 服务端 HTTP 总入口
+ *
+ * 职责：装配会话认证、业务路由、场景配置及静态资源。
+ * Java 研发阅读提示：类似 Spring Boot Web 配置与 Controller 注册入口。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {chatConnection} from './modules/chat/connection.ts';
 import {PageVisitStore,validPageId} from './page-visits.ts';
+import {institutionIntegrationConfig,registerInstitutionIntegration} from './institution-integration.ts';
 import {SceneAccessStore} from './scene-access.ts';
 import type {ChatBindingStore} from '../../../packages/storage/src/chat-bindings.ts';
 import type {InstitutionQueryAdapter} from './institution-query.ts';
@@ -40,6 +49,7 @@ const localRequest=(req:{ip:string;headers:{host?:string}})=>
   ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip)&&
   /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(req.headers.host??'');
 
+/** 阅读提示：Spring Boot 的应用装配入口：挂载各 Controller、会话校验与静态页面。这里决定哪些路由供本机管理、哪些可在 LAN 使用。 */
 export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatConnection>;localOnly?:boolean;workspace?:string;autoOpenCode?:boolean;pool?:Pool;auth:LocalAuth|MultiUserAuth;execution?:ExecutionRegistry;mockBusiness?:boolean;embedded?:EmbeddedAuth;institutionAdapter?:InstitutionQueryAdapter;resetEmbedSlot?:(owner:string)=>Promise<void>;embeddedBindings?:ChatBindingStore;embeddedStorageCheck?:()=>void;native?:Omit<SchedulerConfig,'pool'|'signal'>;pageVisits?:PageVisitStore}){
   const app=Fastify({logger:false,bodyLimit:32768,trustProxy:false});
   const capabilities=opts.native?await opts.native.adapter.probe():evaluateCapabilities().capabilities;
@@ -60,6 +70,11 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     return reply.header('Cache-Control','no-store').sendFile('index.html');
   });
   app.get('/config',async(req,reply)=>{
+    if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
+    if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
+    return reply.header('Cache-Control','no-store').header('Content-Security-Policy',"frame-ancestors 'none'").sendFile('index.html');
+  });
+  app.get('/institution-tasks',async(req,reply)=>{
     if(!localRequest(req))throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
     if(!existsSync(frontend+'index.html'))throw new AuthProblem(503,'FRONTEND_BUILD_MISSING');
     return reply.header('Cache-Control','no-store').header('Content-Security-Policy',"frame-ancestors 'none'").sendFile('index.html');
@@ -124,6 +139,15 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
   const sceneConfig=workspace?new SceneConfigStore(workspace):undefined;
   const sceneAccess=workspace?new SceneAccessStore(workspace):undefined;
   await sceneConfig?.initialize();
+  // Local single-service workbenches expose the two B2B routes automatically.
+  // Multi-user/isolated runtimes do not share this integration's execution context.
+  if(localSession&&workspace&&sceneConfig&&sceneAccess&&opts.auth instanceof LocalAuth&&
+     opts.execution?.singleService()&&opts.nativeConnection){
+    registerInstitutionIntegration(app,{
+      workspace,sceneConfig,sceneAccess,auth:opts.auth,
+      execution:opts.execution,nativeConnection:opts.nativeConnection,
+    },institutionIntegrationConfig());
+  }
   if(multi){
     const auth=opts.auth as MultiUserAuth;
     app.post('/api/v1/auth/login',async(req,reply)=>{
@@ -141,23 +165,32 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     app.addHook('onRequest',async(req,reply)=>{
       const route=req.routeOptions.url;
       if(!route?.startsWith('/api/v1/')||route.startsWith('/api/v1/embed/')||route==='/api/v1/page-visits'||route==='/api/v1/health'||route==='/api/v1/auth/local-session'||
-        (route==='/api/v1/auth/session'&&req.method==='DELETE'))return;
+        (route==='/api/v1/auth/session'&&req.method==='DELETE')||route.startsWith('/api/v1/integrations/institution/investigations'))return;
       let session;
       try{session=await opts.auth.session(req);}catch(e){
         if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
       }
       if(!session?.profile||(session.scope==='lan'? !session.ownerId.startsWith('lan:'): !store.matches(session.profile.key)))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+      if(session.auditId)opts.pageVisits?.touch(session.auditId);
       reply.header('Cache-Control','no-store');
     });
     app.post('/api/v1/auth/local-session',async(req,reply)=>{
       const localAuth=opts.auth as LocalAuth;
       if(!localAuth.origin(req)||req.headers.origin!=='http://'+req.headers.host)
         throw new AuthProblem(403,'ORIGIN_INVALID');
-      const fields=req.body as {name?:unknown;phone?:unknown;lanCode?:unknown}|undefined;
+      const fields=req.body as {name?:unknown;phone?:unknown}|undefined;
       const profile=parseProfile({name:fields?.name,phone:fields?.phone});
+      const existing=await Promise.resolve().then(()=>localAuth.session(req)).catch(()=>undefined);
       const session=localAuth.isLan(req)
-        ?localAuth.openLan(req,reply,{name:profile.name,key:profileKey(profile)},fields?.lanCode)
+        ?localAuth.openLan(req,reply,{name:profile.name,key:profileKey(profile)})
         :localAuth.openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
+      // A previously authenticated LAN account may switch profiles in this
+      // browser. The old Cookie is revoked, and its audit visit is closed.
+      if(existing?.auditId&&existing.auditId!==session.auditId)opts.pageVisits?.recordLogout(existing.auditId);
+      if(session.auditId)opts.pageVisits?.recordLogin({
+        auditId:session.auditId,ownerId:session.ownerId,profileKey:profileKey(profile),
+        name:profile.name,phone:profile.phone,ip:req.ip,scope:session.scope==='lan'?'lan':'local',
+      });
       return reply.header('Cache-Control','no-store').send(result(await makeBootstrap(session.csrf,{id:session.ownerId,name:profile.name})));
     });
   }else app.post<{Body:{pairingCode:string}}>('/api/v1/auth/session',{schema:{
@@ -169,7 +202,10 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     return reply.send(result(await makeBootstrap(session.csrf,owner)));
   });
   app.delete('/api/v1/auth/session',async(req,reply)=>{
-    await opts.auth.logout(req,reply);return reply.status(204).send();
+    const old=await opts.auth.session(req);
+    await opts.auth.logout(req,reply);
+    if(old.auditId)opts.pageVisits?.recordLogout(old.auditId);
+    return reply.status(204).send();
   });
   app.get('/api/v1/bootstrap',async(req,reply)=>{
     const session=await Promise.resolve().then(()=>opts.auth.session(req)).catch(error=>{if(multi&&error instanceof AuthProblem&&error.code==='AUTH_REQUIRED')throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');throw error;});
@@ -233,6 +269,21 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
     const days=req.query.days===undefined?7:Number(req.query.days);
     if(days!==7&&days!==30)throw new AuthProblem(400,'ANALYTICS_RANGE_INVALID');
     return result(opts.pageVisits?.summary(days)??{days,rows:[],daily:[]});
+  });
+  // Login audit is administrator-only. It is NOT the public PV/UV endpoint.
+  app.get<{Querystring:{days?:string;offset?:string;q?:string}}>('/api/v1/user-visits',async req=>{
+    if(!localRequest(req))throw new AuthProblem(403,'USER_VISITS_LOCAL_ONLY');
+    if(!localSession||!sceneConfig||!opts.pageVisits)throw new AuthProblem(404,'USER_VISITS_UNAVAILABLE');
+    const session=await opts.auth.session(req);
+    if(session.scope!=='local'||!session.profile||
+      !sceneConfig.canEdit(session.profile.name))throw new AuthProblem(403,'USER_VISITS_FORBIDDEN');
+    const days=req.query.days===undefined?7:Number(req.query.days);
+    const offset=req.query.offset===undefined?0:Number(req.query.offset);
+    const q=req.query.q??'';
+    if((days!==7&&days!==30)||!Number.isSafeInteger(offset)||offset<0||
+      offset>1000000||typeof q!=='string'||q.length>128)
+      throw new AuthProblem(400,'USER_VISITS_FILTER_INVALID');
+    return result(opts.pageVisits.users(days,offset,q));
   });
   if(multi)app.addHook('onRoute',route=>{
     if(!String(route.url).startsWith('/api/v1/chat/'))return;

@@ -1,3 +1,11 @@
+/**
+ * 原生 OpenCode 连接
+ *
+ * 职责：建立或管理工作台到原生 OpenCode 服务的客户端连接。
+ * Java 研发阅读提示：连接可用不代表模型、Skill、执行目录均已满足业务条件。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {OpenCode} from '@opencode/client';
 import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';

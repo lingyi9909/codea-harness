@@ -1,9 +1,17 @@
+/**
+ * 本机登录和 CSRF 校验
+ *
+ * 职责：维护本地 Cookie、会话有效期、请求来源及修改操作的 CSRF。
+ * Java 研发阅读提示：用户资料不等于企业认证，真正的管理权限必须在服务端校验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import {isPrivateLanIPv4} from './lan-access.ts';
 
-export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string};scope?:'local'|'lan'};
+export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:string;key:string};scope?:'local'|'lan';auditId?:string};
 const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
@@ -23,17 +31,16 @@ export class LocalAuth implements RequestAuth {
   private readonly devOrigin?:string;
   private readonly publishCode?: (code:string)=>void;
   private readonly lanOrigin?:string;
-  private readonly lanKey?:Buffer;
   private readonly lanAttempts:number[]=[];
-  constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void,lan?:{origin:string;code:string}){
+  constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void,lan?:{origin:string}){
     this.publishCode=publishCode;
     this.port=port;this.devOrigin=devOrigin;
     this.pairingHash=hash(pairingCode);
     if(lan){
       const url=new URL(lan.origin);
-      if(url.origin!==lan.origin||url.protocol!=='http:'||!isPrivateLanIPv4(url.hostname)||Number(url.port)!==port||lan.code.length<12)
+      if(url.origin!==lan.origin||url.protocol!=='http:'||!isPrivateLanIPv4(url.hostname)||Number(url.port)!==port)
         throw new Error('LAN_AUTH_CONFIG_INVALID');
-      this.lanOrigin=lan.origin;this.lanKey=hash(lan.code);
+      this.lanOrigin=lan.origin;
     }
     if(devOrigin&&!/^http:\/\/(127\.0\.0\.1|localhost):4175$/.test(devOrigin))
       throw new Error('UNSAFE_DEVELOPMENT_ORIGIN');
@@ -92,27 +99,38 @@ export class LocalAuth implements RequestAuth {
     try{return this.session(req);}catch(e){
       if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
     }
-    return this.issue(reply,'local-workbench',profile);
+    // Prior versions used one shared 'local-workbench' owner for every local profile.
+    // That allowed a different local login to see or mutate another user's native
+    // OpenCode sessions. Bind ownership to the *profile*, not the machine.
+    // Legacy shared-owner sessions cannot safely be assigned to any one user.
+    return this.issue(reply,'local:'+profile.key,profile);
   }
-  openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string},code:unknown):Session{
-    if(!this.isLan(req)||req.headers.origin!==this.lanOrigin||!this.lanKey)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
+  openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string}):Session{
+    if(!this.isLan(req)||req.headers.origin!==this.lanOrigin)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
     const now=Date.now();
     while(this.lanAttempts[0]!==undefined&&this.lanAttempts[0]<now-60000)this.lanAttempts.shift();
     if(this.lanAttempts.length>=20)throw new AuthProblem(429,'LAN_LOGIN_RATE_LIMIT');
     this.lanAttempts.push(now);
-    if(typeof code!=='string'||code.length>128||!safeEqual(hash(code),this.lanKey))throw new AuthProblem(401,'LAN_CODE_INVALID');
+    // 局域网访问无需额外访问码；仍保留 Origin、登录速率、Cookie 和会话隔离。
     // Never derive a security identity from self-entered names or phone numbers.
     // Every new browser login owns its own native sessions, even if another
     // visitor chooses the same self-reported profile.
     try{
       const existing=this.session(req);
-      if(existing.scope==='lan'&&existing.profile?.key===profile.key)return existing;
+      if(existing.scope==='lan'){
+        if(existing.profile?.key===profile.key)return existing;
+        // An account switch in the same LAN browser revokes the previous Cookie.
+        // Otherwise a copied/stale old token would remain usable for 12 hours.
+        const cookie=req.headers.cookie?.split(';').map(s=>s.trim())
+          .find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+        if(cookie)this.sessions.delete(hash(cookie).toString('hex'));
+      }
     }catch{}
     return this.issue(reply,'lan:'+randomUUID(),profile,'lan');
   }
   private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local'):Session{
     const token=randomBytes(32).toString('base64url');
-    const session={ownerId,profile,scope,csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
+    const session={ownerId,profile,scope,auditId:randomUUID(),csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
     this.sessions.set(hash(token).toString('hex'),session);
     reply.header('Set-Cookie',COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
     return session;

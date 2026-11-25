@@ -667,6 +667,9 @@ body{background:#fff;color:var(--silver-ink);}
 .investigation-drawer .log-time-range{
   margin:0 0 23px;padding:17px;background:#f8f9fb;
   border:1px solid #e2e7ed;border-radius:9px;
+  /* Avoid Chromium layout containment collapsing the nested date controls
+     to 0x0 after editing a draft inside the portal drawer. */
+  container-type:normal;
 }
 .investigation-drawer .log-time-range header{display:flex;gap:7px;align-items:flex-start;}
 .investigation-drawer .log-time-range h2{font-size:14px;}
@@ -725,3 +728,10 @@ body{background:#fff;color:var(--silver-ink);}
 @media(prefers-reduced-motion:reduce){
   .investigation-drawer-backdrop,.investigation-drawer{animation:none!important;transition:none!important;}
 }
+
+/* Administrator-only navigation: separate from task/conversation history. */
+.sidebar .scene-nav .admin-group{margin-top:15px;padding-top:10px;border-top:1px solid #d8dee5}
+.sidebar .scene-nav .admin-group>.side-section{margin:9px 8px 7px;font-size:11px}
+.sidebar .scene-nav .scenario-icon.admin{color:#6b7685}
+.sidebar .scene-nav .admin-children .scenario-child{text-decoration:none}
+.sidebar .scene-nav .admin-children .scenario-child:hover{background:#e5e9ed;color:#283342}

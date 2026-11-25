@@ -1,3 +1,11 @@
+/**
+ * 服务端运行配置
+ *
+ * 职责：声明供启动与运行流程读取的配置结构。
+ * Java 研发阅读提示：配置项与安全约束不应由页面显示状态决定。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { resolve } from 'node:path';
 import { configFromEnv } from '../../../packages/storage/src/db.ts';
 

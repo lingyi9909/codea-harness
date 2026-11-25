@@ -8,6 +8,8 @@
 
 # 智能工作台 · Web Workbench
 
+> **Java 研发读 TS 的推荐入口：** [Java → TypeScript 机构排查源码阅读指南](docs/java-to-typescript-institution-api-reading-guide.md)。以 PR #116 为例，从 Fastify 路由（Controller）、并发执行服务（Service）、SQLite 仓储（Repository）到 React 前端组件，按真实调用链讲解并附关键中文注释。
+
 > **当前优先交付：** [报文排查嵌入页 V1](docs/embedded-message-v1.md)：宿主身份接入、免工作台登录、每次打开独立临时会话、多人隔离；不要求手机号，不依赖业务短信框架。原单机与工作台入口保留。
 > **此前方案及阶段记录：** [V1.1 多用户设计](docs/multi-user-and-skill-business-verification-v1.md) · [原阶段交付](docs/v1-1-deployment-and-acceptance.md) · [嵌入页验证记录](docs/embedded-message-validation.md)。原方案中的手机号/业务短信不再作为当前嵌入页的依赖。
 

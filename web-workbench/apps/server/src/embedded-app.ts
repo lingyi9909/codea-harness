@@ -1,3 +1,11 @@
+/**
+ * 嵌入服务装配
+ *
+ * 职责：构建嵌入模式下的 Fastify 服务和依赖。
+ * Java 研发阅读提示：与 app.ts 对比可理解主工作台和独立嵌入服务的差异。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import Fastify from 'fastify';
 import serveStatic from '@fastify/static';
 import {existsSync} from 'node:fs';

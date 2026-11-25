@@ -1,3 +1,11 @@
+/**
+ * 嵌入式报文排查页面
+ *
+ * 职责：面向宿主平台展示独立报文会话的输入与结果。
+ * Java 研发阅读提示：嵌入会话的用户归属由服务端控制，前端展示不构成身份授权。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';
 import {LogInvestigation} from './LogInvestigation.tsx';

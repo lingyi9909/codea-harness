@@ -1,3 +1,11 @@
+/**
+ * 原生执行控制
+ *
+ * 职责：对接 OpenCode 的运行控制、权限或停止操作。
+ * Java 研发阅读提示：区分向原生服务发起控制命令与控制实际完成。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import { AuthProblem } from '../auth.ts';
 import { requestStop } from '../modules/runs/stop.ts';
@@ -59,6 +67,7 @@ async function claim(c:Context):Promise<Control|null>{
   });
 }
 
+/** 阅读提示：将用户的中断或权限确认操作交给原生执行服务；操作结果仍须核对。 */
 export async function dispatchControl(c:Context){
   const control=await claim(c);
   if(!control)return;
@@ -87,6 +96,7 @@ export async function dispatchControl(c:Context){
   });
 }
 
+/** 阅读提示：同步原生会话等待中的权限/输入交互，避免前端只看到旧交互状态。 */
 export async function syncInteractions(c:Context){
   const pending=await c.adapter.listInteractions(c.binding);
   const {taskId,runId}=c.lease;

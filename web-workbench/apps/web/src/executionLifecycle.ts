@@ -1,3 +1,11 @@
+/**
+ * 执行生命周期状态
+ *
+ * 职责：将后台执行反馈映射为前端可显示的阶段与动作。
+ * Java 研发阅读提示：状态映射只影响显示，不会修改后台真实执行结果。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {ChatMessage,ChatStatus} from '../../../packages/contracts/src/chat.ts';
 
 const lastIndex=(messages:ChatMessage[],matches:(message:ChatMessage)=>boolean)=>{

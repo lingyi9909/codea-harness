@@ -1,3 +1,11 @@
+/**
+ * 数据访问连接层
+ *
+ * 职责：统一持久层访问及连接配置。
+ * Java 研发阅读提示：类似 Java DataSource；注意事务边界与数据库异常的处理。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import mysql from 'mysql2/promise';
 import type { Pool, PoolConnection } from 'mysql2/promise';
 

@@ -1,3 +1,11 @@
+/**
+ * 对话业务契约
+ *
+ * 职责：定义前后端共享的聊天、场景和消息类型。
+ * Java 研发阅读提示：类比 Java 公共 DTO；TS 类型只在编译期有效，入站 JSON 仍需校验。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 export type ChatModel={providerID:string;id:string;name:string;variant?:string;variants?:string[];context?:number};
 export type ChatScenario='direct-chat'|'log-inspection'|'message-inspection'|'institution-message-inspection'|'data-analysis';
 export type SceneId='logs'|'message'|'institution-message'|'data';

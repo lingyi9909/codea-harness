@@ -1,3 +1,11 @@
+/**
+ * 浏览器事件 API 封装
+ *
+ * 职责：收发或解析前端使用的实时执行事件。
+ * Java 研发阅读提示：事件通知不等于已落库的最终状态，需与任务查询相互核验。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type { Schema } from './client.ts';
 
 export type EventStreamState='connecting'|'connected'|'disconnected';

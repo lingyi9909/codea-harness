@@ -1,4 +1,5 @@
 .standalone-config { width: min(1120px, 100%); margin: 0 auto; padding: 28px 32px; }
 .standalone-config-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--border, #e7e7eb); margin-bottom: 28px; }
 .standalone-config-header a { color: inherit; font-size: 14px; }
+.standalone-config-header nav { display: flex; align-items: center; flex-wrap: wrap; gap: 22px; }
 @media (max-width: 640px) { .standalone-config { padding: 20px 16px; } }

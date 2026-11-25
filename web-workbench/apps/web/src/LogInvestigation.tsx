@@ -1,6 +1,14 @@
+/**
+ * 问题排查输入页
+ *
+ * 职责：组织日志/业务问题排查的条件、用户追问与结果显示。
+ * Java 研发阅读提示：输入参数应由页面规范化，但后端仍需校验字段及范围。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {sessionStorage} from './userStorage.ts';
 import {useState} from 'react';
-import {CalendarDate,SecondClock} from './TimeFields.tsx';
+import {CalendarDate,EditableCalendarDate,SecondClock} from './TimeFields.tsx';
 import {DirectChat} from './DirectChat.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
 
@@ -115,6 +123,7 @@ function restoredRange(bounds:Bounds):TimeRange{
   const day=wholeDay(calendarDay);
   return day&&day.from===bounds.from&&day.to===bounds.to?day:rangeFromBounds(bounds);
 }
+/** 阅读提示：问题排查条件组件：规范化时间、traceId/关键词等输入，后端仍负责最终参数合法性。 */
 export function LogInvestigation({mode='public',globalModel,embedded=false}:{embedded?:boolean;mode?:'public'|'message';globalModel?:Pick<ChatModel,'id'|'providerID'|'variant'>}={}){
   const storageKey:'harness.logs'|'harness.message'=mode==='message'?'harness.message':'harness.logs';
   const title=mode==='message'?'报文问题排查':'公管问题排查';
@@ -126,7 +135,13 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
   const [day,setDay]=useState(()=>localTime(Date.now()).slice(0,10));
   const {from,to,start,end}=range;
   function editTime(side:'start'|'end',value:string){
-    setRange(previous=>({...previous,[side]:value,[side==='start'?'from':'to']:parseLocal(value),preset:null}));
+    // Incomplete Windows date edits are UI drafts. Keep the last valid numeric
+    // bounds until the user finishes typing; NaN must never leak into the
+    // existing applied range or the already-rendered investigation transcript.
+    setRange(previous=>{
+      const numeric=side==='start'?'from':'to',parsed=parseLocal(value);
+      return {...previous,[side]:value,[numeric]:Number.isFinite(parsed)?parsed:previous[numeric],preset:null};
+    });
   }
   function editDate(side:'start'|'end',value:string){
     const previous=side==='start'?start:end;
@@ -152,7 +167,7 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
   }
   const timeError=range.preset==='day'&&!wholeDay(day)?'请选择有效的查询日期。':
     !start||!end?'请填写完整的开始和结束时间。':
-    !Number.isFinite(from)||!Number.isFinite(to)?'所选时间无效，请重新选择。':
+    !Number.isFinite(parseLocal(start))||!Number.isFinite(parseLocal(end))?'所选时间无效，请重新选择。':
     from>=to?'结束时间必须晚于开始时间。':'';
   const validTime=!timeError;
   const ready=Boolean(validTime&&(trace.trim()||keyword.trim()||msgSn.trim()));
@@ -221,7 +236,7 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
         <div className="range-bound">
           <span className="range-bound-title">开始时间</span>
           <div className="range-split-inputs">
-            <CalendarDate label="开始日期" value={start.split('T')[0]||''} onChange={value=>editDate('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
+            <EditableCalendarDate label="开始日期" value={start.split('T')[0]||''} onChange={value=>editDate('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
             <SecondClock label="开始时刻" value={start.split('T')[1]||''} onChange={value=>editClock('start',value)} invalid={!Number.isFinite(from)} descriptionId="log-range-feedback"/>
           </div>
         </div>
@@ -229,7 +244,7 @@ export function LogInvestigation({mode='public',globalModel,embedded=false}:{emb
         <div className="range-bound">
           <span className="range-bound-title">结束时间</span>
           <div className="range-split-inputs">
-            <CalendarDate label="结束日期" value={end.split('T')[0]||''} onChange={value=>editDate('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
+            <EditableCalendarDate label="结束日期" value={end.split('T')[0]||''} onChange={value=>editDate('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
             <SecondClock label="结束时刻" value={end.split('T')[1]||''} onChange={value=>editClock('end',value)} invalid={!Number.isFinite(to)||to<=from} descriptionId="log-range-feedback"/>
           </div>
         </div>

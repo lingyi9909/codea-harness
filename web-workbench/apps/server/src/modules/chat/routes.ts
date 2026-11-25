@@ -1,3 +1,11 @@
+/**
+ * 通用对话 Controller
+ *
+ * 职责：承接对话创建、查询、执行、追问和管理接口。
+ * Java 研发阅读提示：这是长文件，建议先按 URL 路由分组，再沿调用关系找到 Service。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {BusinessVerificationBridge} from '../../business-verification.ts';
 import type {UserContextResolver} from '../../user-context.ts';
 import type {ExecutionRegistry} from '../../execution-registry.ts';
@@ -126,6 +134,7 @@ function unsupportedEndpoint(error:unknown){
 
 const configuredRoots=()=>(process.env.HARNESS_CHAT_ROOTS??process.env.HARNESS_REPOSITORY_ROOTS??'').split(delimiter).filter(Boolean);
 const defaultDirectory=resolve('chat-files');
+/** 阅读提示：定位当前工作目录并应用允许路径规则；不要在模型处理后才校验目录范围。 */
 export async function resolveLocalWorkspace(input?:string){
   const configured=configuredRoots();
   const selected=input??configured[0]??defaultDirectory;
@@ -136,6 +145,7 @@ export async function resolveLocalWorkspace(input?:string){
   return workspace;
 }
 const configuredSceneKey=(s:ChatScenario):SceneKey|undefined=>s==='log-inspection'?'logs':s==='message-inspection'?'message':s==='institution-message-inspection'?'institution-message':s==='data-analysis'?'data':undefined;
+/** 阅读提示：聊天 API 路由总入口，包含会话生命周期、模型与场景配置、权限确认及流式更新。 */
 export async function registerChat(app:FastifyInstance,auth:RequestAuth,options:{nativeConnection?:ReturnType<typeof chatConnection>;sessionMetadata?:(req:FastifyRequest)=>Record<string,string>;blockSensitiveForms?:boolean;prefix?:string;onSessionCreated?:(req:FastifyRequest,id:string)=>Promise<void>;mayStart?:boolean;workspace?:string;sceneConfig?:SceneConfigStore;sceneAccess?:SceneAccessStore;bindings?:ChatBindingStore;execution?:ExecutionRegistry;multiUser?:boolean;business?:{resolver:UserContextResolver;bridge:BusinessVerificationBridge}}){
   // Grants created before the institution binding was split used message-inspection.
   // Preserve those native/store bindings while resolving the same new configuration.

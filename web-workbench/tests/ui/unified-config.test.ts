@@ -33,8 +33,17 @@ test('standalone config: no workbench mount, independent URL, same saved institu
         await expect(page.getByLabel(field,{exact:true})).toBeVisible();
       await expect(page.getByRole('button',{name:'调整排查条件'})).toHaveCount(0);
     }
-    await expect(page.getByRole('button',{name:'场景配置',exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'场景配置',exact:true}).click();
+    // Administration is a dedicated ACL-gated parent before recent chats,
+    // not an isolated link buried underneath the conversation history.
+    const admin=page.getByRole('group',{name:'系统管理'});
+    await expect(admin.getByRole('button',{name:'系统管理',exact:true})).toBeVisible();
+    for(const name of ['场景配置','接口任务管理','接口接入情况','访问统计','组件测试'])
+      await expect(admin.getByRole('link',{name,exact:true})).toBeVisible();
+    assert.equal(await page.locator('.sidebar .admin-group').evaluate(node=>{
+      const history=document.querySelector('.sidebar .history-heading');
+      return history!==null&&Boolean(node.compareDocumentPosition(history)&Node.DOCUMENT_POSITION_FOLLOWING);
+    }),true,'system management should appear before recent chat history');
+    await admin.getByRole('link',{name:'场景配置',exact:true}).click();
     await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await page.goto(origin+'/config');await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();await expect(page.getByRole('navigation',{name:'场景导航'})).toHaveCount(0);
     await expect(page.getByRole('heading',{name:'各页面权限管理'})).toBeVisible();

@@ -1,3 +1,11 @@
+/**
+ * 会话历史存储
+ *
+ * 职责：维护或整理浏览器侧的历史会话索引与持久化信息。
+ * Java 研发阅读提示：本地缓存与服务器实际任务记录可能不同步，不应混用作为权限凭据。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {sessionStorage} from './userStorage.ts';
 import type {ChatHistoryPage} from '../../../packages/contracts/src/chat.ts';
 
@@ -65,7 +73,7 @@ export function readDraft(key:string):{text:string;files:string}{
 
 export function displayChatTitle(native?:string,cached?:string){
   const title=native?.trim();
-  return title&&!/^(?:Code Harness|智能工作台) · (直接对话|日志排查|问题排查)$/.test(title)?title:cached??'';
+  return title&&!/^(?:Code Harness|智能工作台) · (直接对话|日志排查|问题排查|专项场景)$/.test(title)?title:cached??'';
 }
 
 export function summarizeFirstInput(text='',logInspection=false){

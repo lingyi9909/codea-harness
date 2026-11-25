@@ -1,3 +1,11 @@
+/**
+ * 工具交互 Controller
+ *
+ * 职责：接收权限确认、补参等原生工具交互请求。
+ * Java 研发阅读提示：客户端可操作不代表服务端已授权，必须校验会话归属。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';

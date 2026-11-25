@@ -1,3 +1,11 @@
+/**
+ * 智能工作台 React 主应用
+ *
+ * 职责：组织场景侧栏、直接对话、系统管理和页面切换。
+ * Java 研发阅读提示：JSX 描述视图，useState/useEffect 管理页面状态和副作用；真实权限仍在后端。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {localStorage,sessionStorage} from './userStorage.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api/client.ts';
@@ -43,6 +51,7 @@ function savedGlobalModel():SelectedModel|undefined{
   }catch{return undefined;}
 }
 
+/** 阅读提示：React 根业务组件：组织场景、侧栏和管理目录。useState 是页面状态，权限必须由后端重复验证。 */
 export function WorkbenchApp() {
   useEffect(()=>{const changed=(event:StorageEvent)=>{if(event.key==='harness.account-change')window.location.reload();};window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed);},[]);
   const [bootstrap,setBootstrap]=useState<Schema<'Bootstrap'>|null>(null);
@@ -58,6 +67,8 @@ export function WorkbenchApp() {
     return Object.hasOwn(scenes,saved)&&(!onLan()||saved!=='settings')?saved as Scene:'home';
   });
   const [expandedGroup,setExpandedGroup]=useState<ScenarioGroup|null>(()=>groupForScene(scene));
+  const [adminVisible,setAdminVisible]=useState(false);
+  const [adminExpanded,setAdminExpanded]=useState(true);
   const [chatNavigation,setChatNavigation]=useState<{kind:'new'|'history'|'select';id?:string;seq:number}>({kind:'history',seq:0});
   const [chatDirectory,setChatDirectory]=useState('');
   // One model selection for all OpenCode chats (home, investigations, analytics).
@@ -69,6 +80,15 @@ export function WorkbenchApp() {
     if(globalModel)localStorage.setItem(globalModelKey,JSON.stringify(globalModel));
     else localStorage.removeItem(globalModelKey);
   },[globalModel]);
+  // Never infer administrator rights from localhost alone. The backend
+  // checks the same config-access.json editor ACL used for configuration writes.
+  useEffect(()=>{
+    if(!bootstrap||onLan()){setAdminVisible(false);return;}
+    let live=true;setAdminVisible(false);
+    api.accessSettings().then(()=>{if(live)setAdminVisible(true);})
+      .catch(()=>{if(live)setAdminVisible(false);});
+    return()=>{live=false;};
+  },[bootstrap,connectionAttempt]);
   useEffect(()=>{
     if(!bootstrap)return;
     let live=true;setSceneModelConfig(null);
@@ -284,8 +304,8 @@ export function WorkbenchApp() {
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
-  if(!bootstrap&&loginMode==='profile')return <ProfileLogin lan={onLan()} onLogin={async(name,phone,lanCode)=>{
-    await api.login(name,phone,lanCode);
+  if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
+    await api.login(name,phone);
     window.location.reload();
   }}/>;
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">
@@ -343,17 +363,29 @@ export function WorkbenchApp() {
           </div>}
         </div>)}
         <button className="side-link mobile-history-link" onClick={()=>openChat('history')}><span aria-hidden="true">▤</span>历史对话</button>
+        {adminVisible&&<div className="scenario-group admin-group" role="group" aria-label="系统管理">
+          <div className="side-section">管理功能</div>
+          <button type="button" className={'side-link scenario-parent '+(adminExpanded?'expanded':'')}
+            aria-expanded={adminExpanded} aria-controls="system-admin-pages"
+            onClick={()=>setAdminExpanded(open=>!open)}>
+            <span className="scenario-icon admin" aria-hidden="true">⚙</span>系统管理
+            <span className="scenario-caret" aria-hidden="true">{adminExpanded?'⌄':'›'}</span>
+          </button>
+          {adminExpanded&&<div className="scenario-children admin-children" id="system-admin-pages" role="group" aria-label="系统管理子页面">
+            <a className="side-link scenario-child" href="/config"><span className="scenario-child-mark" aria-hidden="true">·</span>场景配置</a>
+            <a className="side-link scenario-child" href="/institution-tasks"><span className="scenario-child-mark" aria-hidden="true">·</span>接口任务管理</a>
+            <a className="side-link scenario-child" href="/institution-tasks?view=access"><span className="scenario-child-mark" aria-hidden="true">·</span>接口接入情况</a>
+            <a className="side-link scenario-child" href="/analytics"><span className="scenario-child-mark" aria-hidden="true">·</span>访问统计</a>
+             <a className="side-link scenario-child" href="/analytics?view=users"><span className="scenario-child-mark" aria-hidden="true">·</span>用户访问记录</a>
+            <a className="side-link scenario-child" href="/component-lab"><span className="scenario-child-mark" aria-hidden="true">·</span>组件测试</a>
+          </div>}
+        </div>}
       </nav>
       <div className="side-section history-heading">最近对话 <button title="查看完整对话历史" onClick={()=>openChat('history')}>全部</button></div>
       <SidebarChatHistory onSelect={id=>openChat('select',id)} onViewAll={()=>openChat('history')}/>
       {(tasks.length>0||selected||scene==='review')&&<>
         <div className="side-section task-history-heading">Review 任务历史 <button title="刷新任务" onClick={()=>refreshLists().catch(e=>setError(text(e)))}>↻</button></div>
         <div className="history task-history">{tasks.map(task=><button key={task.id} className={'history-item '+(selected===task.id?'selected':'')} onClick={()=>{setSelected(task.id);setScene('review');}}><span className="history-title">{task.title}</span><span className="history-meta">{short(task.headOID)} · {task.status}</span></button>)}</div>
-      </>}
-      {!onLan()&&<>
-        <a className="side-link" href="/analytics"><span aria-hidden="true">▤</span> 访问统计</a>
-        <a className="side-link" href="/component-lab"><span aria-hidden="true">◇</span> 组件测试</a>
-        <button type="button" className="side-link sidebar-settings" onClick={()=>window.location.assign('/config')}><span aria-hidden="true">⚙</span> 场景配置</button>
       </>}
       <div className="workbench-account"><span className="account-avatar" aria-hidden="true">{bootstrap.owner.name.slice(0,1)}</span><span title={bootstrap.owner.name}>{bootstrap.owner.name}</span>
         <button aria-label="退出登录" disabled={busy} onClick={()=>void act(async()=>{await api.logout();window.location.reload();})}>退出</button>

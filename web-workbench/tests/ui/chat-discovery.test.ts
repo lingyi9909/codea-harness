@@ -20,6 +20,25 @@ async function observePaintedText(page:Page){
     });
 }
 
+// Browser storage is scoped by server-confirmed Owner ID, including localhost.
+async function accountStorage(page:Page,which:'local'|'session',key:string){
+  return page.evaluate(async({which,key})=>{
+    const response=await fetch('/api/v1/bootstrap');
+    if(!response.ok)throw Error('AUTH_REQUIRED');
+    const {data}=await response.json();
+    const prefix='harness.user.'+encodeURIComponent(data.owner.id)+'.';
+    return (which==='local'?localStorage:sessionStorage).getItem(prefix+key);
+  },{which,key});
+}
+async function seedAccountSession(page:Page,values:Record<string,string>){
+  await page.evaluate(async(values)=>{
+    const response=await fetch('/api/v1/bootstrap');
+    if(!response.ok)throw Error('AUTH_REQUIRED');
+    const {data}=await response.json();
+    const prefix='harness.user.'+encodeURIComponent(data.owner.id)+'.';
+    for(const [key,value] of Object.entries(values))sessionStorage.setItem(prefix+key,value);
+  },values);
+}
 async function login(page:Page){
   await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
   await page.getByLabel('姓名',{exact:true}).fill('测试同事');
@@ -137,14 +156,19 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
         {type:'text',text:'检查结束。'},{type:'text',text:${JSON.stringify(diagnosis)}}]}]}));
       if(req.url===logBase+'/inbox')return res.end(JSON.stringify({data:[]}));
       if(req.url==='/api/session/active')return res.end(JSON.stringify({data:fs.existsSync(flag+'.prompt')&&!generated?{ses_logs_fixture:{}}:{}}));
+      // History API now lists only server-verified Owner sessions. Simulate
+      // the actual native session list instead of relying on browser caches.
+      if(req.url.split('?')[0]==='/api/session'&&req.method==='GET'){
+        return res.end(JSON.stringify({data:[secondLog,logSession].filter(Boolean),cursor:{}}));
+      }
       if(req.url==='/api/session'&&req.method==='POST'){
         req.setEncoding('utf8');let body='';
         req.on('data',s=>body+=s);req.on('end',()=>{
           fs.writeFileSync(process.env.HARNESS_OPENCODE_SERVICE_FILE+'.body',body);
           const create=JSON.parse(body);
           if(create.metadata.harnessScenario==='log-inspection'){
-            if(logSession){secondLog={...create,id:'ses_second_log'};res.end(JSON.stringify({data:secondLog}));return;}
-            logSession={...create,id:'ses_logs_fixture'};res.end(JSON.stringify({data:logSession}));return;
+            if(logSession){secondLog={...create,id:'ses_second_log',time:{updated:Date.now()}};res.end(JSON.stringify({data:secondLog}));return;}
+            logSession={...create,id:'ses_logs_fixture',time:{updated:Date.now()}};res.end(JSON.stringify({data:logSession}));return;
           }
           res.writeHead(503);res.end('{}');
         });return;
@@ -244,11 +268,11 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('navigation').getByRole('button',{name:'对话首页',exact:true})).toHaveAttribute('aria-current','page');
     await expect(page.locator('.sidebar .brand')).toContainText('智能工作台');
     // The browser must render the actual file-backed editor and respect ACL changes.
-    // Original Workbench navigation must remain available; embedding is additive.
-    await expect(page.getByRole('button',{name:'场景配置',exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'场景配置',exact:true}).click();
-    await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
+    // A non-editor must not see the system-management directory, even from localhost.
+    await expect(page.getByRole('group',{name:'系统管理'})).toHaveCount(0);
+    // Direct /config remains a read-only local page; editing requires editors ACL.
     await page.goto('http://127.0.0.1:'+port+'/config');
+    await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await expect(page.getByRole('heading',{name:'场景配置'})).toBeVisible();
     await expect(page.getByLabel('公管问题排查工作目录')).toHaveValue(project);
     await expect(page.getByRole('button',{name:'保存场景配置'})).toHaveCount(0);
@@ -264,6 +288,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     // not an offline error or an attempt to contact OpenCode.
     await page.goto('http://127.0.0.1:'+port+'/');
     await expect(page.getByRole('navigation',{name:'场景导航'})).toBeVisible();
+    // After the exact editor username is granted access, the management menu appears.
+    const admin=page.getByRole('group',{name:'系统管理'});
+    await expect(admin.getByRole('button',{name:'系统管理',exact:true})).toBeVisible();
+    await expect(admin.getByRole('link',{name:'场景配置',exact:true})).toBeVisible();
     const sceneFile=join(settingsDir,'scenarios.json');
     const configured=await readFile(sceneFile,'utf8');
     // Built-in /models must open the actual model selector, not issue a fake
@@ -305,7 +333,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.screenshot({path:join(shots,'02-model-picker.png')});
     await search.press('Enter');
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','company/intranet');
-    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+    assert.deepEqual(JSON.parse((await accountStorage(page,'local','harness.global.model'))??'null'),
       {id:'intranet',providerID:'company'});
     const composer=page.getByLabel('对话内容');
     await composer.fill('第一行');
@@ -392,10 +420,10 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.locator('.range-zone')).toHaveText('精确到秒');
     await expect(quarter).toHaveAttribute('aria-pressed','true');
     await expect(page.locator('.range-footer')).toContainText('15 分钟');
-    // No native time scroll columns: exact HH:mm:ss remains stable under
-    // mouse-wheel scrolling; dates keep Chromium's built-in calendar popup.
+    // HH:mm:ss and progressive YYYY-MM-DD text editing stay stable on Windows.
+    // The whole-day selector remains a native calendar date picker.
     for(const [date,time] of [['开始日期','开始时刻'],['结束日期','结束时刻']] as const){
-      await expect(page.getByLabel(date)).toHaveAttribute('type','date');
+      await expect(page.getByLabel(date)).toHaveAttribute('type','text');
       await expect(page.getByLabel(time)).toHaveAttribute('type','text');
     }
     await page.getByLabel('开始时刻').hover();
@@ -543,6 +571,17 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(dialog.getByLabel('msgSn',{exact:true})).toHaveValue('000123');
     await expect(dialog.getByLabel('关键词',{exact:true})).toHaveValue('timeout');
     await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
+    // Regression: native date fields could clear the entire value on Backspace.
+    // An incomplete edit must remain visible as draft, disable re-run, and
+    // preserve the existing conversation/results above the drawer.
+    const editableDate=dialog.getByLabel('开始日期',{exact:true});
+    const beforeDate=await editableDate.inputValue();
+    await editableDate.focus();await editableDate.press('End');await editableDate.press('Backspace');
+    await expect(editableDate).toHaveValue(beforeDate.slice(0,-1));
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeDisabled();
+    await expect(feed).toContainText(finalAnswer);
+    await editableDate.fill(beforeDate);
+    await expect(dialog.getByRole('button',{name:'应用并重新排查'})).toBeEnabled();
     const answerDuring=await feed.boundingBox(),composerDuring=await page.locator('.log-investigation-active .composer').boundingBox();
     assert.ok(answerDuring&&composerDuring);
     assert.ok(Math.abs(answerBefore.height-answerDuring.height)<3,'editing must not shrink the result pane');
@@ -572,7 +611,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.getByRole('combobox',{name:'模型变体'}).selectOption('high');
     await page.getByRole('button',{name:'使用此模型'}).click();
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','labs/analysis');
-    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('harness.global.model')??'null')),
+    assert.deepEqual(JSON.parse((await accountStorage(page,'local','harness.global.model'))??'null'),
       {id:'analysis',providerID:'labs',variant:'high'});
     await page.reload();
     await expect(page.locator('.topbar').getByRole('button',{name:'选择模型'})).toHaveAttribute('title','labs/analysis');
@@ -649,7 +688,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text).toBe('下一步怎么查？');
     assert.deepEqual((await recorded('.prompt')).skills,[{id:'corp-logs-v1'}]);
     await expect(summaryBar).toHaveCount(0);
-    assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('harness.logs.filters.ses_logs_fixture')??'{}').msgSn),'000123');
+    assert.equal(JSON.parse((await accountStorage(page,'session','harness.logs.filters.ses_logs_fixture'))??'{}').msgSn,'000123');
     await page.getByRole('button',{name:'历史对话'}).click();
     await history.getByRole('button',{name:/第二次排查/}).click();
     await page.reload();
@@ -661,7 +700,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await history.getByRole('button',{name:/检查超时原因/}).click();
     await expect(summaryBar).toHaveCount(0);
     await expect(page.getByRole('dialog',{name:'调整排查条件'})).toHaveCount(0);
-    assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('harness.chat'),sessionStorage.getItem('harness.logs')]),['','ses_logs_fixture']);
+    assert.deepEqual(await Promise.all([accountStorage(page,'session','harness.chat'),accountStorage(page,'session','harness.logs')]),['','ses_logs_fixture']);
     // Applying conditions reuses the current session, closes the drawer,
     // preserves a pending reply draft and does not attach reply-only files.
     const pendingDraft='未发送的追问草稿';
@@ -675,7 +714,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await dialog.getByRole('button',{name:'应用并重新排查'}).click();
     await expect(dialog).toHaveCount(0);
     await expect(summaryBar).toHaveCount(0);
-    await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('harness.logs.filters.ses_logs_fixture')??'{}')))
+    await expect.poll(async()=>JSON.parse((await accountStorage(page,'session','harness.logs.filters.ses_logs_fixture'))??'{}'))
       .toMatchObject({keyword:'retry-timeout',msgSn:'000789'});
     await expect(page.getByLabel('对话内容')).toHaveValue(pendingDraft);
     await expect.poll(async()=>JSON.parse(await readFile(file+'.prompt','utf8')).text)
@@ -684,7 +723,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     assert.ok(rerun.text.includes('msgSn：000789'));
     assert.ok(!rerun.text.includes(pendingDraft));
     assert.deepEqual(rerun.files,[]);
-    assert.equal(await page.evaluate(()=>sessionStorage.getItem('harness.logs')),'ses_logs_fixture');
+    assert.equal(await accountStorage(page,'session','harness.logs'),'ses_logs_fixture');
     assert.deepEqual(retiredRequests,[]);
     // History management must persist in native OpenCode, not only localStorage.
     await page.getByRole('button',{name:'历史对话'}).click();
@@ -746,6 +785,7 @@ it('groups a multi-step weather response and keeps verification output out of th
   try{
     await app.listen({host:'127.0.0.1',port});
     const page=await browser.newPage({viewport:{width:1280,height:800}});
+    // A legacy unscoped history entry must remain invisible after login.
     await page.addInitScript(id=>{sessionStorage.setItem('harness.scene','chat');sessionStorage.setItem('harness.chat',id);},id);
     const answer='北京明天晴，早晚温差较大。\n\n- **白天**：晴，最高 **15℃**\n- **夜间**：晴，最低 **3℃**\n\n数据来源：[中央气象台](https://www.nmc.cn/publish/forecast/ABJ/beijing.html)';
     const tool=(name:string,result:string)=>({kind:'tool',name,status:'completed',result});
@@ -766,11 +806,23 @@ it('groups a multi-step weather response and keeps verification output out of th
       assistant('answer',[{kind:'text',text:answer}]),
       assistant('done',[{kind:'notice',text:'本轮已完成'}]),
     ];
+    // This UI-only test uses a synthetic ChatStatus without a native session.
+    // Stub the *server-confirmed* history list; ownership denial is covered
+    // independently by tests/api/chat-owner-isolation.test.ts.
+    await page.route('**/api/v1/chat/history',route=>route.fulfill({json:{data:{
+      items:[{id,title:'北京明天的天气',updated:Date.now()}],next:undefined,
+    },requestId:'ui-history-fixture'}}));
     await page.route('**/chat/sessions/'+id+'/activity',route=>route.fulfill({status:204}));
     await page.route('**/chat/sessions/'+id,route=>route.fulfill({json:{data:{
       id,directory:root,title:'北京明天的天气',active:false,messages,permissions:[],forms:[]},requestId:'fixture'}}));
     await page.goto('http://127.0.0.1:'+port);
     await login(page);
+    await seedAccountSession(page,{
+      'harness.scene':'chat',
+      'harness.chat':id,
+      ['harness.chat.selected.'+JSON.stringify(root)]:id,
+    });
+    await page.reload();
     const response=page.getByRole('article',{name:'OpenCode 回答'});
     const shots=join(process.cwd(),'screenshots');
     await mkdir(shots,{recursive:true});

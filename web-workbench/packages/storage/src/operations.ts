@@ -1,3 +1,11 @@
+/**
+ * 操作记录持久化
+ *
+ * 职责：管理异步业务操作的状态与查询。
+ * Java 研发阅读提示：操作接收成功不等于结果完成，要保留幂等与终态判定。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { createHash } from 'node:crypto';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import type { DTO } from '../../contracts/src/domain.ts';

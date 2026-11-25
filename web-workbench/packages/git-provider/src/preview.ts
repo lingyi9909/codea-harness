@@ -1,3 +1,11 @@
+/**
+ * Git 变更预览
+ *
+ * 职责：在创建正式执行任务前展示差异或范围预览。
+ * Java 研发阅读提示：预览结果不能替代执行时再次核对 Git 基线。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import type { DTO } from '../../contracts/src/domain.ts';
 import { git, GitFailure, getRefs } from './repository.ts';
 import type { Ref } from './repository.ts';

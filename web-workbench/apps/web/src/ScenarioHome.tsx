@@ -1,3 +1,11 @@
+/**
+ * 研发场景首页
+ *
+ * 职责：展示可用业务场景与入口，帮助用户定位具体场景。
+ * Java 研发阅读提示：场景入口展示与 Skill 实际可用性是两层逻辑。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 /** Keep legacy scene ids so saved browser navigation survives the visual rename. */
 export const scenes={
   home:'工作台',

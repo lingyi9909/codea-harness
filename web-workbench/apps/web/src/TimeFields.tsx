@@ -1,8 +1,29 @@
+/**
+ * 通用时间输入组件
+ *
+ * 职责：统一管理日期与时间的录入和格式转换。
+ * Java 研发阅读提示：注意业务时区、日期边界以及浏览器本地时间的差异。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 /** Shared native date and second-precision clock controls used by investigations and component tests. */
 type Props={label:string;value:string;onChange:(value:string)=>void;invalid?:boolean;descriptionId?:string;required?:boolean};
 export function CalendarDate({label,value,onChange,invalid=false,descriptionId,required=true}:Props){
   return <label>{label}<input type="date" aria-label={label} value={value} required={required}
     aria-invalid={invalid} aria-describedby={descriptionId}
+    onChange={e=>onChange(e.target.value)}/></label>;
+}
+/**
+ * Windows native date inputs can emit an empty value while only one date
+ * segment is being edited/deleted. For a *custom time range*, use a plain
+ * progressive text draft so Backspace changes just the selected segment,
+ * never clears the previously applied investigation or unmounts the editor.
+ * The parent validates YYYY-MM-DD and disables submission until complete.
+ */
+export function EditableCalendarDate({label,value,onChange,invalid=false,descriptionId,required=true}:Props){
+  return <label>{label}<input type="text" aria-label={label} inputMode="numeric"
+    maxLength={10} placeholder="YYYY-MM-DD" autoComplete="off" value={value}
+    required={required} aria-invalid={invalid} aria-describedby={descriptionId}
     onChange={e=>onChange(e.target.value)}/></label>;
 }
 export function SecondClock({label,value,onChange,invalid=false,descriptionId,required=true}:Props){

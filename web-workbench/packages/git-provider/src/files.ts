@@ -1,3 +1,11 @@
+/**
+ * Git 文件访问适配
+ *
+ * 职责：从已授权仓库读取/组织与任务相关的文件内容。
+ * Java 研发阅读提示：重点关注只读原则、路径范围和仓库内容归属。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { createHash } from 'node:crypto';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';

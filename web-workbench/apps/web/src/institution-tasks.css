@@ -1,0 +1,89 @@
+.institution-tasks-page{min-height:100vh;background:#f7f8fa;color:#1f2937;font-family:inherit;padding:36px clamp(20px,3.5vw,56px);box-sizing:border-box}
+.institution-tasks-page *{box-sizing:border-box}
+.institution-tasks-header{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding-bottom:27px;border-bottom:1px solid #e5e7eb}
+.institution-tasks-header small{font-size:11px;letter-spacing:.14em;font-weight:650;color:#88919e}
+.institution-tasks-header h1{margin:8px 0 10px;font-size:28px;font-weight:680;letter-spacing:-.035em;color:#111827}
+.institution-tasks-header p{font-size:13px;line-height:1.7;color:#697482;margin:0;max-width:660px}
+.institution-tasks-header nav{display:flex;gap:20px;flex-shrink:0;padding-top:12px}
+.institution-tasks-header a{font-size:13px;text-decoration:none;color:#374151}
+.institution-tasks-header a:hover{text-decoration:underline}
+.institution-tasks-toolbar{display:flex;align-items:end;flex-wrap:wrap;gap:18px;padding:28px 0 12px}
+.institution-tasks-toolbar form{display:flex;align-items:end;gap:8px;flex:1 1 420px}
+.institution-tasks-toolbar label{display:flex;flex-direction:column;gap:8px;font-size:12px;color:#657182}
+.institution-tasks-toolbar form label{display:none}
+.institution-tasks-toolbar input,.institution-tasks-toolbar select{height:38px;padding:0 12px;border:1px solid #d9dee5;border-radius:8px;background:#fff;color:#1f2937;font:inherit;font-size:13px;outline-offset:2px}
+.institution-tasks-toolbar input{flex:1;min-width:160px}
+.institution-tasks-toolbar select{min-width:144px}
+.institution-tasks-toolbar button,.institution-tasks-pager button,.institution-tasks-open,.institution-tasks-detail header button{height:38px;border-radius:8px;padding:0 14px;border:1px solid #222b39;background:#222b39;color:#fff;font-size:13px;cursor:pointer;white-space:nowrap}
+.institution-tasks-toolbar .institution-tasks-secondary,.institution-tasks-detail header .institution-tasks-secondary{background:#fff;border-color:#d9dee5;color:#344154}
+.institution-tasks-toolbar button:hover:not(:disabled),.institution-tasks-open:hover,.institution-tasks-pager button:hover:not(:disabled){filter:brightness(.9)}
+.institution-tasks-meta{display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#798290;margin:7px 0 18px}
+.institution-tasks-layout{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(340px,.92fr);gap:18px;align-items:start}
+.institution-tasks-list,.institution-tasks-detail{background:#fff;border:1px solid #e7eaf0;border-radius:12px;min-width:0;overflow:hidden}
+.institution-tasks-table-wrap{overflow:auto}
+.institution-tasks-list table{width:100%;border-collapse:collapse;min-width:590px;font-size:12px}
+.institution-tasks-list th{text-align:left;font-size:11px;color:#7a8594;letter-spacing:.02em;font-weight:550;background:#fafbfc;padding:15px 13px;border-bottom:1px solid #edf0f3}
+.institution-tasks-list td{padding:14px 13px;border-bottom:1px solid #f0f2f5;vertical-align:middle;color:#4b5563;white-space:nowrap}
+.institution-tasks-list tr.selected{background:#f0f4fa}
+.institution-tasks-list td strong{font-weight:650;color:#253142;font-family:ui-monospace,monospace}
+.institution-tasks-list td small{display:block;margin-top:6px;max-width:150px;overflow:hidden;text-overflow:ellipsis;color:#8792a0}
+.institution-task-status{display:inline-flex;align-items:center;gap:6px;border-radius:5px;font-size:12px;font-weight:600;color:#374151}
+.institution-task-status:before{content:'';width:6px;height:6px;background:#a1a8b2;border-radius:50%}
+.institution-task-status.running{color:#366cc4}.institution-task-status.running:before{background:#4d86d9}
+.institution-task-status.queued{color:#927117}.institution-task-status.queued:before{background:#c7a32c}
+.institution-task-status.succeeded{color:#227a59}.institution-task-status.succeeded:before{background:#359b73}
+.institution-task-status.failed{color:#b34242}.institution-task-status.failed:before{background:#d75e5e}
+.institution-task-status.unknown{color:#975e36}.institution-task-status.unknown:before{background:#bc8457}
+.institution-tasks-open{height:30px;background:#fff;color:#344154;border-color:#dee3eb;padding:0 11px;font-size:12px}
+.institution-tasks-pager{display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:14px;color:#6b7280;font-size:12px}
+.institution-tasks-pager button{height:30px;background:#fff;border-color:#dce1e8;color:#3b4656;padding:0 11px;font-size:12px}
+.institution-tasks-pager button:disabled{opacity:.45;cursor:not-allowed}
+.institution-tasks-detail{padding:24px;min-height:290px}
+.institution-tasks-detail>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:23px}
+.institution-tasks-detail h2{font-size:17px;letter-spacing:-.02em;margin:0;font-weight:650}
+.institution-tasks-fields{display:grid;grid-template-columns:102px minmax(0,1fr);gap:12px 16px;font-size:12px;line-height:1.65}
+.institution-tasks-fields>span:nth-child(2n+1){color:#87919e}
+.institution-tasks-fields code,.institution-tasks-fields span{overflow-wrap:anywhere}
+.institution-tasks-fields code{font-size:11px;color:#334155}
+.institution-tasks-fields strong{font-weight:650}
+.institution-tasks-answer{margin-top:25px;border-top:1px solid #eef1f5;padding-top:20px}
+.institution-tasks-answer h3{font-size:14px;color:#243044;margin:0 0 14px}
+.institution-tasks-markdown{font-size:13px;line-height:1.85;color:#374151;overflow-wrap:anywhere}
+.institution-tasks-markdown p{margin:0 0 12px}
+.institution-tasks-markdown h1,.institution-tasks-markdown h2,.institution-tasks-markdown h3{font-size:15px;color:#202b39;margin:16px 0 8px}
+.institution-tasks-markdown pre{overflow:auto;padding:12px;border-radius:7px;background:#f4f5f7}
+.institution-tasks-markdown code{overflow-wrap:anywhere;font-family:ui-monospace,monospace;font-size:12px}
+.institution-tasks-markdown table{border-collapse:collapse;display:block;overflow:auto}
+.institution-tasks-markdown th,.institution-tasks-markdown td{border:1px solid #dfe3eb;padding:7px 10px}
+.institution-tasks-markdown a{color:#2360a3}
+.institution-tasks-empty{padding:26px 12px;text-align:center;color:#8893a1;font-size:13px;line-height:1.7}
+.institution-tasks-error{margin:12px 0;padding:12px 14px;border-radius:8px;background:#fff5f4;color:#ac4545;font-size:12px}
+@media(max-width:1080px){.institution-tasks-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:640px){.institution-tasks-page{padding:20px 14px}.institution-tasks-header{flex-direction:column}.institution-tasks-toolbar form{flex-wrap:wrap}.institution-tasks-toolbar input{flex:1 1 100%}.institution-tasks-meta{flex-direction:column}.institution-tasks-detail{padding:18px}}
+
+.institution-tasks-tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:24px 0 18px;padding-bottom:12px;border-bottom:1px solid #e4e7ed}
+.institution-tasks-tabs a,.institution-tasks-tabs button{font-size:13px;border:0;border-radius:7px;background:transparent;color:#586272;padding:10px 16px;cursor:pointer;text-decoration:none}
+.institution-tasks-tabs a.selected{background:#e5e9ee!important;color:#242b35!important;font-weight:650}
+.institution-tasks-tabs button{margin-left:auto;border:1px solid #d9dfe7;background:#fff}
+.institution-access-warning{background:#fffdf8;border:1px solid #ede7d9;border-radius:10px;padding:19px 23px;margin:0 0 18px;color:#67552b;font-size:13px;line-height:1.75}
+.institution-access-warning strong{font-size:14px;color:#715319}
+.institution-access-warning p{margin:8px 0 0}
+.institution-access-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:17px}
+.institution-access-summary>div{display:flex;flex-direction:column;gap:9px;padding:18px 19px;border:1px solid #e7eaf0;border-radius:10px;background:#fff}
+.institution-access-summary span{font-size:12px;color:#84909f}
+.institution-access-summary strong{font-size:16px;color:#253142}
+.institution-access-table>h2{font-size:16px;color:#202936;margin:20px 20px 8px}
+.institution-access-table>p{margin:0 20px 16px;font-size:12px;line-height:1.7;color:#748090}
+.institution-access-table table{min-width:650px}
+@media(max-width:1050px){.institution-access-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:550px){.institution-access-summary{grid-template-columns:1fr}}
+
+/* SQL-backed pagination: keep controls usable without crowding the results table. */
+.institution-tasks-pager{flex-wrap:wrap}
+.institution-tasks-pager label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.institution-tasks-pager select,.institution-tasks-pager input{
+  height:30px;border:1px solid #dce1e8;border-radius:6px;background:#fff;
+  color:#344154;font:inherit;font-size:12px;padding:0 8px
+}
+.institution-tasks-pager input{width:58px}
+.institution-tasks-pager form{display:flex;gap:6px;align-items:center}

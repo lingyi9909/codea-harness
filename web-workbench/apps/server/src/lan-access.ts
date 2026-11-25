@@ -1,3 +1,11 @@
+/**
+ * 局域网访问边界
+ *
+ * 职责：实现或辅助判断 LAN 访问范围和请求约束。
+ * Java 研发阅读提示：网络可达、登录状态与配置管理员权限是三个不同维度。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 /** Explicit opt-in for LAN-only HTTP testing. Production should use an HTTPS gateway. */
 export function isPrivateLanIPv4(host:string):boolean {
   const octets=host.split('.');

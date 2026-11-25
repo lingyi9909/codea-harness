@@ -1,3 +1,11 @@
+/**
+ * 执行重试编排
+ *
+ * 职责：处理运行失败后的重试或恢复动作。
+ * Java 研发阅读提示：重试前应确认原操作是否已经发生，避免重复触发副作用。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import {randomUUID} from 'node:crypto';
 import type {Pool,RowDataPacket} from 'mysql2/promise';
 import type {DTO} from '../../../../../packages/contracts/src/domain.ts';

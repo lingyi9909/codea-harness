@@ -6,6 +6,7 @@ on:
       - feature/smart-workbench-scenario-groups-20261115
       - feature/workbench-embedded-message-v1
       - feature/workbench-analytics-lan-permissions-component-lab
+      - feature/workbench-institution-b-proxy-access
     paths:
       - 'web-workbench/**'
       - '.github/workflows/workbench-offline-windows.yml'
@@ -40,6 +41,7 @@ jobs:
           npm run web:typecheck
           node --experimental-strip-types --test tests/api/institution-defaults.test.ts tests/api/lan-access.test.ts tests/api/windows-launch-menu.test.mjs
           npm run test:sqlite
+          npm run test:institution-api
           npm run smoke:local
       - name: Verify standalone configuration in Windows Chromium
         working-directory: web-workbench
@@ -165,7 +167,7 @@ jobs:
               await sleep(100);
             }
             if(!ready)throw Error('Offline launcher failed: '+output);
-            for(const path of ['/','/config','/embed/institution-message'])if(!(await fetch(origin+path)).ok)throw Error('Offline page missing: '+path);
+            for(const path of ['/','/config','/institution-tasks','/embed/institution-message'])if(!(await fetch(origin+path)).ok)throw Error('Offline page missing: '+path);
             const page=await fetch(origin+'/embed/institution-message');if(!page.ok)throw Error('Offline institution page missing');
             const html=await page.text(),asset=html.match(/src="(\/assets\/[^"]+\.js)"/);
             if(!asset||!(await fetch(origin+asset[1])).ok)throw Error('Offline frontend asset missing');

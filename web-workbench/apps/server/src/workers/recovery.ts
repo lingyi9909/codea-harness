@@ -1,9 +1,18 @@
+/**
+ * 后台任务异常恢复
+ *
+ * 职责：处理进程恢复时的未完成运行和状态收敛。
+ * Java 研发阅读提示：执行是否已经到达模型或数据库可能不确定，不能无条件重跑。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import type {RowDataPacket,ResultSetHeader} from 'mysql2/promise';
 import type {SchedulerConfig} from './scheduler.ts';
 import type {Lease} from '../../../../packages/storage/src/slots.ts';
 import {withTransaction} from '../../../../packages/storage/src/db.ts';
 import {appendEvent} from '../../../../packages/storage/src/events.ts';
 
+/** 阅读提示：恢复过期执行租约或任务状态；已提交外部动作的重放需要特别谨慎。 */
 export async function resumeExpired(config:SchedulerConfig){
   if(!config.adapter.reattach)return null;
   const query="SELECT r.id,r.task_id,r.native_input_id,s.fence,o.id AS outbox_id,"+

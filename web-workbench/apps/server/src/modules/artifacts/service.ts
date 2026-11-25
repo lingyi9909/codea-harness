@@ -1,3 +1,11 @@
+/**
+ * 报告产物业务逻辑
+ *
+ * 职责：处理报告、附件与任务相关文件的存取逻辑。
+ * Java 研发阅读提示：可类比 Java 的 Service，注意文件和数据库状态的一致性。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';

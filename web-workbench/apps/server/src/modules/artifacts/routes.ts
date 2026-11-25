@@ -1,3 +1,11 @@
+/**
+ * 报告产物 HTTP 路由
+ *
+ * 职责：对外提供已生成报告与附件的查询或下载入口。
+ * Java 研发阅读提示：访问前需要区分报告归属和允许读取的文件。
+ *
+ * 以下为模块说明注释，不改变原有执行逻辑。
+ */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'mysql2/promise';

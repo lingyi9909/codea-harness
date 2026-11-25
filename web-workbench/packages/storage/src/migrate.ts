@@ -1,3 +1,11 @@
+/**
+ * 存储迁移逻辑
+ *
+ * 职责：组织数据库结构的升级和兼容处理。
+ * Java 研发阅读提示：类比 Flyway/Liquibase；迁移必须保护旧数据并避免重复执行副作用。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';

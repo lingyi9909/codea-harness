@@ -1,3 +1,11 @@
+/**
+ * 嵌入业务 SQLite 存储
+ *
+ * 职责：在本地 SQLite 中保存嵌入场景的会话和任务关联。
+ * Java 研发阅读提示：注意数据保留期限、文件权限及服务异常恢复后的任务状态。
+ *
+ * 仅补充模块注释，原有代码和接口行为保持不变。
+ */
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomUUID} from 'node:crypto';
 import {mkdirSync,readFileSync,readdirSync,lstatSync,chmodSync,existsSync} from 'node:fs';

@@ -19,3 +19,7 @@
 .lab-overlay{position:fixed;inset:0;background:rgba(22,31,45,.34);z-index:100;display:grid;place-items:center}
 .lab-overlay section{background:#fff;padding:30px;border-radius:10px;max-width:380px;width:calc(100% - 36px)}
 @media(max-width:750px){.lab-grid{grid-template-columns:1fr}.component-lab>header{align-items:flex-start}}
+
+.component-lab .component-admin-links{display:flex;gap:14px;align-items:center;justify-content:flex-end;flex-wrap:wrap;max-width:630px}
+.component-lab .component-admin-links a{white-space:nowrap;font-size:12px}
+@media(max-width:850px){.component-lab>header{flex-wrap:wrap}.component-lab .component-admin-links{justify-content:flex-start}}
