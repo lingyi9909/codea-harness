@@ -186,7 +186,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
         :localAuth.openLocal(req,reply,{name:profile.name,key:profileKey(profile)},()=>store.save(profile));
       // A previously authenticated LAN account may switch profiles in this
       // browser. The old Cookie is revoked, and its audit visit is closed.
-      if(existing.auditId&&existing.auditId!==session.auditId)opts.pageVisits?.recordLogout(existing.auditId);
+      if(existing?.auditId&&existing.auditId!==session.auditId)opts.pageVisits?.recordLogout(existing.auditId);
       if(session.auditId)opts.pageVisits?.recordLogin({
         auditId:session.auditId,ownerId:session.ownerId,profileKey:profileKey(profile),
         name:profile.name,phone:profile.phone,ip:req.ip,scope:session.scope==='lan'?'lan':'local',
