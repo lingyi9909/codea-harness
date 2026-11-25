@@ -161,14 +161,14 @@ export class HarnessApi {
    * 接口任务列表：对应 C 的 GET /api/v1/institution-tasks。
    * userHash?:string 表示可选参数，URLSearchParams 负责正确编码查询参数。
    */
-  institutionTasks(status:InstitutionTaskStatus|'ALL'='ALL',q='',offset=0,userHash?:string){
-    const params=new URLSearchParams({status,q,offset:String(offset)});
+  institutionTasks(status:InstitutionTaskStatus|'ALL'='ALL',q='',offset=0,userHash?:string,limit:20|50|100=50){
+    const params=new URLSearchParams({status,q,offset:String(offset),limit:String(limit)});
     if(userHash)params.set('userHash',userHash);
     return this.request<InstitutionTaskPage>('/institution-tasks?'+params.toString());
   }
   /** 按 B 自报业务用户分组（后端 SQL GROUP BY），查询结果不包含完整最终结论。 */
-  institutionTaskGroups(q='',offset=0){
-    const params=new URLSearchParams({q,offset:String(offset)});
+  institutionTaskGroups(q='',offset=0,limit:20|50|100=50){
+    const params=new URLSearchParams({q,offset:String(offset),limit:String(limit)});
     return this.request<InstitutionUserGroupPage>('/institution-tasks/users?'+params.toString());
   }
   /** 查询当前最大并发档位和运行中/排队中的任务数。 */
