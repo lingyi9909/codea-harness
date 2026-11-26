@@ -78,20 +78,22 @@ test('LAN colleague login needs no access code and cannot impersonate loopback a
   const auth=new LocalAuth('pair',4176,undefined,undefined,{origin:'http://192.168.2.4:4176'});
   const lan={ip:'192.168.2.44',headers:{host:'192.168.2.4:4176',origin:'http://192.168.2.4:4176'}} as unknown as FastifyRequest;
   const loopback={ip:'127.0.0.1',headers:{host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'}} as unknown as FastifyRequest;
-  const responseHeaders:Record<string,string>={};
-  const reply={header:(name:string,value:string)=>{responseHeaders[name]=value;return reply;}} as unknown as FastifyReply;
+  const responseHeaders:Record<string,string|string[]>={};
+  const reply={header:(name:string,value:string|string[])=>{responseHeaders[name]=value;return reply;}} as unknown as FastifyReply;
   assert.equal(auth.isLan(lan),true);
   assert.equal(auth.isLocal(lan),false);
   assert.equal(auth.isLocal(loopback),true);
   assert.throws(()=>auth.openLan({...lan,headers:{...lan.headers,origin:'http://malicious.example'}} as FastifyRequest,reply,{name:'user',key:'key'}),/LAN_ORIGIN_FORBIDDEN/);
   const opened=auth.openLan(lan,reply,{name:'user',key:'key'});
-  assert.match(opened.ownerId,/^lan:[0-9a-f-]{36}$/);
-  const cookie=responseHeaders['Set-Cookie'].split(';')[0];
+  assert.match(opened.ownerId,/^lan:[0-9a-f]{64}$/);
+  const setCookies=responseHeaders['Set-Cookie'];
+  assert.ok(Array.isArray(setCookies),'new LAN login sets session and persistent visitor cookies');
+  const cookie=setCookies[0].split(';')[0];
   assert.equal(auth.session({...lan,headers:{...lan.headers,cookie}} as FastifyRequest).ownerId,opened.ownerId);
   assert.throws(()=>auth.session({...loopback,headers:{...loopback.headers,cookie}} as FastifyRequest),/SESSION_ORIGIN_MISMATCH/);
   assert.throws(()=>auth.openLan(loopback,reply,{name:'user',key:'key'}),/LAN_ORIGIN_FORBIDDEN/);
-  const otherReplyHeaders:Record<string,string>={};
-  const otherReply={header:(name:string,value:string)=>{otherReplyHeaders[name]=value;return otherReply;}} as unknown as FastifyReply;
+  const otherReplyHeaders:Record<string,string|string[]>={};
+  const otherReply={header:(name:string,value:string|string[])=>{otherReplyHeaders[name]=value;return otherReply;}} as unknown as FastifyReply;
   const sameSelfEnteredProfile=auth.openLan(lan,otherReply,{name:'user',key:'key'});
   assert.notEqual(sameSelfEnteredProfile.ownerId,opened.ownerId,
     'separate browser login must not inherit another coworker\'s native sessions');
