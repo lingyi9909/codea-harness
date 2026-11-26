@@ -36,7 +36,9 @@ const guidelines:Record<FailureCategory,{reason:string;suggestion:string}>={
 };
 const diagnosticCode=(value:unknown):string|null=>{
   const v=safeIdentifier(value,64);
-  return v&&/^(?:E[A-Z0-9_]{2,}|ER_[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|HTTP_[1-5]\d\d|[1-5]\d\d|[A-Z][A-Z0-9_]{2,})$/.test(v)?v:null;
+  // A arbitrary uppercase 'code' can itself be a business secret. Admit only
+  // recognized system/SQL codes, never an unbounded opaque application value.
+  return v&&/^(?:ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|EACCES|EPERM|ENOENT|EHOSTUNREACH|ECONNABORTED|ER_[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|HTTP_[1-5]\d\d|[1-5]\d\d|DEADLINE_EXCEEDED|PERMISSION_DENIED|UNAUTHENTICATED|UNAVAILABLE)$/.test(v)?v:null;
 };
 /** Search transient raw strings ONLY in memory; raw content is never returned or persisted. */
 function classify(raw:string):FailureCategory{
@@ -72,7 +74,19 @@ export function makeSafeFailure(error:unknown,toolName:unknown,toolCallId:unknow
   const observed=explicitCode??[
     ...raw.matchAll(/\b(?:ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|EACCES|EPERM|ER_[A-Z0-9_]+|SQLITE_[A-Z0-9_]+)\b/g),
   ].map(m=>diagnosticCode(m[0])).find((v):v is string=>Boolean(v))??null;
-  const text=guidelines[category];
+  let text=guidelines[category];
+  // More specific, still fully controlled descriptions: SQL names, paths and
+  // actual command arguments never leave this classification function.
+  if(category==='SQL'&&/unknown column|ER_BAD_FIELD_ERROR/i.test(raw))
+    text={reason:'SQL 引用了数据库中不存在的字段',suggestion:'通过 DBHub 只读核对目标表结构、字段拼写及映射关系。'};
+  else if(category==='SQL'&&/ER_NO_SUCH_TABLE|table .*doesn't exist|relation .*does not exist/i.test(raw))
+    text={reason:'SQL 引用了数据库中不存在的表',suggestion:'核对目标数据源、Schema、表名及环境绑定。'};
+  else if(category==='SQL'&&/ER_PARSE_ERROR|sql syntax/i.test(raw))
+    text={reason:'SQL 语法解析失败',suggestion:'核对执行 SQL 的数据库方言和语法规则，不要直接重试写操作。'};
+  else if(category==='NETWORK'&&/ECONNREFUSED|connection refused/i.test(raw))
+    text={reason:'目标服务拒绝网络连接',suggestion:'检查目标服务是否启动、监听端口、网络 ACL 与 MCP/数据库地址。'};
+  else if(category==='TIMEOUT'&&/MCP|DBHUB/i.test(raw))
+    text={reason:'MCP 或 DBHub 工具请求超时',suggestion:'检查工具调用超时、DBHub query_timeout 与目标数据库查询耗时。'};
   return {
     version:1,
     toolName:safeIdentifier(toolName),toolCallId:safeIdentifier(toolCallId),
