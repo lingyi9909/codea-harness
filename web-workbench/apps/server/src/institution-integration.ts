@@ -394,7 +394,8 @@ export class InstitutionIntegration {
         this.tasks.session(task.id,session.id);
         nativeId=session.id;
         this.nativeTasks.set(session.id,task.id);
-        usingEvents=this.enableNativeEvents(client);
+        try{usingEvents=this.enableNativeEvents(client);}
+        catch{usingEvents=false;/* Diagnostics must never reject a valid native session. */}
         this.note(task.id,'NATIVE_SESSION_CREATED');
 
         // 4. 先标记「可能已受理」，再投递 Prompt；不确定的失败必须标 UNKNOWN。
