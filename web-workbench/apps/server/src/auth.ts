@@ -31,7 +31,6 @@ export class LocalAuth implements RequestAuth {
   private readonly devOrigin?:string;
   private readonly publishCode?: (code:string)=>void;
   private readonly lanOrigin?:string;
-  private readonly lanAttempts:number[]=[];
   constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void,lan?:{origin:string}){
     this.publishCode=publishCode;
     this.port=port;this.devOrigin=devOrigin;
@@ -60,8 +59,18 @@ export class LocalAuth implements RequestAuth {
       ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip);
   }
   isLan(req:FastifyRequest){
-    return Boolean(this.lanOrigin&&req.headers.host===new URL(this.lanOrigin).host&&
-      (req.headers.origin===undefined||req.headers.origin===this.lanOrigin));
+    if(!this.lanOrigin)return false;
+    // Login is visitor registration, not authorization against a single
+    // configured public IP. Accept any matching private-LAN Host and Origin
+    // on this workbench port (useful when the PC has multiple LAN addresses).
+    // Keep same-origin checks, loopback-only admin routes and Cookie isolation.
+    const host=req.headers.host??'';
+    let address:URL;
+    try{address=new URL('http://'+host);}catch{return false;}
+    if(address.username||address.password||address.hostname.includes('%')||
+      Number(address.port)!==this.port||!isPrivateLanIPv4(address.hostname)||
+      address.host!==host)return false;
+    return req.headers.origin===undefined||req.headers.origin===address.origin;
   }
   origin(req:FastifyRequest):boolean{
     const host=req.headers.host??'';
@@ -89,29 +98,31 @@ export class LocalAuth implements RequestAuth {
   }
   openLocal(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string},save:()=>void):Session{
     this.requireLocalOrigin(req);
-    const now=Date.now();
-    for(const [key,session] of this.sessions){
-      if(session.expires<=now)this.sessions.delete(key);
-      else if(session.scope!=='lan'&&session.profile?.key!==profile.key)throw new AuthProblem(409,'PROFILE_IN_USE');
-    }
-    // Saving and issuing are synchronous so overlapping logins cannot interleave.
+    // No exclusive profile lock: two users may access the same PC via their
+    // own browser sessions. User-supplied labels never verify identity.
+    // Continue protecting the workspace file from symlink/invalid-path writes.
     save();
-    try{return this.session(req);}catch(e){
+    try{
+      const current=this.session(req);
+      if(current.scope==='local'){
+        if(current.profile?.key===profile.key)return current;
+        // Switching profile in the same browser must not inherit the former
+        // user's chat owner; revoke the old cookie before issuing a new one.
+        const cookie=req.headers.cookie?.split(';').map(s=>s.trim())
+          .find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+        if(cookie)this.sessions.delete(hash(cookie).toString('hex'));
+      }
+    }catch(e){
       if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
     }
-    // Prior versions used one shared 'local-workbench' owner for every local profile.
-    // That allowed a different local login to see or mutate another user's native
-    // OpenCode sessions. Bind ownership to the *profile*, not the machine.
-    // Legacy shared-owner sessions cannot safely be assigned to any one user.
     return this.issue(reply,'local:'+profile.key,profile);
   }
   openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string}):Session{
-    if(!this.isLan(req)||req.headers.origin!==this.lanOrigin)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
-    const now=Date.now();
-    while(this.lanAttempts[0]!==undefined&&this.lanAttempts[0]<now-60000)this.lanAttempts.shift();
-    if(this.lanAttempts.length>=20)throw new AuthProblem(429,'LAN_LOGIN_RATE_LIMIT');
-    this.lanAttempts.push(now);
-    // 局域网访问无需额外访问码；仍保留 Origin、登录速率、Cookie 和会话隔离。
+    if(!this.isLan(req)||req.headers.origin!=='http://'+req.headers.host)
+      throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
+    // There is no global 20-logins/minute gate: colleagues entering together
+    // must not block one another. Keep per-browser session isolation and CSRF.
+    // 局域网访问无需额外访问码；仍保留同源检查、Cookie 和会话隔离。
     // Never derive a security identity from self-entered names or phone numbers.
     // Every new browser login owns its own native sessions, even if another
     // visitor chooses the same self-reported profile.
