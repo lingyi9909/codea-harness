@@ -243,7 +243,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       {value:undefined,configurable:true}));
     await page.getByRole('button',{name:'登录工作台',exact:true}).click();
     await expect(page.getByRole('navigation')).toBeVisible();
-    await page.evaluate(()=>{delete (crypto as Crypto&{randomUUID?:()=>string}).randomUUID;});
+    await page.evaluate(()=>{Reflect.deleteProperty(crypto,'randomUUID');});
     assert.equal(sessionRequests,1);
     const contactCache=await page.evaluate(()=>JSON.stringify([localStorage,sessionStorage,document.cookie]));
     for(const value of ['测试同事','visitor-12'])assert.ok(!contactCache.includes(value));
