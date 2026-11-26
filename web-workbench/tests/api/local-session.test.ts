@@ -24,7 +24,7 @@ it('packaged local sessions require a loopback Host and matching Origin, reuse t
     for(const url of ['/api/v1/chat/settings','/api/v1/tasks','/api/v1/repositories']){
       assert.equal((await app.inject({url,headers:{host}})).statusCode,401);
     }
-    for(const payload of [{},{name:'   ',phone:profile.phone},{name:'test',phone:'abc'},{name:'test',phone:12345678901}]){
+    for(const payload of [{},{name:'   ',phone:profile.phone},{name:'test',phone:'   '},{name:'test',phone:12345678901}]){
       const denied=await app.inject({method:'POST',url:open,headers:{host,origin},payload});
       assert.equal(denied.statusCode,400);
       assert.equal(denied.json().error.code,'PROFILE_INVALID');
@@ -50,9 +50,14 @@ it('packaged local sessions require a loopback Host and matching Origin, reuse t
     assert.equal(refreshed.json().data.csrfToken,csrf);
     assert.deepEqual(refreshed.json().data.owner,opened.json().data.owner);
     const different=await app.inject({method:'POST',url:open,headers:{host,origin},payload:{...profile,name:'另一示例'}});
-    assert.equal(different.statusCode,409);
-    assert.equal(different.headers['set-cookie'],undefined);
-    assert.deepEqual(JSON.parse(await readFile(join(workspace,'.workbench','user.json'),'utf8')),profile);
+    assert.equal(different.statusCode,200,'different visitors may enter the same workspace');
+    assert.notEqual(different.json().data.owner.id,opened.json().data.owner.id);
+    assert.equal((await app.inject({url:bootstrap,headers:{host,cookie}})).statusCode,200,
+      'an additional visitor must not invalidate the original visitor');
+    const loose=await app.inject({method:'POST',url:open,headers:{host,origin},
+      payload:{name:'外部同事',phone:'employee-123'}});
+    assert.equal(loose.statusCode,200,'self-reported phone labels do not require mobile regex');
+    assert.equal(loose.json().data.owner.name,'外部同事');
     const logout='/api/v1/auth/session';
     for(const headers of [{host,origin,cookie},{host,origin:'http://example.com',cookie,'x-csrf-token':csrf}]){
       assert.equal((await app.inject({method:'DELETE',url:logout,headers})).statusCode,403);
@@ -61,35 +66,70 @@ it('packaged local sessions require a loopback Host and matching Origin, reuse t
     assert.equal((await app.inject({url:bootstrap,headers:{host,cookie}})).statusCode,401);
   }finally{await app.close();}
 });
-it('serializes different logins, allows a switch after logout, and gates externally changed profiles',async t=>{
+it('allows parallel visitor profiles with isolated local sessions and account switching',async t=>{
   const workspace=await mkdtemp(join(tmpdir(),'local-profile-'));
   t.after(()=>rm(workspace,{recursive:true,force:true}));
   const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,workspace});
   t.after(()=>app.close());
-  const candidates=[profile,{name:'示例二',phone:'13900000000'}];
-  const login=(payload:typeof profile)=>app.inject({method:'POST',url:open,headers:{host,origin},payload});
-  const attempts=await Promise.all(candidates.map(login));
-  const winner=attempts.findIndex(r=>r.statusCode===200);
-  assert.notEqual(winner,-1);
-  assert.equal(attempts[1-winner].json().error.code,'PROFILE_IN_USE');
-  const file=join(workspace,'.workbench','user.json');
-  assert.deepEqual(JSON.parse(await readFile(file,'utf8')),candidates[winner]);
-  const sessionHeaders=(r:typeof attempts[number])=>({host,origin,cookie:String(r.headers['set-cookie']).split(';')[0],'x-csrf-token':r.json().data.csrfToken});
-  await app.inject({method:'DELETE',url:'/api/v1/auth/session',headers:sessionHeaders(attempts[winner])});
-  const switched=await login(candidates[1-winner]);
-  assert.equal(switched.statusCode,200);
-  // Localhost accounts must NOT share the previous global 'local-workbench' ID.
-  // A profile returns to the same owner across logout/restart, not the owner of B.
-  assert.equal(switched.json().data.owner.id,'local:'+profileKey(candidates[1-winner]));
-  assert.notEqual(switched.json().data.owner.id,attempts[winner].json().data.owner.id);
-  assert.deepEqual(JSON.parse(await readFile(file,'utf8')),candidates[1-winner]);
-  await writeFile(file,JSON.stringify(candidates[winner]));
-  for(const url of [bootstrap,'/api/v1/chat/settings','/api/v1/tasks']){
-    const denied=await app.inject({url,headers:sessionHeaders(switched)});
-    assert.equal(denied.statusCode,401);
-    assert.equal(denied.json().error.code,'PROFILE_LOGIN_REQUIRED');
+  const candidates=[profile,{name:'示例二',phone:'staff-id-2'}];
+  const login=(payload:typeof profile,headers:Record<string,string>={host,origin})=>
+    app.inject({method:'POST',url:open,headers,payload});
+  const attempts=await Promise.all(candidates.map(c=>login(c)));
+  assert.ok(attempts.every(a=>a.statusCode===200),attempts.map(a=>a.body).join('\n'));
+  const sessions=attempts.map(a=>({
+    headers:{host,origin,cookie:String(a.headers['set-cookie']).split(';')[0]},
+    owner:a.json().data.owner.id,
+  }));
+  assert.notEqual(sessions[0].owner,sessions[1].owner);
+  for(const current of sessions){
+    const response=await app.inject({url:bootstrap,headers:current.headers});
+    assert.equal(response.statusCode,200,response.body);
+    assert.equal(response.json().data.owner.id,current.owner);
   }
+  // The shared user.json is advisory, not a gate for all browser sessions.
+  await writeFile(join(workspace,'.workbench','user.json'),JSON.stringify(candidates[0]));
+  assert.equal((await app.inject({url:bootstrap,headers:sessions[1].headers})).statusCode,200);
+  const switched=await login({name:'切换后',phone:'12345'},sessions[0].headers);
+  assert.equal(switched.statusCode,200,switched.body);
+  assert.notEqual(switched.json().data.owner.id,sessions[0].owner);
+  assert.equal((await app.inject({url:bootstrap,headers:sessions[0].headers})).statusCode,401,
+    'switching an account must revoke its old cookie');
+  assert.equal((await app.inject({url:bootstrap,headers:sessions[1].headers})).statusCode,200,
+    'switching one browser must not revoke peer sessions');
 });
+
+it('LAN self-reported visitor entry handles concurrent peers and alternate private addresses',async t=>{
+  const workspace=await mkdtemp(join(tmpdir(),'lan-visitor-entry-'));
+  t.after(()=>rm(workspace,{recursive:true,force:true}));
+  const auth=new LocalAuth('unused',port,undefined,undefined,{origin:'http://192.168.1.66:'+port});
+  const app=await createApp({auth,localOnly:true,workspace});
+  t.after(()=>app.close());
+  const hostA='192.168.1.66:'+port,originA='http://'+hostA;
+  const ids=new Set<string>();
+  for(let i=0;i<32;i++){
+    const login=await app.inject({method:'POST',url:open,remoteAddress:'192.168.1.51',
+      headers:{host:hostA,origin:originA},payload:{name:'同事'+i,phone:'staff-'+i}});
+    assert.equal(login.statusCode,200,login.body);
+    const id=login.json().data.owner.id;
+    assert.ok(!ids.has(id),'each independently logged-in browser has its own owner');
+    ids.add(id);
+    if(i===0||i===31){
+      const state=await app.inject({url:bootstrap,remoteAddress:'192.168.1.51',
+        headers:{host:hostA,origin:originA,cookie:String(login.headers['set-cookie']).split(';')[0]}});
+      assert.equal(state.statusCode,200,state.body);
+      assert.equal(state.json().data.owner.id,id);
+    }
+  }
+  const alternate='192.168.1.67:'+port;
+  const allowed=await app.inject({method:'POST',url:open,remoteAddress:'192.168.1.52',
+    headers:{host:alternate,origin:'http://'+alternate},
+    payload:{name:'另一网卡',phone:'extension-99'}});
+  assert.equal(allowed.statusCode,200,allowed.body);
+  const denied=await app.inject({method:'POST',url:open,remoteAddress:'192.168.1.53',
+    headers:{host:alternate,origin:originA},payload:{name:'错误来源',phone:'123'}});
+  assert.equal(denied.statusCode,403,'cross-origin registration is still denied');
+});
+
 it('rejects redirected profile directories and files before opening a session',async t=>{
   const fixture=await mkdtemp(join(tmpdir(),'local-profile-'));
   t.after(()=>rm(fixture,{recursive:true,force:true}));
