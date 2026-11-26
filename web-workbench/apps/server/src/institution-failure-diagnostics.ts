@@ -1,0 +1,97 @@
+/**
+ * 机构任务失败诊断：只保存经过白名单提取的错误类别/代码/建议。
+ *
+ * 不要把 OpenCode error.message、stack、SQL、Shell 参数或工具返回体写入 SQLite；
+ * 这些原始字符串可能含账号、业务报文、Token 或查询语句。
+ * 该模块只转换观察信息，不决定任务成败，也不调用或重试任何工具。
+ */
+export type FailureCategory='TIMEOUT'|'NETWORK'|'AUTH'|'PERMISSION'|'MCP'|'SQL'|'TOOL_MISSING'|'EXECUTION'|'UNKNOWN';
+export type FailureOrigin='native-event'|'session-snapshot'|'worker';
+export type SafeFailure={
+  version:1;
+  toolName:string|null;
+  toolCallId:string|null;
+  category:FailureCategory;
+  errorCode:string|null;
+  nativeType:string|null;
+  reason:string;
+  suggestion:string;
+  origin:FailureOrigin;
+};
+const asObject=(value:unknown):Record<string,unknown>|undefined=>
+  value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:undefined;
+const safeIdentifier=(value:unknown,max=80):string|null=>
+  typeof value==='string'&&value.length<=max&&/^[a-zA-Z0-9_.:-]+$/.test(value)?value:null;
+const safeType=(value:unknown)=>safeIdentifier(value,64);
+const guidelines:Record<FailureCategory,{reason:string;suggestion:string}>={
+  TIMEOUT:{reason:'工具调用或依赖服务响应超时',suggestion:'检查 OpenCode/DBHub/MCP 连接和超时配置，并核对下游服务耗时。'},
+  NETWORK:{reason:'工具与依赖服务之间的连接异常',suggestion:'检查服务地址、网络连通性、DNS、端口和依赖服务状态。'},
+  AUTH:{reason:'依赖接口返回身份验证或授权错误',suggestion:'核对服务账号、访问令牌有效期与下游接口的访问权限。'},
+  PERMISSION:{reason:'执行权限不足或操作被策略拒绝',suggestion:'核对工作台、OpenCode、MCP 及执行目录的权限规则。'},
+  MCP:{reason:'MCP 服务或工具适配器发生异常',suggestion:'检查 MCP 服务进程、注册配置、工具名称及其后端连接状态。'},
+  SQL:{reason:'数据库或 SQL 查询执行出现异常',suggestion:'用 DBHub 只读检查数据库连接、表结构、字段、SQL 方言和查询超时。'},
+  TOOL_MISSING:{reason:'工具、命令或可执行文件未找到',suggestion:'确认 Skill/MCP 工具配置与可执行文件是否已安装、加载。'},
+  EXECUTION:{reason:'原生执行或工具返回异常',suggestion:'结合工具调用 ID、执行时间和 OpenCode 原生日志继续核查。'},
+  UNKNOWN:{reason:'原生工具报告失败，但未提供可识别的错误分类',suggestion:'按调用 ID 查询 OpenCode 原生会话与对应 MCP/Shell 服务日志。'},
+};
+const diagnosticCode=(value:unknown):string|null=>{
+  const v=safeIdentifier(value,64);
+  return v&&/^(?:E[A-Z0-9_]{2,}|ER_[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|HTTP_[1-5]\d\d|[1-5]\d\d|[A-Z][A-Z0-9_]{2,})$/.test(v)?v:null;
+};
+/** Search transient raw strings ONLY in memory; raw content is never returned or persisted. */
+function classify(raw:string):FailureCategory{
+  if(/\b(?:401|403|UNAUTHENTICATED|UNAUTHORIZED|AUTHENTICATION|TOKEN_EXPIRED|INVALID_TOKEN)\b/i.test(raw))
+    return 'AUTH';
+  if(/\b(?:EACCES|EPERM|PERMISSION_DENIED)\b|permission denied|not permitted|forbidden/i.test(raw))
+    return 'PERMISSION';
+  if(/\b(?:ENOENT|COMMAND_NOT_FOUND|TOOL_NOT_FOUND|EXEC_NOT_FOUND)\b|command not found|tool (?:was )?not found|spawn .*enoent/i.test(raw))
+    return 'TOOL_MISSING';
+  if(/\b(?:ETIMEDOUT|DEADLINE_EXCEEDED|TIMEOUT)\b|timed? out|deadline exceeded|aborterror/i.test(raw))
+    return 'TIMEOUT';
+  if(/\b(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ECONNABORTED)\b|connection refused|network unreachable|dns failure|socket hang up/i.test(raw))
+    return 'NETWORK';
+  if(/\b(?:SQLSTATE|SQLITE_|ER_BAD_FIELD_ERROR|ER_NO_SUCH_TABLE|ER_PARSE_ERROR|ER_ACCESS_DENIED_ERROR)\b|unknown column|sql syntax|relation .*does not exist|table .*doesn't exist/i.test(raw))
+    return 'SQL';
+  if(/\b(?:MCP|MODEL_CONTEXT_PROTOCOL)\b/i.test(raw))return 'MCP';
+  if(/\b(?:TOOL_EXECUTION|TOOL_ERROR|EXECUTION_FAILED)\b/i.test(raw))return 'EXECUTION';
+  return 'UNKNOWN';
+}
+export function makeSafeFailure(error:unknown,toolName:unknown,toolCallId:unknown,origin:FailureOrigin):SafeFailure{
+  const outer=asObject(error);
+  const nested=asObject(outer?.data);
+  const explicitCode=diagnosticCode(outer?.code)??diagnosticCode(nested?.code);
+  const raw=[
+    typeof error==='string'?error:'',
+    typeof outer?.message==='string'?outer.message:'',
+    typeof nested?.message==='string'?nested.message:'',
+    typeof outer?.type==='string'?outer.type:'',
+    typeof outer?.name==='string'?outer.name:'',
+    explicitCode??'',
+  ].join(' ').slice(0,4096);
+  const category=classify(raw);
+  const observed=explicitCode??[
+    ...raw.matchAll(/\b(?:ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|EACCES|EPERM|ER_[A-Z0-9_]+|SQLITE_[A-Z0-9_]+)\b/g),
+  ].map(m=>diagnosticCode(m[0])).find((v):v is string=>Boolean(v))??null;
+  const text=guidelines[category];
+  return {
+    version:1,
+    toolName:safeIdentifier(toolName),toolCallId:safeIdentifier(toolCallId),
+    category,errorCode:observed,
+    nativeType:safeType(outer?.type)??safeType(outer?.name),
+    reason:text.reason,suggestion:text.suggestion,origin,
+  };
+}
+const PREFIX='SAFE_FAILURE_V1:';
+/** Never serialize a raw error object; every field here is normalized. */
+export function encodeSafeFailure(error:unknown,toolName:unknown,toolCallId:unknown,origin:FailureOrigin){
+  return PREFIX+JSON.stringify(makeSafeFailure(error,toolName,toolCallId,origin));
+}
+export function decodeSafeFailure(value:unknown):SafeFailure|null{
+  if(typeof value!=='string'||!value.startsWith(PREFIX))return null;
+  try{
+    const x=JSON.parse(value.slice(PREFIX.length)) as SafeFailure;
+    if(x.version!==1||typeof x.reason!=='string'||typeof x.suggestion!=='string'||
+      !Object.hasOwn(guidelines,x.category))return null;
+    return x;
+  }catch{return null;}
+}
