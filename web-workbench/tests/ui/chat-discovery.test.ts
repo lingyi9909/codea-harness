@@ -237,8 +237,13 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     // A phone value is a visitor label, not a verified mobile number.
     // Registration should succeed immediately without a front-end phone regex gate.
     await page.getByLabel('手机号',{exact:true}).fill('visitor-12');
+    // Private-network HTTP origins do not expose crypto.randomUUID in some
+    // browsers. Simulate this without disabling getRandomValues.
+    await page.evaluate(()=>Object.defineProperty(crypto,'randomUUID',
+      {value:undefined,configurable:true}));
     await page.getByRole('button',{name:'登录工作台',exact:true}).click();
     await expect(page.getByRole('navigation')).toBeVisible();
+    await page.evaluate(()=>{delete (crypto as Crypto&{randomUUID?:()=>string}).randomUUID;});
     assert.equal(sessionRequests,1);
     const contactCache=await page.evaluate(()=>JSON.stringify([localStorage,sessionStorage,document.cookie]));
     for(const value of ['测试同事','visitor-12'])assert.ok(!contactCache.includes(value));
