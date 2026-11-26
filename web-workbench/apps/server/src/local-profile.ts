@@ -18,8 +18,10 @@ export function parseProfile(input:unknown):Profile {
   if(!input||typeof input!=='object'||Object.keys(input).length!==2||
     !('name' in input)||typeof input.name!=='string'||!('phone' in input)||typeof input.phone!=='string')throw invalid();
   const name=input.name.trim(),phone=input.phone.trim().replace(/[ ()-]/g,'');
-  if(!name||[...name].length>80||/\p{Cc}/u.test(input.name)||input.phone.length>40||
-    !/^(?:1[3-9][0-9]{9}|\+[1-9][0-9]{7,14})$/.test(phone))throw invalid();
+  // This is a visitor label, not a verified phone identity. Keep only basic
+  // non-empty/length/control-character checks for display and audit storage.
+  if(!name||[...name].length>80||/\p{Cc}/u.test(input.name)||
+    !phone||input.phone.length>40||/\p{Cc}/u.test(input.phone))throw invalid();
   return {name,phone};
 }
 export const profileKey=(profile:Profile)=>createHash('sha256').update(JSON.stringify(profile)).digest('hex');
