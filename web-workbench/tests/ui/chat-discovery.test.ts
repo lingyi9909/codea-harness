@@ -234,13 +234,14 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.screenshot({path:join(shots,'00-login-silver.png')});
     await expect(page.getByRole('navigation')).toHaveCount(0);
     await page.getByLabel('姓名',{exact:true}).fill('测试同事');
-    await page.getByLabel('手机号',{exact:true}).fill('12');
+    // A phone value is a visitor label, not a verified mobile number.
+    // Registration should succeed immediately without a front-end phone regex gate.
+    await page.getByLabel('手机号',{exact:true}).fill('visitor-12');
     await page.getByRole('button',{name:'登录工作台',exact:true}).click();
-    await expect(page.getByRole('alert')).toContainText('请输入有效的手机号');
-    assert.equal(sessionRequests,0);
-    await login(page);
+    await expect(page.getByRole('navigation')).toBeVisible();
+    assert.equal(sessionRequests,1);
     const contactCache=await page.evaluate(()=>JSON.stringify([localStorage,sessionStorage,document.cookie]));
-    for(const value of ['测试同事','13800000000'])assert.ok(!contactCache.includes(value));
+    for(const value of ['测试同事','visitor-12'])assert.ok(!contactCache.includes(value));
     await expect(page.getByRole('navigation')).toBeVisible();
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
     await expect(page.getByLabel('对话内容')).toBeVisible();
