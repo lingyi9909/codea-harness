@@ -145,3 +145,32 @@ it('startup fills missing default scene bindings without overwriting custom conf
   await next.close();
   assert.equal(await readFile(file,'utf8'),existing);
 });
+
+it('LAN investigation pages can read scene runtime without gaining localhost config access',async t=>{
+  const workspace=await realpath(await mkdtemp(join(tmpdir(),'lan-scene-runtime-')));
+  t.after(()=>rm(workspace,{recursive:true,force:true}));
+  const port=4176,host='192.168.21.10:'+port,origin='http://'+host;
+  const app=await createApp({localOnly:true,workspace,
+    auth:new LocalAuth('unused',port,undefined,undefined,{origin})});
+  t.after(()=>app.close());
+  // Model a colleague accessing from the LAN address, not localhost.
+  const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
+    headers:{host,origin},payload:{name:'局域网同事',phone:'13800000002'}});
+  assert.equal(login.statusCode,200,login.body);
+  const headers={host,origin,cookie:String(login.headers['set-cookie']).split(';')[0]};
+  const runtime=await app.inject({method:'GET',url:'/api/v1/scene-runtime',headers});
+  assert.equal(runtime.statusCode,200,runtime.body);
+  const data=runtime.json().data;
+  assert.ok(data.config.scenes.logs.directory,'public-management scene must have a binding');
+  assert.ok(data.config.scenes.message.directory,'message scene must have a binding');
+  assert.ok(data.config.scenes.data.directory,'analytics scene must have a binding');
+  assert.equal(data.canEdit,false);
+  assert.equal(data.configPath,'');
+  assert.equal(data.accessPath,'');
+  const admin=await app.inject({method:'GET',url:'/api/v1/scene-config',headers});
+  assert.equal(admin.statusCode,403);
+  assert.equal(admin.json().error.code,'CONFIG_LOCAL_ONLY');
+  const write=await app.inject({method:'PUT',url:'/api/v1/scene-config',headers,
+    payload:{config:data.config,revision:data.revision}});
+  assert.equal(write.statusCode,403,'fix must not relax admin configuration authorization');
+});
