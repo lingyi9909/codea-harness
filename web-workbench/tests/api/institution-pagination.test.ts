@@ -39,3 +39,31 @@ test('institution task/group lists paginate in SQL without duplicating records',
     assert.equal(groupsFiltered.total,2,'two different caller hashes may share a self-reported label');
   }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+
+test('diagnostic events are retained, deduplicated and paginated without leaking source payloads',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'institution-diagnostic-pages-'));
+  const database=join(root,'tasks.sqlite');
+  const store=new InstitutionTaskStore(database);
+  try{
+    const task=store.create('platform-b','person-a','request-1','2026-11-26','000123').row;
+    for(let n=0;n<65;n++)store.appendEvent(task.id,'NATIVE_TOOL_CALLED','INFO',undefined,'native-'+n);
+    store.appendEvent(task.id,'NATIVE_TOOL_CALLED','INFO',undefined,'native-0');
+    const first=store.eventsAdmin(task.id,0,20);
+    const second=store.eventsAdmin(task.id,20,20);
+    const last=store.eventsAdmin(task.id,60,20);
+    assert.equal(first.total,66,'65 tool states plus initial task creation');
+    assert.equal(first.items.length,20);
+    assert.equal(second.items.length,20);
+    assert.equal(last.items.length,6);
+    assert.equal(new Set([...first.items,...second.items].map(item=>item.seq)).size,40);
+    assert.equal(JSON.stringify(first).includes('000123'),false,'no raw msgSn in diagnostics');
+    assert.equal(store.eventsAdmin(task.id,0,100).items.length,66);
+  }finally{store.close();}
+  const reopened=new InstitutionTaskStore(database);
+  try{
+    const page=reopened.listAdmin(undefined,undefined,0,undefined,20);
+    assert.equal(page.total,1);
+    assert.equal(reopened.eventsAdmin(page.items[0].taskId,0,100).total,66);
+    assert.throws(()=>reopened.eventsAdmin('missing',0,20),/INVESTIGATION_NOT_FOUND/);
+  }finally{reopened.close();await rm(root,{recursive:true,force:true});}
+});
