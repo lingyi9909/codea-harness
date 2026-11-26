@@ -115,7 +115,9 @@ test('new failed-tool events preserve original errors across SQLite reopen and r
         'dbhub.query','tool-call-123','native-event'),'event-unique-1');
     assert.equal(one.eventsAdmin(b.row.id,0,20).items.some(x=>x.failure?.rawError),false,
       'one task must never see the other task error');
-    assert.equal(one.eventsAdmin(id,0,20).items.find(x=>x.failure)?.failure?.rawError?.includes(error),true);
+    const original=one.eventsAdmin(id,0,20).items.find(x=>x.failure)?.failure?.rawError;
+    assert.ok(original?.includes("trace_id='original-secret'"));
+    assert.ok(original?.includes('Connection refused at 10.1.2.3'));
   }finally{one.close();}
   const reopened=new InstitutionTaskStore(db);
   try{
