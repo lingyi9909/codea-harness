@@ -63,7 +63,9 @@ test('diagnostic events are retained, deduplicated and paginated without leaking
   try{
     const page=reopened.listAdmin(undefined,undefined,0,undefined,20);
     assert.equal(page.total,1);
-    assert.equal(reopened.eventsAdmin(page.items[0].taskId,0,100).total,66);
+    assert.equal(reopened.eventsAdmin(page.items[0].taskId,0,100).total,67,
+      'restart records one additional UNKNOWN reconciliation event for queued work');
+    assert.equal(reopened.eventsAdmin(page.items[0].taskId,0,20).items[0].eventType,'TASK_RESTARTED');
     assert.throws(()=>reopened.eventsAdmin('missing',0,20),/INVESTIGATION_NOT_FOUND/);
   }finally{reopened.close();await rm(root,{recursive:true,force:true});}
 });
