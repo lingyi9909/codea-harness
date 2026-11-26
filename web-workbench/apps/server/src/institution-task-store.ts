@@ -100,11 +100,14 @@ export class InstitutionTaskStore {
     const columns=this.db.prepare("PRAGMA table_info(institution_api_tasks)").all() as Array<{name:string}>;
     if(!columns.some(c=>c.name==='external_user_id'))
       this.db.exec("ALTER TABLE institution_api_tasks ADD COLUMN external_user_id TEXT");
-    // The event table preserves the last observable stage, even when a restart makes the outcome UNKNOWN.
-     this.db.prepare("INSERT INTO institution_api_task_events(task_id,at,level,event_type,detail) "+
-       "SELECT id,?,'WARN','TASK_RESTARTED','PROCESS_RESTARTED' FROM institution_api_tasks "+
-       "WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
-     // Crashes or service restarts must not silently replay model/tool actions.
+    // Logging is non-critical: a broken diagnostics table must never prevent
+    // the pre-existing UNKNOWN reconciliation or leave a task executable twice.
+    try{
+      this.db.prepare("INSERT INTO institution_api_task_events(task_id,at,level,event_type,detail) "+
+        "SELECT id,?,'WARN','TASK_RESTARTED','PROCESS_RESTARTED' FROM institution_api_tasks "+
+        "WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
+    }catch{/* Diagnostic persistence failure cannot change task recovery. */}
+    // Crashes or service restarts must not silently replay model/tool actions.
     // The native session might still have run, so never assert FAILED/SUCCEEDED.
     this.db.prepare("UPDATE institution_api_tasks SET status='UNKNOWN',error_code='PROCESS_RESTARTED',updated_at=?"+
       " WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
@@ -177,7 +180,7 @@ export class InstitutionTaskStore {
       .get(clientId,userHash,requestId) as TaskRow|undefined;
     if(!row)throw new Error('INSTITUTION_API_TASK_NOT_SAVED');
     if(row.payload_hash!==payloadHash)throw new AuthProblem(409,'REQUEST_ID_PAYLOAD_CONFLICT');
-    if(Number(change.changes)===1)this.appendEvent(row.id,'TASK_CREATED');
+    if(Number(change.changes)===1)this.recordDiagnostic(row.id,'TASK_CREATED');
     return {row,created:Number(change.changes)===1};
   }
   /**
@@ -316,7 +319,7 @@ export class InstitutionTaskStore {
     const changed=this.db.prepare("UPDATE institution_api_tasks SET status='RUNNING',updated_at=? WHERE id=? AND status='QUEUED'")
       .run(Date.now(),row.id);
     if(Number(changed.changes)!==1)return undefined;
-    this.appendEvent(row.id,'TASK_RUNNING');
+    this.recordDiagnostic(row.id,'TASK_RUNNING');
     return {...row,status:'RUNNING'};
   }
   /**
@@ -328,6 +331,11 @@ export class InstitutionTaskStore {
     this.db.prepare('INSERT OR IGNORE INTO institution_api_task_events '+
       '(task_id,at,level,event_type,detail,native_event_id) VALUES (?,?,?,?,?,?)')
       .run(taskId,Date.now(),level,eventType,detail?.slice(0,160)??null,nativeEventId??null);
+  }
+  /** Lifecycle writes must succeed or fail independently of diagnostic storage. */
+  private recordDiagnostic(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string){
+    try{this.appendEvent(taskId,eventType,level,detail);}
+    catch{/* Best effort only: never reject task creation, claim, or completion. */}
   }
   /** Newest events first; SQL LIMIT/OFFSET prevents unbounded log responses. */
   eventsAdmin(taskId:string,offset:number,limit=20){
@@ -355,16 +363,18 @@ export class InstitutionTaskStore {
   finish(id:string,next:'SUCCEEDED'|'FAILED'|'UNKNOWN',result:string|null,error:string|null){
     const saved=this.db.prepare("UPDATE institution_api_tasks SET status=?,result_text=?,error_code=?,msg_sn='',updated_at=?"+
       " WHERE id=? AND status='RUNNING'").run(next,result,error,Date.now(),id);
-    if(Number(saved.changes)===1)this.appendEvent(id,'TASK_'+next,next==='SUCCEEDED'?'INFO':'ERROR',error??undefined);
+    if(Number(saved.changes)===1)this.recordDiagnostic(id,'TASK_'+next,next==='SUCCEEDED'?'INFO':'ERROR',error??undefined);
   }
   /**
    * 服务关闭时标记未完成任务 UNKNOWN（不是 FAILED）。
    * 因为任务可能已经送达模型或 DBHub，不能安全地自动重放。
    */
   stopUnfinished(){
-    this.db.prepare("INSERT INTO institution_api_task_events(task_id,at,level,event_type,detail) "+
-      "SELECT id,?,'WARN','TASK_STOPPED','SERVER_STOPPED' FROM institution_api_tasks "+
-      "WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
+    try{
+      this.db.prepare("INSERT INTO institution_api_task_events(task_id,at,level,event_type,detail) "+
+        "SELECT id,?,'WARN','TASK_STOPPED','SERVER_STOPPED' FROM institution_api_tasks "+
+        "WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
+    }catch{/* Continue updating task states even if diagnostic persistence fails. */}
     this.db.prepare("UPDATE institution_api_tasks SET status='UNKNOWN',error_code='SERVER_STOPPED',updated_at=?"+
       " WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
   }
