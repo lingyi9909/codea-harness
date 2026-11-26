@@ -170,7 +170,12 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       try{session=await opts.auth.session(req);}catch(e){
         if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
       }
-      if(!session?.profile||(session.scope==='lan'? !session.ownerId.startsWith('lan:'): !store.matches(session.profile.key)))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+      // A self-reported profile is not an authentication credential. A
+      // server-issued, scoped Cookie isolates conversations; updating the
+      // advisory workspace user.json must not log out other active visitors.
+      if(!session?.profile||(session.scope==='lan'
+        ?!session.ownerId.startsWith('lan:'):!session.ownerId.startsWith('local:')))
+        throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
       if(session.auditId)opts.pageVisits?.touch(session.auditId);
       reply.header('Cache-Control','no-store');
     });
