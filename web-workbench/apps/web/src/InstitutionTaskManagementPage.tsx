@@ -383,7 +383,7 @@ export function InstitutionTaskManagementPage(){
                   detail.status==='FAILED'?'任务执行失败，未产生最终结论。':'暂无最终返回结果。'}</p>}
             </div>
             <section className="institution-task-logs" aria-label="任务执行诊断日志">
-              <header><h3>任务执行诊断</h3><small>最新在前 · 仅本机管理员可查看 · 不含工具输入或推理内容</small></header>
+              <header><h3>任务执行诊断</h3><small>最新在前 · 仅本机管理员可查看 · 失败事件保留原始错误信息</small></header>
               {logError&&<p role="alert" className="institution-tasks-error">{logError}</p>}
               <ol className="institution-task-event-list">
                 {logPage?.items.map(item=><li key={item.seq} className={'institution-task-event '+item.level.toLowerCase()}>
@@ -401,8 +401,14 @@ export function InstitutionTaskManagementPage(){
                       <dt>信息来源</dt><dd>{failureOrigin[item.failure.origin]??'未知'}</dd>
                       <dt>建议检查</dt><dd>{item.failure.suggestion}</dd>
                     </dl>
+                    <h4>原始失败信息（未脱敏）</h4>
+                    {item.failure.rawError
+                      ?<pre className="institution-task-raw-error">{item.failure.rawError}</pre>
+                      :<p className="institution-task-failure-notice">OpenCode 未提供原始错误对象，需查看原生会话或 MCP 日志。</p>}
+                    {item.failure.rawTruncated&&
+                      <p className="institution-task-failure-notice">原始错误超出 128K 字符存储上限，仅展示前 128K 字符。</p>}
                     <p className="institution-task-failure-notice">
-                      仅展示脱敏分类信息，不保存原始 SQL、工具参数、错误堆栈或敏感业务数据。
+                      原始错误可能包含 SQL、访问令牌或业务数据，仅本机管理员可见，请勿公开转发。
                       单次工具失败不一定代表整个任务执行失败。
                     </p>
                   </details>}

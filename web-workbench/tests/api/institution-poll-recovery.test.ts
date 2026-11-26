@@ -188,12 +188,14 @@ test('a native completion event wakes the shared observer before slow polling fa
     assert.equal(failed?.failure?.toolCallId,'call-1');
     assert.equal(failed?.failure?.errorCode,'ETIMEDOUT');
     assert.equal(failed?.failure?.origin,'native-event');
-    assert.equal(JSON.stringify(events).includes('super-secret-token'),false);
-    assert.equal(JSON.stringify(events).includes('sensitive_table'),false);
+    assert.ok(failed?.failure?.rawError?.includes("token='super-secret-token'"),
+      'local maintenance diagnostics retain the original failure text');
+    assert.ok(failed?.failure?.rawError?.includes('sensitive_table'));
+    assert.equal(failed?.failure?.rawTruncated,false);
   }finally{service.close();await rm(root,{recursive:true,force:true});}
 });
 
-test('native error diagnostics classify known faults but never save raw SQL, credentials or server paths',()=>{
+test('local admin diagnostics preserve native raw errors while retaining classification and old format support',()=>{
   const raw={type:'ToolExecutionError',code:'ETIMEDOUT',
     message:"SQL SELECT * FROM account WHERE password='p@ss123' and token='secret-value'; connect to 10.10.3.22 failed"};
   const a=makeSafeFailure(raw,'dbhub.query','call-abc','native-event');
@@ -202,14 +204,23 @@ test('native error diagnostics classify known faults but never save raw SQL, cre
   assert.equal(a.nativeType,'ToolExecutionError');
   assert.equal(a.toolCallId,'call-abc');
   const encoded=encodeSafeFailure(raw,'dbhub.query','call-abc','native-event');
-  assert.equal(encoded.includes('account'),false);
-  assert.equal(encoded.includes('p@ss123'),false);
-  assert.equal(encoded.includes('secret-value'),false);
-  assert.equal(encoded.includes('10.10.3.22'),false);
+  assert.ok(encoded.includes('account'));
+  assert.ok(encoded.includes('p@ss123'));
+  assert.ok(encoded.includes('secret-value'));
+  assert.ok(encoded.includes('10.10.3.22'));
+  assert.ok(decodeSafeFailure(encoded)?.rawError?.includes("password='p@ss123'"));
   assert.equal(decodeSafeFailure(encoded)?.category,'TIMEOUT');
   assert.equal(decodeSafeFailure('an older tool label'),null);
   assert.equal(makeSafeFailure({message:'Access denied: EACCES'},'shell','call-2','worker').category,'PERMISSION');
   assert.equal(makeSafeFailure({message:'Unknown column in SQL query'},'dbhub','call-3','worker').category,'SQL');
   assert.equal(makeSafeFailure({message:'MCP service unavailable'},'dbhub','call-4','worker').category,'MCP');
   assert.equal(makeSafeFailure({message:'something unexpected'},'shell','call-5','worker').category,'UNKNOWN');
+  const exception=new Error('original shell stderr and command path');
+  exception.stack='Error: original shell stderr\n    at C:\\\\service\\\\tool.js:23';
+  const native=decodeSafeFailure(encodeSafeFailure(exception,'shell','call-6','worker'));
+  assert.ok(native?.rawError?.includes('original shell stderr'));
+  assert.ok(native?.rawError?.includes('tool.js:23'));
+  const huge=makeSafeFailure({message:'x'.repeat(140000)},'shell','call-7','worker');
+  assert.equal(huge.rawTruncated,true);
+  assert.ok((huge.rawError?.length??0)<=131072);
 });

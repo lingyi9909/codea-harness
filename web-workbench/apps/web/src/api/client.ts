@@ -34,6 +34,7 @@ export type InstitutionFailureDetail={
   category:'TIMEOUT'|'NETWORK'|'AUTH'|'PERMISSION'|'MCP'|'SQL'|'TOOL_MISSING'|'EXECUTION'|'UNKNOWN';
   errorCode:string|null;nativeType:string|null;
   reason:string;suggestion:string;origin:'native-event'|'session-snapshot'|'worker';
+  rawError?:string|null;rawTruncated?:boolean;
 };
 export type InstitutionTaskLog={
   seq:number;at:string;level:'INFO'|'WARN'|'ERROR';eventType:string;detail:string|null;

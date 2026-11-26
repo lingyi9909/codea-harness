@@ -1,9 +1,11 @@
 /**
- * 机构任务失败诊断：只保存经过白名单提取的错误类别/代码/建议。
+ * 机构任务失败诊断：管理员可查看原始错误对象 + 分类建议。
  *
- * 不要把 OpenCode error.message、stack、SQL、Shell 参数或工具返回体写入 SQLite；
- * 这些原始字符串可能含账号、业务报文、Token 或查询语句。
- * 该模块只转换观察信息，不决定任务成败，也不调用或重试任何工具。
+ * 维护人员需要原生 error.message/stack/SQL 返回错误等原文来排障，
+ * 只采集失败时原生提供的 error 对象（不主动收集 Prompt/整段模型思考）。
+ * 原始错误可能包含凭证与业务数据，故仅保存在七日留存的本地任务库，
+ * 通过原有仅本机管理员可访问的诊断 API 展示；B 对外 API 绝不返回。
+ * 本模块只是记录观察结果，不改变原本的任务成功、失败或重试语义。
  */
 export type FailureCategory='TIMEOUT'|'NETWORK'|'AUTH'|'PERMISSION'|'MCP'|'SQL'|'TOOL_MISSING'|'EXECUTION'|'UNKNOWN';
 export type FailureOrigin='native-event'|'session-snapshot'|'worker';
@@ -17,6 +19,10 @@ export type SafeFailure={
   reason:string;
   suggestion:string;
   origin:FailureOrigin;
+  /** Original native error, including message/stack/data when present. Never redacted. */
+  rawError?:string|null;
+  /** Large native errors are size-capped for database stability, not sanitized. */
+  rawTruncated?:boolean;
 };
 const asObject=(value:unknown):Record<string,unknown>|undefined=>
   value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:undefined;
@@ -40,7 +46,40 @@ const diagnosticCode=(value:unknown):string|null=>{
   // recognized system/SQL codes, never an unbounded opaque application value.
   return v&&/^(?:ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|EACCES|EPERM|ENOENT|EHOSTUNREACH|ECONNABORTED|ER_[A-Z0-9_]+|SQLITE_[A-Z0-9_]+|HTTP_[1-5]\d\d|[1-5]\d\d|DEADLINE_EXCEEDED|PERMISSION_DENIED|UNAUTHENTICATED|UNAVAILABLE)$/.test(v)?v:null;
 };
-/** Search transient raw strings ONLY in memory; raw content is never returned or persisted. */
+/**
+ * Preserve raw native error fields, including non-enumerable Error.message/stack.
+ * Size cap (128 Ki characters) prevents one broken tool from filling task storage.
+ * This is not redaction: error content is preserved verbatim up to the cap.
+ */
+function originalError(error:unknown){
+  if(error===undefined||error===null)return {text:null,truncated:false};
+  let raw:string;
+  try{
+    if(typeof error==='string')raw=error;
+    else{
+      const seen=new WeakSet<object>();
+      const serialized=JSON.stringify(error,(_key,value:unknown)=>{
+        if(value instanceof Error){
+          const e=value as Error&{cause?:unknown};
+          return {...Object.fromEntries(Object.entries(e)),name:e.name,message:e.message,
+            stack:e.stack,...(e.cause===undefined?{}:{cause:e.cause})};
+        }
+        if(typeof value==='bigint')return value.toString();
+        if(value&&typeof value==='object'){
+          if(seen.has(value))return '[Circular]';
+          seen.add(value);
+        }
+        return value;
+      },2);
+      raw=serialized??String(error);
+    }
+  }catch{
+    raw=String(error);
+  }
+  const truncated=raw.length>131072;
+  return {text:truncated?raw.slice(0,131072):raw,truncated};
+}
+/** Classification uses raw strings in memory and does not rewrite originalError(). */
 function classify(raw:string):FailureCategory{
   if(/\b(?:401|403|UNAUTHENTICATED|UNAUTHORIZED|AUTHENTICATION|TOKEN_EXPIRED|INVALID_TOKEN)\b/i.test(raw))
     return 'AUTH';
@@ -87,16 +126,18 @@ export function makeSafeFailure(error:unknown,toolName:unknown,toolCallId:unknow
     text={reason:'目标服务拒绝网络连接',suggestion:'检查目标服务是否启动、监听端口、网络 ACL 与 MCP/数据库地址。'};
   else if(category==='TIMEOUT'&&/MCP|DBHUB/i.test(raw))
     text={reason:'MCP 或 DBHub 工具请求超时',suggestion:'检查工具调用超时、DBHub query_timeout 与目标数据库查询耗时。'};
+  const original=originalError(error);
   return {
     version:1,
     toolName:safeIdentifier(toolName),toolCallId:safeIdentifier(toolCallId),
     category,errorCode:observed,
     nativeType:safeType(outer?.type)??safeType(outer?.name),
     reason:text.reason,suggestion:text.suggestion,origin,
+    rawError:original.text,rawTruncated:original.truncated,
   };
 }
 const PREFIX='SAFE_FAILURE_V1:';
-/** Never serialize a raw error object; every field here is normalized. */
+/** Raw errors are intentionally stored for the local administrator only. */
 export function encodeSafeFailure(error:unknown,toolName:unknown,toolCallId:unknown,origin:FailureOrigin){
   return PREFIX+JSON.stringify(makeSafeFailure(error,toolName,toolCallId,origin));
 }

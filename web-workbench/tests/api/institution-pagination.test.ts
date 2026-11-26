@@ -4,6 +4,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {InstitutionTaskStore} from '../../apps/server/src/institution-task-store.ts';
+import {encodeSafeFailure} from '../../apps/server/src/institution-failure-diagnostics.ts';
 
 test('institution task/group lists paginate in SQL without duplicating records',async()=>{
   const root=await mkdtemp(join(tmpdir(),'institution-pages-'));
@@ -97,4 +98,30 @@ test('diagnostic storage failures cannot alter existing task submission, executi
     assert.equal(store.get('b','owner',pending!.id)?.status,'UNKNOWN',
       'shutdown must still mark uncertain work UNKNOWN even when event writes fail');
   }finally{store.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('new failed-tool events preserve original errors across SQLite reopen and remain scoped to that task',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'institution-raw-error-'));
+  const db=join(root,'tasks.sqlite');
+  let id='';
+  const error="DBHub SQL error: SELECT * FROM institution_log WHERE trace_id='original-secret';\\nConnection refused at 10.1.2.3";
+  const one=new InstitutionTaskStore(db);
+  try{
+    const a=one.create('b','owner','request-1','2026-11-26','000123');
+    const b=one.create('b','owner','request-2','2026-11-26','000456');
+    id=a.row.id;
+    one.appendEvent(id,'NATIVE_TOOL_FAILED','ERROR',
+      encodeSafeFailure({type:'ToolError',message:error,stack:'ToolError at dbhub.ts:42'},
+        'dbhub.query','tool-call-123','native-event'),'event-unique-1');
+    assert.equal(one.eventsAdmin(b.row.id,0,20).items.some(x=>x.failure?.rawError),false,
+      'one task must never see the other task error');
+    assert.equal(one.eventsAdmin(id,0,20).items.find(x=>x.failure)?.failure?.rawError?.includes(error),true);
+  }finally{one.close();}
+  const reopened=new InstitutionTaskStore(db);
+  try{
+    const failure=reopened.eventsAdmin(id,0,20).items.find(x=>x.failure)?.failure;
+    assert.ok(failure?.rawError?.includes('trace_id'));
+    assert.ok(failure?.rawError?.includes('dbhub.ts:42'));
+    assert.equal(failure?.toolCallId,'tool-call-123');
+  }finally{reopened.close();await rm(root,{recursive:true,force:true});}
 });

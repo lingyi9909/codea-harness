@@ -111,3 +111,10 @@
 .institution-task-failure-detail dd{margin:0}
 .institution-task-failure-detail code{white-space:normal;word-break:break-all}
 .institution-task-failure-notice{font-size:11px;color:#717b87;margin:10px 0 0;line-height:1.6}
+
+/* Original error is intentionally unredacted; render as inert text, never as HTML. */
+.institution-task-failure-detail h4{font-size:12px;margin:14px 0 8px}
+.institution-task-raw-error{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;
+  line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+  padding:12px;margin:0;max-height:420px;overflow:auto;
+  background:#f5f6f8;border:1px solid #dfe4eb;border-radius:6px}

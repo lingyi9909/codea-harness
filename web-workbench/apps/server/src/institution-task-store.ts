@@ -324,14 +324,16 @@ export class InstitutionTaskStore {
     return {...row,status:'RUNNING'};
   }
   /**
-   * Only whitelist-produced diagnostic metadata belongs here: never persist
-   * prompts, SQL, tool inputs, credentials, raw reports or message contents.
-   * Replayed native event IDs are de-duplicated to avoid duplicated timeline entries.
+   * Milestones contain only metadata. Failed native tool/step/worker events
+   * additionally contain their original error for local administrator debugging.
+   * Replayed native event IDs are de-duplicated to avoid duplicate timelines.
    */
   appendEvent(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string,nativeEventId?:string){
     this.db.prepare('INSERT OR IGNORE INTO institution_api_task_events '+
       '(task_id,at,level,event_type,detail,native_event_id) VALUES (?,?,?,?,?,?)')
-      .run(taskId,Date.now(),level,eventType,detail?.slice(0,1024)??null,nativeEventId??null);
+      .run(taskId,Date.now(),level,eventType,
+        detail?.startsWith('SAFE_FAILURE_V1:')?detail:detail?.slice(0,1024)??null,
+        nativeEventId??null);
   }
   /** Lifecycle writes must succeed or fail independently of diagnostic storage. */
   private recordDiagnostic(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string){
