@@ -56,12 +56,24 @@ const diagnosticLabels:Record<string,string>={
   NATIVE_EXECUTION_SUCCEEDED:'原生执行完成',NATIVE_EXECUTION_FAILED:'原生执行失败',
   NATIVE_EXECUTION_INTERRUPTED:'原生执行被中断',
   NATIVE_TOOL_CALLED:'开始工具调用',NATIVE_TOOL_SUCCEEDED:'工具调用完成',
-  NATIVE_TOOL_FAILED:'工具调用失败',NATIVE_PERMISSION_ASKED:'原生权限待授权',
+  NATIVE_TOOL_FAILED:'工具调用失败',NATIVE_STEP_FAILED:'原生执行步骤失败',
+  TASK_EXECUTION_ERROR:'任务执行异常',
+  NATIVE_PERMISSION_ASKED:'原生权限待授权',
   STATUS_READ_RETRY:'状态查询重试',STATUS_READ_RECOVERED:'状态查询恢复',
   NATIVE_EVENT_STREAM_RECONNECT:'原生事件流断开重连',PERMISSION_REQUIRED:'执行权限不足',
   FINAL_RESULT_RECEIVED:'收到最终结论',EXECUTION_TIMEOUT:'原生执行等待超时',
   TASK_SUCCEEDED:'任务完成',TASK_FAILED:'任务失败',TASK_UNKNOWN:'执行结果待核验',
   TASK_RESTARTED:'服务重启时任务未完成',TASK_STOPPED:'服务关闭时任务未完成',
+};
+const failureCategories:Record<string,string>={
+  TIMEOUT:'执行超时',NETWORK:'网络连接',AUTH:'身份验证',PERMISSION:'权限不足',
+  MCP:'MCP 服务',SQL:'数据库 / SQL',TOOL_MISSING:'工具缺失',
+  EXECUTION:'原生执行异常',UNKNOWN:'原因未识别',
+};
+const failureOrigin:Record<string,string>={
+  'native-event':'OpenCode 原生事件',
+  'session-snapshot':'OpenCode 会话快照',
+  worker:'工作台任务调度',
 };
 const describeTaskFailure=(code:string)=>taskFailureReason[code]||
   (code.startsWith('OPENCODE_HTTP_')?'OpenCode 接口返回 HTTP '+code.slice('OPENCODE_HTTP_'.length):
@@ -378,6 +390,22 @@ export function InstitutionTaskManagementPage(){
                   <time dateTime={item.at}>{formatTime(item.at)}</time>
                   <strong>{diagnosticLabels[item.eventType]??item.eventType}</strong>
                   {item.detail&&<code>{item.detail}</code>}
+                  {item.failure&&<details className="institution-task-failure-detail">
+                    <summary>查看失败原因与排查建议</summary>
+                    <dl>
+                      <dt>故障类别</dt><dd>{failureCategories[item.failure.category]??'原因未识别'}</dd>
+                      <dt>错误说明</dt><dd>{item.failure.reason}</dd>
+                      <dt>技术错误码</dt><dd><code>{item.failure.errorCode??'原生未提供'}</code></dd>
+                      <dt>原生错误类型</dt><dd><code>{item.failure.nativeType??'原生未提供'}</code></dd>
+                      <dt>工具调用 ID</dt><dd><code>{item.failure.toolCallId??'原生未提供'}</code></dd>
+                      <dt>信息来源</dt><dd>{failureOrigin[item.failure.origin]??'未知'}</dd>
+                      <dt>建议检查</dt><dd>{item.failure.suggestion}</dd>
+                    </dl>
+                    <p className="institution-task-failure-notice">
+                      仅展示脱敏分类信息，不保存原始 SQL、工具参数、错误堆栈或敏感业务数据。
+                      单次工具失败不一定代表整个任务执行失败。
+                    </p>
+                  </details>}
                 </li>)}
               </ol>
               {logPage?.items.length===0&&<p className="institution-tasks-empty">暂无执行日志。旧任务不会补录未曾采集的事件。</p>}
