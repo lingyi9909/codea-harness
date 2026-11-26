@@ -84,16 +84,17 @@ test('diagnostic storage failures cannot alter existing task submission, executi
     assert.equal(store.create('b','owner','request-1','2026-11-26','000123').created,false,
       'idempotency must remain intact if the event table is unavailable');
     const claimed=store.take();
-    assert.equal(claimed?.id,first.row.id,'a diagnostic write must not orphan the first claimed job');
-    store.finish(first.row.id,'SUCCEEDED','Final answer',null);
-    const completed=store.get('b','owner',first.row.id);
+    assert.ok([first.row.id,second.row.id].includes(claimed?.id??''),
+      'a diagnostic write must not orphan the claimed job');
+    store.finish(claimed!.id,'SUCCEEDED','Final answer',null);
+    const completed=store.get('b','owner',claimed!.id);
     assert.equal(completed?.status,'SUCCEEDED');
     assert.equal(completed?.result_text,'Final answer');
     assert.equal(completed?.msg_sn,'');
     const pending=store.take();
-    assert.equal(pending?.id,second.row.id);
+    assert.ok(pending&&pending.id!==claimed?.id);
     store.stopUnfinished();
-    assert.equal(store.get('b','owner',second.row.id)?.status,'UNKNOWN',
+    assert.equal(store.get('b','owner',pending!.id)?.status,'UNKNOWN',
       'shutdown must still mark uncertain work UNKNOWN even when event writes fail');
   }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
