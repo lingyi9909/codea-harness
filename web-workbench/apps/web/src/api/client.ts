@@ -28,6 +28,12 @@ export type InstitutionAdminTask={
 // 交叉类型 A & B：在列表 DTO 的基础上增加 detail 独有字段，类似 Java DTO 继承/组合。
 export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
 export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
+export type InstitutionTaskLog={
+  seq:number;at:string;level:'INFO'|'WARN'|'ERROR';eventType:string;detail:string|null;
+};
+export type InstitutionTaskLogPage={
+  taskId:string;total:number;limit:number;offset:number;items:InstitutionTaskLog[];
+};
 export type UserAccessVisit={
   id:string;name:string;phoneMask:string;ip:string;scope:'lan'|'local';
   loginAt:string;lastActiveAt:string;logoutAt:string|null;
@@ -184,6 +190,11 @@ export class HarnessApi {
   /** 管理员选中一条任务时才查询详细结果，避免列表一次性暴露所有结论。 */
   institutionTask(id:string){
     return this.request<InstitutionAdminTaskDetail>('/institution-tasks/'+encodeURIComponent(id));
+  }
+  /** Only the localhost administrator can inspect sanitized task diagnostics. */
+  institutionTaskLogs(id:string,offset=0,limit:20|50|100=20){
+    const params=new URLSearchParams({offset:String(offset),limit:String(limit)});
+    return this.request<InstitutionTaskLogPage>('/institution-tasks/'+encodeURIComponent(id)+'/logs?'+params.toString());
   }
   /** 已观察到的接口调用情况；不能据此推断平台真实身份或授权。 */
   institutionAccessOverview(){
