@@ -105,9 +105,10 @@ test('a native completion event wakes the shared observer before slow polling fa
   const db=join(root,'tasks.sqlite'),workspace=join(root,'project');
   const {mkdir}=await import('node:fs/promises');await mkdir(workspace);
   const sceneConfig=new SceneConfigStore(workspace);
+  await sceneConfig.initialize();
   const current=sceneConfig.read();
-  sceneConfig.update({...current.scenarios,
-    'institution-message':{directory:workspace,executor:{type:'skill',name:'institution-log-query'}}},current.revision);
+  await sceneConfig.save({version:1,scenes:{...current.config.scenes,
+    'institution-message':{directory:workspace,executor:{type:'skill',name:'institution-log-query'}}}},current.revision);
   const sceneAccess=new SceneAccessStore(workspace);
   const tasks=new InstitutionTaskStore(db,workspace);
   let submitted=false,completed=false,polls=0,prompts=0,subscriptions=0;
