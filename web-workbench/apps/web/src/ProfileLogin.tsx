@@ -58,12 +58,12 @@ export function ProfileLogin({onLogin}:{onLogin:(name:string,phone:string)=>Prom
       </aside>
       <div className="profile-form-pane">
         <span className="profile-overline">欢迎使用</span>
-        <h1 id="profile-title">进入工作台</h1>
+        <h1 id="profile-title">登录工作台</h1>
         <form onSubmit={submit} autoComplete="off">
           <label>姓名<input name="name" value={name} required autoComplete="off" placeholder="请输入姓名" onChange={e=>setName(e.target.value)}/></label>
           <label>手机号<input name="phone" type="tel" value={phone} required maxLength={40} autoComplete="off" placeholder="请输入手机号" onChange={e=>setPhone(e.target.value)}/></label>
           {error&&<p className="profile-error" role="alert">{error}</p>}
-          <button className="profile-submit" disabled={busy} type="submit">{busy?'正在进入…':'进入工作台'}<span aria-hidden="true">↗</span></button>
+          <button className="profile-submit" disabled={busy} type="submit">{busy?'正在登录…':'登录工作台'}<span aria-hidden="true">↗</span></button>
         </form>
       </div>
     </section>
