@@ -13,7 +13,7 @@ import {InstitutionIntegration,transientInstitutionPollError} from '../../apps/s
 import type {chatConnection} from '../../apps/server/src/modules/chat/connection.ts';
 
 type FinalState={status:string;errorCode:string|null};
-async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
+async function execute(mode:'transient'|'native-error'|'prompt-rejected'|'stream-failed'){
   const root=await mkdtemp(join(tmpdir(),'institution-poll-recovery-'));
   const db=join(root,'tasks.sqlite');
   const workspace=join(root,'project');
@@ -25,8 +25,9 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
     'institution-message':{directory:workspace,executor:{type:'skill',name:'institution-log-query'}}}},config.revision);
   const access=new SceneAccessStore(workspace);
   const tasks=new InstitutionTaskStore(db,workspace);
-  let prompts=0,pollErrors=0;
+  let prompts=0,pollErrors=0,activeReads=0;
   const native={
+    ...(mode==='stream-failed'?{event:{subscribe:async function*(){throw new Error('STREAM_UNAVAILABLE');}}}:{}),
     skill:{list:async()=>({location:{directory:workspace},data:[{id:'skill-id',name:'institution-log-query'}]})},
     model:{list:async()=>({data:[{id:'kimi',name:'Kimi',providerID:'private',enabled:true}]})},
     session:{
@@ -34,7 +35,7 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
         id:'native-session-1',location:input.location,permissions:input.permissions,
       }),
       prompt:async()=>{prompts++;if(mode==='prompt-rejected')throw new AuthProblem(502,'OPENCODE_HTTP_400');return {id:'submitted'};},
-      active:async()=>({}),
+      active:async()=>mode==='stream-failed'&&activeReads++===0?{'native-session-1':true}:{} ,
       inbox:{list:async()=>[]},
       interrupt:async()=>({interrupted:true}),
       remove:async()=>({}),
@@ -69,7 +70,7 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
       await delay(40);
     }
     assert.ok(state,'native task should reach terminal state');
-    return {state,prompts,pollErrors};
+    return {state,prompts,pollErrors,elapsedMs:Date.now()-start,activeReads};
   }finally{service.close();await rm(root,{recursive:true,force:true});}
 }
 
@@ -98,6 +99,14 @@ test('only network/read transient errors are retryable, not invalid native input
   assert.equal(transientInstitutionPollError(new Error('fetch failed: ECONNRESET')),true);
   assert.equal(transientInstitutionPollError(new AuthProblem(400,'INVALID_INSTITUTION_DATE')),false);
   assert.equal(transientInstitutionPollError(new Error('programmer bug')),false);
+});
+
+test('an unavailable native event stream preserves legacy completion polling instead of delaying tasks', {timeout:12000},async()=>{
+  const value=await execute('stream-failed');
+  assert.deepEqual(value.state,{status:'SUCCEEDED',errorCode:null});
+  assert.equal(value.prompts,1,'an unavailable event feed must never resubmit the original prompt');
+  assert.ok(value.activeReads>=2,'a second read-only status check is still made');
+  assert.ok(value.elapsedMs<4500,'an unavailable event feed must not force the slow event-mode fallback');
 });
 
 test('a native completion event wakes the shared observer before slow polling fallback', {timeout:10000},async()=>{
