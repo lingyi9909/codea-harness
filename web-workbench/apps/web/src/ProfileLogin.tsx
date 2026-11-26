@@ -14,10 +14,11 @@ function loginError(error:unknown){
   if(error instanceof ApiError){
     switch(error.code){
       case 'PROFILE_CONFLICT': return '该手机号登记的姓名不一致，请联系管理员核对。';
-      case 'LAN_LOGIN_RATE_LIMIT': return '登录尝试次数过多，请稍后重试。';
       case 'PHONE_REQUIRED': case 'PHONE_INVALID': case 'USERNAME_INVALID':
-      case 'PROFILE_INVALID': return '请检查姓名和手机号。境外号码请带上国家或地区代码。';
-      case 'PROFILE_IN_USE': return '另一个会话正在使用此工作目录。请先在该会话退出，再重新登录。';
+      case 'PROFILE_INVALID': return '请填写姓名和手机号（仅作使用记录，不核验身份）。';
+      case 'ORIGIN_INVALID': case 'LAN_ORIGIN_FORBIDDEN': case 'LAN_AUTH_CONFIG_INVALID':
+        return '局域网访问地址不符合服务器设置。请使用工作台启动时公布的内网 IP 和端口访问。';
+      case 'PROFILE_LOGIN_REQUIRED':return '登录会话已过期，请重新填写资料进入工作台。';
       case 'PROFILE_WRITE_FAILED': return '无法保存资料。请检查工作目录的写入权限后重试。';
       case 'OFFLINE': return '无法连接本地工作台。请确认服务已启动，再重新登录。';
     }
@@ -37,8 +38,9 @@ export function ProfileLogin({onLogin}:{onLogin:(name:string,phone:string)=>Prom
     if(!name.trim()||Array.from(name.trim()).length>80){
       setError('请输入 1 至 80 个字符的姓名。');return;
     }
-    if(!/^(?:1[3-9][0-9]{9}|\+[1-9][0-9]{7,14})$/.test(phone.trim().replace(/[ ()-]/g,''))){
-      setError('请输入有效的手机号。境外号码请带上国家或地区代码。');return;
+    // Visitor registration only; no SMS check or phone-number format matching.
+    if(!phone.trim()||phone.trim().length>40){
+      setError('请填写手机号（仅作访问记录，不进行身份验证）。');return;
     }
     setBusy(true);
     try{await onLogin(name.trim(),phone.trim());}
@@ -56,12 +58,12 @@ export function ProfileLogin({onLogin}:{onLogin:(name:string,phone:string)=>Prom
       </aside>
       <div className="profile-form-pane">
         <span className="profile-overline">欢迎使用</span>
-        <h1 id="profile-title">登录工作台</h1>
+        <h1 id="profile-title">进入工作台</h1>
         <form onSubmit={submit} autoComplete="off">
           <label>姓名<input name="name" value={name} required autoComplete="off" placeholder="请输入姓名" onChange={e=>setName(e.target.value)}/></label>
           <label>手机号<input name="phone" type="tel" value={phone} required maxLength={40} autoComplete="off" placeholder="请输入手机号" onChange={e=>setPhone(e.target.value)}/></label>
           {error&&<p className="profile-error" role="alert">{error}</p>}
-          <button className="profile-submit" disabled={busy} type="submit">{busy?'正在登录…':'登录工作台'}<span aria-hidden="true">↗</span></button>
+          <button className="profile-submit" disabled={busy} type="submit">{busy?'正在进入…':'进入工作台'}<span aria-hidden="true">↗</span></button>
         </form>
       </div>
     </section>
