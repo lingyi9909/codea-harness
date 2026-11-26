@@ -27,7 +27,7 @@ import {isAbsolute,join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {AuthProblem,type LocalAuth} from './auth.ts';
-import {WorkspaceProfile} from './local-profile.ts';
+
 import {type ExecutionRegistry} from './execution-registry.ts';
 import {type SceneConfigStore} from './scene-config.ts';
 import {type SceneAccessStore,applyToolPolicy} from './scene-access.ts';
@@ -562,12 +562,13 @@ export function registerInstitutionIntegration(app:FastifyInstance,
   // 管理接口共用 /config 编辑权限：真实回环地址 + 登录会话 + editors 名单。
   // PATCH 还要求 CSRF（防止从其他网站伪造管理员的更改请求）。
   // B 自报的 X-Workbench-User-Id 绝不能用于判定管理员身份。
-  const localProfile=new WorkspaceProfile(deps.workspace);
   const authorizeAdmin=(req:FastifyRequest,mutating=false)=>{
     if(!deps.auth.isLocal(req)||!deps.auth.origin(req))
       throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
     const session=mutating?deps.auth.mutation(req):deps.auth.session(req);
-    if(session.scope==='lan'||!session.profile||!localProfile.matches(session.profile.key))
+    // Admin rights depend on a valid local Cookie plus the editor ACL, not a
+    // shared user.json which another self-registered visitor can overwrite.
+    if(session.scope==='lan'||!session.profile||!session.ownerId.startsWith('local:'))
       throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
     if(!deps.sceneConfig.canEdit(session.profile.name))
       throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
