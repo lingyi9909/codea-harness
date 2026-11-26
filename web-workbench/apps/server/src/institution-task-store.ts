@@ -23,6 +23,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {existsSync,lstatSync,mkdirSync,chmodSync,realpathSync} from 'node:fs';
 import {dirname,isAbsolute,relative,sep} from 'node:path';
 import {AuthProblem} from './auth.ts';
+import {decodeSafeFailure} from './institution-failure-diagnostics.ts';
 
 const RETENTION_MS=7*24*60*60*1000;
 const DIGEST=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -330,7 +331,7 @@ export class InstitutionTaskStore {
   appendEvent(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string,nativeEventId?:string){
     this.db.prepare('INSERT OR IGNORE INTO institution_api_task_events '+
       '(task_id,at,level,event_type,detail,native_event_id) VALUES (?,?,?,?,?,?)')
-      .run(taskId,Date.now(),level,eventType,detail?.slice(0,160)??null,nativeEventId??null);
+      .run(taskId,Date.now(),level,eventType,detail?.slice(0,1024)??null,nativeEventId??null);
   }
   /** Lifecycle writes must succeed or fail independently of diagnostic storage. */
   private recordDiagnostic(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string){
@@ -346,10 +347,15 @@ export class InstitutionTaskStore {
     const rows=this.db.prepare('SELECT seq,at,level,event_type,detail FROM institution_api_task_events '+
       'WHERE task_id=? ORDER BY seq DESC LIMIT ? OFFSET ?')
       .all(taskId,limit,offset);
-    return {taskId,total,offset,limit,items:rows.map(row=>({
-      seq:Number(row.seq),at:new Date(Number(row.at)).toISOString(),level:String(row.level),
-      eventType:String(row.event_type),detail:row.detail==null?null:String(row.detail),
-    }))};
+    return {taskId,total,offset,limit,items:rows.map(row=>{
+      const failure=decodeSafeFailure(row.detail);
+      return {
+        seq:Number(row.seq),at:new Date(Number(row.at)).toISOString(),level:String(row.level),
+        eventType:String(row.event_type),
+        detail:failure?(failure.toolName??null):row.detail==null?null:String(row.detail),
+        failure,
+      };
+    })};
   }
   /** 保存该任务所对应的 OpenCode Session ID（只用于 C 内部跟踪）。 */
   session(id:string,nativeId:string){
