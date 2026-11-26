@@ -102,3 +102,12 @@
 .institution-task-event strong{font-size:12px;font-weight:600}
 .institution-task-event code{font-size:11px;color:#8a4040;white-space:normal}
 .institution-task-logs .institution-tasks-pager{margin-top:12px}
+
+/* Failed tool details are optional read-only diagnostics; do not change task controls. */
+.institution-task-failure-detail{flex-basis:100%;width:100%;min-width:0;margin-top:5px;border-top:1px dashed #e1e5eb;padding-top:8px}
+.institution-task-failure-detail summary{cursor:pointer;font-size:12px;font-weight:600;color:#975331}
+.institution-task-failure-detail dl{display:grid;grid-template-columns:minmax(80px,110px) minmax(0,1fr);gap:7px 9px;margin:10px 0;font-size:12px;overflow-wrap:anywhere}
+.institution-task-failure-detail dt{color:#6b7582}
+.institution-task-failure-detail dd{margin:0}
+.institution-task-failure-detail code{white-space:normal;word-break:break-all}
+.institution-task-failure-notice{font-size:11px;color:#717b87;margin:10px 0 0;line-height:1.6}
