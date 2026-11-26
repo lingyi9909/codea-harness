@@ -69,3 +69,31 @@ test('diagnostic events are retained, deduplicated and paginated without leaking
     assert.throws(()=>reopened.eventsAdmin('missing',0,20),/INVESTIGATION_NOT_FOUND/);
   }finally{reopened.close();await rm(root,{recursive:true,force:true});}
 });
+
+test('diagnostic storage failures cannot alter existing task submission, execution or shutdown semantics',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'institution-diagnostic-fail-open-'));
+  const store=new InstitutionTaskStore(join(root,'tasks.sqlite'));
+  try{
+    // Simulate an optional diagnostic-storage fault after the core task DB has opened.
+    const raw=(store as unknown as {db:{exec:(sql:string)=>void}}).db;
+    raw.exec('DROP TABLE institution_api_task_events');
+    const first=store.create('b','owner','request-1','2026-11-26','000123');
+    const second=store.create('b','owner','request-2','2026-11-26','000124');
+    assert.equal(first.created,true);
+    assert.equal(second.created,true);
+    assert.equal(store.create('b','owner','request-1','2026-11-26','000123').created,false,
+      'idempotency must remain intact if the event table is unavailable');
+    const claimed=store.take();
+    assert.equal(claimed?.id,first.row.id,'a diagnostic write must not orphan the first claimed job');
+    store.finish(first.row.id,'SUCCEEDED','Final answer',null);
+    const completed=store.get('b','owner',first.row.id);
+    assert.equal(completed?.status,'SUCCEEDED');
+    assert.equal(completed?.result_text,'Final answer');
+    assert.equal(completed?.msg_sn,'');
+    const pending=store.take();
+    assert.equal(pending?.id,second.row.id);
+    store.stopUnfinished();
+    assert.equal(store.get('b','owner',second.row.id)?.status,'UNKNOWN',
+      'shutdown must still mark uncertain work UNKNOWN even when event writes fail');
+  }finally{store.close();await rm(root,{recursive:true,force:true});}
+});
