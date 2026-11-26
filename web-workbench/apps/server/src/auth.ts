@@ -6,7 +6,7 @@
  *
  * 以下为模块说明注释，不改变原有执行逻辑。
  */
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import {isPrivateLanIPv4} from './lan-access.ts';
@@ -15,6 +15,11 @@ export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:st
 const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
+// Long-lived pseudonymous browser credential, NOT a verified user identity.
+// A local shared browser can revisit a self-reported profile; do not use
+// self-reported name/phone alone as a global identity across colleague PCs.
+const VISITOR_COOKIE='harness_visitor';
+const VISITOR_MAX_AGE=365*24*60*60;
 export interface RequestAuth {
   origin(req:FastifyRequest):boolean;
   session(req:FastifyRequest):Session|Promise<Session>;
@@ -117,6 +122,14 @@ export class LocalAuth implements RequestAuth {
     }
     return this.issue(reply,'local:'+profile.key,profile);
   }
+  private visitorToken(req:FastifyRequest):string|undefined{
+    const token=req.headers.cookie?.split(';').map(s=>s.trim())
+      .find(s=>s.startsWith(VISITOR_COOKIE+'='))?.slice(VISITOR_COOKIE.length+1);
+    // The server issues 256-bit random values, so a forged/corrupted cookie
+    // cannot accidentally select another colleague's OpenCode history.
+    return token&&/^[A-Za-z0-9_-]{43}$/.test(token)&&
+      Buffer.from(token,'base64url').length===32?token:undefined;
+  }
   openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string}):Session{
     if(!this.isLan(req)||req.headers.origin!=='http://'+req.headers.host)
       throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
@@ -137,13 +150,23 @@ export class LocalAuth implements RequestAuth {
         if(cookie)this.sessions.delete(hash(cookie).toString('hex'));
       }
     }catch{}
-    return this.issue(reply,'lan:'+randomUUID(),profile,'lan');
+    // Reuse the browser's persistent HttpOnly credential to restore the
+    // same OpenCode owner after logout, expiration or workbench restart.
+    const existingVisitor=this.visitorToken(req);
+    const visitor=existingVisitor??randomBytes(32).toString('base64url');
+    const owner='lan:'+createHmac('sha256',Buffer.from(visitor,'base64url'))
+      .update('workbench-lan-owner-v1:').update(profile.key).digest('hex');
+    return this.issue(reply,owner,profile,'lan',existingVisitor?undefined:visitor);
   }
-  private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local'):Session{
+  private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local',
+    newVisitorToken?:string):Session{
     const token=randomBytes(32).toString('base64url');
     const session={ownerId,profile,scope,auditId:randomUUID(),csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
     this.sessions.set(hash(token).toString('hex'),session);
-    reply.header('Set-Cookie',COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
+    const sessionCookie=COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200';
+    reply.header('Set-Cookie',newVisitorToken
+      ?[sessionCookie,VISITOR_COOKIE+'='+newVisitorToken+'; HttpOnly; SameSite=Strict; Path=/; Max-Age='+VISITOR_MAX_AGE]
+      :sessionCookie);
     return session;
   }
   session(req:FastifyRequest):Session{
