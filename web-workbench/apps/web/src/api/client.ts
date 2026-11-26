@@ -28,8 +28,16 @@ export type InstitutionAdminTask={
 // 交叉类型 A & B：在列表 DTO 的基础上增加 detail 独有字段，类似 Java DTO 继承/组合。
 export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
 export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
+export type InstitutionFailureDetail={
+  version:1;
+  toolName:string|null;toolCallId:string|null;
+  category:'TIMEOUT'|'NETWORK'|'AUTH'|'PERMISSION'|'MCP'|'SQL'|'TOOL_MISSING'|'EXECUTION'|'UNKNOWN';
+  errorCode:string|null;nativeType:string|null;
+  reason:string;suggestion:string;origin:'native-event'|'session-snapshot'|'worker';
+};
 export type InstitutionTaskLog={
   seq:number;at:string;level:'INFO'|'WARN'|'ERROR';eventType:string;detail:string|null;
+  failure?:InstitutionFailureDetail|null;
 };
 export type InstitutionTaskLogPage={
   taskId:string;total:number;limit:number;offset:number;items:InstitutionTaskLog[];
