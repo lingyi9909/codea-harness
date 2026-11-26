@@ -162,6 +162,9 @@ export class InstitutionIntegration {
   private readonly active=new Set<Promise<void>>();
   /** One shared native event subscription for all institution tasks (not one per task). */
   private eventStream?:Promise<void>;
+  // Event capability alone is not a healthy subscription. An offline stream
+  // must retain the original fast read-only polling until it connects.
+  private eventStreamOnline=false;
   private readonly nativeTasks=new Map<string,string>();
   private readonly nativeWakeups=new Map<string,()=>void>();
   private readonly recentNativeTerminal=new Map<string,number>();
@@ -237,8 +240,11 @@ export class InstitutionIntegration {
   private async consumeNativeEvents(client:Awaited<ReturnType<ReturnType<typeof chatConnection>>>){
     while(!this.closed){
       try{
-        for await(const event of client.event.subscribe({signal:this.stop.signal,onActivity:()=>{}})){
+        for await(const event of client.event.subscribe({
+          signal:this.stop.signal,onActivity:()=>{this.eventStreamOnline=true;},
+        })){
           if(this.closed)break;
+          this.eventStreamOnline=true;
           const data=event.data as unknown as Record<string,unknown>;
           const sessionId=typeof data.sessionID==='string'?data.sessionID:undefined;
           if(!sessionId)continue;
@@ -256,6 +262,7 @@ export class InstitutionIntegration {
           if(kind.wake)this.nativeWakeups.get(sessionId)?.();
         }
       }catch{/* Subscription may disconnect: polling continues; reconnect this reader only. */}
+      finally{this.eventStreamOnline=false;}
       if(this.closed)break;
       for(const taskId of new Set(this.nativeTasks.values()))
         this.note(taskId,'NATIVE_EVENT_STREAM_RECONNECT','WARN');
@@ -263,7 +270,9 @@ export class InstitutionIntegration {
     }
   }
   private async awaitNativeProgress(sessionId:string,usingEvents:boolean){
-    if(!usingEvents){await delay(NO_EVENT_POLL_MS,undefined,{signal:this.stop.signal});return;}
+    if(!usingEvents||!this.eventStreamOnline){
+      await delay(NO_EVENT_POLL_MS,undefined,{signal:this.stop.signal});return;
+    }
     const controller=new AbortController();
     const wake=()=>controller.abort();
     this.nativeWakeups.set(sessionId,wake);
@@ -492,6 +501,7 @@ export class InstitutionIntegration {
   /** 关闭 C：停止继续领取任务，向轮询发送取消信号，并标记未完成状态。 */
   close(){
     this.closed=true;this.stop.abort();
+    this.eventStreamOnline=false;
     this.nativeTasks.clear();
     this.nativeWakeups.clear();
     this.recentNativeTerminal.clear();
