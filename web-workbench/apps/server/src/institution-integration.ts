@@ -164,6 +164,7 @@ export class InstitutionIntegration {
   private eventStream?:Promise<void>;
   private readonly nativeTasks=new Map<string,string>();
   private readonly nativeWakeups=new Map<string,()=>void>();
+  private readonly recentNativeTerminal=new Map<string,number>();
   private closed=false;
   /** AbortController ≈ Java 的取消信号：用于停止轮询等待，不直接撤销已执行的 SQL。 */
   private readonly stop=new AbortController();
@@ -249,6 +250,9 @@ export class InstitutionIntegration {
           const toolName=event.type.startsWith('session.tool.')&&typeof data.name==='string'&&
             /^[A-Za-z0-9_.:-]{1,80}$/.test(data.name)?data.name:undefined;
           this.note(taskId,kind.label,kind.level,toolName,event.id);
+          if(event.type==='session.execution.succeeded'||event.type==='session.execution.failed'||
+             event.type==='session.execution.interrupted')
+            this.recentNativeTerminal.set(sessionId,Date.now());
           if(kind.wake)this.nativeWakeups.get(sessionId)?.();
         }
       }catch{/* Subscription may disconnect: polling continues; reconnect this reader only. */}
@@ -264,7 +268,11 @@ export class InstitutionIntegration {
     const wake=()=>controller.abort();
     this.nativeWakeups.set(sessionId,wake);
     try{
-      await delay(FALLBACK_POLL_MS,undefined,{
+      // A terminal native event can precede the final persisted message by a
+      // fraction of a second; briefly retry more frequently only in that window.
+      const terminal=this.recentNativeTerminal.get(sessionId);
+      const waitMs=terminal&&Date.now()-terminal<5000?1200:FALLBACK_POLL_MS;
+      await delay(waitMs,undefined,{
         signal:AbortSignal.any([controller.signal,this.stop.signal]),
       });
     }catch(error){
@@ -477,6 +485,7 @@ export class InstitutionIntegration {
         this.nativeTasks.delete(nativeId);
         this.nativeWakeups.get(nativeId)?.();
         this.nativeWakeups.delete(nativeId);
+        this.recentNativeTerminal.delete(nativeId);
       }
     }
   }
@@ -485,6 +494,7 @@ export class InstitutionIntegration {
     this.closed=true;this.stop.abort();
     this.nativeTasks.clear();
     this.nativeWakeups.clear();
+    this.recentNativeTerminal.clear();
     this.tasks.stopUnfinished();
     this.tasks.close();
   }
