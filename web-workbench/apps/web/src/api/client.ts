@@ -71,6 +71,16 @@ export class ApiError extends Error {
   readonly code:string;
   constructor(status: number, code: string, message: string) { super(message);this.status=status;this.code=code; }
 }
+// HTTP private-LAN origins may lack crypto.randomUUID even though
+// crypto.getRandomValues is available. Account-change notification is
+// best-effort and must never turn a successful login/logout into a UI error.
+function signalAccountChange(){
+  try{
+    const bytes=crypto.getRandomValues(new Uint8Array(16));
+    const value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+    window.localStorage.setItem('harness.account-change',value);
+  }catch{/* Local storage restrictions cannot invalidate a server-issued Cookie. */}
+}
 export class HarnessApi {
   private csrf = '';
   private embedToken='';
@@ -260,13 +270,13 @@ export class HarnessApi {
     this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');
     this.setCsrf(session.csrfToken);
-    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
+    signalAccountChange();
     return session;
   }
   async logout() {
     await this.request<void>('/auth/session',{method:'DELETE'});
     this.setCsrf('');this.businessVerificationEnabled=false;resetUserStorage();
-    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
+    signalAccountChange();
   }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }
