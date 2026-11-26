@@ -80,7 +80,8 @@ export function DirectChat({investigation,navigation,onDirectoryChange,sceneId,g
     if(!sceneId)return;
     let live=true;
     fail('');setSceneSettings(null);
-    api.sceneConfig().then(value=>{if(live)setSceneSettings(value);}).catch(e=>{if(live)fail(explain(e));});
+    // Ordinary LAN users must read runtime bindings, not the localhost-only admin configuration endpoint.
+    api.sceneRuntime().then(value=>{if(live)setSceneSettings(value);}).catch(e=>{if(live)fail(explain(e));});
     return ()=>{live=false;};
   },[sceneId,attempt]);
   const directory=sceneId?sceneSettings?.config.scenes[sceneId]?.directory??'':baseSettings?.directories[0]??'';
