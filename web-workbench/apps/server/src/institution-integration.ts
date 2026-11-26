@@ -245,7 +245,10 @@ export class InstitutionIntegration {
           if(!taskId)continue;
           const kind=DIAGNOSTIC_NATIVE_EVENTS[event.type];
           if(!kind)continue;
-          this.note(taskId,kind.label,kind.level,undefined,event.id);
+          // Tool names are fixed identifiers; never copy args, SQL or model output.
+          const toolName=event.type.startsWith('session.tool.')&&typeof data.name==='string'&&
+            /^[A-Za-z0-9_.:-]{1,80}$/.test(data.name)?data.name:undefined;
+          this.note(taskId,kind.label,kind.level,toolName,event.id);
           if(kind.wake)this.nativeWakeups.get(sessionId)?.();
         }
       }catch{/* Subscription may disconnect: polling continues; reconnect this reader only. */}
