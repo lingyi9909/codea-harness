@@ -33,6 +33,7 @@ import {type SceneConfigStore} from './scene-config.ts';
 import {type SceneAccessStore,applyToolPolicy} from './scene-access.ts';
 import type {chatConnection} from './modules/chat/connection.ts';
 import {InstitutionTaskStore,validConcurrency} from './institution-task-store.ts';
+import {encodeSafeFailure} from './institution-failure-diagnostics.ts';
 import type {InstitutionConcurrency,TaskRow,TaskStatus} from './institution-task-store.ts';
 
 // 兼容旧代码的 import 路径，避免本轮阅读性重构影响现有测试或调用方。
@@ -49,6 +50,7 @@ const DIAGNOSTIC_NATIVE_EVENTS:Record<string,{label:string;level:'INFO'|'WARN'|'
   'session.execution.started':{label:'NATIVE_EXECUTION_STARTED',level:'INFO',wake:false},
   'session.execution.succeeded':{label:'NATIVE_EXECUTION_SUCCEEDED',level:'INFO',wake:true},
   'session.execution.failed':{label:'NATIVE_EXECUTION_FAILED',level:'ERROR',wake:true},
+  'session.step.failed':{label:'NATIVE_STEP_FAILED',level:'ERROR',wake:true},
   'session.execution.interrupted':{label:'NATIVE_EXECUTION_INTERRUPTED',level:'WARN',wake:true},
   'session.tool.called':{label:'NATIVE_TOOL_CALLED',level:'INFO',wake:false},
   'session.tool.success':{label:'NATIVE_TOOL_SUCCEEDED',level:'INFO',wake:false},
@@ -255,7 +257,10 @@ export class InstitutionIntegration {
           // Tool names are fixed identifiers; never copy args, SQL or model output.
           const toolName=event.type.startsWith('session.tool.')&&typeof data.name==='string'&&
             /^[A-Za-z0-9_.:-]{1,80}$/.test(data.name)?data.name:undefined;
-          this.note(taskId,kind.label,kind.level,toolName,event.id);
+          const detail=event.type==='session.tool.failed'||
+            event.type==='session.step.failed'||event.type==='session.execution.failed'
+            ?encodeSafeFailure(data.error,toolName,data.id,'native-event'):toolName;
+          this.note(taskId,kind.label,kind.level,detail??undefined,event.id);
           if(event.type==='session.execution.succeeded'||event.type==='session.execution.failed'||
              event.type==='session.execution.interrupted')
             this.recentNativeTerminal.set(sessionId,Date.now());
@@ -332,6 +337,8 @@ export class InstitutionIntegration {
     let definiteFailure=false;
     let nativeId:string|undefined;
     let usingEvents=false;
+    // Tool-call IDs seen through snapshots are kept only in memory, not replayed.
+    const observedFailures=new Set<string>();
     this.note(task.id,'NATIVE_CONNECTING');
 
     try{
@@ -448,6 +455,26 @@ export class InstitutionIntegration {
             continue;
           }
           const [active,inbox,messages,permissionsPending]=snapshot;
+          // Read-only reconciliation: a missing native event stream must not hide
+          // a failed tool. Only capture errors, never the tool input/output.
+          if(!usingEvents||!this.eventStreamOnline){
+            for(const message of messages.data){
+              if(message.type!=='assistant')continue;
+              for(const part of message.content){
+                const data=part as unknown as Record<string,unknown>;
+                const state=data.state as Record<string,unknown>|undefined;
+                const toolCallId=typeof data.callID==='string'?data.callID:
+                  typeof data.id==='string'?data.id:undefined;
+                if(data.type!=='tool'||state?.status!=='error'||!toolCallId||
+                   observedFailures.has(toolCallId))continue;
+                observedFailures.add(toolCallId);
+                const toolName=typeof data.tool==='string'?data.tool:undefined;
+                this.note(task.id,'NATIVE_TOOL_FAILED','ERROR',
+                  encodeSafeFailure(state.error,toolName,toolCallId,'session-snapshot'),
+                  'snapshot-tool:'+toolCallId);
+              }
+            }
+          }
           if(permissionsPending.some(p=>p.sessionID===session.id)){
             this.note(task.id,'PERMISSION_REQUIRED','ERROR');
             await client.session.interrupt({sessionID:session.id});
@@ -463,6 +490,9 @@ export class InstitutionIntegration {
           // A completed native assistant error is definitive even if the
           // active-session indicator has not caught up yet.
           if(final?.error||final?.finish==='error'){
+            this.note(task.id,'NATIVE_EXECUTION_FAILED','ERROR',
+              encodeSafeFailure(final.error,undefined,undefined,'session-snapshot'),
+              'snapshot-execution:'+final.id);
             definiteFailure=true;
             throw new AuthProblem(502,'INSTITUTION_NATIVE_EXECUTION_FAILED');
           }
@@ -487,6 +517,9 @@ export class InstitutionIntegration {
     }catch(error){
       if(!this.closed){
         const code=error instanceof AuthProblem?error.code:'INSTITUTION_EXECUTION_UNAVAILABLE';
+        // Preserve the reason category without persisting raw exception text.
+        this.note(task.id,'TASK_EXECUTION_ERROR','ERROR',
+          encodeSafeFailure(error,undefined,undefined,'worker'));
         // 在 Prompt 投递后出现未知网络错误，不能断言任务没执行 -> UNKNOWN。
         this.tasks.finish(task.id,accepted&&!definiteFailure?'UNKNOWN':'FAILED',null,code);
       }
