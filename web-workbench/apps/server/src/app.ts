@@ -154,7 +154,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       const session=await auth.login(req,reply,req.body);
       return result(await makeBootstrap(session.csrf,{id:session.ownerId,name:session.profile!.name}));
     });
-    // Existing login page keeps its two fields; server mode uses the same UI.
+    // The shared login page submits only a username; legacy API phone payloads remain supported.
     app.post('/api/v1/auth/local-session',async(req,reply)=>{
       const body=req.body as {name?:unknown;phone?:unknown}|undefined;
       const session=await auth.login(req,reply,{username:body?.name,phone:body?.phone});

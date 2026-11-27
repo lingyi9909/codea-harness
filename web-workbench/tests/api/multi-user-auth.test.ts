@@ -8,6 +8,7 @@ import type {FastifyRequest,FastifyReply} from 'fastify';
 class MemoryIdentityStore implements IdentityStore {
   people=new Map<string,Identity>();sessions=new Map<string,StoredSession>();
   async identify(name:string,phone:string){let owner=this.people.get(phone);if(!owner){owner={id:randomUUID(),name,phone,status:'ACTIVE'};this.people.set(phone,owner);}return owner;}
+  async identifyUsername(name:string){return this.identify(name,'username:'+name);}
   async issue(id:string,digest:string,csrfDigest:string,expires:number){const owner=[...this.people.values()].find(p=>p.id===id)!;this.sessions.set(digest,{owner,csrfDigest,expires});}
   async find(digest:string){return this.sessions.get(digest);}
   async revoke(digest:string){this.sessions.delete(digest);}
@@ -40,4 +41,19 @@ test('T1: validation, host/origin restrictions, disabled identities and expiry',
   assert.match(res.headers.get('Set-Cookie')!,/HttpOnly; Secure; SameSite=Strict/);
   const bad=request(cookie);bad.headers.origin='https://evil.example';await assert.rejects(auth.session(bad),/ORIGIN_INVALID/);
   now=session.expires;await assert.rejects(auth.session(request(cookie)),/AUTH_REQUIRED/);
+});
+
+test('username-only server login survives restart and isolates independent users',async()=>{
+  const store=new MemoryIdentityStore();
+  store.identifyUsername=async name=>store.identify(name,'username:'+name);
+  const auth=new MultiUserAuth(store,origin),r=reply();
+  const first=await auth.login(request(),r.value,{username:'zhang01'});
+  const cookie=r.headers.get('Set-Cookie')!.split(';')[0];
+  const peer=await auth.login(request(),reply().value,{username:'li'});
+  assert.notEqual(first.ownerId,peer.ownerId);
+  await auth.logout(request(cookie,first.csrf),reply().value);
+  await assert.rejects(auth.session(request(cookie)),/AUTH_REQUIRED/);
+  const again=await new MultiUserAuth(store,origin).login(request(),reply().value,{username:'zhang01'});
+  assert.equal(again.ownerId,first.ownerId);
+  await assert.rejects(auth.login(request(),reply().value,{username:'123'}),/USERNAME_INVALID/);
 });

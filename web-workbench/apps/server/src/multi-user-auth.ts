@@ -6,6 +6,7 @@
  *
  * 以下为模块说明注释，不改变原有执行逻辑。
  */
+import {parseProfile} from './local-profile.ts';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest,FastifyReply } from 'fastify';
 import { AuthProblem,type Session } from './auth.ts';
@@ -18,6 +19,7 @@ const token=(req:FastifyRequest)=>req.headers.cookie?.split(';').map(s=>s.trim()
 export function loginProfile(input:unknown){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new AuthProblem(400,'PROFILE_INVALID');
   const {username,phone}=input as Record<string,unknown>;
+  if(phone===undefined)return parseProfile({name:username});
   if(typeof username!=='string'||!username.trim()||Array.from(username.trim()).length>80||/[\x00-\x1f\x7f]/.test(username))throw new AuthProblem(400,'USERNAME_INVALID');
   if(typeof phone!=='string'||phone.length>32)throw new AuthProblem(400,'PHONE_REQUIRED');
   let normalized=phone.trim().replace(/[ -]/g,'');
@@ -50,7 +52,9 @@ export class MultiUserAuth {
     if(recent.length>=20)throw new AuthProblem(429,'LOGIN_RATE_LIMIT');
     recent.push(at);this.attempts.set(key,recent);
     if(this.attempts.size>1000)for(const [ip,times]of this.attempts)if(times.at(-1)!<at-60000)this.attempts.delete(ip);
-    const profile=loginProfile(input),owner=await this.store.identify(profile.name,profile.phone);
+    const profile=loginProfile(input),owner=profile.phone
+      ?await this.store.identify(profile.name,profile.phone)
+      :await this.store.identifyUsername(profile.name);
     if(owner.status!=='ACTIVE'||owner.name!==profile.name)throw new AuthProblem(409,'PROFILE_CONFLICT');
     const raw=randomBytes(32).toString('base64url'),csrf=digest('csrf:'+raw),expires=at+43200000;
     await this.store.issue(owner.id,digest(raw),digest(csrf),expires);

@@ -20,7 +20,7 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
     defaultSceneConfiguration(await realpath(project)));
   assert.deepEqual(JSON.parse(await readFile(join(configDir,'config-access.json'),'utf8')),{version:1,editors:['zhangzhanhui']});
   await assert.rejects(readFile(join(configDir,'user.json'),'utf8'),{code:'ENOENT'});
-  const profile={name:'业务开发',phone:'13800000000'};
+  const profile={name:'BusinessDev',phone:'13800000000'};
   const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',headers:{host,origin},payload:profile});
   assert.equal(login.statusCode,200);
   assert.deepEqual(JSON.parse(await readFile(join(configDir,'user.json'),'utf8')),profile);
@@ -35,11 +35,11 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   assert.equal(before.json().data.configPath,join(await realpath(project),'.workbench','scenarios.json'));
   assert.equal(before.json().data.accessPath,join(await realpath(project),'.workbench','config-access.json'));
   assert.equal(before.json().data.canEdit,false);
-  assert.equal(before.json().data.username,'业务开发');
+  assert.equal(before.json().data.username,'BusinessDev');
   assert.equal((await write({version:1,scenes:{}},before.json().data.revision)).statusCode,403);
   const folder=join(project,'.workbench');
   await mkdir(folder,{recursive:true});
-  await writeFile(join(folder,'config-access.json'),JSON.stringify({version:1,editors:['业务开发']}));
+  await writeFile(join(folder,'config-access.json'),JSON.stringify({version:1,editors:['BusinessDev']}));
   assert.equal((await read()).json().data.canEdit,true);
   const realProject=await realpath(project),realOutside=await realpath(outside);
   const config={version:1,scenes:{
@@ -155,7 +155,7 @@ it('LAN investigation pages can read scene runtime without gaining localhost con
   t.after(()=>app.close());
   // Model a colleague accessing from the LAN address, not localhost.
   const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
-    headers:{host,origin},payload:{name:'局域网同事',phone:'13800000002'}});
+    headers:{host,origin},payload:{name:'LanPeer',phone:'13800000002'}});
   assert.equal(login.statusCode,200,login.body);
   const headers={host,origin,cookie:String(login.headers['set-cookie']).split(';')[0]};
   const runtime=await app.inject({method:'GET',url:'/api/v1/scene-runtime',headers});
