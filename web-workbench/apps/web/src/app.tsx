@@ -305,8 +305,8 @@ export function WorkbenchApp() {
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
-  if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    await api.login(name,phone);
+  if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name)=>{
+    await api.login(name);
     window.location.reload();
   }}/>;
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">

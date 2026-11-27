@@ -49,7 +49,7 @@ jobs:
           npm run web:build
           npx playwright install chromium
       - name: Windows browser and installed CLI discovery (offline fixture)
-        run: node --experimental-strip-types --test tests/ui/chat-discovery.test.ts
+        run: node --experimental-strip-types --test tests/ui/chat-discovery.test.ts tests/ui/username-login.test.ts
       - name: Upload real browser screenshots (scripted chat fixture)
         if: always()
         uses: actions/upload-artifact@v4

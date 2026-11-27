@@ -47,8 +47,8 @@ export function PageAnalyticsPage(){
   const total=stats?.rows.reduce((n,row)=>n+row.views,0)??0;
   const today=stats?.daily.filter(row=>row.day===new Date().toISOString().slice(0,10))
     .reduce((n,row)=>n+row.views,0)??0;
-  if(mode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    await api.login(name,phone);setMode('ready');
+  if(mode==='profile')return <ProfileLogin onLogin={async(name)=>{
+    await api.login(name);setMode('ready');
   }}/>;
   if(mode==='pair')return <main className="pair-page"><form className="pair-card" onSubmit={e=>{
     e.preventDefault();if(busy)return;setBusy(true);setError('');

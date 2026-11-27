@@ -252,8 +252,8 @@ export function InstitutionTaskManagementPage(){
     setSelectedId('');setDetail(null);setDetailError('');setLogOffset(0);setLogPage(null);
   }
   // 以下 JSX 是按 mode 分支返回的视图，类似 Java Controller 选择不同页面模板。
-  if(mode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    await api.login(name,phone);setMode('ready');
+  if(mode==='profile')return <ProfileLogin onLogin={async(name)=>{
+    await api.login(name);setMode('ready');
   }}/>;
   if(mode==='pair')return <main className="pair-page"><form className="pair-card" onSubmit={e=>{
     e.preventDefault();if(pairBusy)return;setPairBusy(true);setError('');

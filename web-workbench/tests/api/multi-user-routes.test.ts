@@ -12,7 +12,7 @@ import type {Identity,StoredSession,IdentityStore} from '../../packages/storage/
 test('T2/T3 HTTP injection: three users execute independently and all foreign session operations are denied',async()=>{
   const base=await realpath(await mkdtemp(join(tmpdir(),'v11-routes-'))),workspace=join(base,'shared');await mkdir(workspace);
   const people=new Map<string,Identity>(),sessions=new Map<string,StoredSession>();
-  const store:IdentityStore={identify:async(name,phone)=>{let p=people.get(phone);if(!p){p={id:randomUUID(),name,phone,status:'ACTIVE'};people.set(phone,p);}return p;},issue:async(id,key,csrfDigest,expires)=>{sessions.set(key,{owner:[...people.values()].find(p=>p.id===id)!,csrfDigest,expires});},find:async key=>sessions.get(key),revoke:async key=>{sessions.delete(key);}};
+  const store:IdentityStore={identifyUsername:async(name)=>{let p=people.get('username:'+name);if(!p){p={id:randomUUID(),name,phone:'',status:'ACTIVE'};people.set('username:'+name,p);}return p;},identify:async(name,phone)=>{let p=people.get(phone);if(!p){p={id:randomUUID(),name,phone,status:'ACTIVE'};people.set(phone,p);}return p;},issue:async(id,key,csrfDigest,expires)=>{sessions.set(key,{owner:[...people.values()].find(p=>p.id===id)!,csrfDigest,expires});},find:async key=>sessions.get(key),revoke:async key=>{sessions.delete(key);}};
   const auth=new MultiUserAuth(store,'https://workbench.example');
   const bindings=new Map<string,{owner:string;scenario:string;directory:string}>();
   const pool={execute:async(sql:string,args:unknown[])=>{
