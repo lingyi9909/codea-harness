@@ -227,6 +227,26 @@ test('B creates and reads only its own institution result; admin usage is separa
     const badPage=await app.inject({url:'/api/v1/institution-tasks?limit=1000',
       remoteAddress:'127.0.0.1',headers:adminHeaders});
     assert.equal(badPage.statusCode,400,badPage.body);
+    const diagnosticPath='/api/v1/institution-tasks/'+taskId+'/logs';
+    const logs=await app.inject({url:diagnosticPath+'?offset=0&limit=20',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(logs.statusCode,200,logs.body);
+    assert.ok(logs.json().data.total>=5,'task milestones should be persisted');
+    assert.equal(logs.json().data.limit,20);
+    assert.equal(JSON.stringify(logs.json()).includes('0000123'),false,
+      'diagnostic events must not return raw report or msgSn');
+    const badLogPage=await app.inject({url:diagnosticPath+'?limit=1000',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(badLogPage.statusCode,400,badLogPage.body);
+    const noLogAuth=await app.inject({url:diagnosticPath,
+      remoteAddress:'127.0.0.1',headers:{host:'127.0.0.1:4176'}});
+    assert.equal(noLogAuth.statusCode,401,noLogAuth.body);
+    const remoteLogs=await app.inject({url:diagnosticPath,
+      remoteAddress:'10.10.20.30',headers:{...adminHeaders,host:'10.10.20.30:4176'}});
+    assert.equal(remoteLogs.statusCode,403,remoteLogs.body);
+    const missingLogs=await app.inject({url:'/api/v1/institution-tasks/'+randomUUID()+'/logs',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(missingLogs.statusCode,404,missingLogs.body);
 
     assert.equal(adminList.json().data.items[0].taskId,taskId);
     assert.equal(adminList.json().data.items[0].status,'SUCCEEDED');
@@ -268,6 +288,9 @@ test('B creates and reads only its own institution result; admin usage is separa
     const revokedDetail=await app.inject({url:'/api/v1/institution-tasks/'+taskId,
       remoteAddress:'127.0.0.1',headers:adminHeaders});
     assert.equal(revokedDetail.statusCode,403,revokedDetail.body);
+    const revokedLogs=await app.inject({url:'/api/v1/institution-tasks/'+taskId+'/logs',
+      remoteAddress:'127.0.0.1',headers:adminHeaders});
+    assert.equal(revokedLogs.statusCode,403,revokedLogs.body);
     const revokedUsage=await app.inject({url:'/api/v1/institution-access',
       remoteAddress:'127.0.0.1',headers:adminHeaders});
     assert.equal(revokedUsage.statusCode,403,revokedUsage.body);

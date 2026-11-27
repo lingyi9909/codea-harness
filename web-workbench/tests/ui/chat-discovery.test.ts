@@ -41,11 +41,10 @@ async function seedAccountSession(page:Page,values:Record<string,string>){
 }
 async function login(page:Page){
   await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
-  await page.getByLabel('姓名',{exact:true}).fill('测试同事');
-  await page.getByLabel('手机号',{exact:true}).fill('13800000000');
+  await page.getByLabel('用户名',{exact:true}).fill('TestUser');
   await page.getByRole('button',{name:'登录工作台',exact:true}).click();
   await expect(page.getByRole('navigation')).toBeVisible();
-  await expect(page.getByText('测试同事',{exact:true})).toBeVisible();
+  await expect(page.getByText('TestUser',{exact:true})).toBeVisible();
 }
 
 it('browser uses the startup directory, starts the CLI fixture and shows upstream failure',{timeout:90000},async()=>{
@@ -217,7 +216,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       if(path==='/api/v1/chat/access-log'||path==='/api/v1/chat/project')retiredRequests.push(path);
     });
     await page.goto('http://127.0.0.1:'+port);
-    await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('用户名',{exact:true})).toBeVisible();
     await expect(page.locator('.profile-side')).toBeVisible();
     // Keep the login form simple: no disclosure, promotional copy or footer.
     for(const removed of [
@@ -228,19 +227,30 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
       '本地运行 · 资源随项目使用',
     ])await expect(page.getByText(removed,{exact:false})).toHaveCount(0);
     await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
-    await expect(page.getByLabel('姓名',{exact:true})).toBeVisible();
-    await expect(page.getByLabel('手机号',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('用户名',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('手机号',{exact:true})).toHaveCount(0);
     await expect(page.locator('.profile-submit')).toHaveCSS('background-color','rgb(36, 39, 44)');
     await page.screenshot({path:join(shots,'00-login-silver.png')});
     await expect(page.getByRole('navigation')).toHaveCount(0);
-    await page.getByLabel('姓名',{exact:true}).fill('测试同事');
-    await page.getByLabel('手机号',{exact:true}).fill('12');
+    for(const invalid of ['123','张三','abc_def','abc def']){
+      await page.getByLabel('用户名',{exact:true}).fill(invalid);
+      await page.getByRole('button',{name:'登录工作台',exact:true}).click();
+      await expect(page.getByRole('alert')).toContainText('至少包含一个英文字母');
+      assert.equal(sessionRequests,0);
+    }
+    await page.getByLabel('用户名',{exact:true}).fill('TestUser');
+    // A phone value is a visitor label, not a verified mobile number.
+    // Registration should succeed immediately without a front-end phone regex gate.
+    // Private-network HTTP origins do not expose crypto.randomUUID in some
+    // browsers. Simulate this without disabling getRandomValues.
+    await page.evaluate(()=>Object.defineProperty(crypto,'randomUUID',
+      {value:undefined,configurable:true}));
     await page.getByRole('button',{name:'登录工作台',exact:true}).click();
-    await expect(page.getByRole('alert')).toContainText('请输入有效的手机号');
-    assert.equal(sessionRequests,0);
-    await login(page);
+    await expect(page.getByRole('navigation')).toBeVisible();
+    await page.evaluate(()=>{Reflect.deleteProperty(crypto,'randomUUID');});
+    assert.equal(sessionRequests,1);
     const contactCache=await page.evaluate(()=>JSON.stringify([localStorage,sessionStorage,document.cookie]));
-    for(const value of ['测试同事','13800000000'])assert.ok(!contactCache.includes(value));
+    for(const value of ['TestUser','visitor-12'])assert.ok(!contactCache.includes(value));
     await expect(page.getByRole('navigation')).toBeVisible();
     await expect(page.getByLabel('一次性配对码')).toHaveCount(0);
     await expect(page.getByLabel('对话内容')).toBeVisible();
@@ -278,7 +288,7 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await expect(page.getByRole('button',{name:'保存场景配置'})).toHaveCount(0);
     await page.screenshot({path:join(shots,'09-scene-config-readonly.png')});
     await writeFile(join(settingsDir,'config-access.json'),
-      JSON.stringify({version:1,editors:['测试同事']}));
+      JSON.stringify({version:1,editors:['TestUser']}));
     await page.reload();
     await expect(page.getByRole('button',{name:'保存场景配置'})).toBeVisible();
     await page.getByRole('button',{name:'保存场景配置'}).click();
@@ -755,11 +765,12 @@ it('browser uses the startup directory, starts the CLI fixture and shows upstrea
     await page.reload();
     await page.getByRole('button',{name:'历史对话'}).click();
     await expect(history.getByRole('button',{name:/订单超时调查 · 人工命名/})).toHaveCount(0);
+    await page.evaluate(()=>Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true}));
     await page.getByRole('button',{name:'退出登录'}).click();
     await expect(page.getByRole('heading',{name:'登录工作台'})).toBeVisible();
     assert.equal(await sessionCookie(),undefined);
     await page.reload();
-    await expect(page.getByLabel('手机号',{exact:true})).toHaveValue('');
+    await expect(page.getByLabel('手机号',{exact:true})).toHaveCount(0);
     assert.equal(sessionRequests,1);
   }finally{
     process.chdir(cwd);

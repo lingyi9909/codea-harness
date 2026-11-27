@@ -17,7 +17,7 @@
  */
 import {useEffect,useState} from 'react';
 import Markdown from 'react-markdown';
-import {api,ApiError,type InstitutionAccessOverview,type InstitutionAdminTaskDetail,type InstitutionTaskPage,type InstitutionTaskStatus} from './api/client.ts';
+import {api,ApiError,type InstitutionAccessOverview,type InstitutionAdminTaskDetail,type InstitutionTaskPage,type InstitutionTaskLogPage,type InstitutionTaskStatus} from './api/client.ts';
 import {ProfileLogin} from './ProfileLogin.tsx';
 import {InstitutionConcurrencyControl,InstitutionUserGroupsView} from './InstitutionTaskOperations.tsx';
 import './institution-tasks.css';
@@ -47,6 +47,33 @@ const taskFailureReason:Record<string,string>={
   INSTITUTION_SKILL_NOT_CONFIGURED:'机构排查 Skill 尚未配置',
   INSTITUTION_SKILL_NOT_FOUND:'配置的机构排查 Skill 不存在',
   INSTITUTION_MODEL_NOT_CONFIGURED:'没有可用的配置模型',
+};
+const diagnosticLabels:Record<string,string>={
+  TASK_CREATED:'任务已提交',TASK_RUNNING:'领取执行任务',
+  NATIVE_CONNECTING:'连接 OpenCode',NATIVE_CONNECTED:'OpenCode 已连接',
+  SKILL_READY:'Skill 加载完成',MODEL_READY:'模型已选定',NATIVE_SESSION_CREATED:'执行会话已创建',
+  PROMPT_ACCEPTED:'模型请求已受理',NATIVE_EXECUTION_STARTED:'原生执行开始',
+  NATIVE_EXECUTION_SUCCEEDED:'原生执行完成',NATIVE_EXECUTION_FAILED:'原生执行失败',
+  NATIVE_EXECUTION_INTERRUPTED:'原生执行被中断',
+  NATIVE_TOOL_CALLED:'开始工具调用',NATIVE_TOOL_SUCCEEDED:'工具调用完成',
+  NATIVE_TOOL_FAILED:'工具调用失败',NATIVE_STEP_FAILED:'原生执行步骤失败',
+  TASK_EXECUTION_ERROR:'任务执行异常',
+  NATIVE_PERMISSION_ASKED:'原生权限待授权',
+  STATUS_READ_RETRY:'状态查询重试',STATUS_READ_RECOVERED:'状态查询恢复',
+  NATIVE_EVENT_STREAM_RECONNECT:'原生事件流断开重连',PERMISSION_REQUIRED:'执行权限不足',
+  FINAL_RESULT_RECEIVED:'收到最终结论',EXECUTION_TIMEOUT:'原生执行等待超时',
+  TASK_SUCCEEDED:'任务完成',TASK_FAILED:'任务失败',TASK_UNKNOWN:'执行结果待核验',
+  TASK_RESTARTED:'服务重启时任务未完成',TASK_STOPPED:'服务关闭时任务未完成',
+};
+const failureCategories:Record<string,string>={
+  TIMEOUT:'执行超时',NETWORK:'网络连接',AUTH:'身份验证',PERMISSION:'权限不足',
+  MCP:'MCP 服务',SQL:'数据库 / SQL',TOOL_MISSING:'工具缺失',
+  EXECUTION:'原生执行异常',UNKNOWN:'原因未识别',
+};
+const failureOrigin:Record<string,string>={
+  'native-event':'OpenCode 原生事件',
+  'session-snapshot':'OpenCode 会话快照',
+  worker:'工作台任务调度',
 };
 const describeTaskFailure=(code:string)=>taskFailureReason[code]||
   (code.startsWith('OPENCODE_HTTP_')?'OpenCode 接口返回 HTTP '+code.slice('OPENCODE_HTTP_'.length):
@@ -136,6 +163,10 @@ export function InstitutionTaskManagementPage(){
   const [selectedId,setSelectedId]=useState('');
   const [detail,setDetail]=useState<InstitutionAdminTaskDetail|null>(null);
   const [detailError,setDetailError]=useState('');
+  const [logOffset,setLogOffset]=useState(0);
+  const [logLimit,setLogLimit]=useState<20|50|100>(20);
+  const [logPage,setLogPage]=useState<InstitutionTaskLogPage|null>(null);
+  const [logError,setLogError]=useState('');
 
   // 父页面的刷新计数器；值本身没有业务含义，只是触发 useEffect 的重新执行。
   const [refresh,setRefresh]=useState(0);
@@ -200,15 +231,29 @@ export function InstitutionTaskManagementPage(){
     return()=>{live=false;};
   },[mode,selectedId,refresh]);
 
+  useEffect(()=>{
+    if(mode!=='ready'||accessView||usersView||!selectedId)return;
+    let live=true;
+    api.institutionTaskLogs(selectedId,logOffset,logLimit).then(data=>{
+      if(live){
+        if(logOffset>0&&logOffset>=data.total){
+          setLogOffset(Math.max(0,Math.ceil(data.total/logLimit)-1)*logLimit);return;
+        }
+        setLogPage(data);setLogError('');
+      }
+    }).catch(e=>{if(live)setLogError(errorText(e));});
+    return()=>{live=false;};
+  },[mode,selectedId,logOffset,logLimit,refresh]);
+  const logPages=Math.max(1,Math.ceil((logPage?.total??0)/logLimit));
   const totalPages=Math.max(1,Math.ceil((page?.total??0)/pageSize));
   function moveTo(index:number){
     if(!Number.isSafeInteger(index)||index<0||index>=totalPages||index*pageSize>1000000)return;
     setOffset(index*pageSize);setJump(String(index+1));
-    setSelectedId('');setDetail(null);setDetailError('');
+    setSelectedId('');setDetail(null);setDetailError('');setLogOffset(0);setLogPage(null);
   }
   // 以下 JSX 是按 mode 分支返回的视图，类似 Java Controller 选择不同页面模板。
-  if(mode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    await api.login(name,phone);setMode('ready');
+  if(mode==='profile')return <ProfileLogin onLogin={async(name)=>{
+    await api.login(name);setMode('ready');
   }}/>;
   if(mode==='pair')return <main className="pair-page"><form className="pair-card" onSubmit={e=>{
     e.preventDefault();if(pairBusy)return;setPairBusy(true);setError('');
@@ -284,7 +329,9 @@ export function InstitutionTaskManagementPage(){
                 </small>}</td>
               <td>{formatTime(task.createdAt)}</td>
               <td><button type="button" className="institution-tasks-open" aria-label={'查看任务 '+task.taskId}
-                onClick={()=>{setSelectedId(task.taskId);setDetail(null);setDetailError('');}}>详情</button></td>
+                onClick={()=>{setSelectedId(task.taskId);setDetail(null);setDetailError('');setLogOffset(0);setLogPage(null);}}>详情</button>
+                <button type="button" className="institution-tasks-open" aria-label={'诊断任务 '+task.taskId}
+                  onClick={()=>{setSelectedId(task.taskId);setDetail(null);setDetailError('');setLogOffset(0);setLogPage(null);}}>诊断</button></td>
             </tr>)}</tbody></table>
         </div>
         {!page&&!listError&&<p className="institution-tasks-empty">正在读取任务…</p>}
@@ -335,6 +382,49 @@ export function InstitutionTaskManagementPage(){
                   detail.status==='UNKNOWN'?'执行状态无法确认，需人工核验；不会自动重跑。':
                   detail.status==='FAILED'?'任务执行失败，未产生最终结论。':'暂无最终返回结果。'}</p>}
             </div>
+            <section className="institution-task-logs" aria-label="任务执行诊断日志">
+              <header><h3>任务执行诊断</h3><small>最新在前 · 仅本机管理员可查看 · 失败事件保留原始错误信息</small></header>
+              {logError&&<p role="alert" className="institution-tasks-error">{logError}</p>}
+              <ol className="institution-task-event-list">
+                {logPage?.items.map(item=><li key={item.seq} className={'institution-task-event '+item.level.toLowerCase()}>
+                  <time dateTime={item.at}>{formatTime(item.at)}</time>
+                  <strong>{diagnosticLabels[item.eventType]??item.eventType}</strong>
+                  {item.detail&&<code>{item.detail}</code>}
+                  {item.failure&&<details className="institution-task-failure-detail">
+                    <summary>查看失败原因与排查建议</summary>
+                    <dl>
+                      <dt>故障类别</dt><dd>{failureCategories[item.failure.category]??'原因未识别'}</dd>
+                      <dt>错误说明</dt><dd>{item.failure.reason}</dd>
+                      <dt>技术错误码</dt><dd><code>{item.failure.errorCode??'原生未提供'}</code></dd>
+                      <dt>原生错误类型</dt><dd><code>{item.failure.nativeType??'原生未提供'}</code></dd>
+                      <dt>工具调用 ID</dt><dd><code>{item.failure.toolCallId??'原生未提供'}</code></dd>
+                      <dt>信息来源</dt><dd>{failureOrigin[item.failure.origin]??'未知'}</dd>
+                      <dt>建议检查</dt><dd>{item.failure.suggestion}</dd>
+                    </dl>
+                    <h4>原始失败信息（未脱敏）</h4>
+                    {item.failure.rawError
+                      ?<pre className="institution-task-raw-error">{item.failure.rawError}</pre>
+                      :<p className="institution-task-failure-notice">OpenCode 未提供原始错误对象，需查看原生会话或 MCP 日志。</p>}
+                    {item.failure.rawTruncated&&
+                      <p className="institution-task-failure-notice">原始错误超出 128K 字符存储上限，仅展示前 128K 字符。</p>}
+                    <p className="institution-task-failure-notice">
+                      原始错误可能包含 SQL、访问令牌或业务数据，仅本机管理员可见，请勿公开转发。
+                      单次工具失败不一定代表整个任务执行失败。
+                    </p>
+                  </details>}
+                </li>)}
+              </ol>
+              {logPage?.items.length===0&&<p className="institution-tasks-empty">暂无执行日志。旧任务不会补录未曾采集的事件。</p>}
+              <div className="institution-tasks-pager" aria-label="诊断日志分页">
+                <label>每页 <select aria-label="日志每页条数" value={logLimit} onChange={e=>{
+                  setLogLimit(Number(e.target.value) as 20|50|100);setLogOffset(0);setLogPage(null);
+                }}><option value={20}>20 条</option><option value={50}>50 条</option><option value={100}>100 条</option></select></label>
+                <button type="button" disabled={logOffset===0} onClick={()=>setLogOffset(Math.max(0,logOffset-logLimit))}>上一页</button>
+                <span>第 {Math.floor(logOffset/logLimit)+1} / {logPages} 页 · 共 {logPage?.total??0} 条</span>
+                <button type="button" disabled={!logPage||logOffset+logLimit>=logPage.total}
+                  onClick={()=>setLogOffset(logOffset+logLimit)}>下一页</button>
+              </div>
+            </section>
           </>}
         </>}
       </section>

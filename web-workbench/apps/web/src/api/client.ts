@@ -28,6 +28,21 @@ export type InstitutionAdminTask={
 // 交叉类型 A & B：在列表 DTO 的基础上增加 detail 独有字段，类似 Java DTO 继承/组合。
 export type InstitutionAdminTaskDetail=InstitutionAdminTask&{result:{summary:string}|null};
 export type InstitutionTaskPage={total:number;limit:number;offset:number;items:InstitutionAdminTask[]};
+export type InstitutionFailureDetail={
+  version:1;
+  toolName:string|null;toolCallId:string|null;
+  category:'TIMEOUT'|'NETWORK'|'AUTH'|'PERMISSION'|'MCP'|'SQL'|'TOOL_MISSING'|'EXECUTION'|'UNKNOWN';
+  errorCode:string|null;nativeType:string|null;
+  reason:string;suggestion:string;origin:'native-event'|'session-snapshot'|'worker';
+  rawError?:string|null;rawTruncated?:boolean;
+};
+export type InstitutionTaskLog={
+  seq:number;at:string;level:'INFO'|'WARN'|'ERROR';eventType:string;detail:string|null;
+  failure?:InstitutionFailureDetail|null;
+};
+export type InstitutionTaskLogPage={
+  taskId:string;total:number;limit:number;offset:number;items:InstitutionTaskLog[];
+};
 export type UserAccessVisit={
   id:string;name:string;phoneMask:string;ip:string;scope:'lan'|'local';
   loginAt:string;lastActiveAt:string;logoutAt:string|null;
@@ -55,6 +70,16 @@ export class ApiError extends Error {
   readonly status:number;
   readonly code:string;
   constructor(status: number, code: string, message: string) { super(message);this.status=status;this.code=code; }
+}
+// HTTP private-LAN origins may lack crypto.randomUUID even though
+// crypto.getRandomValues is available. Account-change notification is
+// best-effort and must never turn a successful login/logout into a UI error.
+function signalAccountChange(){
+  try{
+    const bytes=crypto.getRandomValues(new Uint8Array(16));
+    const value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+    window.localStorage.setItem('harness.account-change',value);
+  }catch{/* Local storage restrictions cannot invalidate a server-issued Cookie. */}
 }
 export class HarnessApi {
   private csrf = '';
@@ -185,6 +210,11 @@ export class HarnessApi {
   institutionTask(id:string){
     return this.request<InstitutionAdminTaskDetail>('/institution-tasks/'+encodeURIComponent(id));
   }
+  /** Only the localhost administrator can inspect sanitized task diagnostics. */
+  institutionTaskLogs(id:string,offset=0,limit:20|50|100=20){
+    const params=new URLSearchParams({offset:String(offset),limit:String(limit)});
+    return this.request<InstitutionTaskLogPage>('/institution-tasks/'+encodeURIComponent(id)+'/logs?'+params.toString());
+  }
   /** 已观察到的接口调用情况；不能据此推断平台真实身份或授权。 */
   institutionAccessOverview(){
     return this.request<InstitutionAccessOverview>('/institution-access');
@@ -233,20 +263,20 @@ export class HarnessApi {
     this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
-  async login(name:string,phone:string) {
+  async login(name:string) {
     const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
-      method:'POST',body:JSON.stringify({name,phone}),
+      method:'POST',body:JSON.stringify({name}),
     });
     this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');
     this.setCsrf(session.csrfToken);
-    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
+    signalAccountChange();
     return session;
   }
   async logout() {
     await this.request<void>('/auth/session',{method:'DELETE'});
     this.setCsrf('');this.businessVerificationEnabled=false;resetUserStorage();
-    window.localStorage.setItem('harness.account-change',crypto.randomUUID());
+    signalAccountChange();
   }
   repositories() { return this.request<Schema<'RepositoryPage'>>('/repositories?limit=100'); }
   refs(repositoryId: string) { return this.request<Schema<'Refs'>>('/repositories/'+encodeURIComponent(repositoryId)+'/refs'); }

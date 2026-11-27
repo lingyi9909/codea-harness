@@ -7,6 +7,7 @@
  * 以下为模块说明注释，不改变原有执行逻辑。
  */
 import {localStorage,sessionStorage} from './userStorage.ts';
+import {browserRandomUUID} from './browser-random-id.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api/client.ts';
 import type { Schema } from './api/client.ts';
@@ -35,7 +36,7 @@ const isActive=(status:string)=>['QUEUED','PREPARING','RUNNING','WAITING_INPUT',
 const controllerPattern=/^[A-Za-z_][A-Za-z0-9_]*$/;
 const text=(error:unknown)=>error instanceof Error?error.message:'请求失败';
 const short=(s:string)=>s.length>12?s.slice(0,10)+'…':s;
-const operationId=()=>crypto.randomUUID();
+const operationId=()=>browserRandomUUID();
 const globalModelKey='harness.global.model';
 const onLan=()=>!['localhost','127.0.0.1','::1','[::1]'].includes(window.location.hostname);
 type SelectedModel=Pick<ChatModel,'id'|'providerID'|'variant'>;
@@ -304,8 +305,8 @@ export function WorkbenchApp() {
   const ready=bootstrap?.scenarios.some(s=>s.id==='code-review'&&s.enabled)??false;
   const mutationBusy=busy||Boolean(pendingOperation);
   const active=Boolean(detail&&isActive(detail.latestRun.status));
-  if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{
-    await api.login(name,phone);
+  if(!bootstrap&&loginMode==='profile')return <ProfileLogin onLogin={async(name)=>{
+    await api.login(name);
     window.location.reload();
   }}/>;
   if(!bootstrap&&!loginMode)return <main className="pair-page"><div className="pair-card">

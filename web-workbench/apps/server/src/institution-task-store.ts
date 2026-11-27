@@ -23,6 +23,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {existsSync,lstatSync,mkdirSync,chmodSync,realpathSync} from 'node:fs';
 import {dirname,isAbsolute,relative,sep} from 'node:path';
 import {AuthProblem} from './auth.ts';
+import {decodeSafeFailure} from './institution-failure-diagnostics.ts';
 
 const RETENTION_MS=7*24*60*60*1000;
 const DIGEST=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -77,7 +78,7 @@ export class InstitutionTaskStore {
     this.db=new DatabaseSync(path);
     chmodSync(path,0o600);
     // WAL 支持读写并行；busy_timeout 允许在 SQLite 文件短暂占用时等待。
-    this.db.exec("PRAGMA journal_mode=WAL;PRAGMA busy_timeout=3000;"+
+    this.db.exec("PRAGMA journal_mode=WAL;PRAGMA busy_timeout=3000;PRAGMA foreign_keys=ON;"+
       "CREATE TABLE IF NOT EXISTS institution_api_tasks ("+
       "id TEXT PRIMARY KEY,client_id TEXT NOT NULL,user_hash TEXT NOT NULL,"+
       "request_id TEXT NOT NULL,payload_hash TEXT NOT NULL,day TEXT NOT NULL,msg_sn TEXT NOT NULL,"+
@@ -86,7 +87,12 @@ export class InstitutionTaskStore {
       "UNIQUE(client_id,user_hash,request_id));"+
       "CREATE INDEX IF NOT EXISTS ix_institution_api_task_status ON institution_api_tasks(status,created_at);"+
       "CREATE TABLE IF NOT EXISTS institution_api_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);"+
-      "INSERT OR IGNORE INTO institution_api_settings(key,value) VALUES ('max_concurrency','3');");
+      "INSERT OR IGNORE INTO institution_api_settings(key,value) VALUES ('max_concurrency','3');"+
+       "CREATE TABLE IF NOT EXISTS institution_api_task_events ("+
+       "seq INTEGER PRIMARY KEY AUTOINCREMENT,task_id TEXT NOT NULL REFERENCES institution_api_tasks(id) ON DELETE CASCADE,"+
+       "at INTEGER NOT NULL,level TEXT NOT NULL,event_type TEXT NOT NULL,detail TEXT,native_event_id TEXT);"+
+       "CREATE INDEX IF NOT EXISTS ix_institution_task_events_task_seq ON institution_api_task_events(task_id,seq DESC);"+
+       "CREATE UNIQUE INDEX IF NOT EXISTS ux_institution_task_native_event ON institution_api_task_events(task_id,native_event_id);");
     // This is deliberately a single-writer queue. Different ports/workspaces
     // previously opened one default SQLite file and rewrote each other's
     // RUNNING tasks to UNKNOWN during initialization or shutdown.
@@ -95,6 +101,13 @@ export class InstitutionTaskStore {
     const columns=this.db.prepare("PRAGMA table_info(institution_api_tasks)").all() as Array<{name:string}>;
     if(!columns.some(c=>c.name==='external_user_id'))
       this.db.exec("ALTER TABLE institution_api_tasks ADD COLUMN external_user_id TEXT");
+    // Logging is non-critical: a broken diagnostics table must never prevent
+    // the pre-existing UNKNOWN reconciliation or leave a task executable twice.
+    try{
+      this.db.prepare("INSERT INTO institution_api_task_events(task_id,at,level,event_type,detail) "+
+        "SELECT id,?,'WARN','TASK_RESTARTED','PROCESS_RESTARTED' FROM institution_api_tasks "+
+        "WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
+    }catch{/* Diagnostic persistence failure cannot change task recovery. */}
     // Crashes or service restarts must not silently replay model/tool actions.
     // The native session might still have run, so never assert FAILED/SUCCEEDED.
     this.db.prepare("UPDATE institution_api_tasks SET status='UNKNOWN',error_code='PROCESS_RESTARTED',updated_at=?"+
@@ -168,6 +181,7 @@ export class InstitutionTaskStore {
       .get(clientId,userHash,requestId) as TaskRow|undefined;
     if(!row)throw new Error('INSTITUTION_API_TASK_NOT_SAVED');
     if(row.payload_hash!==payloadHash)throw new AuthProblem(409,'REQUEST_ID_PAYLOAD_CONFLICT');
+    if(Number(change.changes)===1)this.recordDiagnostic(row.id,'TASK_CREATED');
     return {row,created:Number(change.changes)===1};
   }
   /**
@@ -305,7 +319,45 @@ export class InstitutionTaskStore {
     if(!row)return undefined;
     const changed=this.db.prepare("UPDATE institution_api_tasks SET status='RUNNING',updated_at=? WHERE id=? AND status='QUEUED'")
       .run(Date.now(),row.id);
-    return Number(changed.changes)===1?{...row,status:'RUNNING'}:undefined;
+    if(Number(changed.changes)!==1)return undefined;
+    this.recordDiagnostic(row.id,'TASK_RUNNING');
+    return {...row,status:'RUNNING'};
+  }
+  /**
+   * Milestones contain only metadata. Failed native tool/step/worker events
+   * additionally contain their original error for local administrator debugging.
+   * Replayed native event IDs are de-duplicated to avoid duplicate timelines.
+   */
+  appendEvent(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string,nativeEventId?:string){
+    this.db.prepare('INSERT OR IGNORE INTO institution_api_task_events '+
+      '(task_id,at,level,event_type,detail,native_event_id) VALUES (?,?,?,?,?,?)')
+      .run(taskId,Date.now(),level,eventType,
+        detail?.startsWith('SAFE_FAILURE_V1:')?detail:detail?.slice(0,1024)??null,
+        nativeEventId??null);
+  }
+  /** Lifecycle writes must succeed or fail independently of diagnostic storage. */
+  private recordDiagnostic(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string){
+    try{this.appendEvent(taskId,eventType,level,detail);}
+    catch{/* Best effort only: never reject task creation, claim, or completion. */}
+  }
+  /** Newest events first; SQL LIMIT/OFFSET prevents unbounded log responses. */
+  eventsAdmin(taskId:string,offset:number,limit=20){
+    const exists=this.db.prepare('SELECT 1 FROM institution_api_tasks WHERE id=?').get(taskId);
+    if(!exists)throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
+    const total=(this.db.prepare('SELECT COUNT(*) AS n FROM institution_api_task_events WHERE task_id=?')
+      .get(taskId) as {n:number}).n;
+    const rows=this.db.prepare('SELECT seq,at,level,event_type,detail FROM institution_api_task_events '+
+      'WHERE task_id=? ORDER BY seq DESC LIMIT ? OFFSET ?')
+      .all(taskId,limit,offset);
+    return {taskId,total,offset,limit,items:rows.map(row=>{
+      const failure=decodeSafeFailure(row.detail);
+      return {
+        seq:Number(row.seq),at:new Date(Number(row.at)).toISOString(),level:String(row.level),
+        eventType:String(row.event_type),
+        detail:failure?(failure.toolName??null):row.detail==null?null:String(row.detail),
+        failure,
+      };
+    })};
   }
   /** 保存该任务所对应的 OpenCode Session ID（只用于 C 内部跟踪）。 */
   session(id:string,nativeId:string){
@@ -317,14 +369,20 @@ export class InstitutionTaskStore {
    * WHERE status='RUNNING' 防止覆盖已经终止的任务；同时清空 msg_sn 以缩短敏感数据保留。
    */
   finish(id:string,next:'SUCCEEDED'|'FAILED'|'UNKNOWN',result:string|null,error:string|null){
-    this.db.prepare("UPDATE institution_api_tasks SET status=?,result_text=?,error_code=?,msg_sn='',updated_at=?"+
+    const saved=this.db.prepare("UPDATE institution_api_tasks SET status=?,result_text=?,error_code=?,msg_sn='',updated_at=?"+
       " WHERE id=? AND status='RUNNING'").run(next,result,error,Date.now(),id);
+    if(Number(saved.changes)===1)this.recordDiagnostic(id,'TASK_'+next,next==='SUCCEEDED'?'INFO':'ERROR',error??undefined);
   }
   /**
    * 服务关闭时标记未完成任务 UNKNOWN（不是 FAILED）。
    * 因为任务可能已经送达模型或 DBHub，不能安全地自动重放。
    */
   stopUnfinished(){
+    try{
+      this.db.prepare("INSERT INTO institution_api_task_events(task_id,at,level,event_type,detail) "+
+        "SELECT id,?,'WARN','TASK_STOPPED','SERVER_STOPPED' FROM institution_api_tasks "+
+        "WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
+    }catch{/* Continue updating task states even if diagnostic persistence fails. */}
     this.db.prepare("UPDATE institution_api_tasks SET status='UNKNOWN',error_code='SERVER_STOPPED',updated_at=?"+
       " WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
   }

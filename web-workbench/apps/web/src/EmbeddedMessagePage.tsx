@@ -8,6 +8,7 @@
  */
 import {useEffect,useState} from 'react';
 import {api} from './api/client.ts';
+import {browserRandomUUID} from './browser-random-id.ts';
 import {LogInvestigation} from './LogInvestigation.tsx';
 import {ModelPicker} from './ModelPicker.tsx';
 import type {ChatModel} from '../../../packages/contracts/src/chat.ts';
@@ -25,7 +26,7 @@ export function EmbeddedMessagePage(){
     return()=>{live=false;};
   },[ready]);
   useEffect(()=>{
-    let live=true,claimed=false;const nonce=crypto.randomUUID();
+    let live=true,claimed=false;const nonce=browserRandomUUID();
     const parentOrigin=new URLSearchParams(window.location.search).get('parentOrigin')??'';
     const receive=async(event:MessageEvent)=>{
       if(!live||claimed||event.source!==window.parent||event.origin!==parentOrigin)return;

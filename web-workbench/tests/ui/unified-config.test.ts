@@ -20,7 +20,7 @@ test('standalone config: no workbench mount, independent URL, same saved institu
     // login, filesystem persistence and the anonymous page use the real app.
     await page.route('**/api/v1/chat/models',route=>route.fulfill({json:{data:[]}}));
     await page.route('**/api/v1/chat/history',route=>route.fulfill({json:{data:{items:[]}}}));
-    await page.goto(origin+'/');await page.getByLabel('姓名',{exact:true}).fill('zhangzhanhui');await page.getByLabel('手机号',{exact:true}).fill('13800000000');
+    await page.goto(origin+'/');await page.getByLabel('用户名',{exact:true}).fill('zhangzhanhui');
     await page.getByRole('button',{name:'登录工作台'}).click();await expect(page.getByRole('navigation',{name:'场景导航'})).toBeVisible();
     // Existing public/message entrypoints must keep their original forms and
     // navigation after adding the independent institution iframe.
@@ -62,7 +62,7 @@ test('standalone config: no workbench mount, independent URL, same saved institu
     await page.getByRole('button',{name:'最近 30 天'}).click();
     await expect(page.getByRole('button',{name:'最近 30 天'})).toHaveAttribute('aria-pressed','true');
     const visit=await browser.newPage();await visit.goto(origin+'/embed/institution-message');
-    await expect(visit.getByRole('button',{name:'结束会话'})).toBeVisible();await expect(visit.getByLabel('姓名',{exact:true})).toHaveCount(0);
+    await expect(visit.getByRole('button',{name:'结束会话'})).toBeVisible();await expect(visit.getByLabel('用户名',{exact:true})).toHaveCount(0);
     const effective=await visit.evaluate(async()=>{
       // The token stays within HarnessApi; inspect its existing read-only response
       // rather than passing administrative cookies to the embedded page.

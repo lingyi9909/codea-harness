@@ -10,10 +10,11 @@ import {SceneAccessStore} from '../../apps/server/src/scene-access.ts';
 import {ExecutionRegistry} from '../../apps/server/src/execution-registry.ts';
 import {InstitutionTaskStore} from '../../apps/server/src/institution-task-store.ts';
 import {InstitutionIntegration,transientInstitutionPollError} from '../../apps/server/src/institution-integration.ts';
+import {makeSafeFailure,encodeSafeFailure,decodeSafeFailure} from '../../apps/server/src/institution-failure-diagnostics.ts';
 import type {chatConnection} from '../../apps/server/src/modules/chat/connection.ts';
 
 type FinalState={status:string;errorCode:string|null};
-async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
+async function execute(mode:'transient'|'native-error'|'prompt-rejected'|'stream-failed'){
   const root=await mkdtemp(join(tmpdir(),'institution-poll-recovery-'));
   const db=join(root,'tasks.sqlite');
   const workspace=join(root,'project');
@@ -25,8 +26,9 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
     'institution-message':{directory:workspace,executor:{type:'skill',name:'institution-log-query'}}}},config.revision);
   const access=new SceneAccessStore(workspace);
   const tasks=new InstitutionTaskStore(db,workspace);
-  let prompts=0,pollErrors=0;
+  let prompts=0,pollErrors=0,activeReads=0;
   const native={
+    ...(mode==='stream-failed'?{event:{subscribe:async function*(){throw new Error('STREAM_UNAVAILABLE');}}}:{}),
     skill:{list:async()=>({location:{directory:workspace},data:[{id:'skill-id',name:'institution-log-query'}]})},
     model:{list:async()=>({data:[{id:'kimi',name:'Kimi',providerID:'private',enabled:true}]})},
     session:{
@@ -34,7 +36,7 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
         id:'native-session-1',location:input.location,permissions:input.permissions,
       }),
       prompt:async()=>{prompts++;if(mode==='prompt-rejected')throw new AuthProblem(502,'OPENCODE_HTTP_400');return {id:'submitted'};},
-      active:async()=>({}),
+      active:async()=>mode==='stream-failed'&&activeReads++===0?{'native-session-1':true}:{} ,
       inbox:{list:async()=>[]},
       interrupt:async()=>({interrupted:true}),
       remove:async()=>({}),
@@ -45,7 +47,10 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
       return {data:[{id:'answer',type:'assistant',
         ...(mode==='native-error'?{error:{name:'NativeError'}}:{finish:'stop'}),
         time:{completed:Date.now()},
-        content:[{type:'text',text:mode==='native-error'?'':'实际排查结果'}]}]};
+        content:[
+          ...(mode==='stream-failed'?[{id:'snapshot-part-1',type:'tool',tool:'dbhub',
+            state:{status:'error',error:{code:'ECONNREFUSED',message:'connect ECONNREFUSED 10.1.2.3'}}}]:[]),
+          {type:'text',text:mode==='native-error'?'':'实际排查结果'}]}]};
     }},
     permission:{list:async()=>[]},
   };
@@ -69,7 +74,8 @@ async function execute(mode:'transient'|'native-error'|'prompt-rejected'){
       await delay(40);
     }
     assert.ok(state,'native task should reach terminal state');
-    return {state,prompts,pollErrors};
+    const failures=tasks.eventsAdmin(created.data.taskId,0,100).items.filter(x=>x.failure);
+    return {state,prompts,pollErrors,elapsedMs:Date.now()-start,activeReads,failures};
   }finally{service.close();await rm(root,{recursive:true,force:true});}
 }
 
@@ -98,4 +104,123 @@ test('only network/read transient errors are retryable, not invalid native input
   assert.equal(transientInstitutionPollError(new Error('fetch failed: ECONNRESET')),true);
   assert.equal(transientInstitutionPollError(new AuthProblem(400,'INVALID_INSTITUTION_DATE')),false);
   assert.equal(transientInstitutionPollError(new Error('programmer bug')),false);
+});
+
+test('an unavailable native event stream preserves legacy completion polling instead of delaying tasks', {timeout:12000},async()=>{
+  const value=await execute('stream-failed');
+  assert.deepEqual(value.state,{status:'SUCCEEDED',errorCode:null});
+  assert.equal(value.prompts,1,'an unavailable event feed must never resubmit the original prompt');
+  assert.ok(value.activeReads>=2,'a second read-only status check is still made');
+  assert.ok(value.elapsedMs<4500,'an unavailable event feed must not force the slow event-mode fallback');
+  assert.ok(value.failures.some(x=>x.eventType==='NATIVE_TOOL_FAILED'&&
+    x.failure?.category==='NETWORK'&&x.failure?.origin==='session-snapshot'));
+});
+
+test('a native completion event wakes the shared observer before slow polling fallback', {timeout:10000},async()=>{
+  const root=await mkdtemp(join(tmpdir(),'institution-events-'));
+  const db=join(root,'tasks.sqlite'),workspace=join(root,'project');
+  const {mkdir}=await import('node:fs/promises');await mkdir(workspace);
+  const sceneConfig=new SceneConfigStore(workspace);
+  await sceneConfig.initialize();
+  const current=sceneConfig.read();
+  await sceneConfig.save({version:1,scenes:{...current.config.scenes,
+    'institution-message':{directory:workspace,executor:{type:'skill',name:'institution-log-query'}}}},current.revision);
+  const sceneAccess=new SceneAccessStore(workspace);
+  const tasks=new InstitutionTaskStore(db,workspace);
+  let submitted=false,completed=false,polls=0,prompts=0,subscriptions=0;
+  const native={
+    event:{subscribe:async function*({signal}:{signal:AbortSignal}){
+      subscriptions++;
+      while(!submitted&&!signal.aborted)await delay(5);
+      await delay(25);
+      yield {id:'native-tool-failure-1',type:'session.tool.failed',
+        created:Date.now(),data:{sessionID:'native-session-1',id:'call-1',name:'dbhub',
+          error:{type:'ToolError',code:'ETIMEDOUT',
+            message:"SELECT * FROM sensitive_table WHERE token='super-secret-token' ETIMEDOUT"}}};
+      await delay(45);
+      completed=true;
+      yield {id:'native-diagnostic-1',type:'session.execution.succeeded',
+        created:Date.now(),data:{sessionID:'native-session-1'}};
+      while(!signal.aborted)await delay(20);
+    }},
+    skill:{list:async()=>({location:{directory:workspace},data:[{id:'skill-id',name:'institution-log-query'}]})},
+    model:{list:async()=>({data:[{id:'kimi',name:'Kimi',providerID:'private',enabled:true}]})},
+    session:{
+      create:async(input:{location:unknown;permissions:unknown})=>({
+        id:'native-session-1',location:input.location,permissions:input.permissions,
+      }),
+      prompt:async()=>{prompts++;submitted=true;return {id:'accepted'};},
+      active:async()=>{polls++;return completed?{}:{'native-session-1':true};},
+      inbox:{list:async()=>[]},interrupt:async()=>({interrupted:true}),remove:async()=>({}),
+    },
+    message:{list:async()=>({data:completed?[{id:'done',type:'assistant',
+      finish:'stop',time:{completed:Date.now()},content:[{type:'text',text:'有效结论'}]}]:[]})},
+    permission:{list:async()=>[]},
+  };
+  const connection=async()=>native as unknown as Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
+  const execution=new ExecutionRegistry([],async()=>connection(),{
+    workspace,singleServiceIdentity:'single:'+'f'.repeat(64),
+  });
+  const service=new InstitutionIntegration({clientId:'platform-b',databasePath:db},{
+    workspace,sceneConfig,sceneAccess,auth:new LocalAuth('unused',4176),
+    execution,nativeConnection:connection,
+  },tasks);
+  try{
+    const start=Date.now();
+    const taskId=service.create('user-hash','request-1','2026-11-26','000123','customer-001').data.taskId;
+    let state:string|undefined;
+    while(Date.now()-start<3000){
+      state=tasks.listAdmin(undefined,undefined,0).items.find(row=>row.taskId===taskId)?.status;
+      if(state==='SUCCEEDED')break;
+      await delay(25);
+    }
+    assert.equal(state,'SUCCEEDED','native completion should not wait 6.5 seconds');
+    assert.ok(Date.now()-start<2000,'event should wake read-only status check promptly');
+    assert.equal(prompts,1,'native events must never re-execute the prompt');
+    assert.equal(subscriptions,1,'one shared subscriber, not a subscriber per poll');
+    assert.ok(polls<=4,'native event path should avoid repeatedly polling four HTTP APIs');
+    const events=tasks.eventsAdmin(taskId,0,50);
+    assert.ok(events.items.some(row=>row.eventType==='NATIVE_EXECUTION_SUCCEEDED'));
+    assert.ok(events.items.some(row=>row.eventType==='TASK_SUCCEEDED'));
+    const failed=events.items.find(row=>row.eventType==='NATIVE_TOOL_FAILED');
+    assert.equal(failed?.failure?.category,'TIMEOUT');
+    assert.equal(failed?.failure?.toolName,'dbhub');
+    assert.equal(failed?.failure?.toolCallId,'call-1');
+    assert.equal(failed?.failure?.errorCode,'ETIMEDOUT');
+    assert.equal(failed?.failure?.origin,'native-event');
+    assert.ok(failed?.failure?.rawError?.includes("token='super-secret-token'"),
+      'local maintenance diagnostics retain the original failure text');
+    assert.ok(failed?.failure?.rawError?.includes('sensitive_table'));
+    assert.equal(failed?.failure?.rawTruncated,false);
+  }finally{service.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('local admin diagnostics preserve native raw errors while retaining classification and old format support',()=>{
+  const raw={type:'ToolExecutionError',code:'ETIMEDOUT',
+    message:"SQL SELECT * FROM account WHERE password='p@ss123' and token='secret-value'; connect to 10.10.3.22 failed"};
+  const a=makeSafeFailure(raw,'dbhub.query','call-abc','native-event');
+  assert.equal(a.category,'TIMEOUT');
+  assert.equal(a.errorCode,'ETIMEDOUT');
+  assert.equal(a.nativeType,'ToolExecutionError');
+  assert.equal(a.toolCallId,'call-abc');
+  const encoded=encodeSafeFailure(raw,'dbhub.query','call-abc','native-event');
+  assert.ok(encoded.includes('account'));
+  assert.ok(encoded.includes('p@ss123'));
+  assert.ok(encoded.includes('secret-value'));
+  assert.ok(encoded.includes('10.10.3.22'));
+  assert.ok(decodeSafeFailure(encoded)?.rawError?.includes("password='p@ss123'"));
+  assert.equal(decodeSafeFailure(encoded)?.category,'TIMEOUT');
+  assert.equal(decodeSafeFailure('an older tool label'),null);
+  assert.equal(makeSafeFailure({message:'Access denied: EACCES'},'shell','call-2','worker').category,'PERMISSION');
+  assert.equal(makeSafeFailure({message:'Unknown column in SQL query'},'dbhub','call-3','worker').category,'SQL');
+  assert.equal(makeSafeFailure({message:'MCP service unavailable'},'dbhub','call-4','worker').category,'MCP');
+  assert.equal(makeSafeFailure({message:'something unexpected'},'shell','call-5','worker').category,'UNKNOWN');
+  const exception=new Error('original shell stderr and command path');
+  exception.stack='Error: original shell stderr\n    at C:\\\\service\\\\tool.js:23';
+  const native=decodeSafeFailure(encodeSafeFailure(exception,'shell','call-6','worker'));
+  assert.ok(native?.rawError?.includes('original shell stderr'));
+  assert.ok(native?.rawError?.includes('tool.js:23'));
+  const huge=makeSafeFailure({message:'x'.repeat(140000)},'shell','call-7','worker');
+  assert.equal(huge.rawTruncated,true);
+  assert.ok((huge.rawError?.length??0)<=131072);
 });

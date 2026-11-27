@@ -86,7 +86,7 @@ export class PageVisitStore{
     auditId:string;ownerId:string;profileKey:string;name:string;phone:string;
     ip:string;scope:'local'|'lan';
   },now=Date.now()){
-    const masked=record.phone.slice(0,3)+'****'+record.phone.slice(-4);
+    const masked=record.phone?record.phone.slice(0,3)+'****'+record.phone.slice(-4):'';
     this.db.prepare('INSERT OR IGNORE INTO user_access_log '+
       '(id,owner_id,profile_key,name,phone_mask,ip,scope,logged_in_at,last_active_at) '+
       'VALUES (?,?,?,?,?,?,?,?,?)').run(record.auditId,record.ownerId,record.profileKey,

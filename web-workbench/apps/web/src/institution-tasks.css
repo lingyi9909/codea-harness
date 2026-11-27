@@ -87,3 +87,34 @@
 }
 .institution-tasks-pager input{width:58px}
 .institution-tasks-pager form{display:flex;gap:6px;align-items:center}
+
+
+/* Sanitized task diagnostics. Keep paged events contained within the detail panel. */
+.institution-task-logs{margin-top:20px;padding-top:16px;border-top:1px solid var(--border,#dfe4eb);min-width:0}
+.institution-task-logs>header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.institution-task-logs h3{margin:0;font-size:15px}
+.institution-task-logs header small{color:var(--muted,#687487);font-size:11px}
+.institution-task-event-list{padding:0;margin:12px 0;list-style:none;display:grid;gap:8px}
+.institution-task-event{padding:10px 12px;border:1px solid #e3e8ef;border-left:3px solid #87a0b6;border-radius:8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;overflow-wrap:anywhere}
+.institution-task-event.warn{border-left-color:#d49830}
+.institution-task-event.error{border-left-color:#bf5757}
+.institution-task-event time{font-size:11px;color:#65758a;white-space:nowrap}
+.institution-task-event strong{font-size:12px;font-weight:600}
+.institution-task-event code{font-size:11px;color:#8a4040;white-space:normal}
+.institution-task-logs .institution-tasks-pager{margin-top:12px}
+
+/* Failed tool details are optional read-only diagnostics; do not change task controls. */
+.institution-task-failure-detail{flex-basis:100%;width:100%;min-width:0;margin-top:5px;border-top:1px dashed #e1e5eb;padding-top:8px}
+.institution-task-failure-detail summary{cursor:pointer;font-size:12px;font-weight:600;color:#975331}
+.institution-task-failure-detail dl{display:grid;grid-template-columns:minmax(80px,110px) minmax(0,1fr);gap:7px 9px;margin:10px 0;font-size:12px;overflow-wrap:anywhere}
+.institution-task-failure-detail dt{color:#6b7582}
+.institution-task-failure-detail dd{margin:0}
+.institution-task-failure-detail code{white-space:normal;word-break:break-all}
+.institution-task-failure-notice{font-size:11px;color:#717b87;margin:10px 0 0;line-height:1.6}
+
+/* Original error is intentionally unredacted; render as inert text, never as HTML. */
+.institution-task-failure-detail h4{font-size:12px;margin:14px 0 8px}
+.institution-task-raw-error{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;
+  line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+  padding:12px;margin:0;max-height:420px;overflow:auto;
+  background:#f5f6f8;border:1px solid #dfe4eb;border-radius:6px}

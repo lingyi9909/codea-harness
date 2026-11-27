@@ -20,7 +20,7 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
     defaultSceneConfiguration(await realpath(project)));
   assert.deepEqual(JSON.parse(await readFile(join(configDir,'config-access.json'),'utf8')),{version:1,editors:['zhangzhanhui']});
   await assert.rejects(readFile(join(configDir,'user.json'),'utf8'),{code:'ENOENT'});
-  const profile={name:'业务开发',phone:'13800000000'};
+  const profile={name:'BusinessDev',phone:'13800000000'};
   const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',headers:{host,origin},payload:profile});
   assert.equal(login.statusCode,200);
   assert.deepEqual(JSON.parse(await readFile(join(configDir,'user.json'),'utf8')),profile);
@@ -35,11 +35,11 @@ it('scene config is file-backed, editor-ACL guarded, and revision-safe',async t=
   assert.equal(before.json().data.configPath,join(await realpath(project),'.workbench','scenarios.json'));
   assert.equal(before.json().data.accessPath,join(await realpath(project),'.workbench','config-access.json'));
   assert.equal(before.json().data.canEdit,false);
-  assert.equal(before.json().data.username,'业务开发');
+  assert.equal(before.json().data.username,'BusinessDev');
   assert.equal((await write({version:1,scenes:{}},before.json().data.revision)).statusCode,403);
   const folder=join(project,'.workbench');
   await mkdir(folder,{recursive:true});
-  await writeFile(join(folder,'config-access.json'),JSON.stringify({version:1,editors:['业务开发']}));
+  await writeFile(join(folder,'config-access.json'),JSON.stringify({version:1,editors:['BusinessDev']}));
   assert.equal((await read()).json().data.canEdit,true);
   const realProject=await realpath(project),realOutside=await realpath(outside);
   const config={version:1,scenes:{
@@ -144,4 +144,33 @@ it('startup fills missing default scene bindings without overwriting custom conf
   const next=await createApp({localOnly:true,workspace,auth:new LocalAuth('unused',4202)});
   await next.close();
   assert.equal(await readFile(file,'utf8'),existing);
+});
+
+it('LAN investigation pages can read scene runtime without gaining localhost config access',async t=>{
+  const workspace=await realpath(await mkdtemp(join(tmpdir(),'lan-scene-runtime-')));
+  t.after(()=>rm(workspace,{recursive:true,force:true}));
+  const port=4176,host='192.168.21.10:'+port,origin='http://'+host;
+  const app=await createApp({localOnly:true,workspace,
+    auth:new LocalAuth('unused',port,undefined,undefined,{origin})});
+  t.after(()=>app.close());
+  // Model a colleague accessing from the LAN address, not localhost.
+  const login=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
+    headers:{host,origin},payload:{name:'LanPeer',phone:'13800000002'}});
+  assert.equal(login.statusCode,200,login.body);
+  const headers={host,origin,cookie:String(login.headers['set-cookie']).split(';')[0]};
+  const runtime=await app.inject({method:'GET',url:'/api/v1/scene-runtime',headers});
+  assert.equal(runtime.statusCode,200,runtime.body);
+  const data=runtime.json().data;
+  assert.ok(data.config.scenes.logs.directory,'public-management scene must have a binding');
+  assert.ok(data.config.scenes.message.directory,'message scene must have a binding');
+  assert.ok(data.config.scenes.data.directory,'analytics scene must have a binding');
+  assert.equal(data.canEdit,false);
+  assert.equal(data.configPath,'');
+  assert.equal(data.accessPath,'');
+  const admin=await app.inject({method:'GET',url:'/api/v1/scene-config',headers});
+  assert.equal(admin.statusCode,403);
+  assert.equal(admin.json().error.code,'CONFIG_LOCAL_ONLY');
+  const write=await app.inject({method:'PUT',url:'/api/v1/scene-config',headers,
+    payload:{config:data.config,revision:data.revision}});
+  assert.equal(write.statusCode,403,'fix must not relax admin configuration authorization');
 });

@@ -26,7 +26,7 @@ export function StandaloneConfigPage(){
     });
     return()=>{live=false;};
   },[]);
-  if(mode==='profile')return <ProfileLogin onLogin={async(name,phone)=>{await api.login(name,phone);setMode('ready');}}/>;
+  if(mode==='profile')return <ProfileLogin onLogin={async(name)=>{await api.login(name);setMode('ready');}}/>;
   if(mode==='pair')return <main className="pair-page"><form className="pair-card" onSubmit={e=>{
     e.preventDefault();if(busy)return;setBusy(true);setError('');
     void api.pair(code).then(()=>setMode('ready')).catch(e=>setError(e instanceof Error?e.message:String(e))).finally(()=>setBusy(false));

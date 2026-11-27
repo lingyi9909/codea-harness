@@ -27,12 +27,13 @@ import {isAbsolute,join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {AuthProblem,type LocalAuth} from './auth.ts';
-import {WorkspaceProfile} from './local-profile.ts';
+
 import {type ExecutionRegistry} from './execution-registry.ts';
 import {type SceneConfigStore} from './scene-config.ts';
 import {type SceneAccessStore,applyToolPolicy} from './scene-access.ts';
 import type {chatConnection} from './modules/chat/connection.ts';
 import {InstitutionTaskStore,validConcurrency} from './institution-task-store.ts';
+import {encodeSafeFailure} from './institution-failure-diagnostics.ts';
 import type {InstitutionConcurrency,TaskRow,TaskStatus} from './institution-task-store.ts';
 
 // 兼容旧代码的 import 路径，避免本轮阅读性重构影响现有测试或调用方。
@@ -42,6 +43,20 @@ export type {InstitutionConcurrency} from './institution-task-store.ts';
 const API_ROOT='/api/v1/integrations/institution/investigations';
 const TIMEOUT_MS=10*60*1000;
 const MAX_CONSECUTIVE_POLL_ERRORS=5;
+const FALLBACK_POLL_MS=6500;
+const NO_EVENT_POLL_MS=1200;
+// Event names are fixed; tool arguments, output, reasoning and SQL are NEVER persisted.
+const DIAGNOSTIC_NATIVE_EVENTS:Record<string,{label:string;level:'INFO'|'WARN'|'ERROR';wake:boolean}>={
+  'session.execution.started':{label:'NATIVE_EXECUTION_STARTED',level:'INFO',wake:false},
+  'session.execution.succeeded':{label:'NATIVE_EXECUTION_SUCCEEDED',level:'INFO',wake:true},
+  'session.execution.failed':{label:'NATIVE_EXECUTION_FAILED',level:'ERROR',wake:true},
+  'session.step.failed':{label:'NATIVE_STEP_FAILED',level:'ERROR',wake:true},
+  'session.execution.interrupted':{label:'NATIVE_EXECUTION_INTERRUPTED',level:'WARN',wake:true},
+  'session.tool.called':{label:'NATIVE_TOOL_CALLED',level:'INFO',wake:false},
+  'session.tool.success':{label:'NATIVE_TOOL_SUCCEEDED',level:'INFO',wake:false},
+  'session.tool.failed':{label:'NATIVE_TOOL_FAILED',level:'WARN',wake:true},
+  'permission.asked':{label:'NATIVE_PERMISSION_ASKED',level:'WARN',wake:true},
+};
 /** Only retry read-only native status calls. NEVER retry session.prompt(). */
 export function transientInstitutionPollError(error:unknown){
   if(error instanceof AuthProblem){
@@ -147,6 +162,14 @@ export function institutionPrompt(day:string,msgSn:string){
 export class InstitutionIntegration {
   /** 活跃任务的 Promise 集合，相当于 Java 线程池里正在执行的 Future。 */
   private readonly active=new Set<Promise<void>>();
+  /** One shared native event subscription for all institution tasks (not one per task). */
+  private eventStream?:Promise<void>;
+  // Event capability alone is not a healthy subscription. An offline stream
+  // must retain the original fast read-only polling until it connects.
+  private eventStreamOnline=false;
+  private readonly nativeTasks=new Map<string,string>();
+  private readonly nativeWakeups=new Map<string,()=>void>();
+  private readonly recentNativeTerminal=new Map<string,number>();
   private closed=false;
   /** AbortController ≈ Java 的取消信号：用于停止轮询等待，不直接撤销已执行的 SQL。 */
   private readonly stop=new AbortController();
@@ -197,6 +220,81 @@ export class InstitutionIntegration {
   }
   detailAdmin(id:string){return this.tasks.detailAdmin(id);}
   usageAdmin(){return {...this.tasks.usageAdmin(),currentPlatformLabel:this.cfg.clientId};}
+  eventsAdmin(id:string,offset:number,limit=20){return this.tasks.eventsAdmin(id,offset,limit);}
+  /** Diagnostics are best effort, never block or re-run the native task. */
+  private note(taskId:string,eventType:string,level:'INFO'|'WARN'|'ERROR'='INFO',detail?:string,nativeId?:string){
+    try{this.tasks.appendEvent(taskId,eventType,level,detail,nativeId);}
+    catch{/* SQLite diagnostic logging must not change model execution semantics. */}
+  }
+  /**
+   * Subscribe once to the OpenCode event feed and demultiplex by native session ID.
+   * Events wake completion checks; a slower polling fallback covers stream gaps.
+   * The feed never publishes raw prompts, private reasoning or tool contents.
+   */
+  private enableNativeEvents(client:Awaited<ReturnType<ReturnType<typeof chatConnection>>>){
+    if(!client.event||typeof client.event.subscribe!=='function')return false;
+    if(!this.eventStream){
+      const running=this.consumeNativeEvents(client);
+      this.eventStream=running.finally(()=>{this.eventStream=undefined;});
+    }
+    return true;
+  }
+  private async consumeNativeEvents(client:Awaited<ReturnType<ReturnType<typeof chatConnection>>>){
+    while(!this.closed){
+      try{
+        for await(const event of client.event.subscribe({
+          signal:this.stop.signal,onActivity:()=>{this.eventStreamOnline=true;},
+        })){
+          if(this.closed)break;
+          this.eventStreamOnline=true;
+          const data=event.data as unknown as Record<string,unknown>;
+          const sessionId=typeof data.sessionID==='string'?data.sessionID:undefined;
+          if(!sessionId)continue;
+          const taskId=this.nativeTasks.get(sessionId);
+          if(!taskId)continue;
+          const kind=DIAGNOSTIC_NATIVE_EVENTS[event.type];
+          if(!kind)continue;
+          // Tool names are fixed identifiers; never copy args, SQL or model output.
+          const toolName=event.type.startsWith('session.tool.')&&typeof data.name==='string'&&
+            /^[A-Za-z0-9_.:-]{1,80}$/.test(data.name)?data.name:undefined;
+          const detail=event.type==='session.tool.failed'||
+            event.type==='session.step.failed'||event.type==='session.execution.failed'
+            ?encodeSafeFailure(data.error,toolName,data.id,'native-event'):toolName;
+          this.note(taskId,kind.label,kind.level,detail??undefined,event.id);
+          if(event.type==='session.execution.succeeded'||event.type==='session.execution.failed'||
+             event.type==='session.execution.interrupted')
+            this.recentNativeTerminal.set(sessionId,Date.now());
+          if(kind.wake)this.nativeWakeups.get(sessionId)?.();
+        }
+      }catch{/* Subscription may disconnect: polling continues; reconnect this reader only. */}
+      finally{this.eventStreamOnline=false;}
+      if(this.closed)break;
+      for(const taskId of new Set(this.nativeTasks.values()))
+        this.note(taskId,'NATIVE_EVENT_STREAM_RECONNECT','WARN');
+      await delay(2000,undefined,{signal:this.stop.signal}).catch(()=>{});
+    }
+  }
+  private async awaitNativeProgress(sessionId:string,usingEvents:boolean){
+    if(!usingEvents||!this.eventStreamOnline){
+      await delay(NO_EVENT_POLL_MS,undefined,{signal:this.stop.signal});return;
+    }
+    const controller=new AbortController();
+    const wake=()=>controller.abort();
+    this.nativeWakeups.set(sessionId,wake);
+    try{
+      // A terminal native event can precede the final persisted message by a
+      // fraction of a second; briefly retry more frequently only in that window.
+      const terminal=this.recentNativeTerminal.get(sessionId);
+      const waitMs=terminal&&Date.now()-terminal<5000?1200:FALLBACK_POLL_MS;
+      await delay(waitMs,undefined,{
+        signal:AbortSignal.any([controller.signal,this.stop.signal]),
+      });
+    }catch(error){
+      if(!controller.signal.aborted&&!this.stop.signal.aborted)throw error;
+    }finally{
+      if(this.nativeWakeups.get(sessionId)===wake)this.nativeWakeups.delete(sessionId);
+    }
+  }
   /**
    * 补足空闲执行名额：相当于线程池调度器。
    *
@@ -237,11 +335,17 @@ export class InstitutionIntegration {
     // 哪怕后续网络抖动，也不能确定它完全没执行。
     let accepted=false;
     let definiteFailure=false;
+    let nativeId:string|undefined;
+    let usingEvents=false;
+    // Tool-call IDs seen through snapshots are kept only in memory, not replayed.
+    const observedFailures=new Set<string>();
+    this.note(task.id,'NATIVE_CONNECTING');
 
     try{
       const result=await this.deps.execution.run(task.id,async()=>{
         // execution.run 设置每个任务自己的执行上下文（类似 Java ThreadLocal）。
         const client=await this.deps.nativeConnection();
+        this.note(task.id,'NATIVE_CONNECTED');
 
         // 1. 从工作台配置确定 Skill/工作目录，拒绝使用调用者自定义的执行目标。
         const binding=await this.deps.sceneConfig.binding('institution-message');
@@ -254,6 +358,7 @@ export class InstitutionIntegration {
         }
         const matches=catalog.data.filter(skill=>skill.name===binding.executor.name&&Boolean(skill.id));
         if(matches.length!==1)throw new AuthProblem(409,'INSTITUTION_SKILL_NOT_FOUND');
+        this.note(task.id,'SKILL_READY');
 
         // 2. 在可用模型中选择 Kimi（也允许管理员通过环境变量指定）。
         const models=await client.model.list({location:{directory:binding.directory}});
@@ -264,6 +369,7 @@ export class InstitutionIntegration {
           enabled.find(m=>(m.id+' '+m.name).toLowerCase().includes('kimi'))??
           (enabled.length===1?enabled[0]:undefined);
         if(!model)throw new AuthProblem(409,'INSTITUTION_MODEL_NOT_CONFIGURED');
+        this.note(task.id,'MODEL_READY');
 
         // 3. 权限规则在 C 侧决定。每个任务都有独立的 OpenCode Session。
         const permissions=applyToolPolicy(
@@ -293,6 +399,11 @@ export class InstitutionIntegration {
           throw new Error('SERVER_STOPPED');
         }
         this.tasks.session(task.id,session.id);
+        nativeId=session.id;
+        this.nativeTasks.set(session.id,task.id);
+        try{usingEvents=this.enableNativeEvents(client);}
+        catch{usingEvents=false;/* Diagnostics must never reject a valid native session. */}
+        this.note(task.id,'NATIVE_SESSION_CREATED');
 
         // 4. 先标记「可能已受理」，再投递 Prompt；不确定的失败必须标 UNKNOWN。
         // delivery:'queue' 是 OpenCode Session 内的投递方式，
@@ -314,7 +425,8 @@ export class InstitutionIntegration {
           throw error;
         }
 
-        // 5. 定期轮询最终 assistant 消息，最多等待 10 分钟。
+        this.note(task.id,'PROMPT_ACCEPTED');
+        // 5. Prefer native events and use low-frequency status polling as a safety net.
         const end=Date.now()+TIMEOUT_MS;
         const readSnapshot=()=>Promise.all([
           client.session.active(),
@@ -330,10 +442,12 @@ export class InstitutionIntegration {
           let snapshot:Awaited<ReturnType<typeof readSnapshot>>;
           try{
             snapshot=await readSnapshot();
+            if(consecutivePollErrors>0)this.note(task.id,'STATUS_READ_RECOVERED');
             consecutivePollErrors=0;
           }catch(error){
             if(!transientInstitutionPollError(error))throw error;
             consecutivePollErrors++;
+            this.note(task.id,'STATUS_READ_RETRY','WARN',String(consecutivePollErrors));
             if(consecutivePollErrors>MAX_CONSECUTIVE_POLL_ERRORS||Date.now()>=end)
               throw new AuthProblem(503,'INSTITUTION_POLL_UNAVAILABLE');
             // Do not re-send Prompt: the native model may still be running.
@@ -341,7 +455,28 @@ export class InstitutionIntegration {
             continue;
           }
           const [active,inbox,messages,permissionsPending]=snapshot;
+          // Read-only reconciliation: a missing native event stream must not hide
+          // a failed tool. Only capture errors, never the tool input/output.
+          if(!usingEvents||!this.eventStreamOnline){
+            for(const message of messages.data){
+              if(message.type!=='assistant')continue;
+              for(const part of message.content){
+                const data=part as unknown as Record<string,unknown>;
+                const state=data.state as Record<string,unknown>|undefined;
+                const toolCallId=typeof data.callID==='string'?data.callID:
+                  typeof data.id==='string'?data.id:undefined;
+                if(data.type!=='tool'||state?.status!=='error'||!toolCallId||
+                   observedFailures.has(toolCallId))continue;
+                observedFailures.add(toolCallId);
+                const toolName=typeof data.tool==='string'?data.tool:undefined;
+                this.note(task.id,'NATIVE_TOOL_FAILED','ERROR',
+                  encodeSafeFailure(state.error,toolName,toolCallId,'session-snapshot'),
+                  'snapshot-tool:'+toolCallId);
+              }
+            }
+          }
           if(permissionsPending.some(p=>p.sessionID===session.id)){
+            this.note(task.id,'PERMISSION_REQUIRED','ERROR');
             await client.session.interrupt({sessionID:session.id});
             definiteFailure=true;
             throw new AuthProblem(409,'INSTITUTION_PERMISSION_REQUIRED');
@@ -355,6 +490,9 @@ export class InstitutionIntegration {
           // A completed native assistant error is definitive even if the
           // active-session indicator has not caught up yet.
           if(final?.error||final?.finish==='error'){
+            this.note(task.id,'NATIVE_EXECUTION_FAILED','ERROR',
+              encodeSafeFailure(final.error,undefined,undefined,'session-snapshot'),
+              'snapshot-execution:'+final.id);
             definiteFailure=true;
             throw new AuthProblem(502,'INSTITUTION_NATIVE_EXECUTION_FAILED');
           }
@@ -364,11 +502,13 @@ export class InstitutionIntegration {
               .join('\n')
               .trim();
             if(!answer){definiteFailure=true;throw new AuthProblem(502,'INSTITUTION_EMPTY_RESULT');}
+            this.note(task.id,'FINAL_RESULT_RECEIVED');
             return answer.slice(0,65536);
           }
-          await delay(1200,undefined,{signal:this.stop.signal});
+          await this.awaitNativeProgress(session.id,usingEvents);
         }
         if(!this.closed)await client.session.interrupt({sessionID:session.id}).catch(()=>{});
+        this.note(task.id,'EXECUTION_TIMEOUT','WARN');
         throw new AuthProblem(504,'INSTITUTION_EXECUTION_TIMEOUT');
       });
 
@@ -377,14 +517,28 @@ export class InstitutionIntegration {
     }catch(error){
       if(!this.closed){
         const code=error instanceof AuthProblem?error.code:'INSTITUTION_EXECUTION_UNAVAILABLE';
+        // Preserve the reason category without persisting raw exception text.
+        this.note(task.id,'TASK_EXECUTION_ERROR','ERROR',
+          encodeSafeFailure(error,undefined,undefined,'worker'));
         // 在 Prompt 投递后出现未知网络错误，不能断言任务没执行 -> UNKNOWN。
         this.tasks.finish(task.id,accepted&&!definiteFailure?'UNKNOWN':'FAILED',null,code);
+      }
+    }finally{
+      if(nativeId){
+        this.nativeTasks.delete(nativeId);
+        this.nativeWakeups.get(nativeId)?.();
+        this.nativeWakeups.delete(nativeId);
+        this.recentNativeTerminal.delete(nativeId);
       }
     }
   }
   /** 关闭 C：停止继续领取任务，向轮询发送取消信号，并标记未完成状态。 */
   close(){
     this.closed=true;this.stop.abort();
+    this.eventStreamOnline=false;
+    this.nativeTasks.clear();
+    this.nativeWakeups.clear();
+    this.recentNativeTerminal.clear();
     this.tasks.stopUnfinished();
     this.tasks.close();
   }
@@ -408,12 +562,13 @@ export function registerInstitutionIntegration(app:FastifyInstance,
   // 管理接口共用 /config 编辑权限：真实回环地址 + 登录会话 + editors 名单。
   // PATCH 还要求 CSRF（防止从其他网站伪造管理员的更改请求）。
   // B 自报的 X-Workbench-User-Id 绝不能用于判定管理员身份。
-  const localProfile=new WorkspaceProfile(deps.workspace);
   const authorizeAdmin=(req:FastifyRequest,mutating=false)=>{
     if(!deps.auth.isLocal(req)||!deps.auth.origin(req))
       throw new AuthProblem(403,'CONFIG_LOCAL_ONLY');
     const session=mutating?deps.auth.mutation(req):deps.auth.session(req);
-    if(session.scope==='lan'||!session.profile||!localProfile.matches(session.profile.key))
+    // Admin rights depend on a valid local Cookie plus the editor ACL, not a
+    // shared user.json which another self-registered visitor can overwrite.
+    if(session.scope==='lan'||!session.profile||!session.ownerId.startsWith('local:'))
       throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
     if(!deps.sceneConfig.canEdit(session.profile.name))
       throw new AuthProblem(403,'SCENE_CONFIG_EDIT_FORBIDDEN');
@@ -466,6 +621,14 @@ export function registerInstitutionIntegration(app:FastifyInstance,
     return reply.header('Cache-Control','no-store')
       .send({data:getManager().listAdmin(state==='ALL'?undefined:state as TaskStatus,q||undefined,
         parseAdminOffset(offset),userHash,parseAdminLimit(limit)),requestId:randomUUID()});
+  });
+  // Logs are admin-only, paginated and never exposed by platform B's GET.
+  app.get<{Params:{id:string};Querystring:{offset?:string;limit?:string}}>(ADMIN_ROOT+'/:id/logs',async(req,reply)=>{
+    authorizeAdmin(req);
+    if(!taskIdPattern.test(req.params.id))throw new AuthProblem(404,'INVESTIGATION_NOT_FOUND');
+    const {offset='0',limit='20'}=req.query;
+    return reply.header('Cache-Control','no-store')
+      .send({data:getManager().eventsAdmin(req.params.id,parseAdminOffset(offset),parseAdminLimit(limit)),requestId:randomUUID()});
   });
   app.get<{Params:{id:string}}>(ADMIN_ROOT+'/:id',async(req,reply)=>{
     authorizeAdmin(req);

@@ -11,7 +11,7 @@ import type {chatConnection} from '../../apps/server/src/modules/chat/connection
 
 const port=4189;
 const host='127.0.0.1:'+port,origin='http://'+host;
-const A={name:'测试甲',phone:'13800000211'},B={name:'测试乙',phone:'13800000212'};
+const A={name:'UserA',phone:'13800000211'},B={name:'UserB',phone:'13800000212'};
 const api='/api/v1/chat';
 
 test('local users A/B cannot list, read, write, rename, delete or interrupt each other sessions',async t=>{
@@ -142,4 +142,99 @@ test('two LAN logins even with identical self-reported details have distinct ses
   const newBootstrap=await app.inject({url:'/api/v1/bootstrap',remoteAddress:'192.168.1.15',
     headers:{...headers,cookie:newCookie}});
   assert.equal(newBootstrap.statusCode,200);
+});
+
+test('LAN logout, re-login and restart recover own native history but never a peer history',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'lan-history-resume-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const lanHost='192.168.1.66:'+port,lanOrigin='http://'+lanHost;
+  type NativeSession={id:string;title:string;metadata:{harnessOwner:string;harnessScenario:string};
+    location:{directory:string};time:{updated:number};};
+  const sessions=new Map<string,NativeSession>();
+  const native={
+    session:{
+      create:async(input:{title?:string;metadata:NativeSession['metadata'];location:{directory:string}})=>{
+        const row:NativeSession={id:'ses_'+randomUUID(),title:input.title??'对话',
+          metadata:input.metadata,location:input.location,time:{updated:Date.now()}};
+        sessions.set(row.id,row);return row;
+      },
+      get:async({sessionID}:{sessionID:string})=>sessions.get(sessionID),
+      list:async()=>({data:[...sessions.values()],cursor:{}}),
+      update:async()=>{},remove:async()=>{},active:async()=>({}),
+      inbox:{list:async()=>[]},form:{list:async()=>[]},interrupt:async()=>({interrupted:true}),
+    },message:{list:async()=>({data:[],cursor:{}})},permission:{list:async()=>[]},
+  };
+  const client=async()=>native as unknown as Awaited<ReturnType<ReturnType<typeof chatConnection>>>;
+  const makeApp=()=>createApp({auth:new LocalAuth('unused',port,undefined,undefined,{origin:lanOrigin}),
+    localOnly:true,workspace:root,nativeConnection:client});
+  let app=await makeApp();
+  t.after(async()=>app.close());
+  type Visitor={cookies:string[];sessionCookie:string;visitorCookie?:string;owner:string;csrf:string};
+  const cookieLines=(res:{headers:{[key:string]:unknown}})=>{
+    const raw=res.headers['set-cookie'];
+    return (Array.isArray(raw)?raw:[raw]).filter((x):x is string=>typeof x==='string')
+      .map(value=>value.split(';')[0]);
+  };
+  async function login(profile:{name:string;phone?:string},cookies:string[]=[]):Promise<Visitor>{
+    const response=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
+      remoteAddress:'192.168.1.31',headers:{host:lanHost,origin:lanOrigin,
+        ...(cookies.length?{cookie:cookies.join('; ')}:{})},payload:profile});
+    assert.equal(response.statusCode,200,response.body);
+    const newCookies=cookieLines(response);
+    const sessionCookie=newCookies.find(c=>c.startsWith('harness_session='))!;
+    const visitorCookie=newCookies.find(c=>c.startsWith('harness_visitor='))
+      ??cookies.find(c=>c.startsWith('harness_visitor='));
+    assert.ok(sessionCookie);
+    return {cookies:[sessionCookie,...(visitorCookie?[visitorCookie]:[])],
+      sessionCookie,visitorCookie,owner:response.json().data.owner.id,csrf:response.json().data.csrfToken};
+  }
+  const headers=(v:Visitor)=>({host:lanHost,origin:lanOrigin,
+    cookie:v.cookies.join('; '),'x-csrf-token':v.csrf});
+  async function create(v:Visitor){
+    const response=await app.inject({method:'POST',url:api+'/sessions',
+      remoteAddress:'192.168.1.31',headers:headers(v),payload:{scenario:'direct-chat'}});
+    assert.equal(response.statusCode,201,response.body);
+    return response.json().data.id as string;
+  }
+  async function history(v:Visitor){
+    const response=await app.inject({method:'POST',url:api+'/history',
+      remoteAddress:'192.168.1.31',headers:headers(v),payload:{scenario:'direct-chat'}});
+    assert.equal(response.statusCode,200,response.body);
+    return response.json().data.items.map((r:{id:string})=>r.id);
+  }
+  async function logout(v:Visitor){
+    const response=await app.inject({method:'DELETE',url:'/api/v1/auth/session',
+      remoteAddress:'192.168.1.31',headers:headers(v)});
+    assert.equal(response.statusCode,204,response.body);
+    // The session cookie is invalidated, but the browser visitor identity
+    // remains as an HttpOnly cookie across logout.
+  }
+  const a1=await login({name:'f'});
+  assert.ok(a1.visitorCookie,'new LAN browser receives a persistent visitor cookie');
+  assert.equal(a1.owner.startsWith('lan:'),true);
+  const id=await create(a1);
+  assert.deepEqual(await history(a1),[id]);
+  await logout(a1);
+  assert.equal((await app.inject({url:'/api/v1/bootstrap',remoteAddress:'192.168.1.31',
+    headers:{host:lanHost,origin:lanOrigin,cookie:a1.cookies.join('; ')}})).statusCode,401);
+  const a2=await login({name:'f'},[a1.visitorCookie!]);
+  assert.equal(a2.owner,a1.owner,'same browser/profile must recover original owner');
+  assert.deepEqual(await history(a2),[id]);
+  await logout(a2);
+  const b=await login({name:'different'},[a1.visitorCookie!]);
+  assert.notEqual(b.owner,a1.owner,'same browser switching profile cannot inherit prior history');
+  assert.deepEqual(await history(b),[]);
+  const anotherBrowser=await login({name:'f'});
+  assert.notEqual(anotherBrowser.owner,a1.owner,
+    'identical self-reported profile on another browser must not expose private history');
+  assert.deepEqual(await history(anotherBrowser),[]);
+  await app.close();
+  app=await makeApp();
+  const restored=await login({name:'f'},[a1.visitorCookie!]);
+  assert.equal(restored.owner,a1.owner,'workbench restart must retain browser ownership');
+  assert.deepEqual(await history(restored),[id]);
+  assert.equal((await app.inject({url:api+'/sessions/'+id,remoteAddress:'192.168.1.31',
+    headers:headers(anotherBrowser)})).statusCode,401,
+    'a stale cookie from before restart must not be accepted');
+  assert.equal(sessions.size,1,'re-login must not create duplicate native sessions');
 });

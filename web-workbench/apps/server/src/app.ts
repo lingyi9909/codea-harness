@@ -154,7 +154,7 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       const session=await auth.login(req,reply,req.body);
       return result(await makeBootstrap(session.csrf,{id:session.ownerId,name:session.profile!.name}));
     });
-    // Existing login page keeps its two fields; server mode uses the same UI.
+    // The shared login page submits only a username; legacy API phone payloads remain supported.
     app.post('/api/v1/auth/local-session',async(req,reply)=>{
       const body=req.body as {name?:unknown;phone?:unknown}|undefined;
       const session=await auth.login(req,reply,{username:body?.name,phone:body?.phone});
@@ -170,7 +170,12 @@ export async function createApp(opts:{nativeConnection?:ReturnType<typeof chatCo
       try{session=await opts.auth.session(req);}catch(e){
         if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
       }
-      if(!session?.profile||(session.scope==='lan'? !session.ownerId.startsWith('lan:'): !store.matches(session.profile.key)))throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
+      // A self-reported profile is not an authentication credential. A
+      // server-issued, scoped Cookie isolates conversations; updating the
+      // advisory workspace user.json must not log out other active visitors.
+      if(!session?.profile||(session.scope==='lan'
+        ?!session.ownerId.startsWith('lan:'):!session.ownerId.startsWith('local:')))
+        throw new AuthProblem(401,'PROFILE_LOGIN_REQUIRED');
       if(session.auditId)opts.pageVisits?.touch(session.auditId);
       reply.header('Cache-Control','no-store');
     });

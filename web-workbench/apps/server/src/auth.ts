@@ -6,7 +6,7 @@
  *
  * 以下为模块说明注释，不改变原有执行逻辑。
  */
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import {isPrivateLanIPv4} from './lan-access.ts';
@@ -15,6 +15,11 @@ export type Session={ownerId:string;csrf:string;expires:number;profile?:{name:st
 const hash=(s:string)=>createHash('sha256').update(s).digest();
 const safeEqual=(a:Buffer,b:Buffer)=>a.length===b.length&&timingSafeEqual(a,b);
 const COOKIE='harness_session';
+// Long-lived pseudonymous browser credential, NOT a verified user identity.
+// A local shared browser can revisit a self-reported profile; do not use
+// self-reported name/phone alone as a global identity across colleague PCs.
+const VISITOR_COOKIE='harness_visitor';
+const VISITOR_MAX_AGE=365*24*60*60;
 export interface RequestAuth {
   origin(req:FastifyRequest):boolean;
   session(req:FastifyRequest):Session|Promise<Session>;
@@ -31,7 +36,6 @@ export class LocalAuth implements RequestAuth {
   private readonly devOrigin?:string;
   private readonly publishCode?: (code:string)=>void;
   private readonly lanOrigin?:string;
-  private readonly lanAttempts:number[]=[];
   constructor(pairingCode:string,port:number,devOrigin?:string,publishCode?:(code:string)=>void,lan?:{origin:string}){
     this.publishCode=publishCode;
     this.port=port;this.devOrigin=devOrigin;
@@ -60,8 +64,18 @@ export class LocalAuth implements RequestAuth {
       ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.ip);
   }
   isLan(req:FastifyRequest){
-    return Boolean(this.lanOrigin&&req.headers.host===new URL(this.lanOrigin).host&&
-      (req.headers.origin===undefined||req.headers.origin===this.lanOrigin));
+    if(!this.lanOrigin)return false;
+    // Login is visitor registration, not authorization against a single
+    // configured public IP. Accept any matching private-LAN Host and Origin
+    // on this workbench port (useful when the PC has multiple LAN addresses).
+    // Keep same-origin checks, loopback-only admin routes and Cookie isolation.
+    const host=req.headers.host??'';
+    let address:URL;
+    try{address=new URL('http://'+host);}catch{return false;}
+    if(address.username||address.password||address.hostname.includes('%')||
+      Number(address.port)!==this.port||!isPrivateLanIPv4(address.hostname)||
+      address.host!==host)return false;
+    return req.headers.origin===undefined||req.headers.origin===address.origin;
   }
   origin(req:FastifyRequest):boolean{
     const host=req.headers.host??'';
@@ -89,29 +103,39 @@ export class LocalAuth implements RequestAuth {
   }
   openLocal(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string},save:()=>void):Session{
     this.requireLocalOrigin(req);
-    const now=Date.now();
-    for(const [key,session] of this.sessions){
-      if(session.expires<=now)this.sessions.delete(key);
-      else if(session.scope!=='lan'&&session.profile?.key!==profile.key)throw new AuthProblem(409,'PROFILE_IN_USE');
-    }
-    // Saving and issuing are synchronous so overlapping logins cannot interleave.
+    // No exclusive profile lock: two users may access the same PC via their
+    // own browser sessions. User-supplied labels never verify identity.
+    // Continue protecting the workspace file from symlink/invalid-path writes.
     save();
-    try{return this.session(req);}catch(e){
+    try{
+      const current=this.session(req);
+      if(current.scope==='local'){
+        if(current.profile?.key===profile.key)return current;
+        // Switching profile in the same browser must not inherit the former
+        // user's chat owner; revoke the old cookie before issuing a new one.
+        const cookie=req.headers.cookie?.split(';').map(s=>s.trim())
+          .find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+        if(cookie)this.sessions.delete(hash(cookie).toString('hex'));
+      }
+    }catch(e){
       if(!(e instanceof AuthProblem)||e.code!=='AUTH_REQUIRED')throw e;
     }
-    // Prior versions used one shared 'local-workbench' owner for every local profile.
-    // That allowed a different local login to see or mutate another user's native
-    // OpenCode sessions. Bind ownership to the *profile*, not the machine.
-    // Legacy shared-owner sessions cannot safely be assigned to any one user.
     return this.issue(reply,'local:'+profile.key,profile);
   }
+  private visitorToken(req:FastifyRequest):string|undefined{
+    const token=req.headers.cookie?.split(';').map(s=>s.trim())
+      .find(s=>s.startsWith(VISITOR_COOKIE+'='))?.slice(VISITOR_COOKIE.length+1);
+    // The server issues 256-bit random values, so a forged/corrupted cookie
+    // cannot accidentally select another colleague's OpenCode history.
+    return token&&/^[A-Za-z0-9_-]{43}$/.test(token)&&
+      Buffer.from(token,'base64url').length===32?token:undefined;
+  }
   openLan(req:FastifyRequest,reply:FastifyReply,profile:{name:string;key:string}):Session{
-    if(!this.isLan(req)||req.headers.origin!==this.lanOrigin)throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
-    const now=Date.now();
-    while(this.lanAttempts[0]!==undefined&&this.lanAttempts[0]<now-60000)this.lanAttempts.shift();
-    if(this.lanAttempts.length>=20)throw new AuthProblem(429,'LAN_LOGIN_RATE_LIMIT');
-    this.lanAttempts.push(now);
-    // 局域网访问无需额外访问码；仍保留 Origin、登录速率、Cookie 和会话隔离。
+    if(!this.isLan(req)||req.headers.origin!=='http://'+req.headers.host)
+      throw new AuthProblem(403,'LAN_ORIGIN_FORBIDDEN');
+    // There is no global 20-logins/minute gate: colleagues entering together
+    // must not block one another. Keep per-browser session isolation and CSRF.
+    // 局域网访问无需额外访问码；仍保留同源检查、Cookie 和会话隔离。
     // Never derive a security identity from self-entered names or phone numbers.
     // Every new browser login owns its own native sessions, even if another
     // visitor chooses the same self-reported profile.
@@ -126,13 +150,23 @@ export class LocalAuth implements RequestAuth {
         if(cookie)this.sessions.delete(hash(cookie).toString('hex'));
       }
     }catch{}
-    return this.issue(reply,'lan:'+randomUUID(),profile,'lan');
+    // Reuse the browser's persistent HttpOnly credential to restore the
+    // same OpenCode owner after logout, expiration or workbench restart.
+    const existingVisitor=this.visitorToken(req);
+    const visitor=existingVisitor??randomBytes(32).toString('base64url');
+    const owner='lan:'+createHmac('sha256',Buffer.from(visitor,'base64url'))
+      .update('workbench-lan-owner-v1:').update(profile.key).digest('hex');
+    return this.issue(reply,owner,profile,'lan',existingVisitor?undefined:visitor);
   }
-  private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local'):Session{
+  private issue(reply:FastifyReply,ownerId:string,profile?:Session['profile'],scope:'local'|'lan'='local',
+    newVisitorToken?:string):Session{
     const token=randomBytes(32).toString('base64url');
     const session={ownerId,profile,scope,auditId:randomUUID(),csrf:randomBytes(32).toString('base64url'),expires:Date.now()+43200000};
     this.sessions.set(hash(token).toString('hex'),session);
-    reply.header('Set-Cookie',COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
+    const sessionCookie=COOKIE+'='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200';
+    reply.header('Set-Cookie',newVisitorToken
+      ?[sessionCookie,VISITOR_COOKIE+'='+newVisitorToken+'; HttpOnly; SameSite=Strict; Path=/; Max-Age='+VISITOR_MAX_AGE]
+      :sessionCookie);
     return session;
   }
   session(req:FastifyRequest):Session{

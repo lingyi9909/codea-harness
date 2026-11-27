@@ -7,6 +7,7 @@ on:
       - feature/workbench-embedded-message-v1
       - feature/workbench-analytics-lan-permissions-component-lab
       - feature/workbench-institution-b-proxy-access
+      - feature/workbench-task-diagnostics-p0-20261126
     paths:
       - 'web-workbench/**'
       - '.github/workflows/workbench-offline-windows.yml'
