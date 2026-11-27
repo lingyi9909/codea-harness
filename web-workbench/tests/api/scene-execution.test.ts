@@ -57,7 +57,7 @@ it('routes each configured subscene through its own native executor and director
   const app=await createApp({auth:new LocalAuth('unused',port),localOnly:true,workspace:root});
   t.after(()=>app.close());
   const signed=await app.inject({method:'POST',url:'/api/v1/auth/local-session',headers:{host,origin},
-    payload:{name:'Developer',phone:'13800000000'}});
+    payload:{name:'研发同事',phone:'13800000000'}});
   assert.equal(signed.statusCode,200,signed.body);
   const headers={host,origin,cookie:String(signed.headers['set-cookie']).split(';')[0],
     'x-csrf-token':signed.json().data.csrfToken};

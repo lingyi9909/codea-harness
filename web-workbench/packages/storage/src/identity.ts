@@ -6,7 +6,7 @@
  *
  * 仅补充模块注释，原有代码和接口行为保持不变。
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { withTransaction } from './db.ts';
 
@@ -14,7 +14,6 @@ export type Identity={id:string;name:string;phone:string;status:string};
 export type StoredSession={owner:Identity;csrfDigest:string;expires:number};
 export interface IdentityStore {
   identify(name:string,phone:string):Promise<Identity>;
-  identifyUsername(name:string):Promise<Identity>;
   issue(ownerId:string,tokenDigest:string,csrfDigest:string,expires:number):Promise<void>;
   find(tokenDigest:string):Promise<StoredSession|undefined>;
   revoke(tokenDigest:string):Promise<void>;
@@ -42,21 +41,8 @@ export class MysqlIdentityStore implements IdentityStore {
     }
     return {id,name,phone,status:'ACTIVE'};
   }
-  async identifyUsername(name:string):Promise<Identity>{
-    const subject='username:'+createHash('sha256').update(name).digest('hex');
-    const read=async()=>{
-      const [rows]=await this.pool.execute<RowDataPacket[]>('SELECT id,display_name FROM wh_owners WHERE subject=?',[subject]);
-      return rows[0]?{id:String(rows[0].id),name:String(rows[0].display_name),phone:'',status:'ACTIVE'}:undefined;
-    };
-    const existing=await read();if(existing)return existing;
-    const id=randomUUID();
-    try{await this.pool.execute('INSERT INTO wh_owners(id,subject,display_name,created_at,updated_at) VALUES (?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))',[id,subject,name]);}
-    catch(e){if((e as {code?:string}).code!=='ER_DUP_ENTRY')throw e;const winner=await read();if(winner)return winner;throw e;}
-    return {id,name,phone:'',status:'ACTIVE'};
-  }
   async profile(ownerId:string):Promise<Identity|undefined>{
-    const [rows]=await this.pool.execute<RowDataPacket[]>(
-      "SELECT o.id AS owner_id,COALESCE(p.username,o.display_name) AS username,COALESCE(p.phone_normalized,'') AS phone_normalized,COALESCE(p.status,'ACTIVE') AS status FROM wh_owners o LEFT JOIN wh_user_profiles p ON p.owner_id=o.id WHERE o.id=? AND (p.owner_id IS NOT NULL OR o.subject LIKE 'username:%')",[ownerId]);
+    const [rows]=await this.pool.execute<RowDataPacket[]>('SELECT owner_id,username,phone_normalized,status FROM wh_user_profiles WHERE owner_id=?',[ownerId]);
     return rows[0]?identity(rows[0]):undefined;
   }
   async issue(ownerId:string,tokenDigest:string,csrfDigest:string,expires:number){
@@ -64,9 +50,9 @@ export class MysqlIdentityStore implements IdentityStore {
       [randomUUID(),ownerId,tokenDigest,csrfDigest,date(expires)]);
   }
   async find(tokenDigest:string):Promise<StoredSession|undefined>{
-    const [rows]=await this.pool.execute<RowDataPacket[]>(`SELECT o.id AS owner_id,COALESCE(p.username,o.display_name) AS username,COALESCE(p.phone_normalized,'') AS phone_normalized,COALESCE(p.status,'ACTIVE') AS status,s.csrf_digest,
-      TIMESTAMPDIFF(MICROSECOND,'1970-01-01 00:00:00',s.expires_at)/1000 AS expires FROM wh_web_sessions s JOIN wh_owners o ON o.id=s.owner_id LEFT JOIN wh_user_profiles p ON p.owner_id=o.id
-      WHERE s.token_digest=? AND s.revoked_at IS NULL AND s.expires_at>UTC_TIMESTAMP(3) AND (p.status='ACTIVE' OR (p.owner_id IS NULL AND o.subject LIKE 'username:%'))`,[tokenDigest]);
+    const [rows]=await this.pool.execute<RowDataPacket[]>(`SELECT p.owner_id,p.username,p.phone_normalized,p.status,s.csrf_digest,
+      TIMESTAMPDIFF(MICROSECOND,'1970-01-01 00:00:00',s.expires_at)/1000 AS expires FROM wh_web_sessions s JOIN wh_user_profiles p ON p.owner_id=s.owner_id
+      WHERE s.token_digest=? AND s.revoked_at IS NULL AND s.expires_at>UTC_TIMESTAMP(3) AND p.status='ACTIVE'`,[tokenDigest]);
     return rows[0]?{owner:identity(rows[0]),csrfDigest:String(rows[0].csrf_digest),expires:Number(rows[0].expires)}:undefined;
   }
   async revoke(tokenDigest:string){

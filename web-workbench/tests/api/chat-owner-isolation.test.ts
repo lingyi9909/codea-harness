@@ -11,7 +11,7 @@ import type {chatConnection} from '../../apps/server/src/modules/chat/connection
 
 const port=4189;
 const host='127.0.0.1:'+port,origin='http://'+host;
-const A={name:'UserA',phone:'13800000211'},B={name:'UserB',phone:'13800000212'};
+const A={name:'测试甲',phone:'13800000211'},B={name:'测试乙',phone:'13800000212'};
 const api='/api/v1/chat';
 
 test('local users A/B cannot list, read, write, rename, delete or interrupt each other sessions',async t=>{
@@ -175,7 +175,7 @@ test('LAN logout, re-login and restart recover own native history but never a pe
     return (Array.isArray(raw)?raw:[raw]).filter((x):x is string=>typeof x==='string')
       .map(value=>value.split(';')[0]);
   };
-  async function login(profile:{name:string;phone?:string},cookies:string[]=[]):Promise<Visitor>{
+  async function login(profile:typeof A,cookies:string[]=[]):Promise<Visitor>{
     const response=await app.inject({method:'POST',url:'/api/v1/auth/local-session',
       remoteAddress:'192.168.1.31',headers:{host:lanHost,origin:lanOrigin,
         ...(cookies.length?{cookie:cookies.join('; ')}:{})},payload:profile});
@@ -209,7 +209,7 @@ test('LAN logout, re-login and restart recover own native history but never a pe
     // The session cookie is invalidated, but the browser visitor identity
     // remains as an HttpOnly cookie across logout.
   }
-  const a1=await login({name:'f'});
+  const a1=await login({name:'f',phone:'手机号'});
   assert.ok(a1.visitorCookie,'new LAN browser receives a persistent visitor cookie');
   assert.equal(a1.owner.startsWith('lan:'),true);
   const id=await create(a1);
@@ -217,20 +217,20 @@ test('LAN logout, re-login and restart recover own native history but never a pe
   await logout(a1);
   assert.equal((await app.inject({url:'/api/v1/bootstrap',remoteAddress:'192.168.1.31',
     headers:{host:lanHost,origin:lanOrigin,cookie:a1.cookies.join('; ')}})).statusCode,401);
-  const a2=await login({name:'f'},[a1.visitorCookie!]);
+  const a2=await login({name:'f',phone:'手机号'},[a1.visitorCookie!]);
   assert.equal(a2.owner,a1.owner,'same browser/profile must recover original owner');
   assert.deepEqual(await history(a2),[id]);
   await logout(a2);
-  const b=await login({name:'different'},[a1.visitorCookie!]);
+  const b=await login({name:'different',phone:'手机号'},[a1.visitorCookie!]);
   assert.notEqual(b.owner,a1.owner,'same browser switching profile cannot inherit prior history');
   assert.deepEqual(await history(b),[]);
-  const anotherBrowser=await login({name:'f'});
+  const anotherBrowser=await login({name:'f',phone:'手机号'});
   assert.notEqual(anotherBrowser.owner,a1.owner,
     'identical self-reported profile on another browser must not expose private history');
   assert.deepEqual(await history(anotherBrowser),[]);
   await app.close();
   app=await makeApp();
-  const restored=await login({name:'f'},[a1.visitorCookie!]);
+  const restored=await login({name:'f',phone:'手机号'},[a1.visitorCookie!]);
   assert.equal(restored.owner,a1.owner,'workbench restart must retain browser ownership');
   assert.deepEqual(await history(restored),[id]);
   assert.equal((await app.inject({url:api+'/sessions/'+id,remoteAddress:'192.168.1.31',

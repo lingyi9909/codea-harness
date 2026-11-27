@@ -15,16 +15,13 @@ import { AuthProblem } from './auth.ts';
 type Profile={name:string;phone:string};
 export function parseProfile(input:unknown):Profile {
   const invalid=()=>new AuthProblem(400,'PROFILE_INVALID');
-  if(!input||typeof input!=='object'||Object.keys(input).some(key=>key!=='name'&&key!=='phone')||
-    !('name' in input)||typeof input.name!=='string')throw invalid();
-  const name=input.name;
-  // Username is an exact, case-sensitive label. Never silently strip spaces.
-  if(!/^(?=.*[A-Za-z])[A-Za-z0-9]{1,80}$/.test(name))
-    throw new AuthProblem(400,'USERNAME_INVALID');
-  // Older API clients can still send phone; the new UI never requests it.
-  const supplied=(input as {phone?:unknown}).phone;
-  if(supplied!==undefined&&(typeof supplied!=='string'||!supplied.trim()||supplied.length>40||/\p{Cc}/u.test(supplied)))throw invalid();
-  const phone=typeof supplied==='string'?supplied.trim().replace(/[ ()-]/g,''):'';
+  if(!input||typeof input!=='object'||Object.keys(input).length!==2||
+    !('name' in input)||typeof input.name!=='string'||!('phone' in input)||typeof input.phone!=='string')throw invalid();
+  const name=input.name.trim(),phone=input.phone.trim().replace(/[ ()-]/g,'');
+  // This is a visitor label, not a verified phone identity. Keep only basic
+  // non-empty/length/control-character checks for display and audit storage.
+  if(!name||[...name].length>80||/\p{Cc}/u.test(input.name)||
+    !phone||input.phone.length>40||/\p{Cc}/u.test(input.phone))throw invalid();
   return {name,phone};
 }
 export const profileKey=(profile:Profile)=>createHash('sha256').update(JSON.stringify(profile)).digest('hex');
@@ -59,7 +56,7 @@ export class WorkspaceProfile {
       const path=join(this.directory,'.user-'+randomUUID()+'.tmp');
       const fd=openSync(path,'wx',0o600);
       temporary=path;
-      try{writeFileSync(fd,JSON.stringify(profile.phone?profile:{name:profile.name})+'\n','utf8');fsyncSync(fd);}finally{closeSync(fd);}
+      try{writeFileSync(fd,JSON.stringify(profile)+'\n','utf8');fsyncSync(fd);}finally{closeSync(fd);}
       const current=this.checkedDirectory(false);
       if(current.dev!==directory.dev||current.ino!==directory.ino)throw writeFailed();
       this.checkTarget();

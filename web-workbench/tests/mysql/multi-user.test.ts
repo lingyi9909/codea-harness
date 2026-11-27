@@ -17,23 +17,10 @@ test('MySQL 8.4: migrations, concurrent unique identities, persisted auth and bi
   try{
     const owners=await Promise.all([0,1,2].map(()=>store.identify('Concurrent user',phone)));owners.forEach(o=>ids.add(o.id));assert.equal(ids.size,1);
     const others=await Promise.all([0,1].map(i=>store.identify('Other '+i,'+8'+i+suffix)));others.forEach(o=>ids.add(o.id));assert.equal(ids.size,3);
-    const username='User'+randomUUID().replaceAll('-','');
-    const named=await Promise.all([0,1,2].map(()=>store.identifyUsername(username)));
-    named.forEach(o=>ids.add(o.id));assert.equal(new Set(named.map(o=>o.id)).size,1);
-    assert.deepEqual(await store.profile(named[0].id),named[0]);
-    const otherName=await store.identifyUsername(username+'X');ids.add(otherName.id);
-    assert.notEqual(otherName.id,named[0].id);
     const req={ip:'127.0.0.1',headers:{host:'workbench.example',origin:'https://workbench.example'}} as unknown as FastifyRequest;
     let cookie='';const reply={header:(_key:string,value:string)=>{cookie=value.split(';')[0];}} as FastifyReply;
     const auth=new MultiUserAuth(store,'https://workbench.example'),session=await auth.login(req,reply,{username:'Concurrent user',phone});
     const restoredReq={...req,headers:{...req.headers,cookie,'x-csrf-token':session.csrf}} as FastifyRequest;
-    let namedCookie='';
-    const namedReply={header:(_key:string,value:string)=>{namedCookie=value.split(';')[0];}} as FastifyReply;
-    const namedSession=await auth.login(req,namedReply,{username});
-    assert.equal(namedSession.ownerId,named[0].id);
-    const namedReq={...req,headers:{...req.headers,cookie:namedCookie,'x-csrf-token':namedSession.csrf}} as FastifyRequest;
-    assert.equal((await new MultiUserAuth(new MysqlIdentityStore(pool),'https://workbench.example').session(namedReq)).ownerId,named[0].id);
-    await auth.logout(namedReq,namedReply);await assert.rejects(auth.session(namedReq),/AUTH_REQUIRED/);
     const connections=await Promise.all(Array.from({length:4},()=>pool.getConnection()));
     try{for(const connection of connections)await connection.query("SET SESSION time_zone = '+08:00'");}finally{for(const connection of connections)connection.release();}
     assert.equal((await new MultiUserAuth(new MysqlIdentityStore(pool),'https://workbench.example').session(restoredReq)).ownerId,owners[0].id);

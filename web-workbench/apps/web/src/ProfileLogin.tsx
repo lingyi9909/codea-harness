@@ -13,8 +13,9 @@ import './profile-login.css';
 function loginError(error:unknown){
   if(error instanceof ApiError){
     switch(error.code){
-      case 'PROFILE_CONFLICT': return '用户名资料冲突，请联系管理员核对。';
-      case 'USERNAME_INVALID': case 'PROFILE_INVALID': return '用户名只能包含英文字母和数字，且至少包含一个英文字母（1 至 80 位）。';
+      case 'PROFILE_CONFLICT': return '该手机号登记的姓名不一致，请联系管理员核对。';
+      case 'PHONE_REQUIRED': case 'PHONE_INVALID': case 'USERNAME_INVALID':
+      case 'PROFILE_INVALID': return '请填写姓名和手机号（仅作使用记录，不核验身份）。';
       case 'ORIGIN_INVALID': case 'LAN_ORIGIN_FORBIDDEN': case 'LAN_AUTH_CONFIG_INVALID':
         return '局域网访问地址不符合服务器设置。请使用工作台启动时公布的内网 IP 和端口访问。';
       case 'PROFILE_LOGIN_REQUIRED':return '登录会话已过期，请重新填写资料进入工作台。';
@@ -25,19 +26,24 @@ function loginError(error:unknown){
   return '登录失败，请重试。';
 }
 
-export function ProfileLogin({onLogin}:{onLogin:(name:string)=>Promise<void>}){
+export function ProfileLogin({onLogin}:{onLogin:(name:string,phone:string)=>Promise<void>}){
   const [name,setName]=useState('');
+  const [phone,setPhone]=useState('');
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   async function submit(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
     if(busy)return;
     setError('');
-    if(!/^(?=.*[A-Za-z])[A-Za-z0-9]{1,80}$/.test(name)){
-      setError('用户名只能包含英文字母和数字，且至少包含一个英文字母（1 至 80 位）。');return;
+    if(!name.trim()||Array.from(name.trim()).length>80){
+      setError('请输入 1 至 80 个字符的姓名。');return;
+    }
+    // Visitor registration only; no SMS check or phone-number format matching.
+    if(!phone.trim()||phone.trim().length>40){
+      setError('请填写手机号（仅作访问记录，不进行身份验证）。');return;
     }
     setBusy(true);
-    try{await onLogin(name);}
+    try{await onLogin(name.trim(),phone.trim());}
     catch(e){setError(loginError(e));}
     finally{setBusy(false);}
   }
@@ -54,7 +60,8 @@ export function ProfileLogin({onLogin}:{onLogin:(name:string)=>Promise<void>}){
         <span className="profile-overline">欢迎使用</span>
         <h1 id="profile-title">登录工作台</h1>
         <form onSubmit={submit} autoComplete="off">
-          <label>用户名<input name="name" value={name} required maxLength={80} autoComplete="username" placeholder="英文或英文加数字，如 zhang、zhang01" onChange={e=>setName(e.target.value)}/></label>
+          <label>姓名<input name="name" value={name} required autoComplete="off" placeholder="请输入姓名" onChange={e=>setName(e.target.value)}/></label>
+          <label>手机号<input name="phone" type="tel" value={phone} required maxLength={40} autoComplete="off" placeholder="请输入手机号" onChange={e=>setPhone(e.target.value)}/></label>
           {error&&<p className="profile-error" role="alert">{error}</p>}
           <button className="profile-submit" disabled={busy} type="submit">{busy?'正在登录…':'登录工作台'}<span aria-hidden="true">↗</span></button>
         </form>

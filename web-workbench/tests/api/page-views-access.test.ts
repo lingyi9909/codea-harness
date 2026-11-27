@@ -108,7 +108,7 @@ test('LAN colleague can bootstrap workbench without being able to read or edit l
   const localhost={host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'};
   try{
     const remoteLogin=await app.inject({method:'POST',url:'/api/v1/auth/local-session',remoteAddress:'192.168.1.18',
-      headers:remote,payload:{name:'PeerOne',phone:'13800000010'}});
+      headers:remote,payload:{name:'同事一',phone:'13800000010'}});
     assert.equal(remoteLogin.statusCode,200,remoteLogin.body);
     const remoteCookie=String(remoteLogin.headers['set-cookie']).split(';')[0];
     assert.match(remoteLogin.json().data.owner.id,/^lan:/);

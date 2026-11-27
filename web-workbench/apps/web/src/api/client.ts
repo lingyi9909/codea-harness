@@ -263,9 +263,9 @@ export class HarnessApi {
     this.connecting??=this.request<Schema<'Bootstrap'>>('/bootstrap').then(boot=>{this.businessVerificationEnabled=(boot as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;configureUserStorage(boot.owner.id,(boot as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');return boot;}).finally(()=>{this.connecting=undefined;});
     return this.connecting;
   }
-  async login(name:string) {
+  async login(name:string,phone:string) {
     const session=await this.request<Schema<'Bootstrap'>>('/auth/local-session',{
-      method:'POST',body:JSON.stringify({name}),
+      method:'POST',body:JSON.stringify({name,phone}),
     });
     this.businessVerificationEnabled=(session as Schema<'Bootstrap'>&{businessVerification?:boolean}).businessVerification===true;
     configureUserStorage(session.owner.id,(session as Schema<'Bootstrap'>&{identityMode?:string}).identityMode!=='local');

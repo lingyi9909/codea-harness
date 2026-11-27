@@ -57,7 +57,7 @@ test('only localhost config editor can read user access audit; LAN can log in bu
   const lan={host:'192.168.1.66:4176',origin:'http://192.168.1.66:4176'};
   const local={host:'127.0.0.1:4176',origin:'http://127.0.0.1:4176'};
   const a=await app.inject({url:'/api/v1/auth/local-session',method:'POST',
-    remoteAddress:'192.168.1.51',headers:lan,payload:{name:'LiSi',phone:'13800000051'}});
+    remoteAddress:'192.168.1.51',headers:lan,payload:{name:'李四',phone:'13800000051'}});
   assert.equal(a.statusCode,200,a.body);
   const remoteCookie=String(a.headers['set-cookie']).split(';')[0];
   const denied=await app.inject({url:'/api/v1/user-visits',remoteAddress:'192.168.1.51',
@@ -74,7 +74,7 @@ test('only localhost config editor can read user access audit; LAN can log in bu
   assert.equal(body.total,2);
   assert.equal(body.distinctUsers,2);
   assert.ok(body.items.some((row:{name:string;phoneMask:string;ip:string})=>
-    row.name==='LiSi'&&row.phoneMask==='138****0051'&&row.ip==='192.168.1.51'));
+    row.name==='李四'&&row.phoneMask==='138****0051'&&row.ip==='192.168.1.51'));
   assert.equal(JSON.stringify(body).includes('13800000051'),false,'never return raw phone');
   const badLimit=await app.inject({url:'/api/v1/user-visits?days=365',
     remoteAddress:'127.0.0.1',headers:{...local,cookie}});

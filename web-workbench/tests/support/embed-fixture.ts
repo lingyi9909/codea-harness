@@ -97,7 +97,7 @@ export async function embedFixture(origin='https://workbench.example',parentOrig
       },
     } as never;
   },{workspace});
-  const userAuth=new MultiUserAuth({identifyUsername:async()=>{throw Error('no login');},identify:async()=>{throw Error('no login');},issue:async()=>{},find:async()=>undefined,revoke:async()=>{}},'https://workbench.example');
+  const userAuth=new MultiUserAuth({identify:async()=>{throw Error('no login');},issue:async()=>{},find:async()=>undefined,revoke:async()=>{}},'https://workbench.example');
   const makeApp=()=>createApp({auth:userAuth,pool,execution,embedded:new EmbeddedAuth(config,store),workspace,institutionAdapter:options.institutionAdapter,resetEmbedSlot:options.resetSlot});
   let app=await makeApp();
   const restart=async()=>{await app.close();app=await makeApp();};
